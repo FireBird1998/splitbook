@@ -1,4 +1,9 @@
 import {
+  notificationDevice,
+  notificationHint,
+  notificationPreferences,
+} from './test-utils/notification';
+import {
   act,
   create,
   type ReactTestInstance,
@@ -154,6 +159,19 @@ function backend() {
     failDraftRemoval: false,
     submissionKey: 'native-app-test-0001',
   };
+  const draftRequestRecords = new Map<string, unknown>();
+  const draftRequests = {
+    load: async (accountId: string, id: string) => draftRequestRecords.get(accountId + id) ?? null,
+    save: async (accountId: string, id: string, value: unknown) => {
+      draftRequestRecords.set(accountId + id, structuredClone(value));
+    },
+    remove: async (accountId: string, id: string) => {
+      draftRequestRecords.delete(accountId + id);
+    },
+    clear: async () => {
+      draftRequestRecords.clear();
+    },
+  };
   const tagRecords = new Map<string, unknown>();
   const tagRequests = {
     load: async (accountId: string, id: string) =>
@@ -207,6 +225,8 @@ function backend() {
       },
       {
         now: () => clock.now,
+        notifications: notificationDevice,
+        draftRequests,
         settlementAttempts,
         tagRequests,
         expenseDrafts: {
@@ -239,7 +259,7 @@ function backend() {
             },
           },
           cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [groupCreations, settlementAttempts, tagRequests],
+          stores: [groupCreations, settlementAttempts, tagRequests, draftRequests],
         },
         groupCreations,
         newSubmissionKey: () => device.submissionKey,
@@ -3379,6 +3399,76 @@ describe('Account → Connected assistants (#622)', () => {
 });
 
 describe('held update Banner in screen content', () => {
+  it.each(['close', 'save', 'finish later'] as const)(
+    'shows the held Banner immediately on the Group after %s',
+    async (exit) => {
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+      const app = await renderApp((path, init) => {
+        if (path.startsWith('/api/notifications/device'))
+          return json({ data: notificationPreferences });
+        if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST')
+          return json({ status: 201, data: { _id: september._id, group: groupId } }, 201);
+        if (path === `/api/groups/${groupId}/drafts` && init.method === 'POST') {
+          const values = JSON.parse(String(init.body)).drafts[0];
+          return json(
+            {
+              data: [
+                {
+                  id: 'e00000000000000000000001',
+                  groupId,
+                  revision: 0,
+                  state: 'active',
+                  preparedBy: { kind: 'member' },
+                  changedBy: { kind: 'member' },
+                  createdAt: iso,
+                  updatedAt: iso,
+                  missingFields: [],
+                  values,
+                },
+              ],
+            },
+            201,
+          );
+        }
+        if (path === `/api/groups/${groupId}/drafts`) return json({ data: [] });
+        return undefined;
+      });
+      await app.press('Open Maple House');
+      // A member has previously checked To review in this Group.
+      await settle(app.controller.openToReview(groupId));
+      await settle(Promise.resolve(app.controller.closeToReview()));
+      await app.press('Add expense');
+      if (exit !== 'close')
+        await settle(
+          app.controller.updateExpenseDraft({
+            description: 'Dinner',
+            amount: '10',
+            tagId: 'c00000000000000000000001',
+          }),
+        );
+      await settle(
+        app.controller.tapNotification(notificationHint(user.id, groupId, app.clock.now)),
+      );
+      expect(app.controller.getSnapshot().notificationOpening.status).toBe('held');
+      expect(app.text()).not.toContain('An update is ready');
+      if (exit === 'close') await settle(app.controller.closeExpense());
+      else if (exit === 'save') await settle(app.controller.saveExpense());
+      else await settle(app.controller.keepExpenseAsSharedDraft());
+      expect(app.controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        destination: 'expenses',
+      });
+      expect(app.controller.getSnapshot()).toMatchObject({
+        notificationOpening: { status: 'held' },
+        toReview: { groupId: null, run: null },
+        sharedDraftCollection: { groupId, busy: false },
+      });
+      expect(app.text()).toContain('An update is ready');
+      expect(app.pressable('Open')).toBeTruthy();
+      expect(app.pressable('Not now')).toBeTruthy();
+      vi.unstubAllEnvs();
+    },
+  );
   for (const mode of ['light', 'dark'] as const) {
     for (const destination of ['Home', 'Group', 'Group event'] as const) {
       it.each(['held', 'opening', 'error', 'idle'] as const)(
