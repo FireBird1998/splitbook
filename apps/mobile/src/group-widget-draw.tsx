@@ -107,7 +107,7 @@ export function drawGroup(
         padding: 14,
         backgroundColor: color(t.surface),
         borderRadius: 24,
-        justifyContent: 'flex-start',
+        justifyContent: 'space-between',
       }}
     >
       {view.name ? (
