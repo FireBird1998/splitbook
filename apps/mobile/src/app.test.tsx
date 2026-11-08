@@ -3533,9 +3533,10 @@ describe('held update Banner in screen content', () => {
         tagManager: { edit: null, recovery: null, busy: false },
         leave: { status: 'closed' },
       });
-      expect(['saving', 'uncertain']).not.toContain(app.controller.getSnapshot().expense.status);
+      expect(app.controller.getSnapshot().expense.status).toBe(
+        exit === 'close' ? 'editing' : exit === 'save' ? 'saved' : 'idle',
+      );
       expect(notificationTaskProtected(app.controller.getSnapshot())).toBe(false);
-      if (exit === 'finish later') expect(app.controller.getSnapshot().expense.status).toBe('idle');
       expect(app.text()).toContain('An update is ready');
       expect(app.pressable('Open')).toBeTruthy();
       expect(app.pressable('Not now')).toBeTruthy();
@@ -3547,6 +3548,12 @@ describe('held update Banner in screen content', () => {
       await settle();
       // Finish later opens a fresh Group at zero; Close and Save restore the previous view.
       expect(native.scrollTo.mock.calls.at(-1)?.[0]?.y ?? 0).toBe(0);
+      native.scrollTo.mockClear();
+      await app.scrollTo(180);
+      layNativeRow(app.pressable('September groceries,'), 0, 60, 220);
+      await app.layout(400, 1540);
+      await settle();
+      expect(native.scrollTo).not.toHaveBeenCalled();
     },
   );
   for (const mode of ['light', 'dark'] as const) {

@@ -1078,6 +1078,15 @@ function GroupScreen() {
       pendingScroll.current = null;
       return;
     }
+    // Returning from a protected task reveals the held update above the list. Restoring its
+    // row anchor would scroll past that newly inserted Banner, even when the old offset was zero.
+    // Consume this return once; later layouts and the member's own scrolling remain untouched.
+    if (shown.notificationOpening.status !== 'idle' && !notificationTaskProtected(shown)) {
+      scroll.current?.scrollTo({ y: 0, animated: false });
+      scrollY.current = 0;
+      pendingScroll.current = null;
+      return;
+    }
     const { status, data } = shown.financial.expenses;
     const events = shown.activity;
     const activity = shown.destination === 'activity';
