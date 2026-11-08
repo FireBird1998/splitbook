@@ -241,3 +241,11 @@ it('names the currencies of payments hidden by the widget size', () => {
   };
   expect(groupWidget(multi, setup, '4x2', session, now).more).toBe('+1\u00a0more\u00a0· ¥');
 });
+
+it.each(['2x2', '4x2', '4x3'] as const)('offers the Group-specific expired explanation and sign-in at %s', (size) => {
+  expect(groupWidget(part, setup, size, { status: 'expired' }, now)).toMatchObject({
+    state: 'expired', title: 'Sign in again',
+    description: 'to see this Group. It comes back once you do.',
+    action: 'Sign in', target: 'sign-in', name: null, payments: [],
+  });
+});
