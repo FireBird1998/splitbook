@@ -1705,6 +1705,7 @@ function useHeldUpdateBanner() {
     (snapshot) => ({
       opening: snapshot.notificationOpening,
       owner: snapshot.heldNotification,
+      widget: snapshot.heldNotificationSource === 'widget',
       protected: notificationTaskProtected(snapshot),
     }),
     sameSelection,
@@ -1717,13 +1718,25 @@ function useHeldUpdateBanner() {
       standing
       tone={error ? 'error' : 'info'}
       busy={opening}
-      title={opening ? undefined : error ? 'Couldn’t open the update' : 'An update is ready'}
+      title={
+        opening
+          ? undefined
+          : error
+            ? state.widget
+              ? 'Couldn’t open this'
+              : 'Couldn’t open the update'
+            : state.widget
+              ? 'Ready to open'
+              : 'An update is ready'
+      }
       message={
         opening
           ? 'Checking Group access…'
           : error
             ? 'Check your connection and try again.'
-            : 'From a notification you opened earlier.'
+            : state.widget
+              ? 'From a widget you tapped earlier.'
+              : 'From a notification you opened earlier.'
       }
     >
       {!opening && (

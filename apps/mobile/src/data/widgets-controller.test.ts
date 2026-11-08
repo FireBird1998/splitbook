@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController } from './mobile-controller';
 import { savedQueriesIn } from '../test-utils/saved-queries';
+import { notificationTaskProtected } from './notification-alerts';
 import type { WidgetCopy } from '@splitbook/shared/balances-widget';
 
 const alex = { id: 'a00000000000000000000001', name: 'Alex Rivera', email: 'alex@example.test' };
@@ -185,6 +186,33 @@ function fixture() {
               },
             });
           }
+          if (path === `/api/groups/${groupId}/expenses/c00000000000000000000001`)
+            return Response.json({
+              status: 200,
+              data: {
+                _id: 'c00000000000000000000001',
+                group: groupId,
+                createdBy: alex.id,
+                description: 'Saved groceries',
+                amount: 100,
+                amountMinor: 10000,
+                moneyVersion: 1,
+                currency: 'INR',
+                category: 'food',
+                tag: 'Groceries',
+                tagId,
+                date: '2026-11-08T00:00:00Z',
+                paidBy: [{ user: { ...alex, _id: alex.id }, amount: 100, amountMinor: 10000 }],
+                splitBetween: [
+                  { user: { ...alex, _id: alex.id }, amount: 100, amountMinor: 10000 },
+                ],
+                splitMethod: 'equal',
+                revision: 1,
+                isDeleted: false,
+                createdAt: '2026-11-08T00:00:00Z',
+                updatedAt: '2026-11-08T00:00:00Z',
+              },
+            });
           if (path.endsWith('/expenses'))
             return Response.json({
               status: 200,
@@ -592,3 +620,133 @@ it('closes an open widget picker when a chosen-Group widget opens its Expense', 
   expect(c.getSnapshot().widgetPicker).toBe(false);
   expect(c.getSnapshot().screen).toBe('expense');
 });
+
+it('holds a widget tap during Add expense and offers it after close without changing the draft', async () => {
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openExpense(groupId);
+  await c.updateExpenseDraft({ description: 'Still entering groceries', amount: '123', tagId });
+  const form = c.getSnapshot().expense;
+  const before = f.requests.length;
+  await c.openWidget('home');
+  expect(c.getSnapshot()).toMatchObject({
+    screen: 'expense',
+    notificationOpening: { status: 'held' },
+  });
+  expect(c.getSnapshot().expense).toBe(form);
+  expect(f.requests.slice(before)).toEqual([]);
+  const owner = c.getSnapshot().heldNotification;
+  expect(c.getSnapshot().heldNotificationNotice).toBe(owner);
+  expect(owner).not.toBeNull();
+  await c.closeExpense();
+  expect(c.getSnapshot().notificationOpening.status).toBe('held');
+  await c.openPendingNotification();
+  expect(c.getSnapshot()).toMatchObject({
+    screen: 'groups',
+    notificationOpening: { status: 'idle' },
+    heldNotification: null,
+  });
+});
+
+it.each([
+  'Add expense',
+  'edit',
+  'payment',
+  'To review',
+  'Group form',
+  'Tags',
+  'Currencies',
+  'Leave Group',
+] as const)('holds a widget tap with the entire protected %s task unchanged', async (task) => {
+  vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  if (task === 'Add expense') {
+    await c.openExpense(groupId);
+    await c.updateExpenseDraft({ description: 'Unfinished', amount: '123', tagId });
+  }
+  if (task === 'edit') {
+    await c.openExpense(groupId, 'c00000000000000000000001');
+    await c.editExpense();
+    await c.updateExpenseDraft({ description: 'Unfinished edit' });
+    expect(c.getSnapshot().expense.status, c.getSnapshot().expense.message ?? '').toBe('editing');
+  }
+  if (task === 'payment') {
+    f.groupBalances({
+      byCurrency: [
+        {
+          currency: 'INR',
+          balances: [
+            { user: { _id: alex.id, name: alex.name }, balance: -100 },
+            { user: { _id: sam.id, name: sam.name }, balance: 100 },
+          ],
+          debts: [
+            {
+              from: { _id: alex.id, name: alex.name },
+              to: { _id: sam.id, name: sam.name },
+              amount: 100,
+            },
+          ],
+        },
+      ],
+    });
+    await c.selectDestination('balances');
+    await c.openRecordPayment(alex.id, sam.id, 'INR');
+    expect(c.getSnapshot().screen).toBe('settlement');
+  }
+  if (task === 'To review') await c.openToReview(groupId);
+  if (task === 'Group form') {
+    c.startCreate();
+    c.updateCreation({ name: 'Unfinished Group' });
+  }
+  if (task === 'Tags') c.openTags(groupId);
+  if (task === 'Currencies') await c.openCurrencies(groupId);
+  if (task === 'Leave Group') {
+    c.openMembers();
+    await c.reviewLeaveGroup();
+  }
+  const before = c.getSnapshot();
+  expect(notificationTaskProtected(before)).toBe(true);
+  const count = f.requests.length;
+  await c.openWidget('home');
+  const after = c.getSnapshot();
+  expect(after.screen).toBe(before.screen);
+  expect(after.detail).toBe(before.detail);
+  for (const key of [
+    'expense',
+    'settlement',
+    'creation',
+    'toReview',
+    'tagManager',
+    'groupCurrencies',
+    'leave',
+  ] as const)
+    expect(after[key]).toBe(before[key]);
+  expect(after.tagsOpenFor).toBe(before.tagsOpenFor);
+  expect(after.currenciesOpenFor).toBe(before.currenciesOpenFor);
+  expect(after.notificationOpening.status).toBe('held');
+  expect(after.heldNotificationNotice).toBe(after.heldNotification);
+  expect(after.heldNotification).not.toBeNull();
+  expect(f.requests.slice(count)).toEqual([]);
+});
+it.each(['sign out', 'account change'] as const)(
+  'drops a held widget tap on %s',
+  async (action) => {
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    c.startCreate();
+    await c.openWidget('home');
+    const owner = c.getSnapshot().heldNotification!;
+    if (action === 'sign out') await c.signOut();
+    else await c.signIn('sam');
+    expect(c.getSnapshot().heldNotification).toBeNull();
+    expect(c.getSnapshot().notificationOpening.status).toBe('idle');
+    c.dismissPendingNotification(owner);
+    await c.openPendingNotification();
+    expect(c.getSnapshot().heldNotification).toBeNull();
+  },
+);

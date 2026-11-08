@@ -63,7 +63,13 @@ it('floats above the measured Save bar, consumes once and disappears after four 
   expect(scroll.props.contentOffset.y).toBe(240);
   expect(form.props.value).toBe('Dinner being edited');
   await act(async () => {
-    vi.advanceTimersByTime(3_999);
+    vi.advanceTimersByTime(3_000);
+    snapshot = { ...snapshot, heldNotificationSource: 'widget' };
+    listeners.forEach((fn) => fn());
+  });
+  expect(tree.root.findByType(Snackbar).props.message).toBe('Widget held until you finish');
+  await act(async () => {
+    vi.advanceTimersByTime(999);
   });
   expect(tree.root.findAllByType(Snackbar)).toHaveLength(1);
   await act(async () => {

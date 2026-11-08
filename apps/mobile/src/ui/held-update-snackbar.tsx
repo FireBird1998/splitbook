@@ -10,13 +10,20 @@ function HeldNotice({
   notice,
   bottom,
   onDismiss,
+  widget,
 }: {
   notice: HeldNotificationOwner;
   bottom: number;
   onDismiss(): void;
+  widget: boolean;
 }) {
   useDismissAfter(notice, 4_000, onDismiss);
-  return <Snackbar message="Update held until you finish" bottom={bottom} />;
+  return (
+    <Snackbar
+      message={widget ? 'Widget held until you finish' : 'Update held until you finish'}
+      bottom={bottom}
+    />
+  );
 }
 
 /** Feedback floats above the measured task bar without changing the form's scroll geometry. */
@@ -32,6 +39,7 @@ export function HeldUpdateFooter({
     (s) => ({
       owner: s.heldNotification,
       notice: s.heldNotificationNotice,
+      widget: s.heldNotificationSource === 'widget',
     }),
     sameSelection,
   );
@@ -46,7 +54,12 @@ export function HeldUpdateFooter({
     <View onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>
       {children}
       {shown && shown === state.owner ? (
-        <HeldNotice notice={shown} bottom={height + 12} onDismiss={() => setShown(null)} />
+        <HeldNotice
+          notice={shown}
+          bottom={height + 12}
+          onDismiss={() => setShown(null)}
+          widget={state.widget}
+        />
       ) : null}
     </View>
   );

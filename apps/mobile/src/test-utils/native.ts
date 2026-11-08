@@ -18,6 +18,11 @@ const backListeners: (() => boolean)[] = [];
 const reduceMotionListeners: ((enabled: boolean) => void)[] = [];
 let reduceMotion = false;
 let initialURL: string | null = null;
+const urlListeners = new Set<(event: { url: string }) => void>();
+/** Android delivers a widget deep link while the existing app is backgrounded. */
+export function emitURL(url: string) {
+  for (const listener of [...urlListeners]) listener({ url });
+}
 
 /**
  * Sets the window every test in this file starts from; call it at the top of the file.
@@ -212,6 +217,7 @@ export function resetNative() {
   connectionListeners.length = 0;
   backListeners.length = 0;
   initialURL = null;
+  urlListeners.clear();
   // The kit listens for reduce motion for the life of the app, here a file: it hears the
   // setting go back off, as it would on a device, instead of losing its listener.
   if (reduceMotion) setReduceMotion(false);
@@ -266,7 +272,10 @@ export const reactNative = {
   Keyboard: { isVisible: () => false },
   KeyboardAvoidingView: 'KeyboardAvoidingView',
   Linking: {
-    addEventListener: () => ({ remove: () => undefined }),
+    addEventListener: (_type: string, listener: (event: { url: string }) => void) => {
+      urlListeners.add(listener);
+      return { remove: () => urlListeners.delete(listener) };
+    },
     getInitialURL: async () => initialURL,
     openURL: spies.openURL,
   },
