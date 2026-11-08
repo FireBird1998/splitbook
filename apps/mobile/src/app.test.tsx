@@ -3378,55 +3378,96 @@ describe('Account → Connected assistants (#622)', () => {
   });
 });
 
-
 describe('held update Banner in screen content', () => {
   for (const mode of ['light', 'dark'] as const) {
-    for (const destination of ['Home', 'Group'] as const) {
-      it.each(['held', 'opening', 'error', 'idle'] as const)(`${mode} ${destination}: %s`, async (status) => {
-        runtime.appearance = { mode, status: 'ready', message: null };
-        const app = await renderApp();
-        if (destination === 'Group') await settle(app.controller.openGroup(groupId));
-        const owner = { generation: 1, accountId: user.id };
-        const snapshot = { ...app.controller.getSnapshot(), heldNotification: owner,
-          notificationOpening: { status, message: 'Legacy controller message' } };
-        vi.spyOn(app.controller, 'getSnapshot').mockReturnValue(snapshot);
-        const open = vi.spyOn(app.controller, 'openPendingNotification').mockResolvedValue();
-        const dismiss = vi.spyOn(app.controller, 'dismissPendingNotification').mockImplementation(() => {});
-        act(() => screen!.unmount());
-        await mount();
-        const banners = app.root().findAllByType(Banner).filter(node =>
-          ['An update is ready', 'Couldn’t open the update'].includes(node.props.title) ||
-          node.props.message === 'Checking Group access…');
-        expect(banners).toHaveLength(status === 'idle' ? 0 : 1);
-        expect(app.text()).not.toContain('Legacy controller message');
-        if (status === 'idle') return;
-        const banner = banners[0];
-        expect(banner.props.standing).toBe(true);
-        expect(banner.props.tone).toBe(status === 'error' ? 'error' : 'info');
-        let ancestor = banner.parent;
-        while (ancestor && ancestor.type !== 'ScrollView') ancestor = ancestor.parent;
-        expect(ancestor, 'Banner belongs inside the screen scroll content').not.toBeNull();
-        const colors = getSemanticTokens(mode);
-        const host = banner.findAll(node => node.type === 'View')[0];
-        expect(host.props.style.backgroundColor).toBe(status === 'error' ? colors.tint.negative : colors.tint.info);
-        if (status === 'opening') {
-          expect(banner.findAllByType(BusyMark)).toHaveLength(1);
-          expect(banner.findAll(node => node.type === 'Pressable')).toHaveLength(0);
-        } else {
-          expect(banner.props.message).toBe(status === 'held' ? 'From a notification you opened earlier.' : 'Check your connection and try again.');
-          await app.press(status === 'held' ? 'Open' : 'Retry');
-          expect(open).toHaveBeenCalledOnce();
-          await app.press('Not now');
-          expect(dismiss).toHaveBeenCalledExactlyOnceWith(owner);
-        }
-      });
+    for (const destination of ['Home', 'Group', 'Group event'] as const) {
+      it.each(['held', 'opening', 'error', 'idle'] as const)(
+        `${mode} ${destination}: %s`,
+        async (status) => {
+          runtime.appearance = { mode, status: 'ready', message: null };
+          const app = await renderApp();
+          if (destination !== 'Home') await settle(app.controller.openGroup(groupId));
+          if (destination === 'Group event') {
+            await settle(app.controller.selectDestination('activity'));
+            await settle(
+              app.controller.openActivityEvent('d00000000000000000000001', { scrollY: 0 }),
+            );
+          }
+          const owner = { generation: 1, accountId: user.id };
+          const snapshot = {
+            ...app.controller.getSnapshot(),
+            heldNotification: owner,
+            notificationOpening: { status, message: 'Legacy controller message' },
+          };
+          vi.spyOn(app.controller, 'getSnapshot').mockReturnValue(snapshot);
+          const open = vi.spyOn(app.controller, 'openPendingNotification').mockResolvedValue();
+          const dismiss = vi
+            .spyOn(app.controller, 'dismissPendingNotification')
+            .mockImplementation(() => {});
+          act(() => screen!.unmount());
+          await mount();
+          const banners = app
+            .root()
+            .findAllByType(Banner)
+            .filter(
+              (node) =>
+                ['An update is ready', 'Couldn’t open the update'].includes(node.props.title) ||
+                node.props.message === 'Checking Group access…',
+            );
+          expect(banners).toHaveLength(status === 'idle' ? 0 : 1);
+          expect(app.text()).not.toContain('Legacy controller message');
+          if (status === 'idle') return;
+          const banner = banners[0];
+          expect(banner.props.standing).toBe(true);
+          expect(banner.props.tone).toBe(status === 'error' ? 'error' : 'info');
+          let ancestor = banner.parent;
+          while (ancestor && (ancestor.type as unknown) !== 'ScrollView')
+            ancestor = ancestor.parent;
+          expect(ancestor, 'Banner belongs inside the screen scroll content').not.toBeNull();
+          const colors = getSemanticTokens(mode);
+          const host = banner.findAll((node) => (node.type as unknown) === 'View')[0];
+          expect(host.props.style.backgroundColor).toBe(
+            status === 'error' ? colors.negative.bg : colors.info.bg,
+          );
+          expect(host.props.accessibilityState.busy).toBe(status === 'opening');
+          if (status === 'opening') {
+            expect(banner.findAllByType(BusyMark)).toHaveLength(1);
+            expect(banner.findAll((node) => (node.type as unknown) === 'Pressable')).toHaveLength(
+              0,
+            );
+          } else {
+            expect(banner.props.message).toBe(
+              status === 'held'
+                ? 'From a notification you opened earlier.'
+                : 'Check your connection and try again.',
+            );
+            await settle(
+              Promise.resolve(
+                banner
+                  .find(
+                    (node) =>
+                      (node.type as unknown) === 'Pressable' &&
+                      node.props.accessibilityLabel === (status === 'held' ? 'Open' : 'Retry'),
+                  )
+                  .props.onPress(),
+              ),
+            );
+            expect(open).toHaveBeenCalledOnce();
+            await app.press('Not now');
+            expect(dismiss).toHaveBeenCalledExactlyOnceWith(owner);
+          }
+        },
+      );
     }
   }
   it('hides the standing Banner while a protected sheet is open', async () => {
     const app = await renderApp();
-    const snapshot = { ...app.controller.getSnapshot(), tagsOpenFor: groupId,
+    const snapshot = {
+      ...app.controller.getSnapshot(),
+      tagsOpenFor: groupId,
       heldNotification: { generation: 1, accountId: user.id },
-      notificationOpening: { status: 'held' as const, message: 'Legacy controller message' } };
+      notificationOpening: { status: 'held' as const, message: 'Legacy controller message' },
+    };
     vi.spyOn(app.controller, 'getSnapshot').mockReturnValue(snapshot);
     act(() => screen!.unmount());
     await mount();
