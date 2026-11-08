@@ -219,3 +219,7 @@ it('uses two initials in payment avatars without expanding the visible first nam
     { firstName: 'Sam', initials: 'SC' },
   ]);
 });
+it('names the currencies of payments hidden by the widget size', () => {
+  const multi = { ...part, currencies: [...part.currencies, {currency:'JPY',balanceMinor:3000,payments:[{from:'sam',to:'alex',fromName:'Sam Chen',toName:'Alex Rivera',amountMinor:3000}]}] };
+  expect(groupWidget(multi,setup,'4x2',session,now).more).toBe('+1\u00a0more\u00a0· ¥');
+});
