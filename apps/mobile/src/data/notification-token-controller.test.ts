@@ -57,6 +57,7 @@ function phone() {
   let sessions = 0;
   let ids = 0;
   const posts: Post[] = [];
+  let gets = 0;
   const server = {
     /** Replaces the device route's answer to a POST, before the fake applies it. */
     post: null as null | ((body: Post) => Promise<Response> | null),
@@ -89,6 +90,7 @@ function phone() {
   const answerDevice = async (init: RequestInit, cookie: string) => {
     const mine = registration?.session === cookie;
     if (init.method !== 'POST') {
+      gets++;
       if (!registration || mine) return json({ data: state() });
       return json({ data: { ...state(), enabled: false, expenseUpdates: false, payments: false } });
     }
@@ -124,9 +126,14 @@ function phone() {
     };
     return json({ data: state() });
   };
+  /**
+   * Like expo-notifications, every token read also announces that token to the push token
+   * listener: during the read (`'during'`) or just after it returns (`'after'`).
+   */
   const app = (
     native: Partial<NonNullable<MobileDependencies['notifications']>> = {},
     timer?: MobileTimer,
+    announce: 'during' | 'after' = 'after',
   ) => {
     let listener: ((token: string) => void) | null = null;
     const notifications = {
@@ -147,6 +154,13 @@ function phone() {
       }),
       ...native,
     };
+    const read = notifications.token;
+    notifications.token = vi.fn(async () => {
+      const token = await read();
+      if (announce === 'during') listener?.(token);
+      else setTimeout(() => listener?.(token), 0);
+      return token;
+    });
     const controller = createMobileController(
       {
         apiBaseUrl: 'http://localhost:4144',
@@ -205,6 +219,8 @@ function phone() {
     posts,
     server,
     maintenance: () => posts.filter((post) => post.maintenance === true),
+    /** `GET /api/notifications/device` requests so far. */
+    gets: () => gets,
     registration: () => registration,
   };
 }
@@ -296,6 +312,49 @@ describe('a token change keeps an opted-in phone registered (#844)', () => {
     await settle();
     expect(device.maintenance()).toHaveLength(0);
     expect(first.controller.getSnapshot().notifications.confirmed.enabled).toBe(false);
+  });
+});
+
+describe('a token read is not a token change (#844)', () => {
+  it.each(['during', 'after'] as const)(
+    'a cold start with an unchanged token reads the controls once and posts at most once (announced %s the read)',
+    async (announce) => {
+      const { device } = await optedIn();
+      const posts = device.posts.length;
+      const gets = device.gets();
+      const next = device.app({}, undefined, announce);
+      await next.controller.restore();
+      await vi.waitFor(() => expect(device.maintenance()).toHaveLength(1));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(device.gets() - gets).toBe(1);
+      expect(device.posts.length - posts).toBeLessThanOrEqual(1);
+      expect(next.controller.getSnapshot().notifications).toMatchObject({
+        status: 'ready',
+        confirmed: { enabled: true },
+      });
+    },
+  );
+  it('an Enable’s own token read starts no maintenance', async () => {
+    const device = phone();
+    const first = device.app({}, undefined, 'during');
+    await first.controller.signIn('alex');
+    const gets = device.gets();
+    await first.controller.enableNotifications();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(device.maintenance()).toHaveLength(0);
+    expect(device.gets() - gets).toBe(0);
+  });
+  it('a different token announced during a maintenance read is still registered', async () => {
+    const { device } = await optedIn();
+    // FCM rotates while maintenance is reading the token it had.
+    const next = device.app({
+      token: vi.fn(async () => {
+        next.rotate('private-token-rotated');
+        return 'private-token-1';
+      }),
+    });
+    await next.controller.restore();
+    await vi.waitFor(() => expect(device.registration()?.token).toBe('private-token-rotated'));
   });
 });
 

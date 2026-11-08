@@ -361,7 +361,15 @@ under the consent the phone already has; it never enables notifications or asks 
 Either way it first reads `GET /api/notifications/device`. Only when that answers on for this
 session and Android currently allows notifications does it send `POST /api/notifications/device`
 with `maintenance: true` and the token. The server keeps the binding, both activations and both
-cutoffs (`docs/api.md`), so nothing older is sent again; the same token again writes nothing.
+cutoffs (`docs/api.md`), so nothing older is sent again; the same token again changes no
+control, and the server records that this installation maintains itself. Only then does an FCM
+`UNREGISTERED` answer keep the controls on and wait for the next token; until this app's first
+maintenance (its first cold start after an Enable, or a new token), it switches the registration
+off, as for the 2a0b065b app, and Settings shows off.
+
+Expo's token read also announces that token to `addPushTokenListener`, so a token this session
+has already read or registered is not treated as a change: a cold start with an unchanged token
+is one controls read and at most one `POST`.
 A phone that is off, blocked, offline, or signed in with a new session sends nothing: a new
 sign-in starts off and needs **Enable notifications**, as before.
 

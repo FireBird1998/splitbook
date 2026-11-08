@@ -76,6 +76,27 @@ export function notificationControls(d: {
   // Maintenance a member's change interrupted, or that found one pending: it runs after the change.
   let maintenanceWanted = false;
   let maintaining: number | null = null;
+  // expo-notifications announces every token it reads as a new token, during the read or just
+  // after it (#844). So a token this session has already read or registered is not a change, and
+  // one announced during a read waits for that read: only a token it didn't return is registered.
+  let readingToken = false;
+  const tokensSeen = new Set<string>();
+  let announcedDuringRead: string | null = null;
+  const readToken = async (native: NotificationNative) => {
+    readingToken = true;
+    try {
+      const token = await native.token();
+      tokensSeen.add(token);
+      return token;
+    } finally {
+      readingToken = false;
+      const announced = announcedDuringRead;
+      announcedDuringRead = null;
+      // Another token arrived meanwhile: a real change, registered after this read returns.
+      if (announced !== null && !tokensSeen.has(announced))
+        void Promise.resolve().then(() => maintain(announced));
+    }
+  };
   const stopMaintenance = () => {
     maintenance++;
     if (maintaining !== null) maintenanceWanted = true;
@@ -209,7 +230,7 @@ export function notificationControls(d: {
           retry = null;
           return;
         }
-        token = await d.native.token();
+        token = await readToken(d.native);
         if (!active(owner, task)) return;
       }
       if (enabled && category) {
@@ -257,6 +278,14 @@ export function notificationControls(d: {
    */
   const maintain = async (given?: string): Promise<void> => {
     if (!d.native || !d.authenticated()) return;
+    if (given !== undefined) {
+      if (readingToken) {
+        announcedDuringRead = given;
+        return;
+      }
+      if (tokensSeen.has(given)) return;
+      tokensSeen.add(given);
+    }
     const owner = d.owner(),
       task = ++maintenance;
     wake?.();
@@ -297,7 +326,7 @@ export function notificationControls(d: {
           }
           // Off, or Android blocking: nothing to maintain, and never a permission prompt.
           if (!confirmed.enabled || !allowed) return;
-          const token = given ?? (await d.native.token());
+          const token = given ?? (await readToken(d.native));
           if (!live()) return;
           const flight = d.request('/api/notifications/device', owner, {
             method: 'POST',
@@ -363,6 +392,8 @@ export function notificationControls(d: {
       operation++;
       stopMaintenance();
       maintenanceWanted = false;
+      tokensSeen.clear();
+      announcedDuringRead = null;
       retry = null;
       void clearNative().catch(() => undefined);
     },
