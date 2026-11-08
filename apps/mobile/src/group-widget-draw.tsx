@@ -125,7 +125,7 @@ export function drawGroup(
         </FlexWidget>
       ) : null}
       {view.title ? (
-        <FlexWidget style={{ flexGap: 10 }}>
+        <FlexWidget style={{ flex: 1, justifyContent: 'center', flexGap: 10 }}>
           {text(view.title, t.text, small ? 13 : 15, true)}
           {text(view.description, t.textSecondary, small ? 10 : 12)}
         </FlexWidget>
@@ -161,6 +161,12 @@ export function drawGroup(
             text(view.balance, balanceTone, 14, true)
           )}
           {view.people ? text(view.people, t.textSecondary, 11) : null}
+        </FlexWidget>
+      ) : null}
+      {view.state === 'all-square' && !small ? (
+        <FlexWidget style={{ flex: 1, flexDirection: 'row', alignItems: 'center', flexGap: 8 }}>
+          {text('✓', t.status.positive, 20, true)}
+          {text(view.description, t.textSecondary, 12)}
         </FlexWidget>
       ) : null}
       {view.payments.length ? (

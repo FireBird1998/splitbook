@@ -1,6 +1,6 @@
 import { formatCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
-import { counted } from './separator';
+import { counted, SEPARATOR } from './separator';
 import { widgetSavedTime, type WidgetSession } from './balances-widget';
 import type { GroupCategory } from './types';
 export interface GroupWidgetSetup {
@@ -127,6 +127,11 @@ export function groupWidget(
   const allSquare = currencies.every((bucket) => bucket.balanceMinor === 0);
   const age = Math.min(part.verifiedAt, part.balancesVerifiedAt),
     muted = now - age > 86400000;
+  const balanceText = allSquare
+    ? 'You’re all square'
+    : currencies.length > 1
+      ? `In ${counted(currencies.length, 'currency', 'currencies')}`
+      : `${bucket!.balanceMinor < 0 ? 'You owe' : 'You’re owed'} ${formatCurrency(toMajorAmount(Math.abs(bucket!.balanceMinor), bucket!.currency), bucket!.currency)}`;
   return {
     ...empty,
     state: part.archived ? 'archived' : allSquare ? 'all-square' : 'normal',
@@ -149,12 +154,12 @@ export function groupWidget(
         ? 'negative'
         : 'positive') as 'neutral' | 'negative' | 'positive',
     title: null,
-    description: '',
-    balance: allSquare
-      ? 'You’re all square'
-      : currencies.length > 1
-        ? `In ${counted(currencies.length, 'currency', 'currencies')}`
-        : `${bucket!.balanceMinor < 0 ? 'You owe' : 'You’re owed'} ${formatCurrency(toMajorAmount(Math.abs(bucket!.balanceMinor), bucket!.currency), bucket!.currency)}`,
+    description: allSquare
+      ? `You’re all square in ${part.name}.`
+      : part.archived
+        ? 'Nothing more can be saved here.'
+        : '',
+    balance: balanceText + (part.archived ? `${SEPARATOR}final` : ''),
     payments: own.slice(0, limit).map(({ label, amount, firstName, incoming, payment }) => ({
       label,
       amount,
