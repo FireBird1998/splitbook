@@ -22,6 +22,7 @@ function fixture() {
   const rows = new Map<string, unknown>();
   let hold: Promise<void> | undefined;
   const drafts = new Map<string, unknown>();
+  const requests: {path:string;method:string}[] = [];
   const copies: WidgetCopy[] = [];
   const events: string[] = [];
   const group = () => ({
@@ -123,6 +124,7 @@ function fixture() {
         fetch: async (url, init) => {
           if (offline) throw new Error('Offline');
           const path = new URL(url).pathname;
+          requests.push({path,method:init.method ?? 'GET'});
           if (path.endsWith('/sign-in')) {
             user = JSON.parse(String(init.body)).personaId === 'sam' ? sam : alex;
             return Response.json(
@@ -214,6 +216,7 @@ function fixture() {
       return release;
     },
     copies,
+    requests,
     events,
     offline: () => {
       offline = true;
@@ -422,7 +425,7 @@ it('projects a Group and its Balances reads into the widget copy with both verif
 for (const status of [403,404]) it(`removes the Group widget part after a refused read (${status})`, async () => {
  const f=fixture(), c=f.make(); await c.signIn('alex'); await c.openGroup(groupId); await c.refreshBalances();
  await vi.waitFor(()=>expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());
- f.refuse(status); await c.openGroup(groupId,true);
+ f.refuse(status); await c.openGroup(groupId,false);
  await vi.waitFor(()=>expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined());
  expect(f.copies.at(-1)?.lostGroupIds).toContain(groupId);
 });
@@ -434,4 +437,19 @@ it('restores Group widget parts and offline setup with their original saved veri
  const restarted=f.make(); await restarted.restore();
  await vi.waitFor(()=>expect(f.copies.at(-1)?.groups?.[groupId]?.balancesVerifiedAt).toBe(verified));
  expect(f.copies.at(-1)?.savedGroups?.rows.map(g=>g.id)).toEqual([groupId]);
+});
+
+it('a widget payment tap opens Settle up without sending a Settlement request', async () => {
+ const f=fixture(),c=f.make(); await c.signIn('alex');
+ await c.openWidget({kind:'settle',groupId});
+ expect(c.getSnapshot().screen).toBe('settlement');
+ expect(c.getSnapshot().settlement.groupId).toBe(groupId);
+ expect(f.requests.filter(r=>r.method==='POST' && r.path.includes('/settlements'))).toEqual([]);
+});
+it('a widget Add expense tap resumes the Group’s unfinished draft', async () => {
+ const f=fixture(),c=f.make(); await c.signIn('alex'); await c.openExpense(groupId);
+ await c.updateExpenseDraft({description:'Unfinished groceries',amount:'123',tagId});
+ await c.back(); await c.openWidget({kind:'expense',groupId});
+ expect(c.getSnapshot().screen).toBe('expense');
+ expect(c.getSnapshot().expense.draft).toMatchObject({description:'Unfinished groceries',amount:'123'});
 });
