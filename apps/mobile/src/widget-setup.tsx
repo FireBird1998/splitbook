@@ -184,7 +184,9 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               {copy('YOUR GROUPS', true, 12, t.textSecondary)}
               {copy(
-                widgetSavedTime(record!.copy!.savedGroups!.verifiedAt, Date.now()),
+                record!.copy!.savedGroups
+                  ? widgetSavedTime(record!.copy!.savedGroups.verifiedAt, Date.now())
+                  : 'Nothing saved yet',
                 false,
                 12,
                 t.textMuted,
