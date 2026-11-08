@@ -1,88 +1,220 @@
-import { act, create } from 'react-test-renderer';
-import { describe, expect, it, vi } from 'vitest';
+import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { NotificationSettings } from './notification-settings';
-import { emptyNotifications } from '../data/notification-controls';
-import { activateWithScreenReader } from '../test-utils/native';
+import { emptyNotifications, type NotificationControls } from '../data/notification-controls';
+import { activateWithScreenReader, setWindow } from '../test-utils/native';
+import { unreadText } from '../test-utils/layout';
+import { Banner, Card, Divider, ListRow, SectionHeader, Skeleton } from './compact';
+import { ThemeContext } from './theme';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-describe('per-phone Settings notification controls', () => {
-  it('offers explicit enable and renders only confirmed category choices while pending', () => {
-    const onEnable = vi.fn(),
-      onCategory = vi.fn(),
-      onRetry = vi.fn(),
-      onAndroidSettings = vi.fn();
-    const actions = { onEnable, onCategory, onRetry, onAndroidSettings, onDisable: vi.fn() };
-    let screen!: ReturnType<typeof create>;
-    const state = emptyNotifications();
-    act(() => {
-      screen = create(<NotificationSettings {...actions} state={state} />);
-    });
-    const enable = screen.root.find(
-      (n) =>
-        (n.type as unknown) === 'Pressable' &&
-        n.props.accessibilityLabel === 'Enable notifications',
+const caption =
+  'Alerts say only that something changed, never who or how much. Other phones keep their own settings.';
+const actions = () => ({
+  onEnable: vi.fn(),
+  onDisable: vi.fn(),
+  onCategory: vi.fn(),
+  onRetry: vi.fn(),
+  onAndroidSettings: vi.fn(),
+});
+const confirmed = {
+  ...emptyNotifications().confirmed,
+  available: true,
+  enabled: true,
+  expenseUpdates: true,
+  payments: false,
+};
+let screen: ReactTestRenderer;
+afterEach(() => {
+  if (screen) act(() => screen.unmount());
+});
+function render(
+  status: NotificationControls['status'],
+  enabled = true,
+  mode: 'light' | 'dark' = 'light',
+  available = true,
+) {
+  const callbacks = actions();
+  act(() => {
+    screen = create(
+      <ThemeContext.Provider value={getSemanticTokens(mode)}>
+        <NotificationSettings
+          {...callbacks}
+          state={{
+            status,
+            confirmed: { ...confirmed, enabled, available },
+            message: 'Old controller copy',
+          }}
+        />
+      </ThemeContext.Provider>,
     );
-    act(() => activateWithScreenReader(enable));
-    expect(onEnable).toHaveBeenCalledOnce();
-    act(() =>
-      screen.update(<NotificationSettings {...actions} state={{ ...state, status: 'pending' }} />),
-    );
-    expect(
+  });
+  return callbacks;
+}
+const text = () =>
+  screen.root
+    .findAll((n) => (n.type as unknown) === 'Text')
+    .flatMap((n) => n.children.filter((c) => typeof c === 'string'))
+    .join(' ');
+const switches = () =>
+  screen.root.findAll(
+    (n) => (n.type as unknown) === 'Pressable' && n.props.accessibilityRole === 'switch',
+  );
+const press = (label: string) =>
+  act(() =>
+    activateWithScreenReader(
       screen.root.find(
-        (n) =>
-          (n.type as unknown) === 'Pressable' &&
-          n.props.accessibilityLabel === 'Enable notifications',
-      ).props.disabled,
-    ).toBe(true);
-    const confirmed = {
-      ...state.confirmed,
-      available: true,
-      enabled: true,
-      expenseUpdates: true,
-      payments: false,
-    };
-    act(() =>
-      screen.update(
-        <NotificationSettings {...actions} state={{ status: 'ready', confirmed, message: '' }} />,
+        (n) => (n.type as unknown) === 'Pressable' && n.props.accessibilityLabel === label,
       ),
-    );
-    const payments = screen.root.find(
-      (n) => (n.type as unknown) === 'Switch' && n.props.accessibilityLabel === 'Payments',
-    );
-    expect(payments.props.value).toBe(false);
-    act(() => payments.props.onValueChange(true));
-    expect(onCategory).toHaveBeenCalledExactlyOnceWith('payments', true);
-    act(() => screen.unmount());
+    ),
+  );
+
+describe('per-phone Settings notification controls', () => {
+  it('offers one off master row and the fixed privacy caption', () => {
+    const calls = render('off', false);
+    expect(screen.root.findByType(SectionHeader).props.title).toBe('Notifications');
+    expect(screen.root.findAllByType(Card)).toHaveLength(1);
+    expect(screen.root.findAllByType(ListRow)).toHaveLength(1);
+    expect(switches()[0].props.accessibilityState).toEqual({ checked: false, disabled: false });
+    expect(text()).toContain(caption);
+    press('Notifications on this phone, Off');
+    expect(calls.onEnable).toHaveBeenCalledOnce();
+    expect(calls.onDisable).not.toHaveBeenCalled();
   });
-  it('shows a paused feature as not available yet, for an opted-in phone too (#839)', () => {
-    const actions = {
-      onEnable: vi.fn(),
-      onCategory: vi.fn(),
-      onRetry: vi.fn(),
-      onAndroidSettings: vi.fn(),
-      onDisable: vi.fn(),
-    };
-    const paused = { ...emptyNotifications().confirmed, available: false };
-    for (const enabled of [false, true]) {
-      let screen!: ReturnType<typeof create>;
-      const confirmed = { ...paused, enabled, expenseUpdates: enabled, payments: enabled };
-      act(() => {
-        screen = create(
-          <NotificationSettings {...actions} state={{ status: 'ready', confirmed, message: '' }} />,
-        );
-      });
-      const texts = screen.root
-        .findAll((n) => (n.type as unknown) === 'Text')
-        .flatMap((n) => n.children.filter((child) => typeof child === 'string'))
-        .join(' ');
-      expect(texts).toContain('Notifications aren’t available yet.');
-      const labels = screen.root
-        .findAll((n) => (n.type as unknown) === 'Pressable' || (n.type as unknown) === 'Switch')
-        .map((n) => n.props.accessibilityLabel);
-      expect(labels).not.toContain('Enable notifications');
-      expect(labels).not.toContain('Turn off notifications');
-      expect(labels).not.toContain('Expense updates');
-      expect(labels.includes('Open Android notification settings')).toBe(enabled);
-      act(() => screen.unmount());
-    }
+  it('shows only confirmed values and routes every row callback', () => {
+    const calls = render('ready');
+    expect(switches().map((n) => n.props.accessibilityState.checked)).toEqual([true, true, false]);
+    expect(text()).toContain('Expenses you’re part of');
+    expect(text()).toContain('Payments to or from you');
+    expect(text()).toContain(caption);
+    expect(screen.root.findAllByType(Divider).map((n) => n.props.inset ?? 0)).toEqual([66, 66, 0]);
+    press('Notifications on this phone, On for all your Groups');
+    press('Expense updates, Expenses you’re part of');
+    press('Payments, Payments to or from you');
+    press('Android notification settings');
+    expect(calls.onDisable).toHaveBeenCalledOnce();
+    expect(calls.onEnable).not.toHaveBeenCalled();
+    expect(calls.onCategory.mock.calls).toEqual([
+      ['expenseUpdates', false],
+      ['payments', true],
+    ]);
+    expect(calls.onAndroidSettings).toHaveBeenCalledOnce();
   });
+  it('replaces the off switch with a busy mark while asking Android', () => {
+    render('pending', false);
+    expect(switches()).toHaveLength(0);
+    expect(text()).toContain('Asking Android…');
+    expect(text()).toContain(caption);
+    expect(text()).not.toContain('Confirming notification settings…');
+    expect(screen.root.findAll((n) => (n.type as unknown) === 'ActivityIndicator')).toHaveLength(1);
+  });
+  it.each(['pending', 'offline', 'error'] as const)(
+    'holds all confirmed switches disabled during %s',
+    (status) => {
+      render(status);
+      expect(switches().map((n) => n.props.accessibilityState)).toEqual(
+        [true, true, false].map((checked) => ({ checked, disabled: true })),
+      );
+      expect(
+        screen.root.findAll((n) => (n.type as unknown) === 'Switch').every((n) => n.props.disabled),
+      ).toBe(true);
+      if (status === 'pending') {
+        expect(text()).toContain('Confirming notification settings…');
+        expect(screen.root.findAllByType(Banner)).toHaveLength(0);
+        expect(text()).not.toContain(caption);
+      }
+    },
+  );
+  it.each([
+    ['blocked', 'warning', 'Allow them in Android settings to get these alerts.', true],
+    [
+      'denied',
+      'info',
+      'Android didn’t allow notifications. Turn them on again when you’re ready.',
+      false,
+    ],
+    [
+      'offline',
+      'offline',
+      'Connect to change notification settings. Android settings still work offline.',
+      true,
+    ],
+    ['error', 'error', 'Couldn’t confirm notification settings.', true],
+  ] as const)(
+    'renders the %s problem as one Banner outside the Card',
+    (status, tone, message, enabled) => {
+      const calls = render(status, enabled);
+      const banner = screen.root.findByType(Banner);
+      expect(banner.props.tone).toBe(tone);
+      expect(banner.props.message).toBe(message);
+      expect(screen.root.findByType(Card).findAllByType(Banner)).toHaveLength(0);
+      expect(text()).not.toContain('Old controller copy');
+      expect(text()).not.toContain(caption);
+      const urgent = tone === 'warning' || tone === 'error';
+      expect(
+        banner.findAll(
+          (n) =>
+            (n.type as unknown) === 'View' &&
+            n.props.accessibilityLiveRegion === (urgent ? 'assertive' : 'polite'),
+        ),
+      ).toHaveLength(1);
+      if (status === 'blocked') {
+        expect(banner.props.title).toBe('Android is blocking notifications');
+        expect(screen.root.findAllByType(ListRow)[0].props.metaTone).toBe('warning');
+        expect(text()).toContain('Blocked by Android');
+        press('Open Android settings');
+        expect(calls.onAndroidSettings).toHaveBeenCalledOnce();
+      } else if (status === 'offline' || status === 'error') {
+        press('Try again');
+        expect(calls.onRetry).toHaveBeenCalledOnce();
+        press('Android notification settings');
+        expect(calls.onAndroidSettings).toHaveBeenCalledOnce();
+      } else {
+        expect(switches().map((n) => n.props.accessibilityState.checked)).toEqual([false]);
+      }
+    },
+  );
+  it('keeps an offline off phone off without offering unconfirmed category rows', () => {
+    render('offline', false);
+    expect(switches().map((n) => n.props.accessibilityState)).toEqual([
+      { checked: false, disabled: true },
+    ]);
+  });
+  it('shows one accessible skeleton row while loading, never stale controls', () => {
+    render('loading');
+    expect(switches()).toHaveLength(0);
+    expect(screen.root.findAllByType(Skeleton)).toHaveLength(4);
+    expect(
+      screen.root.findAll(
+        (n) =>
+          (n.type as unknown) === 'View' &&
+          n.props.accessibilityLabel === 'Loading notification settings…',
+      ),
+    ).toHaveLength(1);
+    expect(text()).toContain(caption);
+  });
+  it.each([false, true])(
+    'shows unavailable with no switch or caption even when enabled=%s',
+    (enabled) => {
+      render('ready', enabled, 'light', false);
+      expect(text()).toContain('Not available yet');
+      expect(switches()).toHaveLength(0);
+      expect(text()).not.toContain(caption);
+      expect(screen.root.findAllByType(ListRow)).toHaveLength(1);
+    },
+  );
+  it.each(['light', 'dark'] as const)(
+    'wraps at 200% on 360dp and uses %s switch tokens',
+    (mode) => {
+      setWindow({ width: 360, fontScale: 2 });
+      render('ready', true, mode);
+      expect(unreadText(screen.toJSON(), 2, 328)).toEqual([]);
+      const theme = getSemanticTokens(mode);
+      const native = screen.root.findAll((n) => (n.type as unknown) === 'Switch');
+      expect(native[0].props.thumbColor).toBe(theme.brand.main);
+      expect(native[0].props.trackColor.true).toBe(`${theme.brand.main}80`);
+      expect(native[2].props.trackColor.false).toBe(theme.borderStrong);
+      expect(native.every((n) => n.parent?.props.style.alignSelf === 'flex-start')).toBe(true);
+    },
+  );
 });
