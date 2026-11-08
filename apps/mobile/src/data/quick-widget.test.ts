@@ -88,8 +88,28 @@ for (const size of ['1x1', '2x1'] as const)
     ])
       expect(JSON.stringify(quickWidget(copy, chosen, size, status))).not.toContain('Maple');
   });
-it('uses the Group read archive flag ahead of an older active list entry',()=>{
- const archived={...copy,groups:{maple:{id:'maple',name:'Maple House',theme:'home' as const,archived:true,mainCurrency:'INR',verifiedAt:2,balancesVerifiedAt:2,currencies:[]}}};
- expect(quickWidget(archived,{...setup,groupId:'maple'},'2x1',session)).toMatchObject({state:'archived',title:'Group archived'});
- expect(quickWidget({...copy,accountId:'sam'},{...setup,groupId:'maple'},'2x1',session).state).toBe('other-account');
+it('uses the Group read archive flag ahead of an older active list entry', () => {
+  const archived = {
+    ...copy,
+    groups: {
+      maple: {
+        id: 'maple',
+        name: 'Maple House',
+        theme: 'home' as const,
+        archived: true,
+        mainCurrency: 'INR',
+        verifiedAt: 2,
+        balancesVerifiedAt: 2,
+        currencies: [],
+      },
+    },
+  };
+  expect(quickWidget(archived, { ...setup, groupId: 'maple' }, '2x1', session)).toMatchObject({
+    state: 'archived',
+    title: 'Group archived',
+  });
+  expect(
+    quickWidget({ ...copy, accountId: 'sam' }, { ...setup, groupId: 'maple' }, '2x1', session)
+      .state,
+  ).toBe('other-account');
 });

@@ -31,7 +31,7 @@ export function quickWidget(
       null,
       'sign-in',
     );
-  if (session.accountId !== setup.accountId)
+  if (session.accountId !== setup.accountId || (copy && copy.accountId !== setup.accountId))
     return blocked('other-account', 'Set up again', null, {
       kind: 'setup',
       widgetId: setup.widgetId,
@@ -43,7 +43,7 @@ export function quickWidget(
     });
   const group =
     setup.groupId && copy?.accountId === setup.accountId
-      ? (copy.savedGroups?.rows.find((g) => g.id === setup.groupId) ?? copy.groups?.[setup.groupId])
+      ? (copy.groups?.[setup.groupId] ?? copy.savedGroups?.rows.find((g) => g.id === setup.groupId))
       : null;
   if (group?.archived)
     return blocked('archived', 'Group archived', 'Choose another', {
