@@ -182,7 +182,7 @@ it('marks incoming Suggested payments and the balance as owed to you', () => {
   };
   expect(groupWidget(incoming, setup, '4x2', session, now)).toMatchObject({
     balanceTone: 'positive',
-    payments: [{ label: 'Priya pays you', firstName: 'Priya', incoming: true }],
+    payments: [{ label: 'Priya pays you', firstName: 'Priya', incoming: true, payment:{from:'priya',to:'alex',currency:'INR'} }],
   });
 });
 it('keeps the Main currency balance and an overflow label in the compact widget', () => {
