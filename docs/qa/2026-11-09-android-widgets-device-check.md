@@ -81,6 +81,8 @@ The sign-out observer found the widget copy absent by the first observed signed-
 
 **Screenshots:** `Release-build-setup-blocked-actual.png`.
 
+**Resolution:** Release-mode widget checks run on a staging APK with widgets on and a staging account. The signed-in release destinations pass in [the staging release check](2026-11-09-android-widgets-release-staging-check.md). The development-config refusal stays.
+
 ### B02 — The first tap after force-stop wakes the widget but does not open the app
 
 **Tracking:** [#1009](https://github.com/FireBird1998/splitbook/issues/1009)
