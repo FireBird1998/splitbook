@@ -231,6 +231,26 @@ function groupWidgetView(
   };
 }
 
+/**
+ * TalkBack labels for the visible payment rows. When two rows share a first name and their
+ * stored initials differ, each name gains its second initial ("You pay Priya S"), so speech
+ * tells them apart the way the avatars do. Old copies without initials keep first names only.
+ */
+function spokenPayments(payments: ReturnType<typeof groupWidgetView>['payments']) {
+  const byName = new Map<string, string[]>();
+  for (const p of payments)
+    byName.set(p.firstName, [...(byName.get(p.firstName) ?? []), p.initials]);
+  return payments.map((p) => {
+    const shared = byName.get(p.firstName)!;
+    const distinct =
+      shared.length > 1 &&
+      p.initials.length > 1 &&
+      shared.filter((initials) => initials === p.initials).length === 1;
+    const name = distinct ? `${p.firstName} ${p.initials.slice(1, 2)}` : p.firstName;
+    return `${p.incoming ? `${name} pays you` : `You pay ${name}`} ${p.amount}`;
+  });
+}
+
 function groupWidgetProjection(...args: Parameters<typeof groupWidgetView>) {
   const view = groupWidgetView(...args);
   const full = args[5] ? groupWidgetView(args[0], args[1], args[2], args[3], args[4]) : view;
@@ -247,7 +267,7 @@ function groupWidgetProjection(...args: Parameters<typeof groupWidgetView>) {
         ? `${full.compactLabel} ${full.compactAmount}`
         : null,
       args[2] === '2x2' ? full.people : null,
-      ...full.payments.map((p) => p.label + ' ' + p.amount),
+      ...spokenPayments(full.payments),
       full.more,
       full.hidden ? null : full.description,
       full.saved,
