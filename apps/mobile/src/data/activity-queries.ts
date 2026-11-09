@@ -1,11 +1,9 @@
 import {
-  CancelledError,
   hashKey,
   InfiniteQueryObserver,
   type focusManager,
   type InfiniteData,
   type onlineManager,
-  type Query,
   type QueryClient,
   type QueryFunctionContext,
   type QueryState,
@@ -33,15 +31,14 @@ import {
   rowPaths,
   sharePages,
   STALE,
-  createSavedCopyQueue,
+  createSavedReadEngine,
+  parseOnce,
   notSaved,
-  notSavedHere,
   type Envelope,
   type PageEnvelope,
 } from './saved-read-engine';
 import { savedGroupShown } from './group-queries';
-import { cachedRead } from './offline-cache';
-import { keepInvalidated, queryOwner } from './query-owner';
+import { queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
 import type { AccountStorageLease, MobileSnapshot, Route, ScrollAnchor } from './types';
 
@@ -64,23 +61,26 @@ const olderFailed = 'Couldn’t load older activity.';
 const loadFailed = 'Could not load Activity. Please try again.';
 
 /** One parse per answer: structural sharing keeps an unchanged page, and its events, the same. */
-const parsedPages = new WeakMap<object, Map<string, ReturnType<typeof parseActivityPage>>>();
-const pageOf = (value: unknown, groupId: string, page: number) => {
-  const byScope = parsedPages.get(value as object) ?? new Map();
-  parsedPages.set(value as object, byScope);
-  const scope = `${groupId}:${page}`;
-  const known = byScope.get(scope);
-  if (known) return known;
-  const parsed = parseActivityPage(value, groupId, page);
-  byScope.set(scope, parsed);
-  return parsed;
-};
-/** An event's Expense as the record's answer says it is now: one per answer. */
-const targets = new WeakMap<object, Target>();
+const parsedPage = parseOnce((value, scope) => {
+  const [groupId, page] = scope.split(':');
+  return parseActivityPage(value, groupId, Number(page));
+});
+const pageOf = (value: unknown, groupId: string, page: number) =>
+  parsedPage(value, `${groupId}:${page}`);
 const none: Target = { status: 'none' },
   checking: Target = { status: 'loading' },
   unavailable: Target = { status: 'unavailable' },
   failed: Target = { status: 'error' };
+
+/** An event's Expense as the record's answer says it is now: one parse per answer. */
+const targetFrom = parseOnce((value, scope): Target => {
+  const [groupId, expenseId] = scope.split(':');
+  try {
+    return parseActivityExpense((value as Envelope).value, groupId, expenseId);
+  } catch {
+    return failed;
+  }
+});
 
 /** `shown` again when nothing in `next` differs from it, so an unchanged read publishes nothing. */
 const same = <T extends object>(shown: T, next: T): T =>
@@ -93,8 +93,6 @@ const failure = (state: QueryState<unknown, Error>) =>
 /** The server couldn't be reached, and this device has no saved copy of the page. */
 const unreachable = (error: unknown) =>
   error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
-const refused = (error: unknown): error is RequestError =>
-  error instanceof RequestError && [403, 404].includes(error.status);
 /** A row of a Group's Activity page, never an Expense's history. */
 const ownRow = (path: string, groupId: string) =>
   path.startsWith(`/api/groups/${groupId}/activity?page=`);
@@ -156,14 +154,6 @@ export interface ActivitySession {
   missingLedger(groupId: string, owner: number): Promise<void>;
 }
 
-/** A read of a query: whether its request answered, and when it ends (as for a Group's view). */
-type Run = {
-  answered: boolean;
-  reading: Promise<unknown>;
-  abort?: AbortController;
-  before?: Promise<unknown>;
-  ended?: boolean;
-};
 /** An event opened from the list: what it says, and the check of the Expense it names. */
 interface Detail {
   event: ActivityEvent;
@@ -197,8 +187,8 @@ interface View {
    * stays while what this open read can't show yet, so the list never empties to a placeholder.
    */
   preview: { data: Pages; owns(): boolean } | null;
-  /** How many reads of its Activity had answered when this open began: a copy shows before more. */
-  answers: number;
+  /** Restores only before any read answered since this open, even if its query was replaced. */
+  restore(owner: number): Promise<Pages | null>;
   /** This device's copy being read for this open, once: from the open, so a switch shows it. */
   restoring: Promise<void> | null;
 }
@@ -215,19 +205,7 @@ interface View {
  * detail reads the Group's query (#219) and the Expense's record query (#220).
  */
 export function createActivityQueries(session: ActivitySession) {
-  const { client, rows } = session;
-  const queue = createSavedCopyQueue();
-  const runs = new Map<string, Run>();
-  /** How many reads of each query have answered, by its hash: a copy never shows after one. */
-  const answeredReads = new Map<string, number>();
-  const answerOf = (key: QueryKey) => answeredReads.get(hashKey(key)) ?? 0;
-  /** A read of `key` answered, from the server or failing. */
-  const answer = (key: QueryKey, run: Run) => {
-    run.answered = true;
-    answeredReads.set(hashKey(key), answerOf(key) + 1);
-  };
-  /** Each fetch's start, by its promise: whose session, and which query owns it. */
-  const starts = new WeakMap<object, { owner: number; owns(): boolean }>();
+  const { client } = session;
   /** How many pages each fetch has read so far, by its promise. */
   const pagesRead = new WeakMap<object, number>();
   /** How many events the first page of each fetch counted, by its promise. */
@@ -243,11 +221,6 @@ export function createActivityQueries(session: ActivitySession) {
   /** Restored to show while the Group is first read, and not answered by a read since. */
   const previewed = (data: unknown) =>
     !!data && previews.has(data as object) && !answers.has(data as object);
-  /** How often `forget` removed each Group's rows: a row being written meanwhile goes too. */
-  const forgotten = new Map<string, number>();
-  /** The rows this session saved or restored: removable even by a store that can't list rows. */
-  const known = new Set<string>();
-  const reading = new WeakMap<object, Set<AbortController>>();
   /** The returns whose pages a read has shown again. */
   const shownRereads = new WeakSet<object>();
   /** Reads still running, which `settle` waits for. */
@@ -255,7 +228,6 @@ export function createActivityQueries(session: ActivitySession) {
   let view: View | null = null;
   let observer: InfiniteQueryObserver<PageEnvelope, Error, Pages, QueryKey, number> | undefined;
   let pending = false;
-  let rebinding = false;
 
   const held = <T>(key: QueryKey) => client.getQueryCache().get<T, Error>(hashKey(key));
   /** A query's state once it holds something: one an observer only created holds nothing. */
@@ -273,25 +245,31 @@ export function createActivityQueries(session: ActivitySession) {
     activityPagePath(key[3] as string, { page, limit: PAGE_SIZE });
   const isActivity = (key: QueryKey) =>
     key[0] === 'ledger' && key.length === 5 && /\/activity\?limit=\d+$/.test(queryKeyPath(key));
-  const readable = (key: QueryKey, value: unknown, page: number) => {
+  const readable = (key: QueryKey, value: unknown, page = 1) => {
     try {
       return Boolean(pageOf(value, key[3] as string, page));
     } catch {
       return false;
     }
   };
-  const savedRow = async (lease: AccountStorageLease, path: string) =>
-    cachedRead(
-      await lease.write(() => rows!.load(lease.accountId, path)),
-      lease.accountId,
-      path,
-      session.now(),
-    );
-  const removals = (key: QueryKey) => forgotten.get(key[3] as string) ?? 0;
-  const savedCopy = (row: { refreshedAt: number; value: unknown }): Envelope => ({
-    source: 'saved',
-    refreshedAt: row.refreshedAt,
-    value: row.value,
+  const engine = createSavedReadEngine(session, {
+    path: (key, page = 1) => pagePath(key, page),
+    readable,
+    ownsKey: isActivity,
+    rowScope: {
+      groupId: (key) => key[3] as string,
+      remove: removeActivityRows,
+      pathGroup: (path) => {
+        const id = /^\/api\/groups\/([a-f\d]{24})\//i.exec(path)?.[1];
+        return id && ownRow(path, id) ? id : null;
+      },
+      distrust: (key) => [`ledger:${key[3]}`],
+    },
+    refusal: 'forbidden-or-missing',
+    preview: 'unanswered-since-open',
+    automaticRefetch: false,
+    cancelOnRemove: true,
+    staleWhenOffline: true,
   });
 
   /** The Group's read in this open says it is a Household. */
@@ -313,68 +291,22 @@ export function createActivityQueries(session: ActivitySession) {
   };
 
   /**
-   * Saves one page of an answer as its row on the saved-copy queue, where a newer answer
-   * replaces it. The session, the account, the read's query owner and whether its Group is kept here
-   * are checked at write time, so nothing lands after sign-out, an account change, a change or a
-   * denial.
-   */
-  const saveRow = (
-    key: QueryKey,
-    { owner, owns }: { owner: number; owns(): boolean },
-    { refreshedAt, value }: { refreshedAt: number; value: unknown },
-    page: number,
-  ) => {
-    const lease = session.lease(),
-      path = pagePath(key, page);
-    if (!lease || !rows) return;
-    queue.push(path, async () => {
-      if (!session.current(owner) || !session.owns(lease.accountId)) return;
-      if (!owns() || !session.savable(key)) return;
-      const { accountId } = lease,
-        before = removals(key);
-      known.add(path);
-      await rows
-        .save(accountId, path, { version: 1, accountId, path, groupId: key[3], refreshedAt, value })
-        .catch(() => {
-          const { offline } = session.snapshot();
-          if (session.current(owner))
-            session.publish({ offline: { ...offline, message: notSavedHere } });
-        });
-      // Removed while it was being written: it goes too, since `forget` never waits for it. One
-      // that can't go is no longer trusted (#323).
-      if (removals(key) !== before)
-        await rows
-          .remove(accountId, path)
-          .catch(() => session.distrust(accountId, [`ledger:${key[3]}`]));
-    });
-  };
-  /**
    * While Activity is first read, its newest page saved on this device shows, with its own time:
    * at once, even while a read beside the Group is under way (M3-1). Never one a change, a denial
    * or a failed removal made obsolete, one it can't read, and never once a read of it answered
-   * (`answers`: how many had when this open began). Returns what it shows.
+   * since this open began. The engine captures that guard now; when to restore stays here.
    */
-  const restore = async (key: QueryKey, owner: number, answers: number): Promise<Pages | null> => {
-    const lease = session.lease(),
-      owns = queryOwner(client, key);
-    if (!lease || !rows) return null;
-    const row = await savedRow(lease, pagePath(key, 1)).catch(() => null);
-    if (
-      !row ||
-      runs.get(hashKey(key))?.answered ||
-      answerOf(key) !== answers ||
-      !session.current(owner) ||
-      !owns() ||
-      held(key)?.state.data !== undefined ||
-      row.refreshedAt <= session.distrusted(key, true) ||
-      !readable(key, row.value, 1)
-    )
-      return null;
-    const data: Pages = { pages: [{ ...savedCopy(row), page: 1 }], pageParams: [1] };
-    previews.add(data);
-    known.add(row.path);
-    client.setQueryData(key, data);
-    return data;
+  const previewAtOpen = (key: QueryKey) => {
+    const restore = engine.previewAtOpen(key);
+    return (owner: number) =>
+      restore(owner, {
+        page: 1,
+        project: (copy): Pages => {
+          const data = { pages: [{ ...copy, page: 1 }], pageParams: [1] };
+          previews.add(data);
+          return data;
+        },
+      });
   };
   /**
    * This device's copy for this open, read once. The open starts it, so a switch to Activity shows
@@ -383,71 +315,14 @@ export function createActivityQueries(session: ActivitySession) {
    */
   const restoreOnce = (opened: View, owner: number) => {
     const key = activityKey(opened.groupId);
-    opened.restoring ??= restore(key, owner, opened.answers)
+    opened.restoring ??= opened
+      .restore(owner)
       .then((data) => {
         if (data && view === opened) opened.preview = { data, owns: queryOwner(client, key) };
         reproject();
       })
       .catch(() => undefined);
     return opened.restoring;
-  };
-  /** Records a read, and its fetch's start, so its answer is saved only while current. */
-  const track = (key: QueryKey, run: Run) => {
-    const query = held(key),
-      previous = runs.get(hashKey(key));
-    if (rebinding && previous && !previous.ended) run.before = previous.reading;
-    runs.set(hashKey(key), run);
-    void Promise.resolve()
-      .then(() => run.reading)
-      .catch(() => undefined)
-      .finally(() => (run.ended = true));
-    if (query) {
-      run.abort = new AbortController();
-      const reads = reading.get(query) ?? new Set<AbortController>();
-      reading.set(query, reads.add(run.abort));
-    }
-    if (query?.promise && !starts.has(query.promise))
-      starts.set(query.promise, {
-        owner: session.generation(),
-        owns: queryOwner(client, key),
-      });
-    return query;
-  };
-  /**
-   * One read of a page: sends it, or when Splitbook can't be reached, answers with the row saved
-   * here for that page and its own time, offline (M4-5). Only its query's removal cancels it.
-   */
-  const fetchOne = async (key: QueryKey, page: number, run: Run): Promise<Envelope> => {
-    if (run.before) await run.before.catch(() => undefined);
-    const owner = session.generation(),
-      owns = queryOwner(client, key),
-      lease = session.lease(),
-      path = pagePath(key, page);
-    const obsolete = () => !session.current(owner) || !owns();
-    let value: unknown;
-    try {
-      value = await session.read(path, owner, run.abort?.signal);
-      answer(key, run);
-    } catch (error) {
-      answer(key, run);
-      if (!(error instanceof RequestError) || !error.networkFailure || !lease || !rows) throw error;
-      const row = obsolete() ? null : await savedRow(lease, path).catch(() => null);
-      // Overtaken by a change, a denial or a Groups list: it is read again, not shown.
-      if (obsolete()) throw new Superseded();
-      const saved =
-        row && row.refreshedAt > session.distrusted(key, false) && readable(key, row.value, page)
-          ? row
-          : null;
-      keepInvalidated(client, key);
-      session.answered(path, saved?.refreshedAt ?? null);
-      if (!saved)
-        throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
-      return savedCopy(saved);
-    }
-    if (obsolete()) throw new Superseded();
-    pageOf(value, key[3] as string, page);
-    session.answered(path);
-    return { source: 'network', refreshedAt: Date.now(), value };
   };
   /**
    * A page of the Group's Activity. When a later page of a read can't be read, the list ends
@@ -456,15 +331,16 @@ export function createActivityQueries(session: ActivitySession) {
   const readPage = (context: QueryFunctionContext<QueryKey, unknown>) => {
     const key = context.queryKey,
       page = context.pageParam as number,
-      run: Run = { answered: false, reading: Promise.resolve() };
-    const query = track(key, run);
-    const fetch = query?.promise ?? {};
+      query = held(key),
+      fetch = query?.promise ?? {};
     const index = pagesRead.get(fetch) ?? 0;
     pagesRead.set(fetch, index + 1);
     const more = Boolean(query?.state.fetchMeta?.fetchMore);
-    run.reading = (async (): Promise<PageEnvelope> => {
-      try {
-        const answer = await fetchOne(key, page, run);
+    return engine.read<PageEnvelope>({
+      key,
+      page,
+      accept: (value) => void pageOf(value, key[3] as string, page),
+      project: (answer) => {
         const total = pageOf(answer.value, key[3] as string, page).pagination.total;
         if (index === 0 && !more) firstTotals.set(fetch, total);
         // Offline, an older or newer page shows from this device only while it counted as many
@@ -484,11 +360,12 @@ export function createActivityQueries(session: ActivitySession) {
           throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
         }
         return { ...answer, page };
-      } catch (error) {
+      },
+      failure: (error) => {
         if (
           index === 0 ||
           more ||
-          refused(error) ||
+          engine.refuses(error) ||
           error instanceof Superseded ||
           (error instanceof RequestError && error.kind === 'cancelled')
         )
@@ -500,20 +377,10 @@ export function createActivityQueries(session: ActivitySession) {
           value: null,
           message: olderFailed,
         };
-      }
-    })();
-    return run.reading as Promise<PageEnvelope>;
+      },
+    });
   };
 
-  /** Fresh for the display freshness window: never a saved copy, never while offline. */
-  const staleTime = (query: { state: { data?: unknown; dataUpdatedAt: number } }) => {
-    const data = query.state.data as Pages | undefined;
-    return data?.pages.every((page) => page.source === 'network') &&
-      !session.offline() &&
-      query.state.dataUpdatedAt <= Date.now()
-      ? session.freshness
-      : STALE;
-  };
   /** A return's pages of this Activity, until a read has shown them again (from the route). */
   const rereadOf = (key: QueryKey) => {
     const at = session.route();
@@ -528,11 +395,7 @@ export function createActivityQueries(session: ActivitySession) {
     const first = stateOf<Pages>(key)?.data?.pageParams[0] ?? start;
     const pages = reread ? Math.max(1, reread.pages - first + 1) : undefined;
     return {
-      staleTime,
-      retryOnMount: false,
-      refetchOnMount: false,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
+      ...engine.shared,
       queryKey: key,
       queryFn: readPage,
       initialPageParam: start,
@@ -591,36 +454,10 @@ export function createActivityQueries(session: ActivitySession) {
     else bindLater();
   };
 
-  /** Reads a query now, joining a read in flight; one a change cancels is read again. */
-  const readNow = async (
-    options: ReturnType<typeof listOptions>,
-    owner: number,
-    wanted: () => boolean,
-  ) => {
-    const hash = hashKey(options.queryKey);
-    for (;;) {
-      if (!session.current(owner)) throw new Superseded();
-      const fetching = client.fetchInfiniteQuery(options as never);
-      const run = runs.get(hash);
-      try {
-        return await fetching;
-      } catch (error) {
-        if (!(error instanceof CancelledError)) throw error;
-        // The request ends first, so whatever its answer set off has finished: a session that
-        // ended, or a Group whose refusal is this read's answer.
-        const answer = await run?.reading.then(
-          () => null,
-          (cause: unknown) => cause,
-        );
-        if (!session.current(owner)) throw new Superseded();
-        if (answer instanceof RequestError && answer.kind !== 'cancelled') throw answer;
-        if (!wanted()) throw new Superseded();
-      }
-    }
-  };
+  const readNow = engine.readNow;
   /** A refusal answered for this open: the Group's content goes, as the controller drops it. */
   const refuse = (opened: View, error: unknown) => {
-    if (!refused(error) || view !== opened) return false;
+    if (!engine.refuses(error) || !(error instanceof RequestError) || view !== opened) return false;
     session.refused(opened.groupId, error);
     return true;
   };
@@ -712,7 +549,7 @@ export function createActivityQueries(session: ActivitySession) {
     // or removed again by a change confirmed meanwhile, as Activity's reads always were. A
     // refresh, whose cue says a read is running, is done when its read lands (#222, review N1).
     return reading.then(async (answered) => {
-      if (answered && saved) await queue.idle();
+      if (answered && saved) await engine.idle();
     });
   };
 
@@ -724,7 +561,7 @@ export function createActivityQueries(session: ActivitySession) {
       const query = held(activityKey(view.groupId));
       if (query?.state.fetchStatus === 'fetching') {
         await query.promise?.catch(() => undefined);
-        await runs.get(query.queryHash)?.reading.catch(() => undefined);
+        await engine.settle(query.queryKey as QueryKey);
         continue;
       }
       if (running.size) {
@@ -787,16 +624,7 @@ export function createActivityQueries(session: ActivitySession) {
       expenseRecordKey(session.account(), opened.groupId, detail.expenseId),
     )?.state.data;
     if (!data) return failed;
-    const known = targets.get(data);
-    if (known) return known;
-    let target: Target;
-    try {
-      target = parseActivityExpense(data.value, opened.groupId, detail.expenseId);
-    } catch {
-      target = failed;
-    }
-    targets.set(data, target);
-    return target;
+    return targetFrom(data, `${opened.groupId}:${detail.expenseId}`);
   };
   /** Activity as its query holds it, in the snapshot's shape. */
   const activityFrom = (
@@ -932,22 +760,6 @@ export function createActivityQueries(session: ActivitySession) {
     });
     return activity === next.activity ? next : { ...next, activity };
   };
-  /** A fetch that answered from the server: each page saved as its row while still current. */
-  const saveAnswer = (query: Query) => {
-    if (client.getQueryCache().get(query.queryHash) !== query) return;
-    const start = query.promise && starts.get(query.promise);
-    const data = query.state.data as Pages | undefined;
-    if (!start || !data) return;
-    for (const page of data.pages)
-      if (page.source === 'network') saveRow(query.queryKey as QueryKey, start, page, page.page);
-  };
-  /** Removes a Group's Activity rows: every page saved, and any being written once it lands. */
-  const removeRows = async (accountId: string, groupId: string) => {
-    if (!rows) return;
-    forgotten.set(groupId, (forgotten.get(groupId) ?? 0) + 1);
-    await removeActivityRows(rows, accountId, groupId, known);
-  };
-
   return {
     project,
     shownKeys(next: MobileSnapshot): QueryKey[] {
@@ -972,12 +784,7 @@ export function createActivityQueries(session: ActivitySession) {
      */
     rebind() {
       if (!observer) return;
-      rebinding = true;
-      try {
-        bind();
-      } finally {
-        rebinding = false;
-      }
+      engine.rebind(bind);
     },
     /**
      * The member opens this Group, or its view on screen is read again (`again`), which closes an
@@ -997,7 +804,7 @@ export function createActivityQueries(session: ActivitySession) {
           detail: null,
           beside: false,
           preview: null,
-          answers: answerOf(activityKey(groupId)),
+          restore: previewAtOpen(activityKey(groupId)),
           restoring: null,
         };
         const key = activityKey(groupId),
@@ -1137,7 +944,7 @@ export function createActivityQueries(session: ActivitySession) {
         // A refusal of the Group, or the Group gone, drops it; the Expense gone says only that.
         if (
           error instanceof RequestError &&
-          (error.status === 403 || (!recordRead && error.status === 404))
+          engine.refuses(error, recordRead ? 'forbidden-only' : 'forbidden-or-missing')
         )
           return void refuse(opened, error);
         detail.failure =
@@ -1165,18 +972,9 @@ export function createActivityQueries(session: ActivitySession) {
       unbind();
     },
     /** Removes a Group's Activity rows, inside a lease write: a change or a loss. */
-    forget: (accountId: string, groupId: string) => removeRows(accountId, groupId),
+    forget: engine.forget,
     /** Keeps only these Groups' rows: a Groups list from the server left the others out. */
-    async retain(accountId: string, listed: string[]) {
-      if (!rows) return;
-      const keep = new Set(listed);
-      for (const path of await rowPaths(rows, accountId, known)) {
-        const id = /^\/api\/groups\/([a-f\d]{24})\//i.exec(path)?.[1];
-        if (!id || keep.has(id) || !ownRow(path, id)) continue;
-        forgotten.set(id, (forgotten.get(id) ?? 0) + 1);
-        await rows.remove(accountId, path);
-      }
-    },
+    retain: engine.retain,
     /**
      * Returning to the foreground and reconnecting (M1-4, M1-6): Activity on screen reads again
      * what is past its stale time, through TanStack's focus and online events only. Answers
@@ -1184,19 +982,14 @@ export function createActivityQueries(session: ActivitySession) {
      */
     listen(focus: typeof focusManager, online: typeof onlineManager) {
       const stops = [
+        engine.listen(),
         client.getQueryCache().subscribe((event) => {
-          // A removed query's requests are obsolete: they are cancelled, never offline (#214).
-          if (event.type === 'removed') {
-            reading.get(event.query)?.forEach((abort) => abort.abort());
-            return;
-          }
           // Invalidation changes preview eligibility, not the content a response projects.
           if (event.type !== 'updated' || event.action.type === 'invalidate') return;
           const { query } = event,
             key = query.queryKey as QueryKey;
           if (!isActivity(key)) return;
           if (event.action.type === 'success' && !event.action.manual) {
-            saveAnswer(query);
             if (query.state.data) answers.add(query.state.data);
           }
           if (!view || key[3] !== view.groupId) return;
@@ -1212,12 +1005,11 @@ export function createActivityQueries(session: ActivitySession) {
     /** The internet returned on the connection the device kept (#681): Home's NetInfo says so. */
     recover,
     /** Settles once no saved copy is being written. */
-    idle: () => queue.idle(),
+    idle: engine.idle,
     /** The session ended (M10-2): nothing waiting is written, nothing is observed. */
     reset() {
       unbind();
-      queue.cancel();
-      runs.clear();
+      engine.reset();
       view = null;
     },
   };
