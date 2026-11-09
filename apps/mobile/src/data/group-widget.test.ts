@@ -256,3 +256,51 @@ it.each(['2x2', '4x2', '4x3'] as const)(
     });
   },
 );
+
+it('renders an older first-name-only copy with one initial until a new read replaces it', () => {
+  const legacy = {
+    ...part,
+    currencies: [
+      {
+        ...part.currencies[0],
+        payments: [
+          {
+            from: 'alex',
+            to: 'priya',
+            fromName: 'Alex',
+            toName: 'Priya',
+            amountMinor: 106000,
+          },
+        ],
+      },
+    ],
+  };
+  expect(groupWidget(legacy, setup, '4x2', session, now).payments).toMatchObject([
+    { firstName: 'Priya', initials: 'P' },
+  ]);
+});
+
+it('Hide amounts omits stored member initials and names from the view and spoken summary', () => {
+  const copy = {
+    ...part,
+    currencies: [
+      {
+        ...part.currencies[0],
+        payments: [
+          {
+            from: 'alex',
+            to: 'priya',
+            fromName: 'Alex',
+            fromInitials: 'AR',
+            toName: 'Priya',
+            toInitials: 'PS',
+            amountMinor: 106000,
+          },
+        ],
+      },
+    ],
+  };
+  const view = groupWidget(copy, { ...setup, hideAmounts: true }, '4x3', session, now);
+  expect(view.payments).toEqual([]);
+  expect(JSON.stringify(view)).not.toMatch(/Priya|PS|AR|1060|1,060/);
+});
