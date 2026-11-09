@@ -168,7 +168,7 @@ import {
 import { parseInvitationLink, parseToReviewLink } from './invitation-links';
 import { parseGroupBalances } from './financial-dto';
 import { createHomeQueries, draftSummaries, emptyHome } from './home-queries';
-import type { Envelope } from './saved-read-engine';
+import { savedReadFreshness, type Envelope } from './saved-read-engine';
 import { createGroupQueries, emptyExpenses, savedGroupShown, type Step } from './group-queries';
 import { createExpenseQueries } from './expense-queries';
 import { createActivityQueries } from './activity-queries';
@@ -560,10 +560,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let offlineSession = false;
   const freshness = dependencies.displayFreshnessMs ?? DISPLAY_FRESHNESS_MS;
   /** A saved copy or a timestamp ahead of this device’s clock is never fresh (ADR 0006). */
-  const staleTime = ({ state }: { state: { data?: unknown; dataUpdatedAt: number } }) =>
-    (state.data as Envelope | undefined)?.source === 'saved' || state.dataUpdatedAt > Date.now()
-      ? -Infinity
-      : freshness;
+  const staleTime = (query: { state: { data?: unknown; dataUpdatedAt: number } }) =>
+    savedReadFreshness(query, freshness, { source: 'unless-saved' });
   /**
    * The one owner of this controller's display reads (ADR 0006, M1-1): it fetches, joins and
    * keeps every server response a view shows, under the shared query keys (#210). No automatic
