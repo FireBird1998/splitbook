@@ -1,3 +1,5 @@
+import { initials } from '../../initials';
+export { initials } from '../../initials';
 import type { ViewInstance } from 'react-native';
 import { Children, memo, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import {
@@ -289,15 +291,6 @@ export function IconTile({
     </View>
   );
 }
-
-export const initials = (name: string) =>
-  name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase();
 
 /** A CompactAvatar's box, in dp. */
 export const avatarSize = { regular: 32, small: 26 } as const;

@@ -406,3 +406,12 @@ The app needs no change for it: the envelope keeps the change's own `occurredAt`
 so every kind passes the same checks and shows the same fixed text, a tap opens Group Activity the
 same way, and one past its 24 hours, or for an activation since replaced, is dropped. A repeated
 delivery of the same event is suppressed by the existing per-event deduplication.
+
+## Android widget member names (#1011)
+
+The Group widget copy keeps each member's first name and two initials, computed on the
+phone with the same `initials()` used by app avatars. It never stores full surnames or full
+member names. Hide amounts also hides member names and initials, including from TalkBack.
+Older copies without initials keep rendering the first letter until the next Group and
+Balances reads rewrite them. An unreadable copy falls back to the no-copy state without
+wiping setup or blocking future reads.

@@ -85,8 +85,14 @@ export function createWidgetsStore(environment: string) {
         'SELECT copy, session FROM widget_state WHERE environment = ?',
         environment,
       );
+      let copy: WidgetCopy | null = null;
+      try {
+        copy = row?.copy ? JSON.parse(row.copy) : null;
+      } catch {
+        // An unreadable copy is absent for this draw; do not wipe setup or block the next read.
+      }
       return {
-        copy: row?.copy ? JSON.parse(row.copy) : null,
+        copy,
         session: row?.session ? JSON.parse(row.session) : { status: 'signed-out' },
       };
     },
