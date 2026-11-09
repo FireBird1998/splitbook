@@ -115,6 +115,8 @@ The sign-out observer found the widget copy absent by the first observed signed-
 
 **Tracking:** [#1012](https://github.com/FireBird1998/splitbook/issues/1012)
 
+**Fix:** #1012 adds an event-driven, saved-copy font redraw after normal process death. See the [font-scale device check](2026-11-09-android-widget-font-scale-check.md).
+
 **Severity:** Does not block turning the switch on; track as a follow-up.
 
 **Reproduce:** Background the app, kill its process without force-stop, change font_scale from 1.0 to 2.0, and inspect the placed widget.

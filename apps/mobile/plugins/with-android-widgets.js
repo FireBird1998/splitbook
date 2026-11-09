@@ -83,6 +83,17 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
         },
       ],
     });
+    app.service = (app.service ?? []).filter(
+      (item) => item.$['android:name'] !== '.widget.FontScaleJob',
+    );
+    app.service.push({
+      $: {
+        'android:name': '.widget.FontScaleJob',
+        'android:permission': 'android.permission.BIND_JOB_SERVICE',
+        'android:exported': 'true',
+        'android:enabled': String(enabled),
+      },
+    });
     app.activity = (app.activity ?? []).filter(
       (item) =>
         ![
@@ -123,6 +134,12 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
       );
       fs.mkdirSync(javaDir, { recursive: true });
       fs.writeFileSync(
+        path.join(javaDir, 'FontScaleJob.java'),
+        fs
+          .readFileSync(path.join(__dirname, 'android-widgets/FontScaleJob.java'), 'utf8')
+          .replaceAll('__WIDGET_PACKAGE__', `${config.android.package}.widget`),
+      );
+      fs.writeFileSync(
         path.join(javaDir, 'Balances.java'),
         `package ${config.android.package}.widget;
 
@@ -133,6 +150,7 @@ import android.os.Bundle;
 
 public class Balances extends com.reactnativeandroidwidget.RNWidgetProvider {
   @Override public void onReceive(Context context, Intent intent) {
+    FontScaleJob.watch(context);
     if ((context.getPackageName() + ".WIDGET_CLICK").equals(intent.getAction())
         && "OPEN_URI".equals(intent.getStringExtra("clickAction"))) {
       Bundle data = intent.getBundleExtra("clickActionData");
