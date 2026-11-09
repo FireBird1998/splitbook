@@ -248,7 +248,6 @@ export function createExpenseQueries(session: ExpenseSession) {
     automaticRefetch: false,
     cancelOnRemove: true,
     staleWhenOffline: true,
-    recover: () => recover(),
   });
   // Preview projection is the view's: one record or the first history page.
   const restore = (key: QueryKey, owner: number) =>
@@ -874,7 +873,7 @@ export function createExpenseQueries(session: ExpenseSession) {
     /** Try again: the session, the Group, then the record and its changes, read again now. */
     retry: () => again('retry'),
     /** The internet returned on the connection the device kept (#681): Home's NetInfo says so. */
-    recover: engine.recover,
+    recover,
     /**
      * Try again on the record's changes, also while it is edited: every page loaded is read
      * again, from the window's first, and the changes shown stay until they land (M1-3).

@@ -201,7 +201,6 @@ function engineFixture(rule: RefusalRule = 'forbidden-only') {
     automaticRefetch: false,
     cancelOnRemove: true,
     staleWhenOffline: true,
-    recover: async () => undefined,
   });
   const stop = engine.listen();
   const fetch = (accept: (value: unknown) => void | Promise<void> = () => undefined) => {

@@ -147,7 +147,6 @@ export interface SavedReadView {
   automaticRefetch: boolean;
   cancelOnRemove: boolean;
   staleWhenOffline: boolean;
-  recover(): Promise<void>;
 }
 interface Run {
   answered: boolean;
@@ -169,9 +168,13 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
   const { client, rows } = session;
   const queue = createSavedCopyQueue(),
     runs = new Map<string, Run>();
+  /** Each fetch's start, by its promise: whose session, and which query owns it. */
   const starts = new WeakMap<object, { owner: number; owns(): boolean }>();
+  /** Each query's requests under way, which its removal cancels. */
   const reading = new WeakMap<object, Set<AbortController>>();
+  /** How often `forget` removed each scope's rows: a row being written meanwhile goes too. */
   const forgotten = new Map<string, number>(),
+    /** The rows this session saved or restored: removable even by a store that can't list rows. */
     known = new Set<string>();
   let rebinding = false;
   const held = (key: QueryKey) => client.getQueryCache().get<unknown, Error>(hashKey(key));
@@ -188,6 +191,11 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
     refreshedAt: row.refreshedAt,
     value: row.value,
   });
+  /**
+   * Saves an answer as its row on the saved-copy queue, where a newer answer replaces it: one
+   * row per query, or one per page (`page`). The session, the account, the read's query owner and
+   * whether its Group is kept here are checked at write time.
+   */
   const saveRow = (
     key: QueryKey,
     { owner, owns }: { owner: number; owns(): boolean },
@@ -217,12 +225,15 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
           if (session.current(owner))
             session.publish({ offline: { ...offline, message: notSavedHere } });
         });
+      // Removed while it was being written: it goes too, since `forget` never waits for it. One
+      // that can't go is no longer trusted (#323).
       if (removals(key) !== before)
         await rows
           .remove(accountId, path)
           .catch(() => session.distrust(accountId, view.rowScope.distrust(key)));
     });
   };
+  /** A fetch that answered from the server: saved as its row(s) while still current. */
   const saveAnswer = (query: Query) => {
     if (client.getQueryCache().get(query.queryHash) !== query) return;
     const start = query.promise && starts.get(query.promise),
@@ -234,6 +245,7 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
         if (page.source === 'network') saveRow(key, start, page, page.page);
     } else if (data.source === 'network') saveRow(key, start, data);
   };
+  /** Records a read, and its fetch's start, so its answer is saved only while current. */
   const track = (key: QueryKey, run: Run) => {
     const query = held(key),
       previous = runs.get(hashKey(key));
@@ -251,6 +263,11 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
     if (query?.promise && !starts.has(query.promise))
       starts.set(query.promise, { owner: session.generation(), owns: queryOwner(client, key) });
   };
+  /**
+   * One read of a row: sends it, or when Splitbook can't be reached, answers with the row saved
+   * here for that path and its own time, offline (M4-5). Only its query's removal cancels it,
+   * never leaving the screen: an answer still current is kept and saved wherever it lands.
+   */
   const fetchOne = async <T>(request: RowRead<T>, run: Run): Promise<Envelope> => {
     const { key, page, accept } = request;
     if (run.before) await run.before.catch(() => undefined);
@@ -267,6 +284,7 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
       run.answered = true;
       if (!(error instanceof RequestError) || !error.networkFailure || !lease || !rows) throw error;
       const row = obsolete() ? null : await savedRow(lease, path).catch(() => null);
+      // Overtaken by a change, a denial or a Groups list: it is read again, not shown.
       if (obsolete()) throw new Superseded();
       const saved =
         row &&
@@ -283,10 +301,15 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
     if (obsolete()) throw new Superseded();
     const acceptance = accept(value);
     if (acceptance) await acceptance;
+    // A view's acceptance may wait (a Group's does): what was overtaken meanwhile isn't shown.
     if (obsolete()) throw new Superseded();
     session.answered(path);
     return { source: 'network', refreshedAt: Date.now(), value };
   };
+  /**
+   * Fresh for the display freshness window: never a saved copy, never an answer stamped ahead of
+   * this device's clock, and never while offline where the view says so.
+   */
   const staleTime = (query: { state: { data?: unknown; dataUpdatedAt: number } }) => {
     const data = query.state.data as Envelope | Pages | undefined;
     const network = !data
@@ -301,6 +324,7 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
       : STALE;
   };
   return {
+    /** A query function's read of one row; `project` and `failure` shape what its query holds. */
     read<T = Envelope>(request: RowRead<T>): Promise<T> {
       const run: Run = { answered: false, reading: Promise.resolve() };
       track(request.key, run);
@@ -317,8 +341,10 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
           : answer;
       return run.reading as Promise<T>;
     },
+    /** Saves each answer from the server as it lands; subscribe it before a view's own projection. */
     listen() {
       return client.getQueryCache().subscribe((event) => {
+        // A removed query's requests are obsolete: they are cancelled, never offline (#214).
         if (event.type === 'removed') {
           if (view.cancelOnRemove) reading.get(event.query)?.forEach((abort) => abort.abort());
           return;
@@ -332,6 +358,11 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
           saveAnswer(event.query);
       });
     },
+    /**
+     * While a query is first read, the row this device saved shows, with its own time. Never one
+     * a change, a denial or a failed removal made obsolete, one the view can't read, and never
+     * once the view's preview rule says a read has overtaken it.
+     */
     async restore(
       key: QueryKey,
       owner: number,
@@ -359,6 +390,8 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
       known.add(row.path);
       client.setQueryData(key, preview.project ? preview.project(data) : data);
     },
+    // Where `automaticRefetch` is off, nothing reads on its own: the screen's commands, the
+    // foreground and a reconnect read in order.
     shared: {
       staleTime,
       retryOnMount: view.automaticRefetch,
@@ -366,6 +399,7 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
       refetchOnWindowFocus: view.automaticRefetch,
       refetchOnReconnect: view.automaticRefetch,
     },
+    /** Reads a query now, joining a read in flight; one a change cancels is read again. */
     async readNow<T>(
       options: { queryKey: QueryKey },
       owner: number,
@@ -384,6 +418,8 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
           return await fetching;
         } catch (error) {
           if (!(error instanceof CancelledError)) throw error;
+          // The request ends first, so whatever its answer set off has finished: a session that
+          // ended, or a Group whose refusal is this read's answer.
           const answer = await run?.reading.then(
             () => null,
             (cause: unknown) => cause,
@@ -394,6 +430,7 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
         }
       }
     },
+    /** Observers bound again after a scope's queries were replaced: a new read waits for the old. */
     rebind(bind: () => void) {
       rebinding = true;
       try {
@@ -402,11 +439,13 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
         rebinding = false;
       }
     },
+    /** Removes a scope's rows, inside a lease write: a change or a loss. */
     async forget(accountId: string, groupId: string) {
       if (!rows) return;
       forgotten.set(groupId, (forgotten.get(groupId) ?? 0) + 1);
       await view.rowScope.remove(rows, accountId, groupId, known);
     },
+    /** Keeps only these Groups' rows: a Groups list from the server left the others out. */
     async retain(accountId: string, listed: string[]) {
       if (!rows) return;
       const keep = new Set(listed);
@@ -417,20 +456,23 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
         await rows.remove(accountId, path);
       }
     },
+    /** Rows still waiting to be written at these paths are never written. */
     drop(paths: Iterable<string>) {
       for (const path of paths) queue.drop(path);
     },
+    /** Whether an answer is the Group refusing the member, by the view's rule or the one named. */
     refuses(error: unknown, rule: RefusalRule = view.refusal): boolean {
       return (
         error instanceof RequestError &&
         (error.status === 403 || (rule === 'forbidden-or-missing' && error.status === 404))
       );
     },
-    recover: view.recover,
+    /** The session ended (M10-2): nothing waiting is written. */
     reset() {
       queue.cancel();
       runs.clear();
     },
+    /** Settles once no saved copy is being written. */
     idle: () => queue.idle(),
   };
 }
