@@ -1284,6 +1284,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const homeQueries = createHomeQueries({
     ...session,
     environment: apiBase,
+    freshness,
     offline: () => offlineSession,
     drafts: dependencies.expenseDrafts,
     checkUnlisted: (listed, owner) => checkUnlistedRecords(listed, owner),

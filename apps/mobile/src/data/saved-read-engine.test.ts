@@ -1232,9 +1232,14 @@ function accountFixture() {
   f.stop();
   const key = groupsKey(f.ports.account()),
     other = homeBalancesKey(f.ports.account());
+  const marks = new Map<string, number>();
   const engine = createSavedReadEngine(
     {
       ...f.ports,
+      distrusted: (key) => Math.max(f.state.mark, marks.get(`${key[2]}:${key[0]}`) ?? -Infinity),
+      distrust: (accountId, scopes) => {
+        for (const scope of scopes) marks.set(`${accountId}:${scope}`, Infinity);
+      },
       rows: {
         load: (accountId, path) => f.rows.load(accountId, path),
         save: (accountId, path, value) => f.rows.save(accountId, path, value),
@@ -1332,4 +1337,128 @@ it('starts the fetching-only Home preview beside its unanswered read', async () 
     await reading;
     f.client.clear();
   }
+});
+
+it('never restores a Home preview once its request answered, even while acceptance is still fetching', async () => {
+  const f = accountFixture(),
+    accepting = deferred(),
+    accept = deferred();
+  await f.rows.save('account', f.path, {
+    version: 1,
+    accountId: 'account',
+    path: f.path,
+    refreshedAt: 500,
+    value: { title: 'Saved Groups' },
+  });
+  const reading = f.client.fetchQuery({
+    queryKey: f.key,
+    queryFn: () =>
+      f.engine.read({
+        key: f.key,
+        accept: async () => {
+          accepting.resolve();
+          await accept.promise;
+        },
+      }),
+  });
+  await accepting.promise;
+  try {
+    await f.engine.restore(f.key, 1);
+    expect(f.client.getQueryState(f.key)?.fetchStatus).toBe('fetching');
+    expect(f.client.getQueryData(f.key)).toBeUndefined();
+  } finally {
+    accept.resolve();
+    await reading;
+    f.client.clear();
+  }
+});
+
+it.each([
+  ['network', 1000, 30000],
+  ['saved', 1000, -Infinity],
+  ['network', 1001, -Infinity],
+] as const)('preserves Home offline freshness for %s stamped %i', (source, time, expected) => {
+  const f = accountFixture();
+  f.state.offline = true;
+  f.client.setQueryData(f.key, { source, value: {} }, { updatedAt: time });
+  expect(f.engine.shared.staleTime(f.client.getQueryCache().find({ queryKey: f.key })!)).toBe(
+    expected,
+  );
+  f.client.clear();
+});
+
+it('marks every account path before a removal failure, so another late row is still retired', async () => {
+  const f = accountFixture(),
+    started = deferred(),
+    slow = deferred(),
+    save = f.rows.save,
+    remove = f.rows.remove;
+  f.rows.save = async (...args) => {
+    started.resolve();
+    await slow.promise;
+    await save(...args);
+  };
+  f.rows.remove = async (accountId, path) => {
+    if (path === f.path) throw new Error('Groups row cannot be removed');
+    await remove(accountId, path);
+  };
+  f.engine.save(
+    f.other,
+    { owner: 1, owns: () => true },
+    { refreshedAt: 750, value: { title: 'Home' } },
+  );
+  await started.promise;
+  await expect(f.engine.forgetRows('account', [f.path, queryKeyPath(f.other)])).rejects.toThrow(
+    'Groups row cannot be removed',
+  );
+  slow.resolve();
+  await f.engine.idle();
+  expect(await f.rows.load('account', queryKeyPath(f.other))).toBeNull();
+  f.client.clear();
+});
+
+it('distrusts only the account row whose late removal fails', async () => {
+  const f = accountFixture(),
+    started = deferred(),
+    slow = deferred(),
+    save = f.rows.save,
+    remove = f.rows.remove;
+  f.rows.save = async (...args) => {
+    started.resolve();
+    await slow.promise;
+    await save(...args);
+  };
+  f.rows.remove = async (accountId, path) => {
+    if (await f.rows.load(accountId, path)) throw new Error('Cannot remove');
+    await remove(accountId, path);
+  };
+  f.engine.save(
+    f.other,
+    { owner: 1, owns: () => true },
+    { refreshedAt: 750, value: { title: 'Home' } },
+  );
+  await started.promise;
+  await f.engine.forgetRows('account', [queryKeyPath(f.other)]);
+  slow.resolve();
+  await f.engine.idle();
+  const homePath = queryKeyPath(f.other);
+  expect(await f.rows.load('account', homePath)).toMatchObject({ value: { title: 'Home' } });
+  await save('account', f.path, {
+    version: 1,
+    accountId: 'account',
+    path: f.path,
+    refreshedAt: 500,
+    value: { title: 'Groups' },
+  });
+  f.state.read = async () => {
+    throw offlineFailure();
+  };
+  await expect(
+    f.client.fetchQuery({
+      queryKey: f.other,
+      queryFn: () => f.engine.read({ key: f.other, accept: () => undefined }),
+    }),
+  ).rejects.toMatchObject({ code: 'OFFLINE_UNAVAILABLE' });
+  expect(await f.engine.saved(f.key)).toMatchObject({ value: { title: 'Groups' } });
+  f.client.clear();
 });
