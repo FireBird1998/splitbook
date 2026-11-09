@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { buildFigures, tourScript, type Figure } from './generate.ts';
+import { buildFigures, generatedFiles, OUT_DIR, tourScript, type Figure } from './generate.ts';
 
 const LICENSE = readFileSync(resolve(import.meta.dirname, '../vendor/anatomy/LICENSE'), 'utf8');
 
@@ -11,6 +11,14 @@ describe('the tour chunk for the web app', () => {
   beforeAll(() => {
     figures = buildFigures();
   }, 60_000);
+
+  it('generates a quiet figure and tour for every story', () => {
+    const files = generatedFiles(figures);
+    for (const figure of figures) {
+      expect(files.has(`${OUT_DIR}/${figure.id}-quiet.ts`)).toBe(true);
+      expect(files.has(`${OUT_DIR}/${figure.id}-quiet-tour.js`)).toBe(true);
+    }
+  });
 
   it('carries the Anatomy kit’s whole MIT notice in code, where minifying can’t drop it', async () => {
     for (const figure of figures) {
