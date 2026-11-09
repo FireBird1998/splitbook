@@ -953,3 +953,70 @@ it.each(['forget', 'retain'] as const)(
     f.client.clear();
   },
 );
+
+it('uses a screen-owned request while keeping the same saved-read behavior', async () => {
+  const f = engineFixture();
+  const answer = await f.client.fetchQuery({
+    queryKey: f.key,
+    queryFn: () =>
+      f.engine.read({
+        key: f.key,
+        accept: () => undefined,
+        send: async () => ({ title: 'Tags request' }),
+      }),
+  });
+  expect(answer).toEqual({
+    source: 'network',
+    refreshedAt: 1000,
+    value: { title: 'Tags request' },
+  });
+  await f.engine.idle();
+  expect(await f.rows.load('account', f.path)).toMatchObject({ value: { title: 'Tags request' } });
+  f.stop();
+  f.client.clear();
+});
+
+it('reads trusted saved data for a screen without starting or populating its query', async () => {
+  const f = engineFixture();
+  await f.seed();
+  expect(await f.engine.saved(f.key)).toEqual({
+    source: 'saved',
+    refreshedAt: 500,
+    value: { title: 'Saved answer' },
+  });
+  expect(f.client.getQueryData(f.key)).toBeUndefined();
+  f.state.mark = 500;
+  expect(await f.engine.saved(f.key)).toBeNull();
+  f.state.mark = -Infinity;
+  await f.seed(500, { wrong: 'Unreadable' });
+  expect(await f.engine.saved(f.key)).toBeNull();
+  f.stop();
+  f.client.clear();
+});
+
+it('saves a separately verified answer through the same ownership-checked saved-copy lane', async () => {
+  const f = engineFixture();
+  const verified = {
+    source: 'network' as const,
+    refreshedAt: 750,
+    value: { title: 'Verified elsewhere' },
+  };
+  f.client.setQueryData(f.key, verified);
+  f.engine.save(f.key, { owner: 1, owns: () => true }, verified);
+  await f.engine.idle();
+  expect(await f.rows.load('account', f.path)).toMatchObject({
+    refreshedAt: 750,
+    value: { title: 'Verified elsewhere' },
+  });
+  f.engine.save(
+    f.key,
+    { owner: 1, owns: () => false },
+    { ...verified, value: { title: 'Replaced owner' } },
+  );
+  await f.engine.idle();
+  expect(await f.rows.load('account', f.path)).toMatchObject({
+    value: { title: 'Verified elsewhere' },
+  });
+  f.stop();
+  f.client.clear();
+});

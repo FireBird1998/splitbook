@@ -167,6 +167,8 @@ interface RowRead<T> {
   key: QueryKey;
   page?: number;
   accept(value: unknown): void | Promise<void>;
+  /** A screen-owned request, such as Tags' role-aware read (#638), keeps the same row rules. */
+  send?(signal?: AbortSignal): Promise<unknown>;
   project?(answer: Envelope): T;
   failure?(error: unknown): T;
 }
@@ -276,7 +278,11 @@ export function createSavedReadEngine<Scope extends string = never>(
         if (page.source === 'network') saveRow(key, start, page, page.page);
     } else if (data.source === 'network') saveRow(key, start, data);
   };
-  /** Records a read, and its fetch's start, so its answer is saved only while current. */
+  /**
+   * Records a read and its fetch's start, so its answer is saved only while current. A read
+   * replacing one a change cancelled waits for its request and what its answer set off (a
+   * refusal or session change), as Home's reads do.
+   */
   const track = (key: QueryKey, run: Run) => {
     const query = held(key),
       previous = runs.get(hashKey(key));
@@ -309,7 +315,9 @@ export function createSavedReadEngine<Scope extends string = never>(
     const obsolete = () => !session.current(owner) || !owns();
     let value: unknown;
     try {
-      value = await session.read(path, owner, run.abort?.signal);
+      value = await (request.send
+        ? request.send(run.abort?.signal)
+        : session.read(path, owner, run.abort?.signal));
       answered(key, run);
     } catch (error) {
       answered(key, run);
@@ -392,6 +400,22 @@ export function createSavedReadEngine<Scope extends string = never>(
     return data;
   };
   return {
+    /** An answer already verified elsewhere is saved with its original time and owner (#219). */
+    save: saveRow,
+    /**
+     * This phone's saved row, without showing it in a query (Tags' offline choices, #638):
+     * never one a change, a denial or a failed removal made obsolete, nor one it can't read.
+     */
+    async saved(key: QueryKey, page?: number): Promise<Envelope | null> {
+      const lease = session.lease();
+      if (!lease || !rows) return null;
+      const row = await savedRow(lease, view.path(key, page)).catch(() => null);
+      return row &&
+        row.refreshedAt > session.distrusted(key, false) &&
+        view.readable(key, row.value, page)
+        ? copy(row)
+        : null;
+    },
     /** A query function's read of one row; `project` and `failure` shape what its query holds. */
     read<T = Envelope>(request: RowRead<T>): Promise<T> {
       const run: Run = { answered: false, reading: Promise.resolve() };
