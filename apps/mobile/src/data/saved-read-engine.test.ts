@@ -1516,11 +1516,19 @@ it('synchronizes the caller answer marker with preview eligibility in an overlap
   }
 });
 
-
-it.each([[true, 1000],[false, 1001]] as const)('preserves verification-time ordering for account=%s', async (account, expected) => {
+it.each([
+  [true, 1000],
+  [false, 1001],
+] as const)('preserves verification-time ordering for account=%s', async (account, expected) => {
   const f = account ? accountFixture() : engineFixture();
-  f.ports.answered=()=>{f.state.time=1001;};
-  const answer=await f.client.fetchQuery({queryKey:f.key,queryFn:()=>f.engine.read({key:f.key,accept:()=>undefined})});
-  expect(answer).toMatchObject({source:'network',refreshedAt:expected});
-  f.stop(); f.client.clear();
+  f.ports.answered = () => {
+    f.state.time = 1001;
+  };
+  const answer = await f.client.fetchQuery({
+    queryKey: f.key,
+    queryFn: () => f.engine.read({ key: f.key, accept: () => undefined }),
+  });
+  expect(answer).toMatchObject({ source: 'network', refreshedAt: expected });
+  f.stop();
+  f.client.clear();
 });

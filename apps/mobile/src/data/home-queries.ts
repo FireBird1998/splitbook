@@ -332,6 +332,7 @@ export function createHomeQueries(session: HomeSession) {
     cancelOnRemove: false,
     staleWhenOffline: false,
     freshnessSource: 'unless-saved',
+    verificationTime: 'after-acceptance',
   });
   /**
    * The Groups this device's saved list lists, inside a lease write: null if it can't be read, or
@@ -374,21 +375,15 @@ export function createHomeQueries(session: HomeSession) {
     before?: Promise<unknown>,
   ): Promise<Envelope> => {
     if (before) await before.catch(() => undefined);
-    const path = queryKeyPath(key),
-      owner = session.generation(),
+    const owner = session.generation(),
       owns = queryOwner(client, key);
+    read.since = answers;
     const answer = await engine.read({
       key,
       preview: !shown(),
-      // Home's list ordering and figures' coverage check use this read's answer/since, not a
-      // Group view's retry policy. Its request still receives no AbortSignal (#190).
-      send: async () => {
-        read.since = answers;
-        try {
-          return await session.read(path, owner);
-        } finally {
-          read.answered = true;
-        }
+      // Home's list ordering changes at the same transport boundary as the preview guard.
+      onAnswer: () => {
+        read.answered = true;
       },
       accept: async (value) => {
         // An overtaken answer sets off nothing; the engine checks ownership before and after

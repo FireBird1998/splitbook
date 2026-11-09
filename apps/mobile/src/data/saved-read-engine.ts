@@ -180,6 +180,7 @@ export interface SavedReadView<Scope extends string = never> {
   cancelOnRemove: boolean;
   staleWhenOffline: boolean;
   freshnessSource?: FreshnessSource;
+  verificationTime?: 'after-acceptance' | 'after-answer-report';
 }
 interface Run {
   answered: boolean;
@@ -196,6 +197,8 @@ interface RowRead<T> {
   key: QueryKey;
   page?: number;
   accept(value: unknown): void | Promise<void>;
+  /** The transport answered: the view's ordering marker changes with the preview guard. */
+  onAnswer?(): void;
   /** The view asks for a saved preview beside this read, using its named guard. */
   preview?: boolean;
   /** A screen-owned request, such as Tags' role-aware read (#638), keeps the same row rules. */
@@ -204,10 +207,20 @@ interface RowRead<T> {
   failure?(error: unknown): T;
 }
 
+type GroupReadPorts = SavedReadPorts & {
+  rows?: FindableRecordStore;
+  savable(key: QueryKey): boolean;
+};
 /** Owns a view's saved rows and query ownership; no run or queue escapes to callers. */
 export function createSavedReadEngine<Scope extends string = never>(
-  session: SavedReadPorts,
-  view: SavedReadView<Scope>,
+  ...[session, view]:
+    | [
+        GroupReadPorts,
+        SavedReadView<Scope> & {
+          rowScope: Exclude<SavedReadView<Scope>['rowScope'], { kind: 'account' }>;
+        },
+      ]
+    | [SavedReadPorts, SavedReadView<Scope> & { rowScope: { kind: 'account' } }]
 ) {
   const { client, rows } = session;
   const groupScope = view.rowScope.kind === 'account' ? null : view.rowScope;
@@ -352,10 +365,12 @@ export function createSavedReadEngine<Scope extends string = never>(
     try {
       value = await (request.send
         ? request.send(run.abort?.signal)
-        : session.read(path, owner, run.abort?.signal));
-      answered(key, run);
+        : view.cancelOnRemove
+          ? session.read(path, owner, run.abort?.signal)
+          : session.read(path, owner));
     } catch (error) {
       answered(key, run);
+      request.onAnswer?.();
       if (!(error instanceof RequestError) || !error.networkFailure || !lease || !rows) throw error;
       const row = obsolete() ? null : await savedRow(lease, path).catch(() => null);
       // Overtaken by a change, a denial or a Groups list: it is read again, not shown.
@@ -372,13 +387,17 @@ export function createSavedReadEngine<Scope extends string = never>(
         throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
       return copy(saved);
     }
+    answered(key, run);
+    request.onAnswer?.();
     if (obsolete()) throw new Superseded();
     const acceptance = accept(value);
     if (acceptance) await acceptance;
+    // Home stamps before ownership/reporting; the other views stamp after reporting. Keep both.
+    const verifiedAt = view.verificationTime === 'after-acceptance' ? Date.now() : undefined;
     // A view's acceptance may wait (a Group's does): what was overtaken meanwhile isn't shown.
     if (obsolete()) throw new Superseded();
     session.answered(path);
-    return { source: 'network', refreshedAt: Date.now(), value };
+    return { source: 'network', refreshedAt: verifiedAt ?? Date.now(), value };
   };
   const staleTime = (query: { state: { data?: unknown; dataUpdatedAt: number } }) =>
     savedReadFreshness(query, session.freshness, {
