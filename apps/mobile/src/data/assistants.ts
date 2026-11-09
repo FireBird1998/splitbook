@@ -9,7 +9,7 @@ import {
   type QueryKey,
 } from '@splitbook/shared/query-keys';
 import type { AccountGroupRecordStore } from './account-record-storage';
-import { createSavedCopyQueue } from './home-queries';
+import { createSavedCopyQueue } from './saved-read-engine';
 import { cachedRead } from './offline-cache';
 import { queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';

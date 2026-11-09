@@ -23,6 +23,7 @@ import { parseHomeBalances } from './financial-dto';
 import { parseHomeBalancesResponse } from '@splitbook/shared/home-balances-read';
 import { cachedRead } from './offline-cache';
 import { keepInvalidated, queryOwner } from './query-owner';
+import { createSavedCopyQueue, notSaved, notSavedHere, type Envelope } from './saved-read-engine';
 import { RequestError, Superseded } from './transport';
 import type {
   AccountStorageLease,
@@ -33,19 +34,10 @@ import type {
   NetworkState,
 } from './types';
 
-/**
- * A display read as the query cache holds it (ADR 0006, AMEND-2): the server's JSON as received,
- * parsed only when used, and when it was verified. `saved` marks a copy restored from this
- * device, which is never fresh.
- */
-export type Envelope = { source: 'network' | 'saved'; refreshedAt: number; value: unknown };
 type Read = QueryState<Envelope, Error>;
 /** Home's queries' paths: the Groups list, then Home's figures. */
 export const listPath = '/api/groups',
   homePath = '/api/user/balances';
-/** The server can't be reached, and this device has no saved copy of the view. */
-export const notSaved = 'This view was not saved on this device. Connect to load it.';
-const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
 /**
  * What stays on Home when Splitbook can't be reached and this phone keeps no copy to show
  * instead: removed by a change, withheld (#323) or never saved. True beside a "Saved" badge too,
@@ -229,33 +221,6 @@ export function projectHome(read: Read, shown: HomeFinancialState): HomeFinancia
       : error instanceof RequestError
         ? error.message
         : 'Could not load your balances. Please try again.',
-  };
-}
-
-/**
- * The saved-copy queue (ADR 0006, M3-2): saved copies are written one at a time, and the latest
- * write for a query wins, so an older one still waiting is dropped. Sign-out, an account change
- * and a 401 cancel what is waiting; the write already running finishes.
- */
-export function createSavedCopyQueue() {
-  const waiting = new Map<string, () => Promise<void>>();
-  let tail = Promise.resolve();
-  return {
-    push(key: string, write: () => Promise<void>) {
-      const queued = waiting.has(key);
-      waiting.set(key, write);
-      if (queued) return;
-      tail = tail.then(async () => {
-        const latest = waiting.get(key);
-        waiting.delete(key);
-        await latest?.().catch(() => undefined);
-      });
-    },
-    cancel: () => waiting.clear(),
-    /** A write for `key` still waiting is never made. */
-    drop: (key: string) => void waiting.delete(key),
-    /** Settles once the write running now, and every one still waiting, has. */
-    idle: () => tail,
   };
 }
 

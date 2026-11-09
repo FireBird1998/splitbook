@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { homePath, listPath } from './home-queries';
-import { removeGroupRows, rowPaths } from './group-queries';
+import { removeGroupRows } from './group-queries';
+import { rowPaths } from './saved-read-engine';
 import { removeRecordRows } from './expense-queries';
 import { removeActivityRows } from './activity-queries';
 import { parseStoredExpenseDraft } from './expense-draft';
