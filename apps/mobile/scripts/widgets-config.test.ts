@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const require = createRequire(import.meta.url);
 
 // The build configuration is the seam: Android discovers widgets from this manifest.
-function receiver(enabled?: string) {
+function application(enabled?: string) {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     EXPO_NO_DOTENV: '1',
@@ -25,9 +25,10 @@ function receiver(enabled?: string) {
       },
     ),
   );
-  const receivers =
-    config._internal.modResults.android.manifest.manifest.application[0].receiver ?? [];
-  return receivers.find(
+  return config._internal.modResults.android.manifest.manifest.application[0];
+}
+function receiver(enabled?: string) {
+  return (application(enabled).receiver ?? []).find(
     (entry: { $: Record<string, string> }) => entry.$['android:name'] === '.widget.Balances',
   );
 }
@@ -42,3 +43,23 @@ describe('Android Balances widget discovery', () => {
     expect(receiver('false')?.$['android:enabled']).toBe('false');
   }, 30_000);
 });
+
+it('declares a system-bound font-change job only when widgets are enabled, without a configuration broadcast receiver', () => {
+  for (const enabled of ['true', 'false']) {
+    const app = application(enabled);
+    const service = app.service?.find(
+      (entry: { $: Record<string, string> }) => entry.$['android:name'] === '.widget.FontScaleJob',
+    );
+    expect(service?.$).toMatchObject({
+      'android:permission': 'android.permission.BIND_JOB_SERVICE',
+      'android:enabled': enabled,
+    });
+    const actions = (app.receiver ?? []).flatMap(
+      (entry: { 'intent-filter'?: { action?: { $: Record<string, string> }[] }[] }) =>
+        (entry['intent-filter'] ?? []).flatMap((filter) =>
+          (filter.action ?? []).map((action) => action.$['android:name']),
+        ),
+    );
+    expect(actions).not.toContain('android.intent.action.CONFIGURATION_CHANGED');
+  }
+}, 30_000);
