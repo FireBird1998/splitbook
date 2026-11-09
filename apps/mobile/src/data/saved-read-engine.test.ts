@@ -1462,3 +1462,25 @@ it('distrusts only the account row whose late removal fails', async () => {
   expect(await f.engine.saved(f.key)).toMatchObject({ value: { title: 'Groups' } });
   f.client.clear();
 });
+
+it('synchronizes the caller answer marker with preview eligibility in an overlapping disk/wire read', async () => {
+  const f=accountFixture(), disk=deferredValue<unknown>(), wire=deferredValue<unknown>(), accepted=deferred(), accepting=deferred();
+  const late: unknown[]=[];
+  let answered=false;
+  f.rows.load=()=>disk.promise;
+  const stop=f.client.getQueryCache().subscribe(()=>{
+    const data=f.client.getQueryData(f.key) as {source?:string}|undefined;
+    if(answered && data?.source==='saved') late.push(data);
+  });
+  const reading=f.client.fetchQuery({queryKey:f.key,queryFn:()=>f.engine.read({
+    key:f.key, preview:true, send:()=>wire.promise,
+    onAnswer:()=>{answered=true;},
+    accept:async()=>{accepting.resolve();await accepted.promise;},
+  })});
+  disk.resolve({version:1,accountId:'account',path:f.path,refreshedAt:500,value:{title:'Saved'}});
+  await Promise.resolve(); await Promise.resolve();
+  wire.resolve({title:'Live'});
+  await accepting.promise;
+  try { expect(answered).toBe(true); expect(late).toEqual([]); }
+  finally {accepted.resolve();await reading;stop();f.client.clear();}
+});
