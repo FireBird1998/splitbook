@@ -304,3 +304,12 @@ it('Hide amounts omits stored member initials and names from the view and spoken
   expect(view.payments).toEqual([]);
   expect(JSON.stringify(view)).not.toMatch(/Priya|PS|AR|1060|1,060/);
 });
+
+it('renders no-copy when a damaged saved Group part cannot be read', () => {
+  const damaged: WidgetGroupPart = JSON.parse('{"currencies":null}');
+  expect(groupWidget(damaged, setup, '4x2', session, now)).toMatchObject({
+    state: 'no-copy',
+    payments: [],
+    title: 'Nothing saved yet',
+  });
+});
