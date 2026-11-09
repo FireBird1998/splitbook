@@ -922,3 +922,34 @@ it('keeps the Group row being written when only its ledger scope is removed', as
   f.stop();
   f.client.clear();
 });
+
+it.each(['forget', 'retain'] as const)(
+  'removes a ledger row landing after %s without changing a kept Group row',
+  async (removal) => {
+    const f = twoScopeFixture(),
+      started = deferred(),
+      slow = deferred(),
+      save = f.rows.save;
+    await save('account', queryKeyPath(f.details), { title: 'Kept Group' });
+    f.rows.save = async (...args) => {
+      started.resolve();
+      await slow.promise;
+      await save(...args);
+    };
+    await f.client.fetchQuery({
+      queryKey: f.ledger,
+      queryFn: () => f.engine.read({ key: f.ledger, accept: () => undefined }),
+    });
+    await started.promise;
+    if (removal === 'forget') await f.engine.forget('account', f.group, 'ledger');
+    else await f.engine.retain('account', []);
+    slow.resolve();
+    await f.engine.idle();
+    expect(await f.rows.load('account', queryKeyPath(f.ledger))).toBeNull();
+    expect(await f.rows.load('account', queryKeyPath(f.details))).toEqual(
+      removal === 'forget' ? { title: 'Kept Group' } : null,
+    );
+    f.stop();
+    f.client.clear();
+  },
+);

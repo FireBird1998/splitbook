@@ -127,17 +127,21 @@ export interface SavedReadPorts {
 }
 export type RefusalRule = 'forbidden-only' | 'forbidden-or-missing';
 /** View decisions, not persistence machinery. More preview policies join as their views move. */
-export interface SavedReadView {
+export interface SavedReadView<Scope extends string = never> {
   path(key: QueryKey, page?: number): string;
   readable(key: QueryKey, value: unknown, page?: number): boolean;
   ownsKey(key: QueryKey): boolean;
   rowScope: {
     groupId(key: QueryKey): string;
+    /** Scopes whose removal retires this row; omitted for one scope per Group. */
+    scopes?(key: QueryKey): readonly Scope[];
+    defaultScope?: Scope;
     remove(
       rows: FindableRecordStore,
       accountId: string,
       groupId: string,
       known: Iterable<string>,
+      scope?: Scope,
     ): Promise<void>;
     pathGroup(path: string): string | null;
     distrust(key: QueryKey): string[];
@@ -168,7 +172,10 @@ interface RowRead<T> {
 }
 
 /** Owns a view's saved rows and query ownership; no run or queue escapes to callers. */
-export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadView) {
+export function createSavedReadEngine<Scope extends string = never>(
+  session: SavedReadPorts,
+  view: SavedReadView<Scope>,
+) {
   const { client, rows } = session;
   const queue = createSavedCopyQueue(),
     runs = new Map<string, Run>();
@@ -190,7 +197,19 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
   };
   let rebinding = false;
   const held = (key: QueryKey) => client.getQueryCache().get<unknown, Error>(hashKey(key));
-  const removals = (key: QueryKey) => forgotten.get(view.rowScope.groupId(key)) ?? 0;
+  const scopeKey = (groupId: string, scope?: Scope) =>
+    scope === undefined ? groupId : `${groupId}:${scope}`;
+  /** Every scope reaching the row counts: a ledger removal leaves the Group's own row alone. */
+  const removals = (key: QueryKey) => {
+    const groupId = view.rowScope.groupId(key);
+    return (view.rowScope.scopes?.(key) ?? [undefined])
+      .map((scope) => forgotten.get(scopeKey(groupId, scope)) ?? 0)
+      .join(':');
+  };
+  const removed = (groupId: string, scope = view.rowScope.defaultScope) => {
+    const key = scopeKey(groupId, scope);
+    forgotten.set(key, (forgotten.get(key) ?? 0) + 1);
+  };
   const savedRow = async (lease: AccountStorageLease, path: string) =>
     cachedRead(
       await lease.write(() => rows!.load(lease.accountId, path)),
@@ -479,10 +498,10 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
       }
     },
     /** Removes a scope's rows, inside a lease write: a change or a loss. */
-    async forget(accountId: string, groupId: string) {
+    async forget(accountId: string, groupId: string, scope = view.rowScope.defaultScope) {
       if (!rows) return;
-      forgotten.set(groupId, (forgotten.get(groupId) ?? 0) + 1);
-      await view.rowScope.remove(rows, accountId, groupId, known);
+      removed(groupId, scope);
+      await view.rowScope.remove(rows, accountId, groupId, known, scope);
     },
     /** Keeps only these Groups' rows: a Groups list from the server left the others out. */
     async retain(accountId: string, listed: string[]) {
@@ -491,7 +510,7 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
       for (const path of await rowPaths(rows, accountId, known)) {
         const id = view.rowScope.pathGroup(path);
         if (!id || keep.has(id)) continue;
-        forgotten.set(id, (forgotten.get(id) ?? 0) + 1);
+        removed(id);
         await rows.remove(accountId, path);
       }
     },
