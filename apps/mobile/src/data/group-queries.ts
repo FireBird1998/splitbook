@@ -38,6 +38,7 @@ import { objectId, parseGroup } from './dto';
 import { parseExpensePage, parseGroupBalances } from './financial-dto';
 import {
   createSavedCopyQueue,
+  parseOnce,
   notSaved,
   notSavedHere,
   STALE,
@@ -89,41 +90,18 @@ const notKept = {
 const balancesNotUpdated = 'Could not update balances. Please try again.';
 
 /** One parse per answer (and currency): structural sharing keeps an unchanged answer the same. */
-const parsedGroups = new WeakMap<object, MobileGroup>();
-const groupOf = (value: unknown) => {
-  const known = parsedGroups.get(value as object);
-  if (known) return known;
-  const group = parseGroup(value);
-  parsedGroups.set(value as object, group);
-  return group;
-};
-type ExpensePage = ReturnType<typeof parseExpensePage>;
-const parsedPages = new WeakMap<object, Map<string, ExpensePage>>();
-const pageOf = (value: unknown, groupId: string, currency: string) => {
-  const byGroup = parsedPages.get(value as object) ?? new Map<string, ExpensePage>();
-  parsedPages.set(value as object, byGroup);
-  const known = byGroup.get(`${groupId}:${currency}`);
-  if (known) return known;
-  const page = parseExpensePage(value, groupId, currency);
-  byGroup.set(`${groupId}:${currency}`, page);
-  return page;
-};
-const parsedBalances = new WeakMap<object, ReturnType<typeof parseGroupBalances>>();
-const balancesOf = (value: unknown) => {
-  const known = parsedBalances.get(value as object);
-  if (known) return known;
-  const balances = parseGroupBalances(value);
-  parsedBalances.set(value as object, balances);
-  return balances;
-};
-const parsedTrips = new WeakMap<object, TripSummaryRead>();
-const tripOf = (value: unknown) => {
-  const known = parsedTrips.get(value as object);
-  if (known) return known;
-  const trip = parseTripSummaryResponse(value);
-  parsedTrips.set(value as object, trip);
-  return trip;
-};
+const parsedGroup = parseOnce((value) => parseGroup(value));
+const groupOf = (value: unknown) => parsedGroup(value, '');
+const parsedPage = parseOnce((value, scope) => {
+  const [groupId, currency] = scope.split(':');
+  return parseExpensePage(value, groupId, currency);
+});
+const pageOf = (value: unknown, groupId: string, currency: string) =>
+  parsedPage(value, `${groupId}:${currency}`);
+const parsedBalances = parseOnce((value) => parseGroupBalances(value));
+const balancesOf = (value: unknown) => parsedBalances(value, '');
+const parsedTrip = parseOnce((value) => parseTripSummaryResponse(value));
+const tripOf = (value: unknown) => parsedTrip(value, '');
 
 /** `shown` again when nothing in `next` differs from it, so an unchanged read publishes nothing. */
 const same = <T extends object>(shown: T, next: T): T =>
