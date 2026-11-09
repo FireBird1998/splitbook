@@ -160,16 +160,19 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
         <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, gap: 20 }}>
           <Pressable
             accessibilityLabel="Cancel widget setup"
+            accessibilityRole="button"
             onPress={cancel}
             style={{ padding: 8 }}
           >
             <Ionicons name="close" size={24} color={t.text} />
           </Pressable>
-          {copy(
-            balances ? 'Balances widget' : quick ? 'Add expense widget' : 'Group widget',
-            true,
-            22,
-          )}
+          <View style={{ flex: 1 }}>
+            {copy(
+              balances ? 'Balances widget' : quick ? 'Add expense widget' : 'Group widget',
+              true,
+              22,
+            )}
+          </View>
         </View>
         {record === null && !error ? (
           <View style={{ padding: 24 }}>{copy('Loading saved Groups…')}</View>

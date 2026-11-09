@@ -1,0 +1,2 @@
+# Patch context includes intentional blank spaces and upstream CRLF line endings.
+patches/*.patch whitespace=-blank-at-eol,-blank-at-eof,cr-at-eol

@@ -1,3 +1,5 @@
+import { balancesLayout, widgetTextLevel } from './widget-layout';
+import { widgetSummary } from './widget-accessibility';
 import type { WidgetGroupPart } from './group-widget';
 import type { GroupCategory } from './types';
 /** Saved read available to the Android widget renderer, never a live balance. */
@@ -46,6 +48,10 @@ import { formatCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
 export type BalancesWidgetSize = '2x1' | '2x2' | '4x2';
 export interface BalancesWidgetView {
+  layout: ReturnType<typeof balancesLayout>;
+  summary: string;
+  compactLines: string[];
+  compactFallback: string | null;
   state: 'normal' | 'loading' | 'no-copy' | 'signed-out' | 'expired' | 'all-square' | 'no-groups';
   size: BalancesWidgetSize;
   hidden: string | null;
@@ -78,14 +84,19 @@ export function widgetSavedTime(verifiedAt: number, now: number) {
   return `Saved ${saved.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][saved.getMonth()]}`;
 }
 
-export function balancesWidget(
+function balancesWidgetView(
   copy: WidgetCopy | null,
   setup: { kind: 'balances'; reviewEnabled?: boolean; hideAmounts?: boolean },
   size: BalancesWidgetSize,
   session: WidgetSession,
   now: number,
+  fontScale = 1,
 ): BalancesWidgetView {
   const view: BalancesWidgetView = {
+    summary: '',
+    compactLines: [],
+    compactFallback: null,
+    layout: balancesLayout(size, fontScale, false),
     state: 'no-copy',
     hidden: null,
     size,
@@ -157,7 +168,7 @@ export function balancesWidget(
       owe: summary('oweMinor'),
     };
   }
-  const limit = size === '4x2' ? 3 : size === '2x1' ? 1 : 2;
+  const limit = balancesLayout(size, fontScale, true).currencyLines;
   const lines = (field: 'oweMinor' | 'owedMinor') => {
     const rows = home.currencies.filter((row) => row[field] > 0);
     const remaining = rows.length - limit;
@@ -184,5 +195,57 @@ export function balancesWidget(
     owe: owe.lines,
     owedOverflow: owed.overflow,
     oweOverflow: owe.overflow,
+  };
+}
+
+/** One spoken description, kept independent of which lines fit visually. */
+export function balancesWidget(...args: Parameters<typeof balancesWidgetView>): BalancesWidgetView {
+  const view = balancesWidgetView(...args);
+  const full = args[5] ? balancesWidgetView(args[0], args[1], args[2], args[3], args[4]) : view;
+  const overflowSpeech = (overflow: string | null, direction: 'owed' | 'owing') => {
+    if (!overflow) return null;
+    const count = Number(overflow.match(/\d+/)?.[0] ?? 0);
+    return `${count} more ${count === 1 ? 'currency' : 'currencies'} ${direction}`;
+  };
+  const summary = widgetSummary([
+    'Balances',
+    full.state === 'loading' ? 'Loading' : null,
+    full.title,
+    full.description,
+    full.owed.length
+      ? 'You’re owed ' +
+        full.owed.join(' and ') +
+        (args[2] === '2x1' && full.owedOverflow
+          ? ' and ' + overflowSpeech(full.owedOverflow, 'owed')
+          : '')
+      : null,
+    full.owe.length
+      ? 'You owe ' +
+        full.owe.join(' and ') +
+        (args[2] === '2x1' && full.oweOverflow
+          ? ' and ' + overflowSpeech(full.oweOverflow, 'owing')
+          : '')
+      : null,
+    args[2] !== '2x1' ? overflowSpeech(full.owedOverflow, 'owed') : null,
+    args[2] !== '2x1' ? overflowSpeech(full.oweOverflow, 'owing') : null,
+    full.saved,
+    full.review?.replace(SEPARATOR, ' '),
+    full.hidden,
+    full.muted ? 'Open to update' : null,
+  ]);
+  const level = widgetTextLevel(args[5] ?? 1);
+  const compact = args[2] === '2x1' && level > 0 && view.state === 'normal';
+  const lines = compact
+    ? view.hidden
+      ? ['You’re owed', 'You owe']
+      : [`Owed ${view.owed[0] ?? '—'}`, `Owe ${view.owe[0] ?? '—'}`]
+    : [];
+  const tooWide = !view.hidden && lines.some((line) => line.length > (level === 2 ? 15 : 20));
+  return {
+    ...view,
+    summary,
+    compactLines: tooWide ? [] : lines,
+    compactFallback: tooWide ? 'Open to see balances' : null,
+    layout: balancesLayout(args[2], args[5] ?? 1, view.state === 'normal', Boolean(view.hidden)),
   };
 }

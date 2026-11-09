@@ -1,0 +1,162 @@
+diff --git a/android/src/main/java/com/reactnativeandroidwidget/AndroidWidgetModule.java b/android/src/main/java/com/reactnativeandroidwidget/AndroidWidgetModule.java
+index b99a11f946ef06a5e52cb241249499c0728b1028..c33d609aafccf97882369d501bc762394e0bd12a 100644
+--- a/android/src/main/java/com/reactnativeandroidwidget/AndroidWidgetModule.java
++++ b/android/src/main/java/com/reactnativeandroidwidget/AndroidWidgetModule.java
+@@ -3,6 +3,9 @@ package com.reactnativeandroidwidget;
+ import android.app.Activity;
+ import android.appwidget.AppWidgetManager;
+ import android.content.Intent;
++import android.content.ComponentCallbacks;
++import android.content.res.Configuration;
++import android.appwidget.AppWidgetProviderInfo;
+ 
+ import androidx.annotation.NonNull;
+ 
+@@ -16,8 +19,32 @@ import com.facebook.react.bridge.WritableMap;
+ public class AndroidWidgetModule extends com.reactnativeandroidwidget.AndroidWidgetSpec {
+     public static final String NAME = "AndroidWidget";
+ 
++    private final ComponentCallbacks fontChanges;
++    private float fontScale;
++
+     AndroidWidgetModule(ReactApplicationContext context) {
+         super(context);
++        fontScale = context.getResources().getConfiguration().fontScale;
++        fontChanges = new ComponentCallbacks() {
++            @Override public void onConfigurationChanged(Configuration configuration) {
++                if (Float.compare(fontScale, configuration.fontScale) == 0) return;
++                fontScale = configuration.fontScale;
++                // Redraw saved widget data for a user appearance change; never fetch it.
++                AppWidgetManager manager = AppWidgetManager.getInstance(context);
++                for (AppWidgetProviderInfo provider : manager.getInstalledProviders()) {
++                    if (!context.getPackageName().equals(provider.provider.getPackageName())) continue;
++                    String name = provider.provider.getClassName();
++                    RNWidgetJsCommunication.requestWidgetUpdate(context, name.substring(name.lastIndexOf('.') + 1));
++                }
++            }
++            @Override public void onLowMemory() { }
++        };
++        context.getApplicationContext().registerComponentCallbacks(fontChanges);
++    }
++
++    @Override public void invalidate() {
++        getReactApplicationContext().getApplicationContext().unregisterComponentCallbacks(fontChanges);
++        super.invalidate();
+     }
+ 
+     @Override
+diff --git a/android/src/main/java/com/reactnativeandroidwidget/RNWidget.java b/android/src/main/java/com/reactnativeandroidwidget/RNWidget.java
+index df7e6a63f04000f08bd0260b8c059c62eefca764..605fea7d5c9719dfaf569e8a9765ad62b3eb273a 100644
+--- a/android/src/main/java/com/reactnativeandroidwidget/RNWidget.java
++++ b/android/src/main/java/com/reactnativeandroidwidget/RNWidget.java
+@@ -173,7 +173,8 @@ public class RNWidget {
+         Rect offsetViewBounds = new Rect();
+         clickableWidget.getDrawingRect(offsetViewBounds);
+         rootWidget.offsetDescendantRectToMyCoords(clickableWidget, offsetViewBounds);
+-        RemoteViews clickableRemoteView = new RemoteViews(appContext.getPackageName(), R.layout.rn_widget_clickable_calibrated);
++        RemoteViews clickableRemoteView = new RemoteViews(appContext.getPackageName(), clickableView.getAccessibilityLabel() == null
++            ? R.layout.rn_widget_clickable_calibrated_unlabeled : R.layout.rn_widget_clickable_calibrated);
+ 
+         // Both axes must stretch between fixed edges so a child click's bounds
+         // reveal the host size. Clip overflowing hit targets to the rendered root.
+diff --git a/android/src/main/java/com/reactnativeandroidwidget/RNWidgetProvider.java b/android/src/main/java/com/reactnativeandroidwidget/RNWidgetProvider.java
+index f1e16e7d8cb18435c5b0faabedbcfdd37ca6d8b0..7c72186cd9cbfec6b4e5bcb272bf726f322447ca 100644
+--- a/android/src/main/java/com/reactnativeandroidwidget/RNWidgetProvider.java
++++ b/android/src/main/java/com/reactnativeandroidwidget/RNWidgetProvider.java
+@@ -18,7 +18,9 @@ public class RNWidgetProvider extends AppWidgetProvider {
+     public void onAppWidgetOptionsChanged(Context context, AppWidgetManager appWidgetManager, int appWidgetId, Bundle newOptions) {
+         super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions);
+ 
+-        if (RNWidgetSizing.updateStoredSize(context, appWidgetId)) {
++        // A host can rebind after font changes even when its bounds are unchanged.
++        RNWidgetSizing.updateStoredSize(context, appWidgetId);
++        {
+             Data data = RNWidgetJsCommunication.buildData(context, getClass().getSimpleName(), appWidgetId, "WIDGET_RESIZED");
+             RNWidgetJsCommunication.startBackgroundTask(context, data);
+         }
+diff --git a/android/src/main/res/layout/rn_widget.xml b/android/src/main/res/layout/rn_widget.xml
+index 77614f6dff64ccd1edc0cdc3b74b5030fb6cb2c6..666b32b96ece87311ca8b9ec08203412414ee8bc 100644
+--- a/android/src/main/res/layout/rn_widget.xml
++++ b/android/src/main/res/layout/rn_widget.xml
+@@ -1,10 +1,12 @@
+ <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+     android:id="@android:id/background"
++    android:importantForAccessibility="no"
+     android:layout_width="match_parent"
+     android:layout_height="match_parent">
+ 
+     <ImageView
+         android:id="@+id/rn_widget_image_light"
++        android:importantForAccessibility="no"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent"
+         android:background="@android:color/transparent"
+@@ -13,6 +15,7 @@
+ 
+     <ImageView
+         android:id="@+id/rn_widget_image_dark"
++        android:importantForAccessibility="no"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent"
+         android:background="@android:color/transparent"
+@@ -21,6 +24,7 @@
+ 
+     <FrameLayout
+         android:id="@+id/rn_widget_clickable_container"
++        android:importantForAccessibility="no"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent" />
+ 
+diff --git a/android/src/main/res/layout/rn_widget_clickable_calibrated_unlabeled.xml b/android/src/main/res/layout/rn_widget_clickable_calibrated_unlabeled.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..51e7370996ede10547617130457f0f07eaa51833
+--- /dev/null
++++ b/android/src/main/res/layout/rn_widget_clickable_calibrated_unlabeled.xml
+@@ -0,0 +1,14 @@
++<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    android:id="@+id/rn_widget_clickable_positioner"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent">
++
++    <FrameLayout
++        android:id="@+id/rn_widget_clickable_area"
++        android:importantForAccessibility="no"
++        android:layout_width="match_parent"
++        android:layout_height="match_parent"
++        android:background="?android:attr/selectableItemBackground"
++        android:clickable="true"
++        android:focusable="true" />
++</FrameLayout>
+diff --git a/android/src/main/res/layout-night/rn_widget.xml b/android/src/main/res/layout-night/rn_widget.xml
+index a73bb84ba79f8d20d511aaf72dbf5a4618253fd4..52b40cb85a79d6e2440148dde8de745345cafc4c 100644
+--- a/android/src/main/res/layout-night/rn_widget.xml
++++ b/android/src/main/res/layout-night/rn_widget.xml
+@@ -1,10 +1,12 @@
+ <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+     android:id="@android:id/background"
++    android:importantForAccessibility="no"
+     android:layout_width="match_parent"
+     android:layout_height="match_parent">
+ 
+     <ImageView
+         android:id="@+id/rn_widget_image_light"
++        android:importantForAccessibility="no"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent"
+         android:background="@android:color/transparent"
+@@ -13,6 +15,7 @@
+ 
+     <ImageView
+         android:id="@+id/rn_widget_image_dark"
++        android:importantForAccessibility="no"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent"
+         android:background="@android:color/transparent"
+@@ -21,6 +24,7 @@
+ 
+     <FrameLayout
+         android:id="@+id/rn_widget_clickable_container"
++        android:importantForAccessibility="no"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent" />
+ 

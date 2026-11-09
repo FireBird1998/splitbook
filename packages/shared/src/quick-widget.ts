@@ -1,3 +1,4 @@
+import { quickLayout } from './widget-layout';
 import type { WidgetCopy, WidgetSession, WidgetTarget } from './balances-widget';
 export interface QuickWidgetSetup {
   kind: 'quick';
@@ -10,6 +11,7 @@ export function quickWidget(
   setup: QuickWidgetSetup,
   size: '1x1' | '2x1',
   session: WidgetSession,
+  fontScale = 1,
 ) {
   const blocked = (
     state: string,
@@ -18,6 +20,7 @@ export function quickWidget(
     target: WidgetTarget,
   ) => ({
     state,
+    layout: quickLayout(size, fontScale, false),
     size,
     title,
     subtitle,
@@ -53,6 +56,7 @@ export function quickWidget(
   const subtitle = group?.name ?? 'Choose a Group';
   return {
     state: 'normal',
+    layout: quickLayout(size, fontScale, true),
     size,
     title: 'Add expense',
     subtitle,
