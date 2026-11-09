@@ -31,12 +31,15 @@ import { parseGroup } from './dto';
 import {
   MAX_PAGES,
   rowPaths,
-  savedGroupShown,
   sharePages,
   STALE,
+  createSavedCopyQueue,
+  notSaved,
+  notSavedHere,
+  type Envelope,
   type PageEnvelope,
-} from './group-queries';
-import { createSavedCopyQueue, notSaved, type Envelope } from './home-queries';
+} from './saved-read-engine';
+import { savedGroupShown } from './group-queries';
 import { cachedRead } from './offline-cache';
 import { keepInvalidated, queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
@@ -47,7 +50,6 @@ type Target = ActivityState['target'];
 
 /** A page holds 20 events; Activity keeps at most 5 pages, 100 events, and slides (M1-3, M7-2). */
 const PAGE_SIZE = 20;
-const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
 /** A failed refresh keeps the events shown, and says what that means (unchanged from main). */
 const refreshFailed =
   'Could not refresh Activity. Previously loaded events may be stale. A missing event does not mean the ledger change failed.';

@@ -6,7 +6,7 @@ import { widgetGroupCopy } from './widget-group-copy';
 import type { WidgetGroupPart } from '@splitbook/shared/group-widget';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
-import { createSavedCopyQueue, type Envelope } from './home-queries';
+import { createSavedCopyQueue, type Envelope } from './saved-read-engine';
 import type { AccountStorageLease, MobileSnapshot } from './types';
 
 export interface WidgetsNative {

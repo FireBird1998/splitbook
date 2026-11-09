@@ -1,8 +1,7 @@
 import type { QueryClient } from '@tanstack/query-core';
 import type { QueryKey } from '@splitbook/shared/query-keys';
 import type { MobileSnapshot } from './types';
-import type { Envelope } from './home-queries';
-import type { PageEnvelope } from './group-queries';
+import type { Envelope, PageEnvelope } from './saved-read-engine';
 import { RequestError } from './transport';
 
 type Result = Envelope | { pages: PageEnvelope[] };

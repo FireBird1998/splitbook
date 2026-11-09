@@ -25,8 +25,17 @@ import type { FindableRecordStore } from './account-record-storage';
 import { emptyExpenseHistory, parseActivityPage, type ExpenseHistoryState } from './activity';
 import { draftFromExpense, parseExpenseContext, previewExpense } from './expense-draft';
 import { parseExpenseRecord, type ExpenseRecord } from './expense-record';
-import { MAX_PAGES, rowPaths, sharePages, STALE, type PageEnvelope } from './group-queries';
-import { createSavedCopyQueue, notSaved, type Envelope } from './home-queries';
+import {
+  MAX_PAGES,
+  rowPaths,
+  sharePages,
+  STALE,
+  createSavedCopyQueue,
+  notSaved,
+  notSavedHere,
+  type Envelope,
+  type PageEnvelope,
+} from './saved-read-engine';
 import { cachedRead } from './offline-cache';
 import { keepInvalidated, queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
@@ -37,7 +46,6 @@ type Editor = MobileSnapshot['expense'];
 
 /** A page holds 20 changes; the history keeps at most 5 pages, 100 changes, and slides (M1-3). */
 const PAGE_SIZE = 20;
-const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
 const historyUnsaved = 'This Expense’s changes aren’t saved on this device. Connect to see them.';
 const historyFailed = 'Couldn’t load this Expense’s changes.';
 

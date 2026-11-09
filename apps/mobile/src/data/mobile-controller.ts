@@ -167,7 +167,8 @@ import {
 } from './dto';
 import { parseInvitationLink, parseToReviewLink } from './invitation-links';
 import { parseGroupBalances } from './financial-dto';
-import { createHomeQueries, draftSummaries, emptyHome, type Envelope } from './home-queries';
+import { createHomeQueries, draftSummaries, emptyHome } from './home-queries';
+import type { Envelope } from './saved-read-engine';
 import { createGroupQueries, emptyExpenses, savedGroupShown, type Step } from './group-queries';
 import { createExpenseQueries } from './expense-queries';
 import { createActivityQueries } from './activity-queries';

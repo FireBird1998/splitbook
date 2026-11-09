@@ -3,7 +3,6 @@ import {
   hashKey,
   InfiniteQueryObserver,
   QueryObserver,
-  replaceEqualDeep,
   type focusManager,
   type InfiniteData,
   type onlineManager,
@@ -37,7 +36,17 @@ import {
 import type { FindableRecordStore } from './account-record-storage';
 import { objectId, parseGroup } from './dto';
 import { parseExpensePage, parseGroupBalances } from './financial-dto';
-import { createSavedCopyQueue, notSaved, type Envelope } from './home-queries';
+import {
+  createSavedCopyQueue,
+  notSaved,
+  notSavedHere,
+  STALE,
+  MAX_PAGES,
+  rowPaths,
+  sharePages,
+  type Envelope,
+  type PageEnvelope,
+} from './saved-read-engine';
 import { cachedRead } from './offline-cache';
 import { keepInvalidated, queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
@@ -51,35 +60,7 @@ import type {
   TripSummaryState,
 } from './types';
 
-/**
- * A page of a Group's Expenses as its query holds it: the server's page with its own time (a
- * saved copy keeps the time it was verified), or `failed`, a page that couldn't be read after the
- * ones before it, which ends the list there and is what Load more reads next.
- */
-export type PageEnvelope =
-  | (Envelope & { page: number })
-  | { source: 'failed'; page: number; refreshedAt: number; value: null; message: string };
 type Pages = InfiniteData<PageEnvelope, number>;
-/**
- * A list read again keeps each page that answered the same, matched by its number, not its place:
- * after the window slides, the pages that stayed keep their rows, which then render as they were
- * (#219). TanStack shares by position, which a dropped page would shift.
- */
-export const sharePages = (old: unknown, next: unknown): unknown => {
-  const before = old as Pages | undefined,
-    after = next as Pages;
-  if (!before?.pages || !after?.pages) return next;
-  const pages = after.pages.map((page, index) => {
-    const at = before.pageParams.indexOf(after.pageParams[index]);
-    return at < 0 ? page : (replaceEqualDeep(before.pages[at], page) as PageEnvelope);
-  });
-  const pageParams = replaceEqualDeep(before.pageParams, after.pageParams);
-  return pageParams === before.pageParams &&
-    pages.length === before.pages.length &&
-    pages.every((page, index) => page === before.pages[index])
-    ? before
-    : { pages, pageParams };
-};
 type Expenses = GroupFinancialState['expenses'];
 type Balances = GroupFinancialState['balances'];
 /** Before a Trip's summary is first read (#730). */
@@ -94,10 +75,6 @@ const noTrip: TripSummaryState = {
 
 /** A page holds 20 Expenses; a list keeps at most 5 pages, 100 rows, and slides past them (M1-3). */
 const PAGE_SIZE = 20;
-export const MAX_PAGES = 5;
-/** A stale time that is stale whatever the clock says, even moved back past a read. */
-export const STALE = -Infinity;
-const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
 /**
  * What stays on screen when Splitbook can't be reached and this phone keeps no copy to show
  * instead: removed by a change, withheld (#323) or never saved. Beside the time it was read, as
@@ -194,23 +171,6 @@ const inRows = (path: string, groupId: string, scope: GroupRows) => {
         path.startsWith(`${prefix}/trip-summary?`) ||
         // What uses each of its currencies (#722) changes with its ledger too.
         path === `${prefix}/currencies`;
-};
-/**
- * The paths of the persister's rows for this account: those it lists, so rows saved before this
- * session count too, and those named in `known`, for a store that can't list its rows. Only the
- * keys are read where the store can, so a row that can't be read never stops a removal.
- */
-export const rowPaths = async (
-  rows: FindableRecordStore,
-  accountId: string,
-  known: Iterable<string> = [],
-) => {
-  const paths = new Set(known);
-  const listed = rows.keys
-    ? await rows.keys(accountId)
-    : (await rows.list(accountId)).map(({ groupId }) => groupId);
-  for (const path of listed) paths.add(path);
-  return paths;
 };
 /**
  * Removes a Group's saved copies from the persister's rows (M3-1): every row of the Group, or
