@@ -11,8 +11,9 @@ import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { DRAFTS_PER_REQUEST } from '@splitbook/shared/validators/expense-draft';
 import { visuallyHidden } from '@/components/insights/a11y';
 import MoneyText from '@/components/common/MoneyText';
-import LandingFigure from '@/components/landing-figures/LandingFigure';
-import { nettingStation, toReviewRack } from '@/components/landing-figures/generated';
+import QuietDrawing from '@/components/landing-figures/QuietDrawing';
+import { toReviewRackQuiet } from '@/components/landing-figures/generated/quiet';
+import { nettingStation, toReviewRack } from '@/components/landing-figures/generated/story';
 import type { WhatsLive } from '@/lib/landing/whats-live';
 import { RADIUS } from '@/lib/theme/tokens';
 import { PRODUCT_NAME } from '@/lib/product';
@@ -233,60 +234,51 @@ export default function LandingAssistants({ live }: { live: WhatsLive }) {
       eyebrow="Connected assistants"
       eyebrowColor="status.info"
       title="Talk to your Groups in Claude or ChatGPT."
+      art={canPrepare && <QuietDrawing figure={toReviewRackQuiet} placement="assist" />}
+      headingAside={<Chat canPrepare={canPrepare} />}
+      headingAfter={
+        <Stack spacing={3} alignItems="flex-start">
+          <Steps canPrepare={canPrepare} />
+          <Button variant="outlined" href="/connect/chatgpt" sx={{ minHeight: 44 }}>
+            How to connect ChatGPT
+          </Button>
+        </Stack>
+      }
       intro={
         canPrepare
           ? `Connect your ${PRODUCT_NAME} account once. Ask what you owe, or say what you spent and let the assistant prepare it for To review. Nothing is saved until you say so.`
           : `Connect your ${PRODUCT_NAME} account once and ask what you owe. Nothing is saved until you say so.`
       }
     >
-      <Stack spacing={{ xs: 4, md: 6 }}>
-        <Box
-          sx={{
-            display: 'grid',
-            gap: { xs: 4, md: 7 },
-            alignItems: 'center',
-            gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) minmax(0, 1fr)' },
-          }}
-        >
-          <Stack spacing={3} alignItems="flex-start">
-            <Steps canPrepare={canPrepare} />
-            <Button variant="outlined" href="/connect/chatgpt" sx={{ minHeight: 44 }}>
-              How to connect ChatGPT
-            </Button>
-          </Stack>
-          <Chat canPrepare={canPrepare} />
-        </Box>
-        {canPrepare && <LandingFigure figure={toReviewRack} />}
-        <Box
-          component="ul"
-          sx={{
-            listStyle: 'none',
-            p: 0,
-            m: 0,
-            display: 'grid',
-            gap: 2,
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, minmax(0, 1fr))',
-              md: `repeat(${statements.length}, minmax(0, 1fr))`,
-            },
-          }}
-        >
-          {statements.map(({ icon: Icon, title, text }) => (
-            <Box component="li" key={title} sx={landingCard}>
-              <Stack spacing={1.25}>
-                <Icon aria-hidden sx={{ color: 'status.info' }} />
-                <Typography variant="h6" component="h3" sx={{ m: 0 }}>
-                  {title}
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                  {text}
-                </Typography>
-              </Stack>
-            </Box>
-          ))}
-        </Box>
-      </Stack>
+      <Box
+        component="ul"
+        sx={{
+          listStyle: 'none',
+          p: 0,
+          m: 0,
+          display: 'grid',
+          gap: 2,
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: 'repeat(2, minmax(0, 1fr))',
+            md: `repeat(${statements.length}, minmax(0, 1fr))`,
+          },
+        }}
+      >
+        {statements.map(({ icon: Icon, title, text }) => (
+          <Box component="li" key={title} sx={landingCard}>
+            <Stack spacing={1.25}>
+              <Icon aria-hidden sx={{ color: 'status.info' }} />
+              <Typography variant="h6" component="h3" sx={{ m: 0 }}>
+                {title}
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                {text}
+              </Typography>
+            </Stack>
+          </Box>
+        ))}
+      </Box>
     </LandingSection>
   );
 }

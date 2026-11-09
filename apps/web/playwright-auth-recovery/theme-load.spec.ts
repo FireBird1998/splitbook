@@ -63,15 +63,16 @@ for (const preference of ['stored', 'system'] as const) {
             `brand before hydration: ${path}`,
           ).toContain(source);
         if (path === '/') {
-          await expect(page.locator('figure.iso').first()).toBeVisible();
-          const papers = await page
-            .locator('figure.iso')
-            .evaluateAll((figures) =>
-              figures.map((figure) =>
-                getComputedStyle(figure).getPropertyValue('--anatomy-paper').trim(),
-              ),
-            );
-          for (const paper of papers) expect(paper, 'figure before hydration').toBe('#131313');
+          // The quiet landing drawings (#1000) take the dark quiet palette before hydration.
+          const drawings = page.locator('[data-quiet-figure] .iso[data-quiet]');
+          await expect(drawings.first()).toBeVisible();
+          const papers = await drawings.evaluateAll((figures) =>
+            figures.map((figure) =>
+              getComputedStyle(figure).getPropertyValue('--anatomy-paper').trim(),
+            ),
+          );
+          expect(papers.length, 'quiet drawings on Landing').toBeGreaterThan(0);
+          for (const paper of papers) expect(paper, 'figure before hydration').toBe('#141720');
         }
       } finally {
         release();
@@ -188,12 +189,14 @@ for (const attribute of ['missing', 'invalid'] as const) {
       attribute === 'missing' ? null : 'invalid-theme',
     );
     await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(244, 245, 249)');
-    const figures = page.locator('figure.iso');
+    // The quiet landing drawings (#1000) fall back to the light quiet palette.
+    const figures = page.locator('[data-quiet-figure] .iso[data-quiet]');
     await expect(figures.first()).toBeVisible();
-    for (const paper of await figures.evaluateAll((nodes) =>
+    const papers = await figures.evaluateAll((nodes) =>
       nodes.map((node) => getComputedStyle(node).getPropertyValue('--anatomy-paper').trim()),
-    ))
-      expect(paper).toBe('#fbfbfa');
+    );
+    expect(papers.length).toBeGreaterThan(0);
+    for (const paper of papers) expect(paper).toBe('#f8f9fc');
   });
 }
 

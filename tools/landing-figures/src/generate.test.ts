@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { buildFigures, generatedFiles, OUT_DIR, tourScript, type Figure } from './generate.ts';
+import { quietTourScript } from './quiet.ts';
+import { buildFigures, generatedFiles, OUT_DIR, type Figure } from './generate.ts';
 
 const LICENSE = readFileSync(resolve(import.meta.dirname, '../vendor/anatomy/LICENSE'), 'utf8');
 
@@ -22,7 +23,7 @@ describe('the tour chunk for the web app', () => {
 
   it('carries the Anatomy kit’s whole MIT notice in code, where minifying can’t drop it', async () => {
     for (const figure of figures) {
-      const source = tourScript(figure, 'esm');
+      const source = quietTourScript(figure, 'esm');
       const { play } = (await import(
         `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
       )) as { play: { license?: string } };

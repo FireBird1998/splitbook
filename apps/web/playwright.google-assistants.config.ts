@@ -14,7 +14,7 @@ const server = Array.isArray(base.webServer) ? base.webServer[0] : base.webServe
 
 export default defineConfig({
   ...base,
-  testMatch: 'landing-assistants.spec.ts',
+  testMatch: ['landing-assistants.spec.ts', 'landing-quiet.spec.ts'],
   outputDir: './playwright-google/results/assistants',
   reporter: process.env.CI
     ? [['github'], ['html', { outputFolder: 'playwright-google/report/assistants', open: 'never' }]]
