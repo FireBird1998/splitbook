@@ -8,8 +8,10 @@ import Typography from '@mui/material/Typography';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import BrandLogo from '@/components/layout/BrandLogo';
 import BrandMark from '@/components/layout/BrandMark';
-import LandingFigure from '@/components/landing-figures/LandingFigure';
-import { splittingLine } from '@/components/landing-figures/generated';
+import QuietDrawing from '@/components/landing-figures/QuietDrawing';
+import QuietTours from '@/components/landing-figures/QuietTours';
+import { quietLayout } from '@/components/landing-figures/quiet-layout';
+import { splittingLineQuiet } from '@/components/landing-figures/generated/quiet';
 import { PRODUCT_NAME } from '@/lib/product';
 import { TOPBAR_HEIGHT } from '@/lib/theme/tokens';
 import type { WhatsLive } from '@/lib/landing/whats-live';
@@ -159,9 +161,10 @@ export function LandingTopBar({
 
 function Hero({ live }: LandingPageProps) {
   return (
-    <Box component="section" sx={{ py: { xs: 5, md: 10 } }}>
+    <Box component="section" id="hero" sx={{ position: 'relative', pt: { xs: 5, md: 10 }, pb: 3 }}>
       <Container
         maxWidth="lg"
+        className="sbq-lift"
         sx={{
           ...sideGutter,
           display: 'flex',
@@ -211,10 +214,8 @@ function Hero({ live }: LandingPageProps) {
           )}
         </Stack>
       </Container>
-      {/* Fig 1 at full width under the headline and actions, which paint first. */}
-      <Container maxWidth="lg" sx={{ ...sideGutter, mt: { xs: 4, md: 7 } }}>
-        <LandingFigure figure={splittingLine} />
-      </Container>
+      <QuietTours />
+      <QuietDrawing figure={splittingLineQuiet} placement="hero" />
     </Box>
   );
 }
@@ -308,12 +309,12 @@ function LandingFooter({ live }: LandingPageProps) {
 /**
  * The public landing page a signed-out visitor gets at `/` (#443): the top bar, the hero, the
  * closing call to action and the footer, each saying only what `live` says this deployment has.
- * It renders on the server; only the Sign in with Google button and Fig 1's live tour run in the
+ * It renders on the server; only the sign-in button and the shared quiet-tour control run in the
  * browser.
  */
 export default function LandingPage({ live }: LandingPageProps) {
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box sx={{ ...quietLayout, minHeight: '100vh', bgcolor: 'background.default' }}>
       <LandingTopBar
         live={live}
         sections={[

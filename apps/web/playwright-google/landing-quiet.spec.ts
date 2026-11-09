@@ -44,6 +44,7 @@ test('the pause control follows the hero actions in the tab order and has a visi
     .locator('#hero a, #hero button')
     .filter({ hasNotText: /Pause animation|Play animation/ })
     .last();
+  await expect(page.getByRole('button', { name: 'Pause animation' })).toBeVisible();
   await lastAction.focus();
   await page.keyboard.press('Tab');
   const pause = page.getByRole('button', { name: 'Pause animation' });
@@ -107,6 +108,11 @@ for (const width of [1440, 390])
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
       const scripts: string[] = [];
+      const responses: Promise<string>[] = [];
+      page.on('response', (response) => {
+        if (response.url().split('?')[0].endsWith('.js'))
+          responses.push(response.text().catch(() => ''));
+      });
       page.on('request', (r) => {
         if (r.url().includes('quiet-tour')) scripts.push(r.url());
       });
@@ -133,6 +139,11 @@ for (const width of [1440, 390])
         }
       }
       expect(scripts).toEqual([]);
+      expect(
+        (await Promise.all(responses)).filter((source) =>
+          source.includes('Anatomy kit (https://github.com/wheresryan22/anatomy)'),
+        ),
+      ).toEqual([]);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         width,
       );
@@ -153,5 +164,37 @@ for (const width of [1440, 390])
         animations: 'disabled',
       });
       writeFileSync(join(output, `${view}-contrast.json`), JSON.stringify(results, null, 2) + '\n');
+    });
+  }
+
+for (const width of [1440, 390])
+  for (const colorScheme of ['light', 'dark'] as const) {
+    test(`${width}-${colorScheme}: moving SVG copy contrast at multiple story frames`, async ({
+      page,
+    }, info) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme, reducedMotion: 'no-preference' });
+      await page.goto('/');
+      await page.evaluate(() => document.fonts.ready);
+      const pause = page.getByRole('button', { name: /^(Pause|Play) animation$/ });
+      await expect(pause).toBeVisible();
+      const results = [];
+      for (const section of ['hero', 'settle', 'assistants']) {
+        const root = page.locator('#' + section);
+        await root.scrollIntoViewIfNeeded();
+        for (const frame of [0, 1, 2]) {
+          // Exercise the actual story and pause handler; keep scrolling from moving the control.
+          await page.waitForTimeout(3000);
+          await pause.dispatchEvent('click');
+          results.push({ section, frame, ...(await sampleCopyContrast(root)) });
+          await pause.dispatchEvent('click');
+        }
+      }
+      const output = process.env.LANDING_EVIDENCE_DIR ?? info.outputDir;
+      mkdirSync(output, { recursive: true });
+      writeFileSync(
+        join(output, `${width === 1440 ? 'desktop' : 'phone'}-${colorScheme}-moving-contrast.json`),
+        JSON.stringify(results, null, 2) + '\n',
+      );
     });
   }

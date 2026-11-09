@@ -6,12 +6,11 @@ import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
 import { isDemoMode } from '@/lib/auth-mode';
 import { whatsLive } from '@/lib/landing/whats-live';
 import { LANDING_HEADLINE, LANDING_PROMISE } from '@/components/landing/landing-copy';
-import { splittingLine } from '@/components/landing-figures/generated';
+import { still } from '@/components/landing-figures/generated/link-preview';
 import { SEPARATOR } from '@splitbook/shared/separator';
 
 const title = `Splitbook${SEPARATOR}${LANDING_HEADLINE.replace(/\.$/, '')}`;
 const description = LANDING_PROMISE;
-const still = splittingLine.still;
 
 /** The app's public address, which makes the link preview's image address absolute. */
 function appUrl(): URL | undefined {

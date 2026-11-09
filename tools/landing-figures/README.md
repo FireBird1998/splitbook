@@ -1,116 +1,67 @@
 # Landing figures
 
-The drawings on the public landing page (#443) are isometric figures of small machines, made with the vendored Anatomy kit (`vendor/anatomy`, MIT, see its `PROVENANCE.md`). This package draws them at build time and writes them into the web app as generated modules (`apps/web/src/components/landing-figures/generated/`), so the page renders a real SVG with no runtime dependency on the kit.
-
-Every number a figure shows comes from `src/story.ts`, which runs the story through `@splitbook/shared`: the exact-money split cuts each Expense and each member's chips, the balance calculation gives the counters, the debt simplifier gives the payments, and the same equal split cuts the items Fig 2's assistant prepares. The debts between pairs of members (Fig 3's grey cords) have no shared function: the story nets them from the shared split's shares, and `check` proves that paying them would clear the shared balances. The figures can't drift from the product's money rules.
+The public landing page's quiet isometric machines use the vendored Anatomy kit (`vendor/anatomy`,
+MIT; see `PROVENANCE.md`). The generator writes server-rendered SVGs, theme-specific transparent
+stills and separate lazy client tours. Never edit `apps/web/src/components/landing-figures/generated/`:
+`build` owns the folder and removes obsolete output.
 
 ## Commands
 
-From the repository root:
+Run from the repository root:
 
 ```sh
-pnpm --filter @splitbook/landing-figures build     # regenerate the figures, and redraw any still that is out of date
-pnpm --filter @splitbook/landing-figures check     # what CI runs
-pnpm --filter @splitbook/landing-figures preview   # write interactive pages (light and dark) to a temp folder
-pnpm --filter @splitbook/landing-figures test      # the story and check unit tests
+pnpm --filter @splitbook/landing-figures build
+pnpm --filter @splitbook/landing-figures check
+pnpm --filter @splitbook/landing-figures test
+pnpm --filter @splitbook/landing-figures preview
 ```
 
-`build` and `check` run headless Chrome. Set `CHROME_PATH` if Chrome isn't found. `build` stamps each still with what it was drawn from (a hash of its page, in a PNG text chunk) and redraws it only when that changes, so a rebuild doesn't churn the PNG.
+`build` and `check` run headless Chrome (`CHROME_PATH` can select its executable). Preview writes
+six `<id>-quiet-<theme>.html` pages. PNGs carry a source hash and redraw only when it changes.
 
-`check` fails on any of these:
+## Story and geometry
 
-- **Stale output:** the generated modules differ from a fresh build. Run `build` and commit the result.
-- **Stale output** also covers a file left in the generated folder that the build no longer writes. `build` removes it.
-- **A story that doesn't balance:** a member's chips don't add up to their share, the counters don't sum to zero after every Expense, or the payments leave a balance unsettled. Fig 2 fails it too when a prepared item's chips don't add up to its amount.
-- **A missing or stale still:** a figure's light still is missing, isn't a PNG, isn't 1200 × 630, or was drawn from another version of the figure (its stamp differs). `check` doesn't redraw it or compare pixels, because Chrome's pixels differ from machine to machine.
-- **An edited vendored kit:** a file in `vendor/anatomy` differs from the bytes `MANIFEST.sha256` pins, or isn't listed there.
-- **Audit problems:** the kit's audit finds clearance, depth-order, support or other faults in a figure's geometry.
-- **A counter that isn't true in some frame:** each tour plays once round by itself, with motion, in headless Chrome at twice real time, and every frame it draws is read. In a tour with counters (Figs 1 and 3), the counters must add up to zero, and none may pass where it is heading (drawCounters notes that as `data-target`).
-- **A step the live region doesn't tell as drawn:** the live region (`[data-status]`, all a screen reader hears) must say what the plate's readout says. That holds as each tour starts over by itself in that same run. It also holds after every key as each tour is stepped by keyboard, held and moving: → more than twice round, then Home. Each → must also say something new, and the → presses must come round to the state Home starts over at. Within a step, a beat may change only the readout while the live region keeps the step's words: Fig 1's cutting and sorting, Fig 2's item landing in the rack. Every step a visitor can reach tells its words, starting over included.
-- **A tour that stalls after Pause:** from the restart, each tour is paused and stepped by → to every step → reaches, then played again, at twice real time (#570). From each, it must move on by itself and come round to its restart.
-- **Floating line ends, or a page error:** in light or dark, a line ends in mid-air, or the page logs an error. The vendored line-end check runs in headless Chrome with reduced motion, on the drawing at rest and on every pose its live tour shows, stepping from its still (each figure says how many).
+All numbers come from `src/story.ts` through `@splitbook/shared`: exact-money splits, Balances,
+Suggested payments and prepared items. The splitting line cuts each Expense into its members'
+chips; the To review rack lets only the member's lever save a prepared item; the netting station
+replaces the pairwise debts with the fewest payments. Their original geometry is shared across
+both quiet palettes and the link preview.
 
-## Figures
+`check` verifies current output and PNG stamps, a balancing story, the unchanged vendored kit,
+the geometry audit, and line ends through ordinary timed playback in light and dark. It reads
+every drawn counter frame: readings must sum to zero and never overshoot their targets. It also
+checks autoplay, pause/resume, ignored clicks and keys, offscreen cancellation and reduced-motion
+inactivity. Unit tests enforce the approved 0.6 speed and the original raw/gzip chunk budgets.
 
-| Figure                     | Module                            | Shows                                                                                                                                                                                                                                                 |
-| -------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fig 1, the splitting line  | `src/figures/splitting-line.mjs`  | Each Expense is a bar of chips, one per share. A saw cuts it, and pushers send each chip into its member's bin. The counters always add up to zero.                                                                                                   |
-| Fig 2, the To review rack  | `src/figures/to-review-rack.mjs`  | The assistant's terminal sends the items it prepares as tagged bars down a tube into a rack. Only the member's lever lets the bottom bar out onto the conveyor into the line: Dinner is saved, and Cab waits. A thin read line lets it read Balances. |
-| Fig 3, the netting station | `src/figures/netting-station.mjs` | Four tills, and a pegboard whose grey cords are the five debts the Expenses left. A cabinet replaces them with the three payments, and a magnet shuttle carries ₹100 coins until every counter reads zero.                                            |
+## Generated page assets
 
-Each figure module exports a function of the story that returns its SVG at rest, its own styles, the words around it (readout, legend, caption, the still's description), the data its live tour animates, how many poses its tour shows under reduced motion, and the audit recorder. Figs 2 and 3 build on `src/figures/common.mjs`: the projection, the recorder, solids, screens, tubes and the bench they stand on.
+- `quiet.ts` exports `splittingLineQuiet`, `toReviewRackQuiet`, `nettingStationQuiet`, `quietFigureCss`
+  and `QuietFigure`. Each figure has SVG, its own CSS, dimensions and `stills.light` / `stills.dark`.
+- `quiet-tours.ts` exports lazy `quietTours[id]()` loaders. Each `<id>-quiet-tour.js` contains just
+  that scene, its data and the decorative runner. Its full MIT notice is retained as `play.license`.
+- `QUIET_TOUR_SPEED` is exported through the quiet modules. Its one editable source is
+  `src/quiet-tour.ts`: `0.6` times the original story clock.
+- `story.ts` exports server-only heading, payments and prepared-item metadata used by the copy.
+- `link-preview.ts` exports the unchanged link-preview image metadata.
 
-`<id>.tour.js` is the figure's live tour: `playTour(root, data)` runs it on a plate already in the page and returns a function that stops it. Each figure's tour supplies only its scene (how its story moves, steps, starts over and holds its still); `src/figures/tour.js` runs every scene the same way, only inside `root`:
-
-- clicking, or pressing →, Space or Enter, steps through the story;
-- Home starts it over;
-- it runs only while the figure is on screen.
-
-It plays on by itself, so it shows the plate's Pause button (`[data-pause]`, WCAG 2.2.2): Pause holds the line where it is, and steps then show settled; Play goes on from there. Under reduced motion it opens on the figure's still, moves only when stepped and leaves the button hidden. It draws a frame only when something changes. Its counters move money only between two of them: `counterReadings` eases each move (`raiseAndLower`) in whole rupees, so they always add up to the same total and never pass where they are heading (a chip in Fig 1 carries its share from the member to the payer as it lands; a payment in Fig 3 moves between two tills). The generator bundles it with the kit functions it uses (esbuild, pinned) and its data: as an ES module for the web app, and as a script for the preview, check and still pages. Every one of them runs the same code.
-
-## Generated output
-
-`build` owns `apps/web/src/components/landing-figures/generated/` and deletes any file there it doesn't write. Hand-written web code for the figures, such as the live tour's client component, goes beside it in `landing-figures/`, never inside `generated/`.
-
-- `figure.ts`: the `LandingFigure` type and `figureCss`, the kit's styles. A wrapper with class `iso` gives the dark theme; add `data-theme="light"` for light.
-- `<id>.ts`: one figure's `svg`, `css`, `label` (for `role="img"`), size, plate words and still. It imports `server-only`, so it can never reach a client bundle (Fig 1's is about 360 KB).
-- `<id>-tour.js`: the figure's live tour with its data, about 20 KB. The web app loads it as its own chunk, near the screen. Next's minifier drops every comment, so the chunk carries the kit's MIT notice as `play.license`, and the Google suite checks the shipped script holds it.
-- `tours.ts`: the loaders for those chunks, the only figure code in the client bundle.
-- `index.ts`: re-exports for the server.
-
-The drawing's markup is the same in both themes. Only the stylesheet's tokens change.
-
-Each figure's light still, the page's link preview image, is `apps/web/public/landing-figures/<id>-light.png`: the tour's reduced-motion still at 1200 × 630.
-
-In the web app, `LandingFigure` (a server component) renders the plate, and `FigureTour` (a client component) puts it in the page's theme and starts the tour once the figure comes near the screen.
-
-## Quiet figures (#999)
-
-The framed figures remain for the current page. The quiet versions reuse exactly the same story,
-geometry and scene code, with the approved light/dark greys, indigo screens and faint money ink.
-They have transparent backgrounds and no plate, label, readout, legend, caption, focus target or
-live region. Section placement and the exact desktop/phone edge masks belong to the page (#1000),
-including every `-webkit-` mask twin; the figure itself does not bake in a page-specific fade.
-The link-preview PNG and its source stamp are unchanged.
-
-The additional generated modules are:
-
-- `quiet.ts`: server exports (`splittingLineQuiet`, `toReviewRackQuiet`, `nettingStationQuiet`),
-  `quietFigureCss`, and the `QuietFigure` type. Each figure supplies `svg`, `css`, dimensions and
-  transparent PNG `stills.light` / `stills.dark` URLs for Reduce motion.
-- `quiet-tours.ts`: lazy `quietTours[id]()` loaders for the separate `<id>-quiet-tour.js` chunks.
-  These contain the same scenes as the framed tours, bundled against the decorative runner;
-  no framed stepping or live-region code ships in them.
-- `QUIET_TOUR_SPEED`: the exported `0.6` story-clock multiplier, sourced from
-  `src/quiet-tour.ts` and re-exported through the generated quiet modules. Change it in that
-  one source, then build. Both the unit tests and the generator check require the quiet speed.
-
-The page renders a wrapper with `class="iso" data-quiet data-theme="light"` (or `dark`) and
-`aria-hidden="true"`, applies `quietFigureCss` plus the figure's own `css`, then puts its SVG
-inside a `[data-stage]` element. It loads a tour only when appropriate:
+The page renders `.iso[data-quiet]` and a `[data-stage]` SVG inside an `aria-hidden` wrapper, with
+pointer events disabled. It adapts the generated theme selectors to the page's pre-paint root
+choice. The approved desktop and phone placement and both standard/WebKit edge masks belong to
+`apps/web/src/components/landing-figures/quiet-layout.ts`.
 
 ```ts
 const { play } = await quietTours[figure.id]!();
 const control = play(root);
-control.setPaused(true); // the page's single Pause animation button calls all three controls
-control.setPaused(false); // continues from the same frame; no storage
-control.stop(); // unmount: disconnect visibility/media observers and cancel the frame
+control.setPaused(true); // the page's one Pause animation button controls every loaded tour
+control.setPaused(false); // continues from the held frame; no persistence
+control.stop(); // cancel frames and disconnect observers on unmount
 ```
 
-The runner starts itself only while the stage intersects the viewport, immediately cancels frames
-when it leaves, and ignores clicks, ArrowRight, Space, Enter and Home. The page owns the one accessible
-Pause/Play button. Under Reduce motion the page uses the corresponding still and need not load a tour;
-even if loaded, the runner schedules nothing and poses the same still. A live preference change is
-also observed. CSS animations and transitions are disabled in quiet figures, so pausing holds all motion.
+The runner starts only while the stage intersects the viewport and ignores all stepping input.
+Quiet CSS disables independent animations and transitions. Under Reduce motion the page shows
+the correct theme's PNG, loads no tour and hides the pause control; the runner itself also respects
+that preference. The page's pending lazy loads inherit its current pause choice.
 
-`preview` now writes six additional `<id>-quiet-<theme>.html` pages. They show the transparent drawing
-against the matching page background, without page copy or masks. The check adds both quiet palettes'
-line ends at rest and through normal timed playback, plus the actual quiet bundles' autoplay,
-pause/resume, ignored inputs, offscreen cancellation, reduced-motion inactivity and every-frame
-counter invariants. The framed scenes still get their exhaustive stepped-pose and live-region checks.
-Unit tests also enforce each chunk's original framed raw/gzip budget; none may rise.
-
-The approved raw palette is not itself a guarantee of text contrast over every coloured detail:
-for example the light accent under secondary text is 2.47:1, and the dark lamp under secondary
-text is 1.77:1. Keep the approved tokens, then verify the actual masked text overlaps at ≥4.5:1
-in #1000; adjust the drawing's opacity or overlap there if a sampled region fails.
+The framed page modules, controls, live regions and stepping checks have been removed. The old
+runner and link-preview page recipe remain private generator inputs solely to preserve the
+1200 × 630 light link-preview PNG and its source stamp byte for byte. They are never page chunks.

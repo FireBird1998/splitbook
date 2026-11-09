@@ -4,8 +4,9 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { visuallyHidden } from '@/components/insights/a11y';
 import MoneyText from '@/components/common/MoneyText';
-import LandingFigure from '@/components/landing-figures/LandingFigure';
-import { nettingStation } from '@/components/landing-figures/generated';
+import QuietDrawing from '@/components/landing-figures/QuietDrawing';
+import { nettingStationQuiet } from '@/components/landing-figures/generated/quiet';
+import { nettingStation } from '@/components/landing-figures/generated/story';
 import { PRODUCT_NAME } from '@/lib/product';
 import LandingSection from './LandingSection';
 
@@ -19,11 +20,11 @@ export default function LandingSettleUp() {
     <LandingSection
       id="settle"
       elevated
+      art={<QuietDrawing figure={nettingStationQuiet} placement="settle" />}
       eyebrow="Settle up"
       title={nettingStation.headline}
       intro={`${PRODUCT_NAME} nets every Expense into one balance each, then works out the fewest payments that clear them. When someone pays you back, record it and the whole Group sees it in Activity.`}
     >
-      <LandingFigure figure={nettingStation} />
       <Box
         component="ul"
         aria-label="The payments"

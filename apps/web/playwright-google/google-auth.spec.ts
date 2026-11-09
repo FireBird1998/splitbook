@@ -73,7 +73,7 @@ test.describe('google auth mode', () => {
     await expect(page.locator('#pricing')).toHaveCount(0);
     // With assistants off, no Connected assistants section or Fig 2 (#450).
     await expect(page.locator('#assistants')).toHaveCount(0);
-    await expect(page.getByRole('figure', { name: 'The To review rack' })).toHaveCount(0);
+    await expect(page.locator('[data-quiet-figure="to-review-rack"]')).toHaveCount(0);
 
     // The brand kit: the logo leads home, and the footer's mark is decorative beside the name.
     const home = page.getByRole('link', { name: 'Splitbook home' });

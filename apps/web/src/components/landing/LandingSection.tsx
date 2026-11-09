@@ -38,6 +38,9 @@ export default function LandingSection({
   hiddenTitle = false,
   intro,
   children,
+  art,
+  headingAside,
+  headingAfter,
 }: {
   id?: string;
   elevated?: boolean;
@@ -48,6 +51,9 @@ export default function LandingSection({
   hiddenTitle?: boolean;
   intro?: string;
   children: ReactNode;
+  art?: ReactNode;
+  headingAside?: ReactNode;
+  headingAfter?: ReactNode;
 }) {
   return (
     <Box
@@ -57,6 +63,8 @@ export default function LandingSection({
       data-elevated={elevated ? '' : undefined}
       sx={{
         py: { xs: 7, md: 13 },
+        position: 'relative',
+        overflow: 'clip',
         ...(elevated && {
           bgcolor: 'surface.elevated',
           borderTop: 1,
@@ -69,28 +77,58 @@ export default function LandingSection({
       }}
     >
       <Container maxWidth="lg" sx={LANDING_GUTTER}>
-        <Stack spacing={1.5} sx={{ mb: hiddenTitle ? 0 : { xs: 4, md: 6 }, maxWidth: 760 }}>
-          {eyebrow && (
-            <Typography variant="overline" color={eyebrowColor} sx={{ fontWeight: 600 }}>
-              {eyebrow}
-            </Typography>
-          )}
-          <Typography
-            variant="displaySmall"
-            component="h2"
-            color="text.primary"
-            sx={{ m: 0, fontSize: LANDING_SECTION_TITLE_SIZE, ...(hiddenTitle && visuallyHidden) }}
-          >
-            {title}
-          </Typography>
-          {intro && (
-            <Typography variant="lead" component="p" color="text.secondary">
-              {intro}
-            </Typography>
-          )}
-        </Stack>
-        {children}
+        <Box
+          className="sbq-lift"
+          sx={
+            headingAside
+              ? {
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', md: 'minmax(0,1fr) minmax(0,1fr)' },
+                  alignItems: 'center',
+                  gap: { xs: 4, md: 7 },
+                  mb: { xs: 4, md: 6 },
+                }
+              : undefined
+          }
+        >
+          <Box>
+            <Stack
+              spacing={1.5}
+              sx={{
+                mb: hiddenTitle ? 0 : { xs: 4, md: 6 },
+                maxWidth: art ? { xs: '100%', md: 560 } : 760,
+              }}
+            >
+              {eyebrow && (
+                <Typography variant="overline" color={eyebrowColor} sx={{ fontWeight: 600 }}>
+                  {eyebrow}
+                </Typography>
+              )}
+              <Typography
+                variant="displaySmall"
+                component="h2"
+                color="text.primary"
+                sx={{
+                  m: 0,
+                  fontSize: LANDING_SECTION_TITLE_SIZE,
+                  ...(hiddenTitle && visuallyHidden),
+                }}
+              >
+                {title}
+              </Typography>
+              {intro && (
+                <Typography variant="lead" component="p" color="text.secondary">
+                  {intro}
+                </Typography>
+              )}
+            </Stack>
+            {headingAfter}
+          </Box>
+          {headingAside}
+        </Box>
+        <Box className="sbq-lift">{children}</Box>
       </Container>
+      {art}
     </Box>
   );
 }

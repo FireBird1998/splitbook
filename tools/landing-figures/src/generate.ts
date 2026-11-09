@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildSync } from 'esbuild';
-import { ISO_CSS } from './kit.ts';
 import { buildNettingStation } from './figures/netting-station.mjs';
 import { buildSplittingLine } from './figures/splitting-line.mjs';
 import { buildToReviewRack } from './figures/to-review-rack.mjs';
@@ -38,8 +37,6 @@ export function buildFigures(): Figure[] {
   return [buildSplittingLine(s), buildToReviewRack(s), buildNettingStation(s)];
 }
 
-const camel = (id: string) => id.replace(/-(\w)/g, (_, c: string) => c.toUpperCase());
-
 /**
  * A figure's live tour, bundled with the kit functions it uses and its data. As an ES module it
  * exports `play(root)` for the web app; as a classic script it plays the first `.iso-figure` in
@@ -74,104 +71,24 @@ export const stillPath = (figure: Figure) => `${STILL_DIR}/${stillFile(figure)}`
 /** The figures that have a still: the ones that are a link preview. */
 export const withStills = (figures: Figure[]) => figures.filter((figure) => 'still' in figure);
 
-/**
- * The web app's view of the figures:
- * - `figure.ts`: the figure type and one shared stylesheet (the kit's light and dark tokens);
- * - `<id>.ts`: per figure, server only, its static drawing, its words and its extras;
- * - `<id>-tour.js`: its live tour, a client chunk loaded near the screen;
- * - `tours.ts`: the loaders for those chunks, the only figure code in the client bundle;
- * - `index.ts`: re-exports for the server.
- */
+/** Only quiet assets reach the page; story metadata stays server-only and independent of SVGs. */
 export function generatedFiles(figures: Figure[]): Map<string, string> {
   const files = quietFiles(figures);
+  const preview = withStills(figures)[0]!;
+  if (!('still' in preview)) throw new Error('Missing link preview');
   files.set(
-    `${OUT_DIR}/figure.ts`,
-    `${HEADER}
-/** A landing figure, drawn once at build time: the same markup in light and dark. */
-export interface LandingFigure {
-  id: string;
-  /** Its number on the page: Fig 1, Fig 2… */
-  number: number;
-  title: string;
-  /** What the drawing shows, for assistive technology (role="img"). */
-  label: string;
-  width: number;
-  height: number;
-  /** The figure's SVG at rest, styled by figureCss and its own css under an .iso wrapper. */
-  svg: string;
-  css: string;
-  /** The plate's readout before the live tour runs. */
-  readout: string;
-  /** The legend under the plate: each key's mark and words. */
-  legend: {
-    mark: 'bin' | 'positive' | 'negative' | 'lamp' | 'cord' | 'pay' | 'coin' | 'lever' | 'tag' | 'read';
-    label: string;
-  }[];
-  caption: string;
-  // A figure's own extras. Each figure's module declares exactly the ones it has (it satisfies
-  // this type), so they are typed as present where they exist.
-  /** The light still the tour shows under reduced motion, as the page's link preview (Fig 1). */
-  still?: { src: string; width: number; height: number; alt: string };
-  /** The heading of the section the figure belongs to, in the story's own counts (Fig 3). */
-  headline?: string;
-  /** The payments a settle-up figure carries, by member name, in currency (Fig 3). */
-  payments?: { from: string; to: string; amountMinor: number }[];
-  /** The items an assistant prepares for To review, between members by name, in currency (Fig 2). */
-  prepared?: { title: string; amountMinor: number; between: string[] }[];
-  currency?: string;
-}
-
-/** The kit's styles; a wrapper with class "iso" picks dark, or light with data-theme="light". */
-export const figureCss = ${JSON.stringify(ISO_CSS)};
-`,
+    `${OUT_DIR}/link-preview.ts`,
+    `${HEADER}import 'server-only';\nexport const still = ${JSON.stringify({ src: `${STILL_URL_DIR}/${stillFile(preview)}`, ...STILL_SIZE, alt: preview.still })};\n`,
   );
-  for (const figure of figures) {
-    const data = {
-      id: figure.id,
-      number: figure.number,
-      title: figure.title,
-      label: figure.label,
-      width: figure.width,
-      height: figure.height,
-      svg: figure.svg,
-      css: figure.css,
-      readout: figure.readout,
-      legend: figure.legend,
-      caption: figure.caption,
-      ...('still' in figure && {
-        still: { src: `${STILL_URL_DIR}/${stillFile(figure)}`, ...STILL_SIZE, alt: figure.still },
-      }),
-      ...('headline' in figure && { headline: figure.headline }),
-      ...('payments' in figure && { payments: figure.payments, currency: figure.currency }),
-      ...('prepared' in figure && { prepared: figure.prepared, currency: figure.currency }),
-    };
-    files.set(
-      `${OUT_DIR}/${figure.id}.ts`,
-      `${HEADER}import 'server-only';
-import type { LandingFigure } from './figure';
-
-export const ${camel(figure.id)} = ${JSON.stringify(data)} satisfies LandingFigure;
-`,
-    );
-    files.set(
-      `${OUT_DIR}/${figure.id}-tour.js`,
-      `${HEADER}// ${figure.title}: its live tour, with code from the Anatomy kit (MIT); its notice ships as
-// play.license.
-${tourScript(figure, 'esm')}`,
-    );
-  }
+  const netting = figures.find((figure) => 'payments' in figure)!;
+  const rack = figures.find((figure) => 'prepared' in figure)!;
+  if (!('payments' in netting) || !('prepared' in rack)) throw new Error('Missing landing story');
   files.set(
-    `${OUT_DIR}/tours.ts`,
-    `${HEADER}
-/** Each figure's live tour, loaded on demand; \`play\` returns a function that stops it. */
-export const tours: Record<string, () => Promise<{ play(root: HTMLElement): () => void }>> = {
-${figures.map((f) => `  '${f.id}': () => import('./${f.id}-tour.js'),`).join('\n')}
-};
+    `${OUT_DIR}/story.ts`,
+    `${HEADER}import 'server-only';
+export const nettingStation = ${JSON.stringify({ headline: netting.headline, payments: netting.payments, currency: netting.currency })};
+export const toReviewRack = ${JSON.stringify({ prepared: rack.prepared, currency: rack.currency })};
 `,
-  );
-  files.set(
-    `${OUT_DIR}/index.ts`,
-    `${HEADER}export { figureCss, type LandingFigure } from './figure';\n${figures.map((f) => `export { ${camel(f.id)} } from './${f.id}';`).join('\n')}\n`,
   );
   return files;
 }

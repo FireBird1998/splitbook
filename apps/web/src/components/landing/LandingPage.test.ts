@@ -307,43 +307,6 @@ describe('the landing page with legal and support pages', () => {
   });
 });
 
-describe('Fig 1 in the hero', () => {
-  it('shows the splitting line in its plate, named by its full description, in both themes', () => {
-    for (const mode of MODES) {
-      const html = render(mode, OFF);
-      expect(svgImages(html)[0]).toEqual(
-        expect.stringMatching(
-          /^A small production line on a bench that splits Expenses\. .* into the bin of the member it belongs to: You, Priya, Sam and Alex\. Each bin's counter shows that member's balance, and a lamp marks who paid\.$/,
-        ),
-      );
-      expect(text(html)).toContain('Fig 1 The splitting line');
-      expect(text(html)).toContain('Line idle · 3 Expenses waiting');
-      for (const key of [
-        'Bins, left to right: You, Priya, Sam and Alex',
-        '+ gets back',
-        '− owes',
-        'Lamp: who paid',
-        'Each Expense is cut into one chip per share, and the counters always add up to zero.',
-      ])
-        expect(text(html)).toContain(key);
-    }
-  });
-
-  it('draws the figures in the page’s theme', () => {
-    for (const mode of MODES) {
-      // With assistants preparing items, Fig 2 is on the page too (#450).
-      const html = render(mode, {
-        ...OFF,
-        assistants: { available: true, canPrepare: true },
-        toReview: true,
-      });
-      // Figures inherit the pre-paint root choice, even while the JS theme is still light.
-      expect(html).not.toMatch(/<figure\b[^>]*data-theme=/);
-      expect(html).toContain(':root:not([data-theme="dark"]) .iso');
-    }
-  });
-});
-
 describe('the Settle up section', () => {
   it('shows five debts becoming three payments, with Fig 3 and the payments, in both themes', () => {
     for (const mode of MODES) {
@@ -357,8 +320,6 @@ describe('the Settle up section', () => {
           /^A netting station on a bench\. Four tills .*: You \+500, Priya −100, Sam \+300 and Alex −700\. .* five debts left by three Expenses .* three payment cords, .*: five from Alex to You, two from Alex to Sam and one from Priya to Sam\. Then every counter reads zero\.$/,
         ),
       );
-      expect(text(html)).toContain('Fig 3 The netting station');
-      expect(text(html)).toContain('Grey cords: the debts the Expenses left');
       // The three payments beneath it, as Splitbook's simplify step works them out.
       for (const payment of [
         'Alex pays You ₹500.00',
@@ -468,16 +429,6 @@ describe('the Connected assistants section (#450)', () => {
           /^A To review rack on a bench\. .* stacked one on another: Dinner at Thalassa, ₹2,400 between You, Priya and Sam, and Cab to the airport, ₹600 between You and Priya\. .* The member saves Dinner at Thalassa, and Cab to the airport waits in the rack\. The tube never reaches the conveyor\.$/,
         ),
       ]);
-      for (const words of [
-        'Fig 2 The To review rack',
-        // At rest it shows its still: Dinner saved, Cab waiting.
-        'Cab to the airport ₹600 waits in To review · nothing moves until you save it',
-        'Your lever: the only way a bar leaves the rack',
-        'Bars with a blue tag: items an assistant prepared',
-        'The thin read line lets it see Balances; the tube ends at the rack, never at the line',
-        'Dinner at Thalassa ₹2,400 between You, Priya and Sam (three ₹800 chips) and Cab to the airport ₹600 between You and Priya (two ₹300 chips).',
-      ])
-        expect(text(own)).toContain(words);
     }
   });
 

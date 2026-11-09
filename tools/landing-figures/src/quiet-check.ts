@@ -105,8 +105,7 @@ export function quietProblems(figures: Figure[]): string[] {
                 ['wait', 100],
               ]
             : [];
-        // Geometry is shared with the framed scene's exhaustive stepped-pose check. Here ordinary
-        // quiet playback checks the recoloured fills' occlusion without giving visitors any steps.
+        // Check line ends throughout ordinary timed playback, without exposing a stepping API.
         for (let i = 0; i < figure.poses; i++)
           actions.push(
             ['eval', 'window.quietClock.advance(480); null'],
