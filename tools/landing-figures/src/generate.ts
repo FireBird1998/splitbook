@@ -6,6 +6,7 @@ import { buildNettingStation } from './figures/netting-station.mjs';
 import { buildSplittingLine } from './figures/splitting-line.mjs';
 import { buildToReviewRack } from './figures/to-review-rack.mjs';
 import { story } from './story.ts';
+import { quietFiles } from './quiet.ts';
 
 /** Where the generated modules live in the web app, relative to the repository root. */
 export const OUT_DIR = 'apps/web/src/components/landing-figures/generated';
@@ -82,7 +83,7 @@ export const withStills = (figures: Figure[]) => figures.filter((figure) => 'sti
  * - `index.ts`: re-exports for the server.
  */
 export function generatedFiles(figures: Figure[]): Map<string, string> {
-  const files = new Map<string, string>();
+  const files = quietFiles(figures);
   files.set(
     `${OUT_DIR}/figure.ts`,
     `${HEADER}
