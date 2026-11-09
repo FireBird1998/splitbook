@@ -1020,3 +1020,99 @@ it('saves a separately verified answer through the same ownership-checked saved-
   f.stop();
   f.client.clear();
 });
+
+it('falls back to the saved row when a screen-owned request cannot reach Splitbook', async () => {
+  const f = engineFixture();
+  await f.seed();
+  const answer = await f.client.fetchQuery({
+    queryKey: f.key,
+    queryFn: () =>
+      f.engine.read({
+        key: f.key,
+        accept: () => undefined,
+        send: async () => {
+          throw offlineFailure();
+        },
+      }),
+  });
+  expect(answer).toEqual({ source: 'saved', refreshedAt: 500, value: { title: 'Saved answer' } });
+  f.stop();
+  f.client.clear();
+});
+
+it('cancels a screen-owned request when its query is removed', async () => {
+  const f = engineFixture(),
+    started = deferred();
+  const options = {
+    queryKey: f.key,
+    queryFn: () =>
+      f.engine.read({
+        key: f.key,
+        accept: () => undefined,
+        send: (signal) =>
+          new Promise((_, reject) => {
+            signal?.addEventListener('abort', () =>
+              reject(new RequestError('Cancelled', 0, null, false, null, 'cancelled')),
+            );
+            started.resolve();
+          }),
+      }),
+  };
+  const reading = f.engine.readNow(options, 1, () => false);
+  const refused = expect(reading).rejects.toBeInstanceOf(Superseded);
+  await started.promise;
+  f.client.removeQueries({ queryKey: f.key });
+  await refused;
+  expect(f.client.getQueryData(f.key)).toBeUndefined();
+  expect(await f.rows.load('account', f.path)).toBeNull();
+  f.stop();
+  f.client.clear();
+});
+
+it('distrusts only the late ledger row when its removal fails in a two-scope view', async () => {
+  const f = twoScopeFixture(),
+    started = deferred(),
+    slow = deferred(),
+    save = f.rows.save,
+    remove = f.rows.remove;
+  const path = queryKeyPath(f.details);
+  await save('account', path, {
+    version: 1,
+    accountId: 'account',
+    path,
+    refreshedAt: 500,
+    value: { title: 'Kept Group' },
+  });
+  f.rows.save = async (...args) => {
+    started.resolve();
+    await slow.promise;
+    await save(...args);
+  };
+  f.rows.remove = async (accountId, path) => {
+    if (await f.rows.load(accountId, path)) throw new Error('Cannot remove');
+    await remove(accountId, path);
+  };
+  const options = {
+    queryKey: f.ledger,
+    queryFn: () => f.engine.read({ key: f.ledger, accept: () => undefined }),
+  };
+  await f.client.fetchQuery(options);
+  await started.promise;
+  await f.engine.forget('account', f.group, 'ledger');
+  slow.resolve();
+  await f.engine.idle();
+  expect(await f.rows.load('account', queryKeyPath(f.ledger))).toMatchObject({
+    value: { title: 'Read answer' },
+  });
+  f.state.read = async () => {
+    throw offlineFailure();
+  };
+  await expect(f.client.fetchQuery(options)).rejects.toMatchObject({ code: 'OFFLINE_UNAVAILABLE' });
+  expect(await f.engine.saved(f.details)).toEqual({
+    source: 'saved',
+    refreshedAt: 500,
+    value: { title: 'Kept Group' },
+  });
+  f.stop();
+  f.client.clear();
+});
