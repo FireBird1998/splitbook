@@ -71,7 +71,7 @@ The sign-out observer found the widget copy absent by the first observed signed-
 
 ### B01 — Standard release cannot run the required local demo QA configuration
 
-**Tracking:** pending QA issue filing/link.
+**Tracking:** [#1013](https://github.com/FireBird1998/splitbook/issues/1013)
 
 **Severity:** Blocks the required release QA pass; not evidence that a correctly configured production build is broken.
 
@@ -83,7 +83,7 @@ The sign-out observer found the widget copy absent by the first observed signed-
 
 ### B02 — The first tap after force-stop wakes the widget but does not open the app
 
-**Tracking:** pending QA issue filing/link.
+**Tracking:** [#1009](https://github.com/FireBird1998/splitbook/issues/1009)
 
 **Severity:** Blocks the stated force-stop acceptance criterion; ordinary process-death routing passed in debug.
 
@@ -97,7 +97,7 @@ The sign-out observer found the widget copy absent by the first observed signed-
 
 ### B03 — Live Group widget avatars have one initial instead of two
 
-**Tracking:** pending QA issue filing/link.
+**Tracking:** [#1011](https://github.com/FireBird1998/splitbook/issues/1011)
 
 **Severity:** Does not block turning the switch on; track as a follow-up.
 
@@ -109,7 +109,7 @@ The sign-out observer found the widget copy absent by the first observed signed-
 
 ### B04 — Font-size changes do not redraw widgets after process death
 
-**Tracking:** pending QA issue filing/link.
+**Tracking:** [#1012](https://github.com/FireBird1998/splitbook/issues/1012)
 
 **Severity:** Does not block turning the switch on; track as a follow-up.
 
@@ -121,7 +121,7 @@ The sign-out observer found the widget copy absent by the first observed signed-
 
 ### B05 — Archiving is presented as lost access instead of the final archived balance
 
-**Tracking:** pending QA issue filing/link.
+**Tracking:** [#1008](https://github.com/FireBird1998/splitbook/issues/1008)
 
 **Severity:** Blocks turning the widgets switch on.
 
@@ -135,7 +135,7 @@ The sign-out observer found the widget copy absent by the first observed signed-
 
 ### B06 — Setup records remain after the flag-off upgrade removes the widgets
 
-**Tracking:** pending QA issue filing/link.
+**Tracking:** [#1010](https://github.com/FireBird1998/splitbook/issues/1010)
 
 **Severity:** Does not block turning the switch on; track as a follow-up.
 
