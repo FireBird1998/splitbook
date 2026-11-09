@@ -71,6 +71,7 @@ export default function QuietTours() {
     <Button
       type="button"
       className="sbq-pause"
+      disableRipple
       hidden={!moving}
       data-tour-speed={QUIET_TOUR_SPEED}
       aria-pressed={paused}
