@@ -1236,6 +1236,7 @@ function accountFixture() {
   const engine = createSavedReadEngine(
     {
       ...f.ports,
+      answered: (path, saved) => f.ports.answered(path, saved),
       distrusted: (key) => Math.max(f.state.mark, marks.get(`${key[2]}:${key[0]}`) ?? -Infinity),
       distrust: (accountId, scopes) => {
         for (const scope of scopes) marks.set(`${accountId}:${scope}`, Infinity);
@@ -1258,6 +1259,7 @@ function accountFixture() {
       cancelOnRemove: false,
       staleWhenOffline: false,
       freshnessSource: 'unless-saved',
+      verificationTime: 'after-acceptance',
     },
   );
   return { ...f, engine, key, other, path: queryKeyPath(key), stop: () => undefined };
@@ -1464,23 +1466,61 @@ it('distrusts only the account row whose late removal fails', async () => {
 });
 
 it('synchronizes the caller answer marker with preview eligibility in an overlapping disk/wire read', async () => {
-  const f=accountFixture(), disk=deferredValue<unknown>(), wire=deferredValue<unknown>(), accepted=deferred(), accepting=deferred();
-  const late: unknown[]=[];
-  let answered=false;
-  f.rows.load=()=>disk.promise;
-  const stop=f.client.getQueryCache().subscribe(()=>{
-    const data=f.client.getQueryData(f.key) as {source?:string}|undefined;
-    if(answered && data?.source==='saved') late.push(data);
+  const f = accountFixture(),
+    disk = deferredValue<unknown>(),
+    wire = deferredValue<unknown>(),
+    accepted = deferred(),
+    accepting = deferred();
+  const late: unknown[] = [];
+  let answered = false;
+  f.rows.load = () => disk.promise;
+  const stop = f.client.getQueryCache().subscribe(() => {
+    const data = f.client.getQueryData(f.key) as { source?: string } | undefined;
+    if (answered && data?.source === 'saved') late.push(data);
   });
-  const reading=f.client.fetchQuery({queryKey:f.key,queryFn:()=>f.engine.read({
-    key:f.key, preview:true, send:()=>wire.promise,
-    onAnswer:()=>{answered=true;},
-    accept:async()=>{accepting.resolve();await accepted.promise;},
-  })});
-  disk.resolve({version:1,accountId:'account',path:f.path,refreshedAt:500,value:{title:'Saved'}});
-  await Promise.resolve(); await Promise.resolve();
-  wire.resolve({title:'Live'});
+  const reading = f.client.fetchQuery({
+    queryKey: f.key,
+    queryFn: () =>
+      f.engine.read({
+        key: f.key,
+        preview: true,
+        send: () => wire.promise,
+        onAnswer: () => {
+          answered = true;
+        },
+        accept: async () => {
+          accepting.resolve();
+          await accepted.promise;
+        },
+      }),
+  });
+  disk.resolve({
+    version: 1,
+    accountId: 'account',
+    path: f.path,
+    refreshedAt: 500,
+    value: { title: 'Saved' },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  wire.resolve({ title: 'Live' });
   await accepting.promise;
-  try { expect(answered).toBe(true); expect(late).toEqual([]); }
-  finally {accepted.resolve();await reading;stop();f.client.clear();}
+  try {
+    expect(answered).toBe(true);
+    expect(late).toEqual([]);
+  } finally {
+    accepted.resolve();
+    await reading;
+    stop();
+    f.client.clear();
+  }
+});
+
+
+it.each([[true, 1000],[false, 1001]] as const)('preserves verification-time ordering for account=%s', async (account, expected) => {
+  const f = account ? accountFixture() : engineFixture();
+  f.ports.answered=()=>{f.state.time=1001;};
+  const answer=await f.client.fetchQuery({queryKey:f.key,queryFn:()=>f.engine.read({key:f.key,accept:()=>undefined})});
+  expect(answer).toMatchObject({source:'network',refreshedAt:expected});
+  f.stop(); f.client.clear();
 });
