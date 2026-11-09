@@ -918,6 +918,23 @@ describe('saved copies on the persister (#219, M3-1)', () => {
     expect([...f.disk.keys()].filter((key) => key.includes(maplePath))).toEqual([]);
   });
 
+  it('refuses a saved Expense-list page with the wrong page number offline', async () => {
+    const f = fixture();
+    const controller = await withPages(f, 2);
+    await settle();
+    const path = f
+      .savedRows(`${maplePath}/expenses?`)
+      .find(({ path }) => path.includes('page=2&'))!.path;
+    const row = f.rows.get(alex.id + path) as {
+      value: { data: { pagination: { page: number } } };
+    };
+    row.value.data.pagination.page = 1;
+    f.server.offline = true;
+    await controller.refresh('pull');
+    expect(listed(controller.getSnapshot())).toEqual(septemberRows(1, 20));
+    expect(controller.getSnapshot().financial.expenses.moreStatus).toBe('error');
+  });
+
   it('shows them after an offline restart with their original times, never as fresh, and reads them again on reconnect', async () => {
     const f = fixture();
     const first = f.create();
