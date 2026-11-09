@@ -1,6 +1,11 @@
 import { registerRootComponent } from 'expo';
 
 import App from './App';
+import { reconcileWidgetSetups } from './src/widget-lifecycle';
+
+// Disabling receivers can prevent Android's deletion callback. Retry cleanup on every startup,
+// including flag-off builds and before sign-in. Failure retains the records for the next start.
+void reconcileWidgetSetups().catch(() => undefined);
 import { androidWidgetsEnabled } from './src/widgets-flag';
 import { androidNotificationsEnabled } from './src/notifications-flag';
 

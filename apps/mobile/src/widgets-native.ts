@@ -20,6 +20,25 @@ export function createWidgetsStore(environment: string) {
     return db;
   };
   return {
+    async reconcileSetups(activeIds: number[]) {
+      // An invalid/partial native result must never delete a live placement.
+      if (activeIds.some((id) => !Number.isSafeInteger(id) || id <= 0))
+        throw new Error('Invalid native widget id');
+      if (!opening) {
+        const { File } = await import('expo-file-system');
+        if (!new File(`file://${defaultDatabaseDirectory}`, 'splitbook-widgets.db').exists) return;
+      }
+      // Placements belong to Android, not an account or API environment. Preserve every live id.
+      const placeholders = activeIds.map(() => '?').join(',');
+      await (
+        await database()
+      ).runAsync(
+        activeIds.length
+          ? `DELETE FROM widget_setup WHERE widget_id NOT IN (${placeholders})`
+          : 'DELETE FROM widget_setup',
+        ...activeIds,
+      );
+    },
     async setup(widgetId: number): Promise<WidgetSetupRecord | null> {
       const row = await (
         await database()
