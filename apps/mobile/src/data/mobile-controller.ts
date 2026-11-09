@@ -168,7 +168,7 @@ import {
 import { parseInvitationLink, parseToReviewLink } from './invitation-links';
 import { parseGroupBalances } from './financial-dto';
 import { createHomeQueries, draftSummaries, emptyHome } from './home-queries';
-import { savedReadFreshness, type Envelope } from './saved-read-engine';
+import { savedReadFreshness, STALE, type Envelope } from './saved-read-engine';
 import { createGroupQueries, emptyExpenses, savedGroupShown, type Step } from './group-queries';
 import { createExpenseQueries } from './expense-queries';
 import { createActivityQueries } from './activity-queries';
@@ -7795,7 +7795,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         );
       }),
       // A saved copy is never fresh, and neither is a read of them: each open reads them again.
-      staleTime: 0,
+      staleTime: STALE,
       retry: false,
       networkMode: 'always' as const,
       refetchOnReconnect: 'always' as const,

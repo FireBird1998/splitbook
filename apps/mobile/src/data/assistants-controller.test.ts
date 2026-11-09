@@ -605,3 +605,18 @@ describe('Connected assistants on Android (#622)', () => {
     controller.dispose();
   });
 });
+
+it('reads Connected assistants again on opening after the phone clock moves back', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-20T09:00:00.000Z'));
+  try {
+    const f = fixture();
+    const { controller } = await readOnline(f);
+    controller.back();
+    clock.mockReturnValue(Date.parse('2026-10-19T09:00:00.000Z'));
+    f.server.connections = [{ ...helper, name: 'Updated helper' }];
+    const state = await openAssistants(controller);
+    expect(state().assistants?.map((assistant) => assistant.name)).toEqual(['Updated helper']);
+  } finally {
+    clock.mockRestore();
+  }
+});

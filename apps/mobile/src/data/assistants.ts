@@ -9,7 +9,7 @@ import {
   type QueryKey,
 } from '@splitbook/shared/query-keys';
 import type { AccountGroupRecordStore } from './account-record-storage';
-import { createSavedCopyQueue } from './saved-read-engine';
+import { createSavedCopyQueue, STALE } from './saved-read-engine';
 import { cachedRead } from './offline-cache';
 import { queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
@@ -285,7 +285,7 @@ export function createAssistants(session: AssistantsSession) {
       const answer = await session.client.fetchQuery({
         queryKey: key,
         queryFn: ({ signal }) => fetchAssistants(key, owner, signal),
-        staleTime: 0,
+        staleTime: STALE,
         retry: false,
       });
       if (session.current(owner)) show(answer);
