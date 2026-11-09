@@ -34,6 +34,7 @@ export function createWidgetCopy(
   let savedGroups: WidgetCopy['savedGroups'];
   const lost = new Set<string>();
   const retired = new Set<string>();
+  const archived = new Set<string>();
   let restored = false;
   const restore = async (accountId: string) => {
     if (restored || !rows) return;
@@ -52,7 +53,7 @@ export function createWidgetCopy(
             id: g.id,
             name: g.name,
             theme: g.category,
-            archived: !!g.isArchived,
+            archived: !!g.isArchived || archived.has(g.id),
             members: g.members.length,
             currencies: 1 + g.alternateCurrencies.length,
           })),
@@ -91,7 +92,7 @@ export function createWidgetCopy(
             id: g.id,
             name: g.name,
             theme: g.category,
-            archived: !!g.isArchived,
+            archived: !!g.isArchived || archived.has(g.id),
             members: g.members.length,
             currencies: 1 + g.alternateCurrencies.length,
           })),
@@ -108,6 +109,7 @@ export function createWidgetCopy(
         );
         lost.delete(id);
         retired.delete(id);
+        archived.delete(id);
       }
       const copy: WidgetCopy = {
         version: 1,
@@ -148,8 +150,17 @@ export function createWidgetCopy(
         await held.writeSavedCopy(() => native.redraw());
       });
     },
+    archiveGroup(id: string) {
+      if (groups[id]) groups[id] = { ...groups[id], archived: true };
+      archived.add(id);
+      lost.delete(id);
+      retired.add(id);
+      queue.cancel();
+      signature = '';
+    },
     forgetGroup(id: string, denied = false) {
       delete groups[id];
+      archived.delete(id);
       retired.add(id);
       queue.cancel();
       if (denied) {
@@ -166,6 +177,7 @@ export function createWidgetCopy(
       savedGroups = undefined;
       lost.clear();
       retired.clear();
+      archived.clear();
       restored = false;
     },
     idle: () => queue.idle(),

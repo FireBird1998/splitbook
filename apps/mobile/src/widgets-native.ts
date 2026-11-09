@@ -73,11 +73,23 @@ export function createWidgetsStore(environment: string) {
     },
     async write(copy: WidgetCopy) {
       const db = await ensure();
-      // To review has its own verification time. Offline Home restoration must not erase it.
-      if (process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' && !copy.review) {
-        const previous = await this.read();
-        if (previous.copy?.accountId === copy.accountId && previous.copy.review)
-          copy = { ...copy, review: previous.copy.review };
+      const previous = (await this.read()).copy;
+      if (previous?.accountId === copy.accountId) {
+        // App queries deliberately evict archived Groups. Their verified final widget balance
+        // survives that eviction and a restart, until access is genuinely lost or the copy purged.
+        const finalGroups = Object.fromEntries(
+          Object.entries(previous.groups ?? {}).filter(
+            ([id, group]) => group.archived && !copy.lostGroupIds?.includes(id),
+          ),
+        );
+        copy = { ...copy, groups: { ...finalGroups, ...copy.groups } };
+        // To review has its own verification time. Offline Home restoration must not erase it.
+        if (
+          process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' &&
+          !copy.review &&
+          previous.review
+        )
+          copy = { ...copy, review: previous.review };
       }
       await db.runAsync(
         'UPDATE widget_state SET copy = ? WHERE environment = ?',
