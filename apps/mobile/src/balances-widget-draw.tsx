@@ -131,6 +131,29 @@ export function drawBalances(view: BalancesWidgetView, t: SemanticTokens) {
               ? text(view.description, t.textSecondary, small ? 10 : 12)
               : null}
           </FlexWidget>
+        ) : view.compactFallback ? (
+          <FlexWidget style={{ flexGap: 3 }}>
+            <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
+              {mark(14)}
+              {text('Balances', t.text, 10, true)}
+            </FlexWidget>
+            {text(view.compactFallback, t.textSecondary, 9)}
+          </FlexWidget>
+        ) : view.compactLines.length ? (
+          <FlexWidget style={{ flexGap: 2 }}>
+            {view.compactLines.map((line, index) => (
+              <TextWidget
+                key={index}
+                text={line}
+                maxLines={1}
+                style={{
+                  color: color(index === 0 ? t.status.positive : t.status.negative),
+                  fontSize: view.hidden ? 10 : l.moneyFontSize === 13 ? 10 : 12,
+                  fontWeight: 'bold',
+                }}
+              />
+            ))}
+          </FlexWidget>
         ) : compactMoney ? (
           <FlexWidget style={{ flexGap: 2 }}>
             <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 4 }}>
@@ -169,7 +192,7 @@ export function drawBalances(view: BalancesWidgetView, t: SemanticTokens) {
             {column('You owe', view.owe, view.oweOverflow, t.status.negative)}
           </FlexWidget>
         )}
-        {view.hidden && l.showPrivacyLabel ? hiddenLabel(view.hidden, t) : null}
+        {view.hidden && l.showPrivacyLabel ? hiddenLabel(view.hidden, t, l.privacyFontSize) : null}
       </FlexWidget>
       <FlexWidget style={{ flex: 1 }} />
       {!small ? (

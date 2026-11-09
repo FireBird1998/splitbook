@@ -240,7 +240,7 @@ export function groupWidget(...args: Parameters<typeof groupWidgetView>) {
     summary: widgetSummary([
       'Group',
       full.state === 'loading' ? 'Loading' : null,
-      full.hidden ? null : full.name,
+      full.name,
       full.title,
       full.balance,
       args[2] === '2x2' && full.currencyOverflow

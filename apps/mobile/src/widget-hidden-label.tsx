@@ -3,7 +3,7 @@ import { SvgWidget } from 'react-native-android-widget/src/widgets/SvgWidget';
 import { TextWidget } from 'react-native-android-widget/src/widgets/TextWidget';
 import type { SemanticTokens } from '@splitbook/shared/design-tokens';
 /** The same quiet privacy indicator on Balances and Group. */
-export function hiddenLabel(label: string, t: SemanticTokens) {
+export function hiddenLabel(label: string, t: SemanticTokens, fontSize = 10) {
   return (
     <FlexWidget
       style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', flexGap: 4 }}
@@ -13,7 +13,7 @@ export function hiddenLabel(label: string, t: SemanticTokens) {
         style={{ width: 14, height: 14 }}
       />
       <FlexWidget style={{ flex: 1 }}>
-        <TextWidget text={label} style={{ fontSize: 10, color: t.textMuted as `#${string}` }} />
+        <TextWidget text={label} style={{ fontSize, color: t.textMuted as `#${string}` }} />
       </FlexWidget>
     </FlexWidget>
   );

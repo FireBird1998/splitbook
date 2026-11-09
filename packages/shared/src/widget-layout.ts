@@ -17,9 +17,11 @@ export function balancesLayout(
     equalColumns: small || size === '4x2',
     currencyLines: size === '4x2' ? [3, 2, 1][level]! : size === '2x2' && !level ? 2 : 1,
     showReview: !level && !small,
-    showHeader: (!small || normal) && !(small && hidden && level === 2),
-    showPrivacyLabel: size === '4x2' || (level < 2 && (!small || !level)),
+    showHeader: (!small || normal) && !(small && level > 0 && normal),
+    showPrivacyLabel:
+      size === '4x2' || (small && hidden && level > 0) || (level < 2 && (!small || !level)),
     hiddenFontSize: small && level === 2 ? 8 : 11,
+    privacyFontSize: small && hidden && level === 2 ? 8 : 10,
     showTile: !small && level < 2,
     showDescription: small || level < 2,
     showSavedInHeader: !level,
