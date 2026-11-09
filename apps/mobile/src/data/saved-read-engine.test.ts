@@ -730,7 +730,6 @@ it('leaves automatic mount, focus and reconnect re-reads to the view', async () 
   }
 });
 
-
 it('keeps Activity previews suppressed after a read answered since the open, even after its query went', async () => {
   const f = engineFixture('forbidden-or-missing', 'unanswered-since-open');
   await f.seed();
@@ -747,6 +746,111 @@ it('keeps Activity previews suppressed after a read answered since the open, eve
   expect(f.client.getQueryData(f.key)).toBeUndefined();
   next.resolve({ title: 'New answer' });
   await reading;
+  f.stop();
+  f.client.clear();
+});
+
+it('settles the acceptance of a cancelled query before the caller finishes waiting', async () => {
+  const f = engineFixture();
+  const accepting = deferred(),
+    accepted = deferred();
+  const reading = f.fetch(async () => {
+    accepting.resolve();
+    await accepted.promise;
+  });
+  const refused = expect(reading).rejects.toBeInstanceOf(Superseded);
+  await accepting.promise;
+  f.client.removeQueries({ queryKey: f.key });
+  let settled = false;
+  const waiting = f.engine.settle(f.key).then(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  accepted.resolve();
+  await waiting;
+  await refused;
+  expect(settled).toBe(true);
+  expect(f.client.getQueryData(f.key)).toBeUndefined();
+  expect(await f.rows.load('account', f.path)).toBeNull();
+  f.stop();
+  f.client.clear();
+});
+
+it('lets the view turn a rejected page projection into its failed-page answer', async () => {
+  const f = engineFixture();
+  const answer = await f.client.fetchQuery({
+    queryKey: f.key,
+    queryFn: () =>
+      f.engine.read({
+        key: f.key,
+        accept: () => undefined,
+        project: () => {
+          throw new RequestError('Saved page no longer matches', 0, 'OFFLINE_UNAVAILABLE');
+        },
+        failure: (error) => {
+          if (!(error instanceof RequestError) || error.code !== 'OFFLINE_UNAVAILABLE') throw error;
+          return { source: 'failed', page: 2 };
+        },
+      }),
+  });
+  expect(answer).toEqual({ source: 'failed', page: 2 });
+  await f.engine.idle();
+  expect(await f.rows.load('account', f.path)).toBeNull();
+  f.stop();
+  f.client.clear();
+});
+
+it.each([
+  ['same-run-unanswered', false],
+  ['unanswered-since-open', true],
+] as const)('uses the %s guard when a newer read is still unanswered', async (guard, allowed) => {
+  const f = engineFixture('forbidden-or-missing', guard);
+  await f.seed();
+  const restore = f.engine.previewAtOpen(f.key);
+  const load = deferredValue<unknown>(),
+    first = deferredValue<unknown>(),
+    next = deferredValue<unknown>(),
+    original = f.rows.load;
+  f.rows.load = () => load.promise;
+  f.state.read = () => first.promise;
+  const earlier = f.fetch().catch(() => undefined),
+    preview = restore(1);
+  await f.client.cancelQueries({ queryKey: f.key });
+  f.state.read = () => next.promise;
+  const reading = f.fetch();
+  load.resolve(await original('account', f.path));
+  const restored = await preview;
+  if (allowed) {
+    expect(restored).toEqual({
+      source: 'saved',
+      refreshedAt: 500,
+      value: { title: 'Saved answer' },
+    });
+    expect(f.client.getQueryData(f.key)).toEqual(restored);
+  } else {
+    expect(restored).toBeNull();
+    expect(f.client.getQueryData(f.key)).toBeUndefined();
+  }
+  next.resolve({ title: 'New answer' });
+  first.resolve({ title: 'Old answer' });
+  await Promise.all([earlier, reading]);
+  f.stop();
+  f.client.clear();
+});
+
+it("returns Activity's projected preview with its saved time for the view to keep beside the Group read", async () => {
+  const f = engineFixture('forbidden-or-missing', 'unanswered-since-open');
+  await f.seed();
+  const restore = f.engine.previewAtOpen(f.key);
+  const copy = await restore(1, {
+    project: (answer) => ({ pages: [{ ...answer, page: 1 }], pageParams: [1] }),
+  });
+  expect(copy).toEqual({
+    pages: [{ source: 'saved', refreshedAt: 500, value: { title: 'Saved answer' }, page: 1 }],
+    pageParams: [1],
+  });
+  expect(f.client.getQueryData(f.key)).toBe(copy);
   f.stop();
   f.client.clear();
 });

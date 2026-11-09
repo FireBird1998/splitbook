@@ -143,7 +143,7 @@ export interface SavedReadView {
     distrust(key: QueryKey): string[];
   };
   refusal: RefusalRule;
-  preview: 'same-run-unanswered';
+  preview: 'same-run-unanswered' | 'unanswered-since-open';
   automaticRefetch: boolean;
   cancelOnRemove: boolean;
   staleWhenOffline: boolean;
@@ -154,6 +154,10 @@ interface Run {
   abort?: AbortController;
   before?: Promise<unknown>;
   ended?: boolean;
+}
+interface Preview<T> {
+  page?: number;
+  project?(copy: Envelope): T;
 }
 interface RowRead<T> {
   key: QueryKey;
@@ -176,6 +180,14 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
   const forgotten = new Map<string, number>(),
     /** The rows this session saved or restored: removable even by a store that can't list rows. */
     known = new Set<string>();
+  /** How many reads of each query answered: Activity never previews after one since its open. */
+  const answeredReads = new Map<string, number>();
+  const answerOf = (key: QueryKey) => answeredReads.get(hashKey(key)) ?? 0;
+  /** A read answered, from the server or failing: both overtake an earlier preview (#222). */
+  const answered = (key: QueryKey, run: Run) => {
+    run.answered = true;
+    answeredReads.set(hashKey(key), answerOf(key) + 1);
+  };
   let rebinding = false;
   const held = (key: QueryKey) => client.getQueryCache().get<unknown, Error>(hashKey(key));
   const removals = (key: QueryKey) => forgotten.get(view.rowScope.groupId(key)) ?? 0;
@@ -279,9 +291,9 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
     let value: unknown;
     try {
       value = await session.read(path, owner, run.abort?.signal);
-      run.answered = true;
+      answered(key, run);
     } catch (error) {
-      run.answered = true;
+      answered(key, run);
       if (!(error instanceof RequestError) || !error.networkFailure || !lease || !rows) throw error;
       const row = obsolete() ? null : await savedRow(lease, path).catch(() => null);
       // Overtaken by a change, a denial or a Groups list: it is read again, not shown.
@@ -323,21 +335,64 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
       ? session.freshness
       : STALE;
   };
+  /**
+   * While a query is first read, the row this device saved shows, with its own time. Never one
+   * a change, a denial or a failed removal made obsolete, one the view can't read, and never
+   * once the view's preview rule says a read has overtaken it.
+   */
+  const restore = async <T = Envelope>(
+    key: QueryKey,
+    owner: number,
+    preview: Preview<T> = {},
+    answers = answerOf(key),
+  ): Promise<T | null> => {
+    const lease = session.lease(),
+      owns = queryOwner(client, key),
+      started = runs.get(hashKey(key));
+    if (!lease || !rows) return null;
+    const row = await savedRow(lease, view.path(key, preview.page)).catch(() => null),
+      latest = runs.get(hashKey(key));
+    if (
+      !row ||
+      (view.preview === 'same-run-unanswered' &&
+        latest &&
+        (latest !== started || latest.answered)) ||
+      (view.preview === 'unanswered-since-open' &&
+        (latest?.answered || answerOf(key) !== answers)) ||
+      !session.current(owner) ||
+      !owns() ||
+      held(key)?.state.data !== undefined ||
+      row.refreshedAt <= session.distrusted(key, true) ||
+      !view.readable(key, row.value, preview.page)
+    )
+      return null;
+    const copyOf = copy(row);
+    const data = preview.project ? preview.project(copyOf) : (copyOf as T);
+    known.add(row.path);
+    client.setQueryData(key, data);
+    return data;
+  };
   return {
     /** A query function's read of one row; `project` and `failure` shape what its query holds. */
     read<T = Envelope>(request: RowRead<T>): Promise<T> {
       const run: Run = { answered: false, reading: Promise.resolve() };
       track(request.key, run);
       const answer = fetchOne(request, run);
+      const failure = (error: unknown): T => {
+        if (request.failure) return request.failure(error);
+        throw error;
+      };
       run.reading =
         request.project || request.failure
-          ? answer.then(
-              (value) => (request.project ? request.project(value) : value),
-              (error) => {
-                if (request.failure) return request.failure(error);
-                throw error;
-              },
-            )
+          ? answer.then((value) => {
+              try {
+                return request.project ? request.project(value) : value;
+              } catch (error) {
+                // A view may reject a saved page against its window (#222): its failure policy
+                // still shapes the query's answer, just as for a failed row read.
+                return failure(error);
+              }
+            }, failure)
           : answer;
       return run.reading as Promise<T>;
     },
@@ -358,37 +413,17 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
           saveAnswer(event.query);
       });
     },
+    restore<T = Envelope>(key: QueryKey, owner: number, preview: Preview<T> = {}) {
+      return restore(key, owner, preview);
+    },
     /**
-     * While a query is first read, the row this device saved shows, with its own time. Never one
-     * a change, a denial or a failed removal made obsolete, one the view can't read, and never
-     * once the view's preview rule says a read has overtaken it.
+     * Captures when an open began, without exposing answer counts. Its restore still checks
+     * ownership and trust at load time, but no preview follows any answer since this open.
      */
-    async restore(
-      key: QueryKey,
-      owner: number,
-      preview: { page?: number; project?(copy: Envelope): unknown } = {},
-    ) {
-      const lease = session.lease(),
-        owns = queryOwner(client, key),
-        started = runs.get(hashKey(key));
-      if (!lease || !rows) return;
-      const row = await savedRow(lease, view.path(key, preview.page)).catch(() => null),
-        latest = runs.get(hashKey(key));
-      if (
-        !row ||
-        (view.preview === 'same-run-unanswered' &&
-          latest &&
-          (latest !== started || latest.answered)) ||
-        !session.current(owner) ||
-        !owns() ||
-        held(key)?.state.data !== undefined ||
-        row.refreshedAt <= session.distrusted(key, true) ||
-        !view.readable(key, row.value, preview.page)
-      )
-        return;
-      const data = copy(row);
-      known.add(row.path);
-      client.setQueryData(key, preview.project ? preview.project(data) : data);
+    previewAtOpen(key: QueryKey) {
+      const answers = answerOf(key);
+      return <T = Envelope>(owner: number, preview: Preview<T> = {}) =>
+        restore(key, owner, preview, answers);
     },
     // Where `automaticRefetch` is off, nothing reads on its own: the screen's commands, the
     // foreground and a reconnect read in order.
@@ -429,6 +464,10 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
           if (!wanted()) throw new Superseded();
         }
       }
+    },
+    /** Waits for a query's underlying acceptance even when TanStack cancelled its fetch (#222). */
+    async settle(key: QueryKey) {
+      await runs.get(hashKey(key))?.reading.catch(() => undefined);
     },
     /** Observers bound again after a scope's queries were replaced: a new read waits for the old. */
     rebind(bind: () => void) {
