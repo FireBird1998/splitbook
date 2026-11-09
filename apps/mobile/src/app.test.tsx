@@ -825,6 +825,91 @@ describe('App notification callbacks (#839)', () => {
   });
 });
 
+describe('App Settings notification permission on resume', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  async function settingsWithPermission(initial: 'granted' | 'blocked') {
+    vi.stubEnv('EXPO_PUBLIC_ANDROID_NOTIFICATIONS_ENABLED', 'true');
+    let permission = initial;
+    const read = vi
+      .spyOn(notificationDevice, 'permission')
+      .mockImplementation(async () => permission);
+    const prompt = vi.spyOn(notificationDevice, 'requestPermission');
+    const token = vi.spyOn(notificationDevice, 'token');
+    const clear = vi.spyOn(notificationDevice, 'clear');
+    const requests: string[] = [];
+    const app = await renderApp((path, init) => {
+      if (!path.startsWith('/api/notifications/device')) return undefined;
+      requests.push(init.method ?? 'GET');
+      return json({ data: { ...notificationPreferences, payments: false } });
+    });
+    await app.press('Account and settings');
+    return {
+      app,
+      read,
+      prompt,
+      token,
+      clear,
+      requests,
+      setPermission: (value: typeof initial) => {
+        permission = value;
+      },
+    };
+  }
+
+  it.each([
+    ['blocked', 'granted'],
+    ['granted', 'blocked'],
+  ] as const)(
+    'reflects %s → %s on the open Settings screen with one local read',
+    async (initial, next) => {
+      const { app, read, prompt, token, clear, requests, setPermission } =
+        await settingsWithPermission(initial);
+      const banner = 'Android is blocking notifications';
+      if (initial === 'blocked') {
+        expect(app.text()).toContain(banner);
+        await app.press('Open Android settings');
+      } else expect(app.text()).not.toContain(banner);
+      const confirmed = app.controller.getSnapshot().notifications.confirmed;
+      const requestCount = requests.length;
+      const writes = app.writes.length;
+      for (const mock of [read, prompt, token, clear]) mock.mockClear();
+      await settle(Promise.resolve(emitAppState('background')));
+      setPermission(next);
+      await settle(Promise.resolve(emitAppState('active')));
+      expect(app.controller.getSnapshot().screen).toBe('settings');
+      if (next === 'granted') {
+        expect(app.text()).toContain('On for all your Groups');
+        expect(app.text()).not.toContain(banner);
+      } else {
+        expect(app.text()).toContain('Blocked by Android');
+        expect(app.text()).toContain(banner);
+        expect(app.pressable('Open Android settings')).toBeTruthy();
+      }
+      expect(app.controller.getSnapshot().notifications.confirmed).toEqual(confirmed);
+      expect(read).toHaveBeenCalledOnce();
+      expect(prompt).not.toHaveBeenCalled();
+      expect(token).not.toHaveBeenCalled();
+      expect(clear).not.toHaveBeenCalled();
+      expect(requests).toHaveLength(requestCount);
+      expect(app.writes).toHaveLength(writes);
+    },
+  );
+
+  it('does no notification work on resume away from Settings', async () => {
+    const { app, read, requests, setPermission } = await settingsWithPermission('granted');
+    await app.androidBack();
+    expect(app.controller.getSnapshot().screen).not.toBe('settings');
+    const requestCount = requests.length;
+    read.mockClear();
+    await settle(Promise.resolve(emitAppState('background')));
+    setPermission('blocked');
+    await settle(Promise.resolve(emitAppState('active')));
+    expect(read).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(requestCount);
+  });
+});
+
 describe('App Settings sign-out', () => {
   it('lists in Settings everything the sign-out confirmation says is cleared', async () => {
     const app = await renderApp();
