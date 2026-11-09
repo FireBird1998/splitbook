@@ -27,12 +27,11 @@ import {
 } from './activity';
 import { parseGroup } from './dto';
 import {
-  MAX_PAGES,
   rowPaths,
-  sharePages,
   STALE,
   createSavedReadEngine,
   parseOnce,
+  uniqueRows,
   notSaved,
   type Envelope,
   type PageEnvelope,
@@ -84,10 +83,7 @@ const targetFrom = parseOnce((value, scope): Target => {
 
 /** `shown` again when nothing in `next` differs from it, so an unchanged read publishes nothing. */
 const same = <T extends object>(shown: T, next: T): T =>
-  (Object.keys(next) as (keyof T)[]).every((field) => shown[field] === next[field]) &&
-  Object.keys(shown).length === Object.keys(next).length
-    ? shown
-    : next;
+  (Object.keys(next) as (keyof T)[]).every((field) => shown[field] === next[field]) ? shown : next;
 const failure = (state: QueryState<unknown, Error>) =>
   state.status !== 'error' || state.error instanceof Superseded ? null : state.error;
 /** The server couldn't be reached, and this device has no saved copy of the page. */
@@ -206,10 +202,6 @@ interface View {
  */
 export function createActivityQueries(session: ActivitySession) {
   const { client } = session;
-  /** How many pages each fetch has read so far, by its promise. */
-  const pagesRead = new WeakMap<object, number>();
-  /** How many events the first page of each fetch counted, by its promise. */
-  const firstTotals = new WeakMap<object, number>();
   /** Data restored from this device to show while the Group is first read: never verified here. */
   const previews = new WeakSet<object>();
   /**
@@ -324,59 +316,34 @@ export function createActivityQueries(session: ActivitySession) {
       .catch(() => undefined);
     return opened.restoring;
   };
-  /**
-   * A page of the Group's Activity. When a later page of a read can't be read, the list ends
-   * there (`failed`), keeping the pages read before it; offline, the page's saved copy answers.
-   */
+  const paging = engine.paging({
+    pagination: (key, value, page) => pageOf(value, key[3] as string, page).pagination,
+    failedMessage: () => olderFailed,
+    reopen: 'multiple-pages',
+  });
+  /** A page of Activity keeps its own saved-total coherence rule (#222). */
   const readPage = (context: QueryFunctionContext<QueryKey, unknown>) => {
     const key = context.queryKey,
-      page = context.pageParam as number,
-      query = held(key),
-      fetch = query?.promise ?? {};
-    const index = pagesRead.get(fetch) ?? 0;
-    pagesRead.set(fetch, index + 1);
-    const more = Boolean(query?.state.fetchMeta?.fetchMore);
-    return engine.read<PageEnvelope>({
-      key,
-      page,
-      accept: (value) => void pageOf(value, key[3] as string, page),
-      project: (answer) => {
-        const total = pageOf(answer.value, key[3] as string, page).pagination.total;
-        if (index === 0 && !more) firstTotals.set(fetch, total);
+      groupId = key[3] as string,
+      page = context.pageParam as number;
+    return paging.read(context, {
+      accept: (value) => void pageOf(value, groupId, page),
+      validate: (answer, first) => {
         // Offline, an older or newer page shows from this device only while it counted as many
         // events as the window's first page: otherwise events between them would silently go
         // missing, or show twice (#222, as #173's pilot did).
-        const first = more ? (query?.state.data as Pages | undefined)?.pages[0] : undefined;
-        const reference = more
-          ? first && first.source !== 'failed'
-            ? pageOf(first.value, key[3] as string, first.page).pagination.total
-            : undefined
-          : index > 0
-            ? firstTotals.get(fetch)
+        const reference =
+          first && first.source !== 'failed'
+            ? pageOf(first.value, groupId, first.page).pagination.total
             : undefined;
-        if (answer.source === 'saved' && reference !== undefined && total !== reference) {
-          const path = pagePath(key, page);
-          session.answered(path, null);
+        if (
+          answer.source === 'saved' &&
+          reference !== undefined &&
+          pageOf(answer.value, groupId, page).pagination.total !== reference
+        ) {
+          session.answered(pagePath(key, page), null);
           throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
         }
-        return { ...answer, page };
-      },
-      failure: (error) => {
-        if (
-          index === 0 ||
-          more ||
-          engine.refuses(error) ||
-          error instanceof Superseded ||
-          (error instanceof RequestError && error.kind === 'cancelled')
-        )
-          throw error;
-        return {
-          source: 'failed',
-          page,
-          refreshedAt: Date.now(),
-          value: null,
-          message: olderFailed,
-        };
       },
     });
   };
@@ -398,16 +365,7 @@ export function createActivityQueries(session: ActivitySession) {
       ...engine.shared,
       queryKey: key,
       queryFn: readPage,
-      initialPageParam: start,
-      getNextPageParam: (last: PageEnvelope) => {
-        if (last.source === 'failed') return undefined;
-        const { pagination } = pageOf(last.value, key[3] as string, last.page);
-        return pagination.page < pagination.totalPages ? pagination.page + 1 : undefined;
-      },
-      getPreviousPageParam: (_first: PageEnvelope, _all: PageEnvelope[], param: number) =>
-        param > 1 ? param - 1 : undefined,
-      maxPages: MAX_PAGES,
-      structuralSharing: sharePages,
+      ...paging.options(key, start),
       ...(pages ? { pages } : {}),
       ...(fresh || (reread && reread.pages > 1) ? { staleTime: STALE } : {}),
     } as const;
@@ -674,17 +632,14 @@ export function createActivityQueries(session: ActivitySession) {
       // An event read on two pages, as events are added above it, is listed once; the events
       // shown stay the same list when nothing in them changed, so an unchanged read publishes
       // nothing.
-      const events = [
-        ...new Map(
-          parsed.flatMap((page) => page.events).map((event) => [event._id, event]),
-        ).values(),
-      ];
-      const kept =
-        events.length === shown.events.length &&
-        events.every((event, index) => event === shown.events[index]);
+      const events = uniqueRows(
+        parsed.map((page) => page.events),
+        (event) => event._id,
+        shown.events,
+      );
       next = {
         ...base,
-        events: kept ? shown.events : events,
+        events,
         pagination: parsed[parsed.length - 1].pagination,
         firstPage: read[0].page,
         // Never fresher than its oldest page (#215).
@@ -807,19 +762,8 @@ export function createActivityQueries(session: ActivitySession) {
           restore: previewAtOpen(activityKey(groupId)),
           restoring: null,
         };
-        const key = activityKey(groupId),
-          query = held<Pages>(key),
-          pages = query?.state.data;
-        // As a Group's Months do (#219): a window being read, or slid, goes; its read with it.
-        if (query && pages && pages.pages.length > 1) {
-          if (pages.pageParams[0] === 1 && query.state.fetchStatus !== 'fetching')
-            client.setQueryData<Pages>(
-              key,
-              { pages: pages.pages.slice(0, 1), pageParams: [1] },
-              { updatedAt: query.state.dataUpdatedAt },
-            );
-          else client.removeQueries({ queryKey: key, exact: true });
-        }
+        // A new open takes the newest page, preserving its named one-page rule (#215).
+        paging.reopen(activityKey(groupId));
       }
       if (fresh)
         void client.invalidateQueries({
@@ -854,35 +798,23 @@ export function createActivityQueries(session: ActivitySession) {
     async loadOlder(owner: number) {
       const opened = view;
       if (!opened || !onScreen() || !session.checked(opened.groupId)) return;
-      const key = activityKey(opened.groupId),
-        state = stateOf<Pages>(key);
-      if (!state?.data || state.fetchStatus === 'fetching') return;
-      const { pages, pageParams } = state.data;
-      const last = pages[pages.length - 1];
-      if (last.source === 'failed')
-        client.setQueryData<Pages>(
-          key,
-          { pages: pages.slice(0, -1), pageParams: pageParams.slice(0, -1) },
-          { updatedAt: held(key)?.state.dataUpdatedAt },
-        );
-      else {
-        const { pagination } = pageOf(last.value, opened.groupId, last.page);
-        if (pagination.page >= pagination.totalPages) return;
-      }
-      bind();
-      const result = await observer?.fetchNextPage({ cancelRefetch: false });
+      const result = await paging.older(activityKey(opened.groupId), () => {
+        bind();
+        return observer;
+      });
+      if (result === false) return;
       if (result?.error) refuse(opened, result.error);
       await settle(owner);
     },
-    /** Load newer: the page before the window, which drops the window's oldest page. */
+    /** Load newer: the page before the window, which drops its oldest page. */
     async loadNewer(owner: number) {
       const opened = view;
       if (!opened || !onScreen() || !session.checked(opened.groupId)) return;
-      const state = stateOf<Pages>(activityKey(opened.groupId));
-      if (!state?.data || state.fetchStatus === 'fetching' || (state.data.pageParams[0] ?? 1) <= 1)
-        return;
-      bind();
-      const result = await observer?.fetchPreviousPage({ cancelRefetch: false });
+      const result = await paging.newer(activityKey(opened.groupId), () => {
+        bind();
+        return observer;
+      });
+      if (result === false) return;
       if (result?.error) refuse(opened, result.error);
       await settle(owner);
     },

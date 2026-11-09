@@ -37,10 +37,9 @@ import { parseExpensePage, parseGroupBalances } from './financial-dto';
 import {
   createSavedReadEngine,
   parseOnce,
+  uniqueRows,
   STALE,
-  MAX_PAGES,
   rowPaths,
-  sharePages,
   type Envelope,
   type PageEnvelope,
 } from './saved-read-engine';
@@ -274,8 +273,6 @@ export function createGroupQueries(session: GroupSession) {
   let opens = 0;
   /** Each Expense list or Balances read from the server, by its data: its fetch's start. */
   const answers = new WeakMap<object, Start>();
-  /** How many pages each fetch of an Expense list has read so far, by its promise. */
-  const pagesRead = new WeakMap<object, number>();
   /** Data restored from this device to show while the view is first read: never verified here. */
   const previews = new WeakSet<object>();
   /** The returns whose pages a read has shown again. */
@@ -501,44 +498,24 @@ export function createGroupQueries(session: GroupSession) {
       noteStart(key);
       return engine.read({ key, accept: (value) => void tagsOf(value), send });
     };
-  /**
-   * A page of a Month's Expenses. When a later page of a read can't be read, the list ends there
-   * (`failed`), keeping the pages read before it; offline, the page's saved copy answers for it.
-   */
+  const paging = engine.paging({
+    pagination: (key, value) =>
+      pageOf(value, key[3] as string, currencyOf(key[3] as string)).pagination,
+    failedMessage: (error) =>
+      messageOf(error as Error, 'Could not load more expenses. Please try again.'),
+    reopen: 'multiple-pages',
+  });
+  /** A Month's page: its Expense read invalidates figures, and wire pages check their number. */
   const readPage = (context: QueryFunctionContext<QueryKey, unknown>) => {
     const key = context.queryKey,
       groupId = key[3] as string,
       page = context.pageParam as number;
-    const query = noteStart(key);
-    const fetch = query?.promise ?? {};
-    const index = pagesRead.get(fetch) ?? 0;
-    pagesRead.set(fetch, index + 1);
-    const more = Boolean(query?.state.fetchMeta?.fetchMore);
-    session.expensesRead(groupId, index === 0 && !more);
-    return engine.read<PageEnvelope>({
-      key,
-      page,
+    noteStart(key);
+    return paging.read(context, {
+      before: (fresh) => session.expensesRead(groupId, fresh),
       accept: (value) => {
         if (pageOf(value, groupId, currencyOf(groupId)).pagination.page !== page)
           throw new Error('Unexpected expense page.');
-      },
-      project: (answer) => ({ ...answer, page }),
-      failure: (error) => {
-        if (
-          index === 0 ||
-          more ||
-          engine.refuses(error) ||
-          error instanceof Superseded ||
-          (error instanceof RequestError && error.kind === 'cancelled')
-        )
-          throw error;
-        return {
-          source: 'failed',
-          page,
-          refreshedAt: Date.now(),
-          value: null,
-          message: messageOf(error as Error, 'Could not load more expenses. Please try again.'),
-        };
       },
     });
   };
@@ -586,16 +563,7 @@ export function createGroupQueries(session: GroupSession) {
       ...shared,
       queryKey: key,
       queryFn: readPage,
-      initialPageParam: start,
-      getNextPageParam: (last: PageEnvelope) => {
-        if (last.source === 'failed') return undefined;
-        const { pagination } = pageOf(last.value, key[3] as string, currencyOf(key[3] as string));
-        return pagination.page < pagination.totalPages ? pagination.page + 1 : undefined;
-      },
-      getPreviousPageParam: (_first: PageEnvelope, _all: PageEnvelope[], param: number) =>
-        param > 1 ? param - 1 : undefined,
-      maxPages: MAX_PAGES,
-      structuralSharing: sharePages,
+      ...paging.options(key, start),
       ...(pages ? { pages } : {}),
       ...(fresh || (reread && reread.pages > 1) ? { staleTime: STALE } : {}),
     };
@@ -1041,15 +1009,15 @@ export function createGroupQueries(session: GroupSession) {
       const parsed = read.map((page) => pageOf(page.value, groupId, currencyOf(groupId)));
       // A row read on two pages, as Expenses are added above it, is listed once; the rows shown
       // stay the same list when nothing in them changed, so an unchanged read publishes nothing.
-      const rows = [
-        ...new Map(parsed.flatMap((page) => page.expenses).map((row) => [row.id, row])).values(),
-      ];
-      const kept =
-        rows.length === base.data.length && rows.every((row, index) => row === base.data[index]);
+      const rows = uniqueRows(
+        parsed.map((page) => page.expenses),
+        (row) => row.id,
+        base.data,
+      );
       base = {
         ...base,
         month,
-        data: kept ? base.data : rows,
+        data: rows,
         summary: parsed[0].summary,
         pagination: parsed[parsed.length - 1].pagination,
         firstPage: read[0].page,
@@ -1425,16 +1393,8 @@ export function createGroupQueries(session: GroupSession) {
       // A Group opened anew lists each Month from its newest page, as a return or a refresh of
       // the view on screen never does: their pages beyond it go from memory (#215).
       for (const query of client.getQueryCache().getAll()) {
-        const key = query.queryKey as QueryKey,
-          pages = query.state.data as Pages | undefined;
-        if (key[3] !== groupId || !isList(key) || !pages || pages.pages.length < 2) continue;
-        if (pages.pageParams[0] === 1 && query.state.fetchStatus !== 'fetching')
-          client.setQueryData<Pages>(
-            key,
-            { pages: pages.pages.slice(0, 1), pageParams: [1] },
-            { updatedAt: query.state.dataUpdatedAt },
-          );
-        else client.removeQueries({ queryKey: key, exact: true });
+        const key = query.queryKey as QueryKey;
+        if (key[3] === groupId && isList(key)) paging.reopen(key);
       }
       // A Group read earlier shows its Month at once.
       const data = held<Envelope>(groupQueryKey(groupId))?.state.data;
@@ -1496,41 +1456,28 @@ export function createGroupQueries(session: GroupSession) {
      * page that couldn't be read before is read again, in its place.
      */
     async loadMore(owner: number) {
-      const key = shownList(),
-        state = stateOf<Pages>(key);
-      if (!onScreen() || !key || !state?.data || state.fetchStatus === 'fetching' || !view?.checked)
-        return;
-      const { pages, pageParams } = state.data;
-      const last = pages[pages.length - 1];
-      if (last.source === 'failed')
-        client.setQueryData<Pages>(
-          key,
-          { pages: pages.slice(0, -1), pageParams: pageParams.slice(0, -1) },
-          { updatedAt: held(key)?.state.dataUpdatedAt },
-        );
-      else {
-        const { pagination } = pageOf(last.value, key[3] as string, currencyOf(key[3] as string));
-        if (pagination.page >= pagination.totalPages) return;
-      }
-      bind();
-      await observers.list?.fetchNextPage({ cancelRefetch: false });
-      await settle(owner);
-    },
-    /** Load newer: the page before the window, which drops the window's oldest page. */
-    async loadNewer(owner: number) {
-      const key = shownList(),
-        state = stateOf<Pages>(key);
+      const key = shownList();
+      if (!onScreen() || !key || !view?.checked) return;
       if (
-        !onScreen() ||
-        !key ||
-        !state?.data ||
-        state.fetchStatus === 'fetching' ||
-        !view?.checked ||
-        (state.data.pageParams[0] ?? 1) <= 1
+        (await paging.older(key, () => {
+          bind();
+          return observers.list;
+        })) === false
       )
         return;
-      bind();
-      await observers.list?.fetchPreviousPage({ cancelRefetch: false });
+      await settle(owner);
+    },
+    /** Load newer: the page before the window, which drops its oldest page. */
+    async loadNewer(owner: number) {
+      const key = shownList();
+      if (!onScreen() || !key || !view?.checked) return;
+      if (
+        (await paging.newer(key, () => {
+          bind();
+          return observers.list;
+        })) === false
+      )
+        return;
       await settle(owner);
     },
     /**
