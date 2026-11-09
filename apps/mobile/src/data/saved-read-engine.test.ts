@@ -1116,3 +1116,13 @@ it('distrusts only the late ledger row when its removal fails in a two-scope vie
   f.stop();
   f.client.clear();
 });
+
+it('does not restore a Home preview when the query is no longer fetching', async () => {
+  const f = engineFixture('forbidden-only', 'fetching-unanswered');
+  await f.seed();
+  const copy = await f.engine.restore(f.key, 1);
+  expect(copy).toBeNull();
+  expect(f.client.getQueryData(f.key)).toBeUndefined();
+  f.stop();
+  f.client.clear();
+});
