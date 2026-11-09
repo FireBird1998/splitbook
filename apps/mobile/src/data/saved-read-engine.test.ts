@@ -10,7 +10,13 @@ import { RequestError, Superseded } from './transport';
 import type { RefusalRule, SavedReadPorts, SavedReadView } from './saved-read-engine';
 import type { MobileSnapshot } from './types';
 import { QueryClient, QueryObserver, focusManager, onlineManager } from '@tanstack/query-core';
-import { expenseRecordKey, queryKeyPath, type QueryKey } from '@splitbook/shared/query-keys';
+import {
+  expenseRecordKey,
+  groupKey,
+  groupBalancesKey,
+  queryKeyPath,
+  type QueryKey,
+} from '@splitbook/shared/query-keys';
 import { followInjectedClock } from '../test-utils/query-clock';
 
 describe('the saved-copy queue', () => {
@@ -851,6 +857,68 @@ it("returns Activity's projected preview with its saved time for the view to kee
     pageParams: [1],
   });
   expect(f.client.getQueryData(f.key)).toBe(copy);
+  f.stop();
+  f.client.clear();
+});
+
+function twoScopeFixture() {
+  const f = engineFixture();
+  f.stop();
+  const details = groupKey(f.ports.account(), f.group),
+    ledger = groupBalancesKey(f.ports.account(), f.group);
+  const engine = createSavedReadEngine<'group' | 'ledger'>(f.ports, {
+    path: (key) => queryKeyPath(key),
+    readable: (_key, value) => !!value && typeof value === 'object' && 'title' in value,
+    ownsKey: (key) => key[0] === 'group' || key[0] === 'balances',
+    rowScope: {
+      groupId: (key) => key[3] as string,
+      defaultScope: 'group',
+      scopes: (key) => (key[0] === 'group' ? ['group'] : ['group', 'ledger']),
+      remove: async (store, accountId, group, known, scope = 'group') => {
+        for (const path of await rowPaths(store, accountId, known)) {
+          if (
+            scope === 'group'
+              ? path.startsWith(`/api/groups/${group}`)
+              : path === queryKeyPath(ledger)
+          )
+            await store.remove(accountId, path);
+        }
+      },
+      pathGroup: () => f.group,
+      distrust: (key) => [`${key[0]}:${key[3]}`],
+    },
+    refusal: 'forbidden-or-missing',
+    preview: 'same-run-unanswered',
+    automaticRefetch: false,
+    cancelOnRemove: true,
+    staleWhenOffline: true,
+  });
+  return { ...f, engine, details, ledger, stop: engine.listen() };
+}
+
+it('keeps the Group row being written when only its ledger scope is removed', async () => {
+  const f = twoScopeFixture(),
+    started = deferred(),
+    slow = deferred(),
+    save = f.rows.save;
+  await save('account', queryKeyPath(f.ledger), { title: 'Old balances' });
+  f.rows.save = async (...args) => {
+    started.resolve();
+    await slow.promise;
+    await save(...args);
+  };
+  await f.client.fetchQuery({
+    queryKey: f.details,
+    queryFn: () => f.engine.read({ key: f.details, accept: () => undefined }),
+  });
+  await started.promise;
+  await f.engine.forget('account', f.group, 'ledger');
+  slow.resolve();
+  await f.engine.idle();
+  expect(await f.rows.load('account', queryKeyPath(f.details))).toMatchObject({
+    value: { title: 'Read answer' },
+  });
+  expect(await f.rows.load('account', queryKeyPath(f.ledger))).toBeNull();
   f.stop();
   f.client.clear();
 });
