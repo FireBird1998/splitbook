@@ -3,6 +3,8 @@ import { createMobileController } from './mobile-controller';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 import { notificationTaskProtected } from './notification-alerts';
 import type { WidgetCopy } from '@splitbook/shared/balances-widget';
+import { groupWidget } from '@splitbook/shared/group-widget';
+import { quickWidget } from '@splitbook/shared/quick-widget';
 
 const alex = { id: 'a00000000000000000000001', name: 'Alex Rivera', email: 'alex@example.test' };
 const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
@@ -22,6 +24,7 @@ function fixture() {
   let refused = 0;
   let offlineAfterSave = false;
   let noGroups = false;
+  let archived = false;
   let identity: unknown = null;
   const rows = new Map<string, unknown>();
   let hold: Promise<void> | undefined;
@@ -32,6 +35,7 @@ function fixture() {
   const group = () => ({
     _id: groupId,
     name: 'Maple House',
+    isArchived: archived,
     createdBy: user.id,
     category: 'home',
     defaultCurrency: 'INR',
@@ -231,7 +235,7 @@ function fixture() {
           if (path === `/api/groups/${groupId}/balances`)
             return Response.json({ status: 200, data: groupBalances });
           if (path === '/api/groups')
-            return Response.json({ status: 200, data: noGroups ? [] : [group()] });
+            return Response.json({ status: 200, data: noGroups || archived ? [] : [group()] });
           if (path === '/api/user/balances')
             return Response.json({
               status: 200,
@@ -260,6 +264,9 @@ function fixture() {
   };
   return {
     make,
+    archive: () => {
+      archived = true;
+    },
     noGroups: () => {
       noGroups = true;
     },
@@ -750,3 +757,53 @@ it.each(['sign out', 'account change'] as const)(
     expect(c.getSnapshot().heldNotification).toBeNull();
   },
 );
+
+it('keeps the last Group balance as final when an authoritative read says it is archived', async () => {
+  const f = fixture(),
+    c = f.make();
+  f.groupBalances({
+    byCurrency: [
+      {
+        currency: 'INR',
+        balances: [
+          { user: { _id: alex.id, name: alex.name }, balance: -12 },
+          { user: { _id: sam.id, name: sam.name }, balance: 12 },
+        ],
+        debts: [
+          {
+            from: { _id: alex.id, name: alex.name },
+            to: { _id: sam.id, name: sam.name },
+            amount: 12,
+          },
+        ],
+      },
+    ],
+  });
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await c.refreshBalances();
+  await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());
+  const original = f.copies.at(-1)!.groups![groupId]!;
+  f.archive();
+  await c.openWidget({ kind: 'group', groupId });
+  await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]?.archived).toBe(true));
+  const copy = f.copies.at(-1)!;
+  expect(copy.lostGroupIds).not.toContain(groupId);
+  expect(copy.groups![groupId]).toMatchObject({
+    currencies: original.currencies,
+    verifiedAt: original.verifiedAt,
+    balancesVerifiedAt: original.balancesVerifiedAt,
+  });
+  const session = { status: 'authenticated' as const, accountId: alex.id, loading: false };
+  const setup = { widgetId: 7, accountId: alex.id, groupId };
+  expect(
+    groupWidget(copy.groups![groupId], { ...setup, kind: 'group' }, '4x2', session, verified),
+  ).toMatchObject({ state: 'archived', final: true, addExpense: false });
+  expect(quickWidget(copy, { ...setup, kind: 'quick' }, '2x1', session)).toMatchObject({
+    state: 'archived',
+    title: 'Group archived',
+    subtitle: 'Choose another',
+  });
+  // The app's existing archived-Group refusal is unchanged.
+  expect(c.getSnapshot().detail.data).toBeNull();
+});

@@ -1213,6 +1213,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         code === 'GROUP_ARCHIVED' ||
           path === `/api/groups/${groupId}` ||
           path.includes('/tag-actions'),
+        code === 'GROUP_ARCHIVED',
       ),
     // Balances and Home follow every read of a Group or its Expenses (M1-5, AMEND-1); an Expense
     // list read also leaves their saved copies from before it unshown (#191).
@@ -2305,7 +2306,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const onLostForm = (groupId: string) =>
     (snapshot.screen === 'expense' && snapshot.expense.groupId === groupId) ||
     (snapshot.screen === 'settlement' && snapshot.settlement.groupId === groupId);
-  const forgetGroup = (groupId: string, status: number, owner: number, financialRefusal = true) => {
+  const forgetGroup = (
+    groupId: string,
+    status: number,
+    owner: number,
+    financialRefusal = true,
+    archivedWidget = false,
+  ) => {
     if (!current(owner)) return Promise.resolve();
     tagOwners.delete(groupId);
     // Its kept Tag change goes with its other records; the next open reads what is left.
@@ -2343,7 +2350,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (running?.owner === owner)
       return Promise.all([recorded, running.removal]).then(() => undefined);
     // Eviction locks the active form at once; its queued intent survives a process restart.
-    const removal = Promise.all([recorded, removeGroup(groupId, status, owner)])
+    const removal = Promise.all([recorded, removeGroup(groupId, status, owner, archivedWidget)])
       .then(() => undefined)
       .finally(() => {
         if (forgetting.get(groupId)?.removal === removal) forgetting.delete(groupId);
@@ -2352,7 +2359,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     return removal;
   };
   const forgetting = new Map<string, { owner: number; removal: Promise<void> }>();
-  const removeGroup = async (groupId: string, status: number, owner: number) => {
+  const removeGroup = async (
+    groupId: string,
+    status: number,
+    owner: number,
+    archivedWidget = false,
+  ) => {
     const scopes = [
       `group:${groupId}`,
       `ledger:${groupId}`,
@@ -2360,7 +2372,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       'groups',
       'home',
     ];
-    widgets.forgetGroup(groupId, true);
+    // The app still refuses archived Groups; widgets retain their verified final balance.
+    if (archivedWidget) widgets.archiveGroup(groupId);
+    else widgets.forgetGroup(groupId, true);
     // Its views observe nothing more, so their removed queries are never read back (F5).
     groupQueries.lose(groupId);
     expenseQueries.lose(groupId);
