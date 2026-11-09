@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { connectedAssistantsPath } from '@splitbook/shared/api-paths';
 import { homePath, listPath } from './home-queries';
 import { removeGroupRows } from './group-queries';
 import { rowPaths } from './saved-read-engine';
@@ -10,7 +11,7 @@ import { unresolvedTagRecord } from './tag-management';
 import type { MobileDependencies } from './types';
 
 const recorded = z.object({ accountId: z.string(), scopes: z.record(z.string(), z.number()) });
-const allScopes = ['groups', 'group', 'ledger', 'balances', 'home'];
+const allScopes = ['groups', 'group', 'ledger', 'balances', 'home', 'assistants'];
 
 /**
  * Saved copies this device couldn't remove (ADR 0006, #212), by scope, each with when: a copy
@@ -37,14 +38,16 @@ export function untrustedCopies({
     return parsed.success ? parsed.data : null;
   };
   /**
-   * A scope's saved copies: a Group's, its ledger's (Balances too), the Groups list or Home's.
+   * A scope's saved copies: a Group's, its ledger's (Balances too), the Groups list, Home's or
+   * Connected assistants. An assistants row that lands after removal must stay untrusted too.
    * A Group's view (#219), its Expense records with their changes (#220) and its Activity (#222)
    * keep every saved row on the persister (#223).
    */
   const remove = async (accountId: string, scope: string) => {
     if (!rows) return;
     const [name, groupId = ''] = scope.split(':');
-    if (name === 'groups' || name === 'home')
+    if (name === 'assistants') await rows.remove(accountId, connectedAssistantsPath());
+    else if (name === 'groups' || name === 'home')
       await rows?.remove(accountId, name === 'groups' ? listPath : homePath);
     else if (!groupId) {
       // A journal that couldn't be read was replaced conservatively: its affected Groups are

@@ -1227,7 +1227,10 @@ it.each([
   },
 );
 
-function accountFixture() {
+function accountFixture(
+  settings: Partial<Pick<SavedReadView, 'saveFailure' | 'noStorage'>> = {},
+  stored = true,
+) {
   const f = engineFixture();
   f.stop();
   const key = groupsKey(f.ports.account()),
@@ -1241,12 +1244,14 @@ function accountFixture() {
       distrust: (accountId, scopes) => {
         for (const scope of scopes) marks.set(`${accountId}:${scope}`, Infinity);
       },
-      rows: {
-        load: (accountId, path) => f.rows.load(accountId, path),
-        save: (accountId, path, value) => f.rows.save(accountId, path, value),
-        remove: (accountId, path) => f.rows.remove(accountId, path),
-        clear: () => f.rows.clear(),
-      },
+      rows: stored
+        ? {
+            load: (accountId, path) => f.rows.load(accountId, path),
+            save: (accountId, path, value) => f.rows.save(accountId, path, value),
+            remove: (accountId, path) => f.rows.remove(accountId, path),
+            clear: () => f.rows.clear(),
+          }
+        : undefined,
     },
     {
       path: (key) => queryKeyPath(key),
@@ -1259,6 +1264,7 @@ function accountFixture() {
       cancelOnRemove: false,
       staleWhenOffline: false,
       freshnessSource: 'unless-saved',
+      ...settings,
     },
   );
   return { ...f, engine, key, other, path: queryKeyPath(key), stop: () => undefined };
@@ -1514,3 +1520,79 @@ it('synchronizes the caller answer marker with preview eligibility in an overlap
     f.client.clear();
   }
 });
+
+it('retires an account row as soon as its owned removal is queued behind a write', async () => {
+  const f = accountFixture(),
+    started = deferred(),
+    slow = deferred(),
+    save = f.rows.save;
+  f.rows.save = async (...args) => {
+    started.resolve();
+    await slow.promise;
+    await save(...args);
+  };
+  f.engine.save(
+    f.key,
+    { owner: 1, owns: () => true },
+    { refreshedAt: 750, value: { title: 'Old list' } },
+  );
+  await started.promise;
+  f.rows.remove = async () => {
+    throw new Error('Storage full');
+  };
+  f.engine.removeRow(f.key, { owner: 1, owns: () => true });
+  slow.resolve();
+  await f.engine.idle();
+  expect(await f.rows.load('account', f.path)).toMatchObject({ value: { title: 'Old list' } });
+  expect(await f.engine.saved(f.key)).toBeNull();
+  f.client.clear();
+});
+
+it('keeps a row when its queued removal no longer owns the query', async () => {
+  const f = accountFixture();
+  await f.rows.save('account', f.path, { title: 'Keep' });
+  f.engine.removeRow(f.key, { owner: 1, owns: () => false });
+  await f.engine.idle();
+  expect(await f.rows.load('account', f.path)).toEqual({ title: 'Keep' });
+  f.client.clear();
+});
+
+it('keeps a silent saved-copy failure out of the offline banner', async () => {
+  const f = accountFixture({ saveFailure: 'silent' });
+  f.rows.save = async () => {
+    throw new Error('Storage full');
+  };
+  f.engine.save(
+    f.key,
+    { owner: 1, owns: () => true },
+    { refreshedAt: 750, value: { title: 'Online list' } },
+  );
+  await f.engine.idle();
+  expect(f.state.notice).toBeNull();
+  f.client.clear();
+});
+
+it.each(['read-error', 'unavailable'] as const)(
+  'keeps the view’s %s answer when offline without a saved-copy store',
+  async (noStorage) => {
+    const f = accountFixture({ noStorage }, false);
+    const failure = new RequestError('Network unavailable', 0, null, true);
+    f.state.read = async () => {
+      throw failure;
+    };
+    const reports: (number | null | undefined)[] = [];
+    f.ports.answered = (_path, saved) => reports.push(saved);
+    const read = f.client.fetchQuery({
+      queryKey: f.key,
+      queryFn: () => f.engine.read({ key: f.key, accept: () => undefined }),
+    });
+    if (noStorage === 'unavailable') {
+      await expect(read).rejects.toMatchObject({ code: 'OFFLINE_UNAVAILABLE' });
+      expect(reports).toEqual([null]);
+    } else {
+      await expect(read).rejects.toBe(failure);
+      expect(reports).toEqual([]);
+    }
+    f.client.clear();
+  },
+);

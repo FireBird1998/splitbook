@@ -1307,21 +1307,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   });
   /** Account → Connected assistants (#622), with its Saved copy among the account's others. */
   const assistantsData = createAssistants({
-    client: queryClient,
-    account: () => account(),
-    rows: savedCopies.rows,
-    generation: () => generation,
-    current,
-    lease: () => accountStorage(),
-    owns: (accountId) => accountStorage()?.accountId === accountId,
-    read: (path, owner, signal) => session.read(path, owner, signal),
-    distrusted: session.distrusted,
-    distrust: session.distrust,
+    ...session,
+    freshness,
+    offline: () => offlineSession,
     send: (path, owner, body) => request(path, owner, { method: 'POST', body }),
     online: () => !snapshot.offline.active && onlineManager.isOnline(),
     state: () => snapshot.assistants,
-    publish: (assistants) => publish({ ...snapshot, assistants }),
-    now,
+    show: (assistants) => publish({ ...snapshot, assistants }),
   });
   /** A Group's own view: the Group, its Expenses and its Balances (ADR 0006, M1-1, #219). */
   const groupQueries = createGroupQueries({

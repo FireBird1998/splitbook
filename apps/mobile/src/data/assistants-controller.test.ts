@@ -48,6 +48,8 @@ function fixture() {
     offlineAfterRevoke: false,
     /** This phone can't remove saved copies. */
     failRemoval: false,
+    /** The next saved copy waits while another read removes it. */
+    holdNextSave: null as Promise<void> | null,
     connections: [helper, reader],
   };
   let cookie: string | null = null,
@@ -58,6 +60,14 @@ function fixture() {
   const rows = savedQueriesIn(cache);
   const savedQueries = {
     ...rows,
+    save: async (account: string, path: string, value: unknown) => {
+      if (path === connectionsPath) {
+        const hold = server.holdNextSave;
+        server.holdNextSave = null;
+        await hold;
+      }
+      await rows.save(account, path, value);
+    },
     remove: async (account: string, path: string) => {
       if (server.failRemoval) throw new Error('The device storage is full');
       await rows.remove(account, path);
@@ -133,7 +143,7 @@ function fixture() {
     }
     throw new Error(`Unexpected fixture request ${method} ${path}`);
   };
-  const create = () =>
+  const create = (now?: () => number) =>
     createMobileController(
       {
         apiBaseUrl: 'http://localhost:4157',
@@ -160,6 +170,7 @@ function fixture() {
           },
         },
         savedQueries,
+        now,
         netInfo: {
           // As NetInfo does, a new listener hears the connection as it is now.
           addEventListener: (listener) => {
@@ -213,7 +224,15 @@ function fixture() {
     connectionState = state;
     connection.forEach((listener) => listener(state));
   };
-  return { create, server, requests, bodies, savedAssistants, connect };
+  return {
+    create,
+    server,
+    requests,
+    bodies,
+    savedAssistants,
+    connect,
+    savedRow: () => rows.load(alex.id, connectionsPath),
+  };
 }
 type Fixture = ReturnType<typeof fixture>;
 type Controller = ReturnType<Fixture['create']>;
@@ -315,6 +334,30 @@ describe('Connected assistants on Android (#622)', () => {
     expect(restarted.getSnapshot().assistants.available).not.toBe(true);
     restarted.openAssistants();
     expect(restarted.getSnapshot().screen).toBe('settings');
+    restarted.dispose();
+  });
+
+  it('never restores a Connected assistants copy that lands after a 404 and cannot be removed', async () => {
+    const f = fixture();
+    const { controller } = await readOnline(f);
+    let release!: () => void;
+    f.server.holdNextSave = new Promise((resolve) => (release = resolve));
+    await controller.refresh('pull');
+    await vi.waitFor(() => expect(f.server.holdNextSave).toBeNull());
+    f.server.assistantsOff = true;
+    f.server.failRemoval = true;
+    await controller.refresh('pull');
+    expect(controller.getSnapshot().assistants.available).toBe(false);
+    release();
+    await settle();
+    const restarted = await restartOffline(f, controller);
+    restarted.openSettings();
+    await vi.waitFor(() => expect(restarted.getSnapshot().assistants.status).toBe('ready'));
+    expect(restarted.getSnapshot().assistants).toMatchObject({
+      assistants: null,
+      unsaved: true,
+      saved: false,
+    });
     restarted.dispose();
   });
 
@@ -617,6 +660,31 @@ it('reads Connected assistants again on opening after the phone clock moves back
     const state = await openAssistants(controller);
     expect(state().assistants?.map((assistant) => assistant.name)).toEqual(['Updated helper']);
   } finally {
+    clock.mockRestore();
+  }
+});
+
+it('keeps the Connected assistants row format and session-clock verification time', async () => {
+  const f = fixture(),
+    time = Date.parse('2026-10-20T09:00:00.000Z');
+  const controller = f.create(() => time);
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(time + 60_000);
+  try {
+    await controller.signIn('alex');
+    const state = await openAssistants(controller);
+    await vi.waitFor(async () =>
+      expect(await f.savedRow()).toMatchObject({
+        version: 1,
+        accountId: alex.id,
+        groupId: null,
+        path: connectionsPath,
+        refreshedAt: time,
+        value: { connections: { connections: [{ name: helper.name }, { name: reader.name }] } },
+      }),
+    );
+    expect(state().refreshedAt).toBe(time);
+  } finally {
+    controller.dispose();
     clock.mockRestore();
   }
 });
