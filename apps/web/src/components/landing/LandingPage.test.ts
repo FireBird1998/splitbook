@@ -803,3 +803,33 @@ describe('the content sections (#446)', () => {
       expect(shown).toContain(sentence);
   });
 });
+
+describe('quiet landing drawings (#1000)', () => {
+  const preparing = { ...OFF, assistants: { available: true, canPrepare: true }, toReview: true };
+  it('renders all three drawings as decoration, without plate words or a live region', () => {
+    for (const mode of MODES) {
+      const html = render(mode, preparing);
+      for (const id of ['splitting-line', 'netting-station', 'to-review-rack']) {
+        expect(html).toMatch(
+          new RegExp(`<div[^>]*aria-hidden="true"[^>]*data-quiet-figure="${id}"`),
+        );
+      }
+      expect(html).not.toMatch(/<figcaption|data-readout|data-status|aria-live|Fig [123]/);
+    }
+  });
+  it('keeps the rack under the existing can-prepare condition', () => {
+    expect(render('light', OFF)).not.toContain('data-quiet-figure="to-review-rack"');
+    expect(
+      render('light', { ...OFF, assistants: { available: true, canPrepare: false } }),
+    ).not.toContain('data-quiet-figure="to-review-rack"');
+    expect(render('light', preparing)).toContain('data-quiet-figure="to-review-rack"');
+  });
+  it('has exactly one named pause control with an explicit pressed state', () => {
+    const html = render('light', preparing);
+    const controls = [
+      ...html.matchAll(/<button\b[^>]*aria-pressed="false"[^>]*>([\s\S]*?)<\/button>/g),
+    ];
+    expect(controls).toHaveLength(1);
+    expect(text(controls[0]![1])).toBe('Pause animation');
+  });
+});
