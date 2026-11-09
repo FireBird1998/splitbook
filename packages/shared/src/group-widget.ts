@@ -28,6 +28,8 @@ export interface WidgetGroupPart {
       to: string | null;
       fromName: string;
       toName: string;
+      fromInitials?: string;
+      toInitials?: string;
       amountMinor: number;
     }[];
   }[];
@@ -131,33 +133,31 @@ function groupWidgetView(
   const own = (setup.hideAmounts ? [] : currencies).flatMap((bucket) =>
     bucket.payments
       .filter((payment) => payment.from === setup.accountId || payment.to === setup.accountId)
-      .map((payment) => ({
-        label:
-          payment.from === setup.accountId
-            ? `You pay ${payment.toName.trim().split(/\s+/)[0]}`
-            : `${payment.fromName.trim().split(/\s+/)[0]} pays you`,
-        amount: formatCurrency(
-          toMajorAmount(payment.amountMinor, bucket.currency),
-          bucket.currency,
-        ),
-        firstName: (payment.from === setup.accountId ? payment.toName : payment.fromName)
-          .trim()
-          .split(/\s+/)[0],
-        initials: (payment.from === setup.accountId ? payment.toName : payment.fromName)
-          .trim()
-          .split(/\s+/)
-          .slice(0, 2)
-          .map((word) => word[0] ?? '')
-          .join('')
-          .toUpperCase(),
-        currency: bucket.currency,
-        incoming: payment.to === setup.accountId,
-        payment:
-          payment.from && payment.to
-            ? { from: payment.from, to: payment.to, currency: bucket.currency }
-            : null,
-        person: payment.from === setup.accountId ? payment.to : payment.from,
-      })),
+      .map((payment) => {
+        const outgoing = payment.from === setup.accountId;
+        const firstName = (outgoing ? payment.toName : payment.fromName).trim().split(/\s+/)[0];
+        const storedInitials = outgoing ? payment.toInitials : payment.fromInitials;
+        return {
+          label: outgoing ? `You pay ${firstName}` : `${firstName} pays you`,
+          amount: formatCurrency(
+            toMajorAmount(payment.amountMinor, bucket.currency),
+            bucket.currency,
+          ),
+          firstName,
+          // Older copies contain only the first name; the next read adds the app's initials.
+          initials:
+            typeof storedInitials === 'string' && storedInitials
+              ? storedInitials
+              : firstName.slice(0, 1).toUpperCase(),
+          currency: bucket.currency,
+          incoming: payment.to === setup.accountId,
+          payment:
+            payment.from && payment.to
+              ? { from: payment.from, to: payment.to, currency: bucket.currency }
+              : null,
+          person: outgoing ? payment.to : payment.from,
+        };
+      }),
   );
   const bucket = currencies[0],
     limit = groupLayout(size, fontScale).paymentLines;
@@ -231,7 +231,27 @@ function groupWidgetView(
   };
 }
 
-export function groupWidget(...args: Parameters<typeof groupWidgetView>) {
+/**
+ * TalkBack labels for the visible payment rows. When two rows share a first name and their
+ * stored initials differ, each name gains its second initial ("You pay Priya S"), so speech
+ * tells them apart the way the avatars do. Old copies without initials keep first names only.
+ */
+function spokenPayments(payments: ReturnType<typeof groupWidgetView>['payments']) {
+  const byName = new Map<string, string[]>();
+  for (const p of payments)
+    byName.set(p.firstName, [...(byName.get(p.firstName) ?? []), p.initials]);
+  return payments.map((p) => {
+    const shared = byName.get(p.firstName)!;
+    const distinct =
+      shared.length > 1 &&
+      p.initials.length > 1 &&
+      shared.filter((initials) => initials === p.initials).length === 1;
+    const name = distinct ? `${p.firstName} ${p.initials.slice(1, 2)}` : p.firstName;
+    return `${p.incoming ? `${name} pays you` : `You pay ${name}`} ${p.amount}`;
+  });
+}
+
+function groupWidgetProjection(...args: Parameters<typeof groupWidgetView>) {
   const view = groupWidgetView(...args);
   const full = args[5] ? groupWidgetView(args[0], args[1], args[2], args[3], args[4]) : view;
   return {
@@ -247,7 +267,7 @@ export function groupWidget(...args: Parameters<typeof groupWidgetView>) {
         ? `${full.compactLabel} ${full.compactAmount}`
         : null,
       args[2] === '2x2' ? full.people : null,
-      ...full.payments.map((p) => p.label + ' ' + p.amount),
+      ...spokenPayments(full.payments),
       full.more,
       full.hidden ? null : full.description,
       full.saved,
@@ -255,4 +275,13 @@ export function groupWidget(...args: Parameters<typeof groupWidgetView>) {
       full.target === 'setup' || full.muted ? full.action : null,
     ]),
   };
+}
+
+export function groupWidget(...args: Parameters<typeof groupWidgetView>) {
+  try {
+    return groupWidgetProjection(...args);
+  } catch {
+    // Damaged saved data must not prevent Android drawing the widget or erase its setup.
+    return groupWidgetProjection(undefined, args[1], args[2], args[3], args[4], args[5]);
+  }
 }

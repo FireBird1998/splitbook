@@ -99,11 +99,13 @@ The sign-out observer found the widget copy absent by the first observed signed-
 
 **Tracking:** [#1011](https://github.com/FireBird1998/splitbook/issues/1011)
 
+**Fix:** #1011 adds first name and two initials to the widget copy, reusing the app's initials function. New reads distinguish members sharing a first name; older copies keep their one-letter fallback. Follow-up device evidence covers both sizes and Hide amounts.
+
 **Severity:** Does not block turning the switch on; track as a follow-up.
 
 **Reproduce:** Sign in as Alex; read Goa Friends Trip Balances; place a Group widget; view 4x2 or 4x3.
 
-**Observed:** The avatars show P and S rather than PS and SC. The real widget copy stores first names only, so the two-initial renderer has no surname. Synthetic board fixtures in earlier passes carried full names.
+**Observed:** The avatars show P and S rather than PS and SC. At this check, the widget copy stored first names only, so the two-initial renderer had no surname. Synthetic board fixtures in earlier passes carried full names.
 
 **Screenshots:** `WidgetGroup4x3-dark-actual.png`, `WidgetGroup4x2-actual.png`.
 

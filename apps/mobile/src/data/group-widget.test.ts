@@ -24,22 +24,28 @@ export const part: WidgetGroupPart = {
         {
           from: 'alex',
           to: 'priya',
-          fromName: 'Alex Rivera',
-          toName: 'Priya Shah',
+          fromName: 'Alex',
+          fromInitials: 'AR',
+          toName: 'Priya',
+          toInitials: 'PS',
           amountMinor: 106000,
         },
         {
           from: 'alex',
           to: 'sam',
-          fromName: 'Alex Rivera',
-          toName: 'Sam Chen',
+          fromName: 'Alex',
+          fromInitials: 'AR',
+          toName: 'Sam',
+          toInitials: 'SC',
           amountMinor: 42000,
         },
         {
           from: 'sam',
           to: 'priya',
-          fromName: 'Sam Chen',
-          toName: 'Priya Shah',
+          fromName: 'Sam',
+          fromInitials: 'SC',
+          toName: 'Priya',
+          toInitials: 'PS',
           amountMinor: 90000,
         },
       ],
@@ -118,8 +124,10 @@ it('limits compact to the people count, wide to two payments and tall to four, k
           {
             from: 'sam',
             to: 'alex',
-            fromName: 'Sam Chen',
-            toName: 'Alex Rivera',
+            fromName: 'Sam',
+            fromInitials: 'SC',
+            toName: 'Alex',
+            toInitials: 'AR',
             amountMinor: 3000,
           },
         ],
@@ -131,8 +139,10 @@ it('limits compact to the people count, wide to two payments and tall to four, k
         payments: Array.from({ length: 4 }, () => ({
           from: 'priya',
           to: 'alex',
-          fromName: 'Priya Shah',
-          toName: 'Alex Rivera',
+          fromName: 'Priya',
+          fromInitials: 'PS',
+          toName: 'Alex',
+          toInitials: 'AR',
           amountMinor: 1000,
         })),
       },
@@ -172,8 +182,10 @@ it('marks incoming Suggested payments and the balance as owed to you', () => {
           {
             from: 'priya',
             to: 'alex',
-            fromName: 'Priya Shah',
-            toName: 'Alex Rivera',
+            fromName: 'Priya',
+            fromInitials: 'PS',
+            toName: 'Alex',
+            toInitials: 'AR',
             amountMinor: 120000,
           },
         ],
@@ -186,6 +198,7 @@ it('marks incoming Suggested payments and the balance as owed to you', () => {
       {
         label: 'Priya pays you',
         firstName: 'Priya',
+        initials: 'PS',
         incoming: true,
         payment: { from: 'priya', to: 'alex', currency: 'INR' },
       },
@@ -231,8 +244,10 @@ it('names the currencies of payments hidden by the widget size', () => {
           {
             from: 'sam',
             to: 'alex',
-            fromName: 'Sam Chen',
-            toName: 'Alex Rivera',
+            fromName: 'Sam',
+            fromInitials: 'SC',
+            toName: 'Alex',
+            toInitials: 'AR',
             amountMinor: 3000,
           },
         ],
@@ -256,3 +271,60 @@ it.each(['2x2', '4x2', '4x3'] as const)(
     });
   },
 );
+
+it('renders an older first-name-only copy with one initial until a new read replaces it', () => {
+  const legacy = {
+    ...part,
+    currencies: [
+      {
+        ...part.currencies[0],
+        payments: [
+          {
+            from: 'alex',
+            to: 'priya',
+            fromName: 'Alex',
+            toName: 'Priya',
+            amountMinor: 106000,
+          },
+        ],
+      },
+    ],
+  };
+  expect(groupWidget(legacy, setup, '4x2', session, now).payments).toMatchObject([
+    { firstName: 'Priya', initials: 'P' },
+  ]);
+});
+
+it('Hide amounts omits stored member initials and names from the view and spoken summary', () => {
+  const copy = {
+    ...part,
+    currencies: [
+      {
+        ...part.currencies[0],
+        payments: [
+          {
+            from: 'alex',
+            to: 'priya',
+            fromName: 'Alex',
+            fromInitials: 'AR',
+            toName: 'Priya',
+            toInitials: 'PS',
+            amountMinor: 106000,
+          },
+        ],
+      },
+    ],
+  };
+  const view = groupWidget(copy, { ...setup, hideAmounts: true }, '4x3', session, now);
+  expect(view.payments).toEqual([]);
+  expect(JSON.stringify(view)).not.toMatch(/Priya|PS|AR|1060|1,060/);
+});
+
+it('renders no-copy when a damaged saved Group part cannot be read', () => {
+  for (const damaged of [JSON.parse('{"currencies":null}'), { ...part, name: 42 }])
+    expect(groupWidget(damaged, setup, '4x2', session, now)).toMatchObject({
+      state: 'no-copy',
+      payments: [],
+      title: 'Nothing saved yet',
+    });
+});

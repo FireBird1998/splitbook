@@ -12,7 +12,7 @@ const tagId = 'e00000000000000000000001';
 const groupId = 'b00000000000000000000001';
 const controllers: ReturnType<typeof createMobileController>[] = [];
 const verified = Date.parse('2026-11-08T04:11:00Z');
-function fixture() {
+function fixture(extraMembers: (typeof alex)[] = []) {
   let user = alex,
     cookie: string | null = null,
     owner: string | null = alex.id,
@@ -46,6 +46,7 @@ function fixture() {
         alex,
         sam,
         { id: 'a00000000000000000000003', name: 'Priya Shah', email: 'priya@example.test' },
+        ...extraMembers,
       ]
         .filter((person) => person.id !== user.id)
         .map((person) => ({
@@ -806,4 +807,43 @@ it('keeps the last Group balance as final when an authoritative read says it is 
   });
   // The app's existing archived-Group refusal is unchanged.
   expect(c.getSnapshot().detail.data).toBeNull();
+});
+
+it('stores first names and two initials so members with the same first name remain distinct', async () => {
+  const shah = { _id: 'a00000000000000000000003', name: 'Priya Shah' };
+  const kapoor = { _id: 'a00000000000000000000004', name: 'Priya Kapoor' };
+  const f = fixture([{ id: kapoor._id, name: kapoor.name, email: 'kapoor@example.test' }]);
+  const c = f.make();
+  f.groupBalances({
+    byCurrency: [
+      {
+        currency: 'INR',
+        balances: [
+          { user: { _id: alex.id, name: alex.name }, balance: -30 },
+          { user: shah, balance: 10 },
+          { user: kapoor, balance: 20 },
+        ],
+        debts: [
+          { from: { _id: alex.id, name: alex.name }, to: shah, amount: 10 },
+          { from: { _id: alex.id, name: alex.name }, to: kapoor, amount: 20 },
+        ],
+      },
+    ],
+  });
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await c.refreshBalances();
+  await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());
+  const part = f.copies.at(-1)!.groups![groupId];
+  expect(part.currencies[0].payments).toMatchObject([
+    { fromName: 'Alex', fromInitials: 'AR', toName: 'Priya', toInitials: 'PS' },
+    { fromName: 'Alex', fromInitials: 'AR', toName: 'Priya', toInitials: 'PK' },
+  ]);
+  expect(JSON.stringify(part)).not.toMatch(/Rivera|Shah|Kapoor/);
+  const session = { status: 'authenticated' as const, accountId: alex.id, loading: false };
+  const setup = { kind: 'group' as const, widgetId: 7, accountId: alex.id, groupId };
+  expect(groupWidget(part, setup, '4x2', session, verified).payments).toMatchObject([
+    { firstName: 'Priya', initials: 'PS' },
+    { firstName: 'Priya', initials: 'PK' },
+  ]);
 });

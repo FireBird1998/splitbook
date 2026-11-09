@@ -208,3 +208,71 @@ it('names the extra currency when compact Balances omits it', () => {
     '1 more currency owed',
   );
 });
+const priyas = (
+  first: [string, string | undefined],
+  second: [string, string | undefined],
+): WidgetGroupPart => ({
+  ...part,
+  currencies: [
+    {
+      currency: 'INR',
+      balanceMinor: -148000,
+      payments: [
+        {
+          from: 'alex',
+          to: 'priya-1',
+          fromName: 'Alex',
+          toName: first[0],
+          toInitials: first[1],
+          amountMinor: 106000,
+        },
+        {
+          from: 'priya-2',
+          to: 'alex',
+          fromName: second[0],
+          fromInitials: second[1],
+          toName: 'Alex',
+          amountMinor: 42000,
+        },
+        {
+          from: 'alex',
+          to: 'sam',
+          fromName: 'Alex',
+          toName: 'Sam',
+          toInitials: 'SL',
+          amountMinor: 1000,
+        },
+      ],
+    },
+  ],
+});
+it('speaks the second initial only for rows that share a first name', () => {
+  const summary = groupWidget(
+    priyas(['Priya', 'PS'], ['Priya', 'PK']),
+    setup,
+    '4x3',
+    auth,
+    now,
+  ).summary;
+  expect(summary).toContain('You pay Priya S ₹1,060.00');
+  expect(summary).toContain('Priya K pays you ₹420.00');
+  expect(summary).toContain('You pay Sam ₹10.00');
+});
+it.each([
+  ['old copies without initials', ['Priya', undefined], ['Priya', undefined]],
+  ['matching initials', ['Priya', 'PS'], ['Priya', 'PS']],
+] as const)('keeps first names only for %s', (_, first, second) => {
+  const summary = groupWidget(priyas([...first], [...second]), setup, '4x3', auth, now).summary;
+  expect(summary).toContain('You pay Priya ₹1,060.00');
+  expect(summary).toContain('Priya pays you ₹420.00');
+});
+it('speaks no names or initials for duplicate first names when hidden', () => {
+  const summary = groupWidget(
+    priyas(['Priya', 'PS'], ['Priya', 'PK']),
+    { ...setup, hideAmounts: true },
+    '4x3',
+    auth,
+    now,
+  ).summary;
+  expect(summary).not.toMatch(/Priya|Sam|₹/);
+});

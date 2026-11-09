@@ -74,3 +74,18 @@ it('keeps only the same account’s archived final balances across app-query evi
   await restarted.write({ ...copy, accountId: 'sam', groups: {} });
   expect((await restarted.read()).copy?.groups).toEqual({});
 });
+
+it('treats an unreadable widget copy as absent while keeping the saved session and setup', async () => {
+  const store = createWidgetsStore('development');
+  const session = { status: 'authenticated' as const, accountId: 'alex', loading: false };
+  const setup = { kind: 'group' as const, widgetId: 7, accountId: 'alex', groupId: 'maple' };
+  await store.setSession(session);
+  await store.saveSetup(setup);
+  // Corruption at the SQLite boundary; observe only the store's public read interfaces.
+  native.databases
+    .get('splitbook-widgets.db')!
+    .prepare('UPDATE widget_state SET copy = ? WHERE environment = ?')
+    .run('{unreadable', 'development');
+  await expect(store.read()).resolves.toEqual({ copy: null, session });
+  expect(await store.setup(7)).toEqual(setup);
+});

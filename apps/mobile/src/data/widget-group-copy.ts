@@ -1,3 +1,4 @@
+import { initials } from '../initials';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { WidgetGroupPart } from '@splitbook/shared/group-widget';
 import type { MobileGroup, GroupCurrencyBalance } from './types';
@@ -31,7 +32,9 @@ export function widgetGroupCopy(
           from: row.from.id,
           to: row.to.id,
           fromName: row.from.name.trim().split(/\s+/)[0],
+          fromInitials: initials(row.from.name),
           toName: row.to.name.trim().split(/\s+/)[0],
+          toInitials: initials(row.to.name),
           amountMinor: parseAmountMinor(row.amount, bucket.currency),
         })),
     })),
