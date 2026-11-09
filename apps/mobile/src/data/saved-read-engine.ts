@@ -180,7 +180,6 @@ export interface SavedReadView<Scope extends string = never> {
   cancelOnRemove: boolean;
   staleWhenOffline: boolean;
   freshnessSource?: FreshnessSource;
-  verificationTime?: 'after-acceptance' | 'after-answer-report';
 }
 interface Run {
   answered: boolean;
@@ -392,12 +391,10 @@ export function createSavedReadEngine<Scope extends string = never>(
     if (obsolete()) throw new Superseded();
     const acceptance = accept(value);
     if (acceptance) await acceptance;
-    // Home stamps before ownership/reporting; the other views stamp after reporting. Keep both.
-    const verifiedAt = view.verificationTime === 'after-acceptance' ? Date.now() : undefined;
     // A view's acceptance may wait (a Group's does): what was overtaken meanwhile isn't shown.
     if (obsolete()) throw new Superseded();
     session.answered(path);
-    return { source: 'network', refreshedAt: verifiedAt ?? Date.now(), value };
+    return { source: 'network', refreshedAt: Date.now(), value };
   };
   const staleTime = (query: { state: { data?: unknown; dataUpdatedAt: number } }) =>
     savedReadFreshness(query, session.freshness, {

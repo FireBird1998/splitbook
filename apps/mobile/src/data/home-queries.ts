@@ -332,7 +332,6 @@ export function createHomeQueries(session: HomeSession) {
     cancelOnRemove: false,
     staleWhenOffline: false,
     freshnessSource: 'unless-saved',
-    verificationTime: 'after-acceptance',
   });
   /**
    * The Groups this device's saved list lists, inside a lease write: null if it can't be read, or
