@@ -46,7 +46,7 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop-light',
-      testIgnore: 'landing-assistants.spec.ts',
+      testIgnore: ['landing-assistants.spec.ts', 'landing-quiet.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },

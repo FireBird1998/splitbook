@@ -8,12 +8,7 @@ import { expectNoSeriousA11yViolations } from '../playwright/fixtures';
  */
 
 const section = (page: Page) => page.locator('#assistants');
-/** Fig 2's plate, its drawing named by its full description, and the rack's waiting count. */
-const fig2 = (page: Page) => page.getByRole('figure', { name: 'The To review rack' });
-const fig2Drawing = (page: Page) =>
-  fig2(page).getByRole('img', { name: /^A To review rack on a bench\./ });
-const waiting = (page: Page) => fig2(page).locator('[data-count="rack"]');
-const bar = (page: Page, item: number) => fig2Drawing(page).locator(`[data-bar="${item}"]`);
+const rack = (page: Page) => page.locator('[data-quiet-figure="to-review-rack"]');
 
 test('the hero and the top bar lead to Connected assistants, with Fig 2 and what an assistant can do', async ({
   page,
@@ -47,9 +42,8 @@ test('the hero and the top bar lead to Connected assistants, with Fig 2 and what
     'href',
     '/connect/chatgpt',
   );
-  await fig2(page).scrollIntoViewIfNeeded();
-  await expect(fig2Drawing(page)).toBeVisible();
-  await expect(fig2(page)).toContainText('Bars with a blue tag: items an assistant prepared');
+  await expect(rack(page)).toHaveAttribute('aria-hidden', 'true');
+  await expect(rack(page).locator('[data-stage] svg')).toBeVisible();
 
   await expectNoSeriousA11yViolations(page, testInfo, 'landing-assistants-desktop-light');
 });
@@ -61,9 +55,9 @@ test('the assistants section fits a phone without sideways scroll, in dark', asy
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/#assistants');
   await expect(section(page).getByRole('heading', { level: 2 })).toBeVisible();
-  await fig2(page).scrollIntoViewIfNeeded();
-  await expect(fig2Drawing(page)).toBeVisible();
-  await expect(fig2(page)).toHaveCSS('--anatomy-paper', '#131313');
+  await rack(page).scrollIntoViewIfNeeded();
+  await expect(rack(page).locator('[data-stage] svg')).toBeVisible();
+  await expect(rack(page).locator('.iso')).toHaveCSS('--anatomy-paper', '#141720');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
@@ -71,92 +65,13 @@ test('the assistants section fits a phone without sideways scroll, in dark', asy
   await expectNoSeriousA11yViolations(page, testInfo, 'landing-assistants-phone-dark');
 });
 
-test('under reduced motion Fig 2 holds its still, Dinner saved and Cab waiting, and steps through the rest', async ({
-  page,
-}) => {
-  await page.clock.install();
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/');
-  await fig2(page).scrollIntoViewIfNeeded();
-
-  // The documented still: Dinner is saved into the line, and Cab waits alone in the rack.
-  await expect(waiting(page)).toHaveText('1');
-  await expect(bar(page, 0)).toBeHidden();
-  await expect(bar(page, 1)).toBeVisible();
-  await expect(fig2(page)).toContainText(
-    'Cab to the airport ₹600 waits in To review · nothing moves until you save it',
-  );
-  await expect(fig2(page).getByRole('button', { name: /^(Pause|Play)$/ })).toHaveCount(0);
-
-  const tour = fig2(page).getByRole('group', { name: /^Live tour\./ });
-  const status = fig2(page).getByRole('status');
-  await tour.press('ArrowRight');
-  await expect(waiting(page)).toHaveText('0');
-  // Starting over is announced too, so the live region never keeps the still's words (#568).
-  await expect(status).toHaveText('Claude connected · To review empty');
-  await tour.press('ArrowRight');
-  await expect(status).toHaveText('Claude prepares Dinner at Thalassa ₹2,400 · 3 × ₹800');
-  await expect(waiting(page)).toHaveText('1');
-  await tour.press('ArrowRight');
-  await expect(status).toHaveText('Claude prepares Cab to the airport ₹600 · 2 × ₹300');
-  await expect(waiting(page)).toHaveText('2');
-  await tour.press('ArrowRight');
-  // The lever lets only the bottom bar out: Dinner is saved, Cab stays.
-  await expect(status).toHaveText(
-    'Cab to the airport ₹600 waits in To review · nothing moves until you save it',
-  );
-  await expect(waiting(page)).toHaveText('1');
-  await expect(bar(page, 0)).toBeHidden();
-
-  // Nothing moves by itself.
-  await page.clock.runFor(5_000);
-  await expect(waiting(page)).toHaveText('1');
-  await expect(bar(page, 1)).toBeVisible();
-});
-
-test('Fig 2 prepares and saves by itself on screen, and pauses from its button', async ({
-  page,
-}) => {
-  await page.clock.install();
-  await page.goto('/');
-  await fig2(page).scrollIntoViewIfNeeded();
-  await expect(fig2(page).getByRole('status')).toHaveText(
-    'Claude prepares Dinner at Thalassa ₹2,400 · 3 × ₹800',
-    { timeout: 10_000 },
-  );
-
-  const drawing = () => fig2Drawing(page).evaluate((svg) => svg.innerHTML);
-  await fig2(page).getByRole('button', { name: 'Pause' }).click();
-  // Held, the step under way shows settled, then nothing moves.
-  await page.clock.runFor(500);
-  const held = await drawing();
-  await page.clock.runFor(3_000);
-  expect(await drawing()).toBe(held);
-  await fig2(page).getByRole('button', { name: 'Play' }).click();
-  await expect.poll(drawing).not.toBe(held);
-  await expect(fig2(page).getByRole('status')).toHaveText(
-    'You pull the lever · Dinner at Thalassa ₹2,400 is saved',
-    { timeout: 15_000 },
-  );
-});
-
 test.describe('without JavaScript', () => {
   test.use({ javaScriptEnabled: false });
-
-  test('the section still shows Fig 2 at its still: Dinner saved, Cab waiting by the lever', async ({
-    page,
-  }) => {
-    await page.goto('/');
-    await expect(fig2Drawing(page)).toBeVisible();
-    await expect(fig2(page)).toContainText(
-      'Cab to the airport ₹600 waits in To review · nothing moves until you save it',
-    );
-    await expect(waiting(page)).toHaveText('1');
-    await expect(bar(page, 0)).toBeHidden();
-    await expect(bar(page, 1)).toBeVisible();
-    // The member's lever is drawn, not just its mount.
-    await expect(fig2Drawing(page).locator('[data-part="lever"] path').first()).toBeAttached();
-    await expect(fig2(page).getByRole('group', { name: /^Live tour/ })).toHaveCount(0);
-    await expect(fig2(page).getByRole('button', { name: /^(Pause|Play)$/ })).toHaveCount(0);
+  test('the assistants copy and quiet rack still render', async ({ page }) => {
+    await page.goto('/#assistants');
+    await expect(section(page).getByRole('heading', { level: 2 })).toBeVisible();
+    await expect(rack(page).locator('[data-stage] svg')).toBeVisible();
+    await expect(rack(page)).toHaveAttribute('aria-hidden', 'true');
+    await expect(page.getByRole('button', { name: /animation$/ })).toHaveCount(0);
   });
 });

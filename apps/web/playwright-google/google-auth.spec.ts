@@ -36,19 +36,8 @@ async function signInWithIdToken(
 test.describe('google auth mode', () => {
   const headline = (page: Page) =>
     page.getByRole('heading', { level: 1, name: 'Every shared cost, worked out to the paisa.' });
-  /** Fig 1's plate, and its drawing named by its full description (#448). */
-  const fig1 = (page: Page) => page.getByRole('figure', { name: 'The splitting line' });
-  const fig1Drawing = (page: Page) =>
-    fig1(page).getByRole('img', {
-      name: /^A small production line on a bench that splits Expenses\./,
-    });
-  /** The four bins' counters, left to right: You, Priya, Sam and Alex. */
-  const counters = (page: Page) => fig1(page).locator('[data-count]');
-  /** Fig 3's plate, its drawing, and its four tills' counters (You, Priya, Sam, Alex). */
-  const fig3 = (page: Page) => page.getByRole('figure', { name: 'The netting station' });
-  const fig3Drawing = (page: Page) =>
-    fig3(page).getByRole('img', { name: /^A netting station on a bench\./ });
-  const tills = (page: Page) => fig3(page).locator('[data-count]');
+  const fig1 = (page: Page) => page.locator('[data-quiet-figure="splitting-line"]');
+  const fig1Drawing = (page: Page) => fig1(page).locator('[data-stage] svg');
 
   test('home page shows the landing page with Google sign-in, not the demo picker', async ({
     page,
@@ -97,8 +86,7 @@ test.describe('google auth mode', () => {
 
     // Fig 1 sits under the hero at full width, named by its full description.
     await expect(fig1Drawing(page)).toBeVisible();
-    await expect(fig1(page)).toContainText('Fig 1');
-    await expect(fig1(page)).toContainText('Bins, left to right: You, Priya, Sam and Alex');
+    await expect(fig1(page)).toHaveAttribute('aria-hidden', 'true');
 
     await expectNoSeriousA11yViolations(page, testInfo, 'landing-desktop-light');
   });
@@ -119,169 +107,12 @@ test.describe('google auth mode', () => {
     await fig1(page).scrollIntoViewIfNeeded();
     await expect(fig1Drawing(page)).toBeVisible();
     // The drawing follows the page into dark: its paper is the kit's dark card.
-    await expect(fig1(page)).toHaveCSS('--anatomy-paper', '#131313');
+    await expect(fig1(page).locator('.iso')).toHaveCSS('--anatomy-paper', '#141720');
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
 
     await expectNoSeriousA11yViolations(page, testInfo, 'landing-phone-dark');
-  });
-
-  test('under reduced motion Fig 1 holds its still, and steps with clicks and keys', async ({
-    page,
-  }) => {
-    await page.clock.install();
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/');
-
-    // The documented still: Groceries partway through its sort with no chip landed, so the
-    // counters read what Dinner and Cab left, and add up to zero (#511).
-    await expect(counters(page)).toHaveText(['+900', '+100', '−500', '−500']);
-    await expect(fig1(page)).toContainText('Groceries: each chip to the bin it belongs to');
-    // Nothing moves by itself, so there is nothing to pause.
-    await expect(fig1(page).getByRole('button', { name: /^(Pause|Play)$/ })).toHaveCount(0);
-
-    const tour = fig1(page).getByRole('group', { name: /^Live tour\./ });
-    await tour.press('ArrowRight');
-    await expect(counters(page)).toHaveText(['+500', '−100', '+300', '−700']);
-    await expect(fig1(page).getByRole('status')).toContainText('All 3 Expenses split.');
-
-    await tour.press('Home');
-    await expect(counters(page)).toHaveText(['0', '0', '0', '0']);
-    // Starting over is announced, not left saying the end (#568).
-    await expect(fig1(page).getByRole('status')).toHaveText('Line idle · 3 Expenses waiting');
-
-    await tour.click();
-    await expect(counters(page)).toHaveText(['+900', '−300', '−300', '−300']);
-    await tour.press(' ');
-    await expect(counters(page)).toHaveText(['+900', '+100', '−500', '−500']);
-    // Nothing moves on its own: five seconds on, the Cab is still settled.
-    await page.clock.runFor(5_000);
-    await expect(counters(page)).toHaveText(['+900', '+100', '−500', '−500']);
-    await expect(fig1(page)).toContainText('Cab ₹600 · Priya paid');
-  });
-
-  test('Fig 1 runs its tour on screen and stops when it leaves', async ({ page }) => {
-    await page.clock.install();
-    await page.setViewportSize({ width: 1280, height: 480 });
-    await page.goto('/');
-    await fig1(page).scrollIntoViewIfNeeded();
-    // On screen, the line starts the story by itself.
-    await expect(fig1(page)).toContainText('Dinner ₹1,200 · You paid', { timeout: 10_000 });
-
-    const drawing = () => fig1Drawing(page).evaluate((svg) => svg.innerHTML);
-    await page.getByRole('contentinfo').scrollIntoViewIfNeeded();
-    await expect(fig1(page)).not.toBeInViewport();
-    const left = await drawing();
-    await page.clock.runFor(3_000);
-    expect(await drawing()).toBe(left);
-
-    await fig1(page).scrollIntoViewIfNeeded();
-    await expect.poll(drawing).not.toBe(left);
-  });
-
-  test('Fig 1 pauses from its Pause button and plays on from where it held', async ({ page }) => {
-    await page.clock.install();
-    await page.goto('/');
-    await expect(fig1(page)).toContainText('Dinner ₹1,200 · You paid', { timeout: 10_000 });
-
-    const drawing = () => fig1Drawing(page).evaluate((svg) => svg.innerHTML);
-    await fig1(page).getByRole('button', { name: 'Pause' }).click();
-    const play = fig1(page).getByRole('button', { name: 'Play' });
-    await expect(play).toBeVisible();
-    const held = await drawing();
-    await page.clock.runFor(3_000);
-    expect(await drawing()).toBe(held);
-
-    await play.click();
-    await expect(fig1(page).getByRole('button', { name: 'Pause' })).toBeVisible();
-    await expect.poll(drawing).not.toBe(held);
-  });
-
-  test('under reduced motion Fig 3 holds a payment in flight, and steps through the rest', async ({
-    page,
-  }) => {
-    await page.clock.install();
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/');
-    await fig3(page).scrollIntoViewIfNeeded();
-
-    // The documented still: Alex has paid You, and Alex's ₹200 for Sam is on the shuttle.
-    await expect(tills(page)).toHaveText(['0', '−100', '+300', '−200']);
-    await expect(fig3(page)).toContainText('Pay 2 of 3 · Alex pays Sam ₹200');
-    await expect(fig3(page).getByRole('button', { name: /^(Pause|Play)$/ })).toHaveCount(0);
-
-    const tour = fig3(page).getByRole('group', { name: /^Live tour\./ });
-    await tour.press('ArrowRight');
-    await expect(tills(page)).toHaveText(['0', '−100', '+100', '0']);
-    // The payment under way lands, and the step says so (#568).
-    await expect(fig3(page).getByRole('status')).toHaveText('Pay 2 of 3 · Alex paid Sam ₹200');
-    await tour.press('ArrowRight');
-    await expect(tills(page)).toHaveText(['0', '0', '0', '0']);
-    await expect(fig3(page).getByRole('status')).toContainText('Settled in 3 payments');
-
-    await tour.press('Home');
-    await expect(tills(page)).toHaveText(['+500', '−100', '+300', '−700']);
-    await expect(fig3(page).getByRole('status')).toHaveText('5 debts between 4 people');
-    await tour.click();
-    await expect(fig3(page)).toContainText('Netting · 5 debts become 3 payments');
-    await page.clock.runFor(5_000);
-    await expect(tills(page)).toHaveText(['+500', '−100', '+300', '−700']);
-  });
-
-  test('Fig 3 nets and pays by itself on screen, and pauses from its button', async ({ page }) => {
-    await page.clock.install();
-    await page.goto('/');
-    await fig3(page).scrollIntoViewIfNeeded();
-    await expect(fig3Drawing(page)).toBeVisible();
-    await expect(fig3(page)).toContainText('Netting · 5 debts become 3 payments', {
-      timeout: 10_000,
-    });
-
-    const drawing = () => fig3Drawing(page).evaluate((svg) => svg.innerHTML);
-    await fig3(page).getByRole('button', { name: 'Pause' }).click();
-    const held = await drawing();
-    await page.clock.runFor(3_000);
-    expect(await drawing()).toBe(held);
-    await fig3(page).getByRole('button', { name: 'Play' }).click();
-    await expect.poll(drawing).not.toBe(held);
-  });
-
-  test('stepping during Fig 3’s netting finishes it: the debt cords down, the payment cords up', async ({
-    page,
-  }) => {
-    await page.goto('/');
-    await fig3(page).scrollIntoViewIfNeeded();
-    await expect(fig3(page)).toContainText('Netting · 5 debts become 3 payments', {
-      timeout: 10_000,
-    });
-    await fig3(page)
-      .getByRole('group', { name: /^Live tour\./ })
-      .click();
-    await expect(fig3(page)).toContainText('Pay 1 of 3 · Alex pays You ₹500');
-    const opacities = (cords: string) =>
-      fig3Drawing(page)
-        .locator(cords)
-        .evaluateAll((els) => els.map((el) => (el as SVGElement).style.opacity));
-    expect(await opacities('[data-debt]')).toEqual(['0', '0', '0', '0', '0']);
-    expect(await opacities('[data-pay]')).toEqual(['1', '1', '1']);
-  });
-
-  test('Fig 1’s tour ships with the Anatomy kit’s licence', async ({ page }) => {
-    await page.goto('/');
-    await expect(fig1(page).getByRole('button', { name: 'Pause' })).toBeVisible();
-    // The script that brought the tour, as the browser loaded it (minified in a production build).
-    const notice = await page.evaluate(async () => {
-      for (const entry of performance.getEntriesByType('resource')) {
-        if (!entry.name.split('?')[0].endsWith('.js')) continue;
-        const source = await (await fetch(entry.name)).text();
-        if (source.includes('Live tour.')) return source;
-      }
-      return '';
-    });
-    expect(notice).toContain('Anatomy kit (https://github.com/wheresryan22/anatomy)');
-    expect(notice).toContain('Copyright (c) 2026 Ryan');
-    expect(notice).toContain('Permission is hereby granted, free of charge');
   });
 
   test('/login shows the Google sign-in button, not the demo picker', async ({ page }) => {
@@ -399,28 +230,19 @@ test.describe('google auth mode', () => {
 test.describe('google auth mode without JavaScript', () => {
   test.use({ javaScriptEnabled: false });
 
-  test('the landing page still shows the headline, the actions and Fig 1', async ({ page }) => {
+  test('the landing page still shows its copy and decorative drawings without JavaScript', async ({
+    page,
+  }) => {
     await page.goto('/');
     await expect(
       page.getByRole('heading', { level: 1, name: 'Every shared cost, worked out to the paisa.' }),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign in with Google' }).first()).toBeVisible();
-    await expect(
-      page
-        .getByRole('figure', { name: 'The splitting line' })
-        .getByRole('img', { name: /^A small production line on a bench that splits Expenses\./ }),
-    ).toBeVisible();
-    // Fig 3 at rest: the balances before anyone settles up.
-    await expect(
-      page
-        .getByRole('figure', { name: 'The netting station' })
-        .getByRole('img', { name: /^A netting station on a bench\./ }),
-    ).toBeVisible();
-    // The drawing at rest, with no live tour to step through.
-    await expect(page.getByRole('figure', { name: 'The splitting line' })).toContainText(
-      'Line idle · 3 Expenses waiting',
-    );
-    await expect(page.getByRole('group', { name: /^Live tour/ })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /^(Pause|Play)$/ })).toHaveCount(0);
+    for (const id of ['splitting-line', 'netting-station']) {
+      const root = page.locator(`[data-quiet-figure="${id}"]`);
+      await expect(root.locator('[data-stage] svg')).toBeVisible();
+      await expect(root).toHaveAttribute('aria-hidden', 'true');
+    }
+    await expect(page.getByRole('button', { name: /animation$/ })).toHaveCount(0);
   });
 });
