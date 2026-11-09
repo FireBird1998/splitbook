@@ -7127,7 +7127,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // screen observes, and those past their stale time read again.
     if (origin === 'foreground') focusManager.onFocus();
     try {
-      await reread(origin === 'foreground');
+      if (origin === 'foreground' && snapshot.screen === 'settings')
+        await Promise.all([notifications.recheckPermission(), reread(true)]);
+      else await reread(origin === 'foreground');
     } finally {
       views.splice(views.lastIndexOf(view), 1);
       // A sign-out or restore since then has already cleared it.

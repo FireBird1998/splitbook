@@ -13,6 +13,7 @@ export interface NotificationNative {
 }
 /** Registration maintenance tries at most three times, waiting this long before each retry. */
 export const maintenanceRetryDelays = [2_000, 8_000] as const;
+const blockedMessage = 'Android blocks notifications. Open Android settings to allow them.';
 const preferences = z.object({
   available: z.boolean(),
   enabled: z.boolean(),
@@ -66,6 +67,7 @@ export function notificationControls(d: {
   timer?: MobileTimer;
 }) {
   let operation = 0;
+  let permissionCheck = 0;
   const timer: MobileTimer =
     d.timer ??
     ((run, ms) => {
@@ -177,10 +179,7 @@ export function notificationControls(d: {
         confirmed,
         hasConfirmed: true,
         status: confirmed.enabled && permission !== 'granted' ? 'blocked' : 'ready',
-        message:
-          confirmed.enabled && permission !== 'granted'
-            ? 'Android blocks notifications. Open Android settings to allow them.'
-            : '',
+        message: confirmed.enabled && permission !== 'granted' ? blockedMessage : '',
       });
       retry = null;
     } catch (error) {
@@ -188,6 +187,27 @@ export function notificationControls(d: {
         retry = read;
         failed(error);
       }
+    }
+  };
+  /** Resume Settings without reading or changing the server's confirmed registration. */
+  const recheckPermission = async () => {
+    const before = d.state();
+    if (
+      !d.native ||
+      !d.authenticated() ||
+      (before.status !== 'blocked' && !(before.status === 'ready' && before.confirmed.enabled))
+    )
+      return;
+    const owner = d.owner(),
+      task = operation,
+      check = ++permissionCheck;
+    try {
+      const permission = await d.native.permission();
+      if (!active(owner, task) || check !== permissionCheck || d.state() !== before) return;
+      const status = permission === 'granted' ? 'ready' : 'blocked';
+      if (status !== before.status) set(status, status === 'blocked' ? blockedMessage : '');
+    } catch {
+      // A failed local read cannot confirm a change to the last known state.
     }
   };
   const change = async (
@@ -230,7 +250,7 @@ export function notificationControls(d: {
           set(
             permission === 'blocked' ? 'blocked' : 'denied',
             permission === 'blocked'
-              ? 'Android blocks notifications. Open Android settings to allow them.'
+              ? blockedMessage
               : 'Permission wasn’t granted. You can enable notifications when you’re ready.',
           );
           retry = null;
@@ -261,10 +281,7 @@ export function notificationControls(d: {
         confirmed,
         hasConfirmed: true,
         status: enabled && permission !== 'granted' ? 'blocked' : 'ready',
-        message:
-          enabled && permission !== 'granted'
-            ? 'Android blocks notifications. Open Android settings to allow them.'
-            : '',
+        message: enabled && permission !== 'granted' ? blockedMessage : '',
       });
       retry = null;
       // An explicit Enable registered a fresh token itself; a category change resumes maintenance.
@@ -326,10 +343,7 @@ export function notificationControls(d: {
               confirmed,
               hasConfirmed: true,
               status: confirmed.enabled && !allowed ? 'blocked' : 'ready',
-              message:
-                confirmed.enabled && !allowed
-                  ? 'Android blocks notifications. Open Android settings to allow them.'
-                  : '',
+              message: confirmed.enabled && !allowed ? blockedMessage : '',
             });
           }
           // Off, or Android blocking: nothing to maintain, and never a permission prompt.
@@ -372,6 +386,7 @@ export function notificationControls(d: {
   };
   return {
     read,
+    recheckPermission,
     enable: () => change(true, undefined, undefined, true),
     disable: () => change(false),
     category: (category: 'expenseUpdates' | 'payments', value: boolean) =>
