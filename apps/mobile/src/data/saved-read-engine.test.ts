@@ -7,7 +7,7 @@ import {
   parseOnce,
 } from './saved-read-engine';
 import { RequestError, Superseded } from './transport';
-import type { RefusalRule, SavedReadPorts } from './saved-read-engine';
+import type { RefusalRule, SavedReadPorts, SavedReadView } from './saved-read-engine';
 import type { MobileSnapshot } from './types';
 import { QueryClient, QueryObserver, focusManager, onlineManager } from '@tanstack/query-core';
 import { expenseRecordKey, queryKeyPath, type QueryKey } from '@splitbook/shared/query-keys';
@@ -122,7 +122,10 @@ describe('saved reads', () => {
   });
 });
 
-function engineFixture(rule: RefusalRule = 'forbidden-only') {
+function engineFixture(
+  rule: RefusalRule = 'forbidden-only',
+  preview: SavedReadView['preview'] = 'same-run-unanswered',
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, networkMode: 'always', gcTime: Infinity } },
   });
@@ -197,7 +200,7 @@ function engineFixture(rule: RefusalRule = 'forbidden-only') {
       distrust: (key) => [`ledger:${key[3]}`],
     },
     refusal: rule,
-    preview: 'same-run-unanswered',
+    preview,
     automaticRefetch: false,
     cancelOnRemove: true,
     staleWhenOffline: true,
@@ -725,4 +728,25 @@ it('leaves automatic mount, focus and reconnect re-reads to the view', async () 
     f.stop();
     f.client.clear();
   }
+});
+
+
+it('keeps Activity previews suppressed after a read answered since the open, even after its query went', async () => {
+  const f = engineFixture('forbidden-or-missing', 'unanswered-since-open');
+  await f.seed();
+  const restore = f.engine.previewAtOpen(f.key);
+  f.state.read = async () => {
+    throw new RequestError('Server failure', 500);
+  };
+  await expect(f.fetch()).rejects.toMatchObject({ status: 500 });
+  f.client.removeQueries({ queryKey: f.key });
+  const next = deferredValue<unknown>();
+  f.state.read = () => next.promise;
+  const reading = f.fetch();
+  await restore(1);
+  expect(f.client.getQueryData(f.key)).toBeUndefined();
+  next.resolve({ title: 'New answer' });
+  await reading;
+  f.stop();
+  f.client.clear();
 });
