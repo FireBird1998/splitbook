@@ -63,3 +63,54 @@ The drawing's markup is the same in both themes. Only the stylesheet's tokens ch
 Each figure's light still, the page's link preview image, is `apps/web/public/landing-figures/<id>-light.png`: the tour's reduced-motion still at 1200 × 630.
 
 In the web app, `LandingFigure` (a server component) renders the plate, and `FigureTour` (a client component) puts it in the page's theme and starts the tour once the figure comes near the screen.
+
+## Quiet figures (#999)
+
+The framed figures remain for the current page. The quiet versions reuse exactly the same story,
+geometry and scene code, with the approved light/dark greys, indigo screens and faint money ink.
+They have transparent backgrounds and no plate, label, readout, legend, caption, focus target or
+live region. Section placement and the exact desktop/phone edge masks belong to the page (#1000),
+including every `-webkit-` mask twin; the figure itself does not bake in a page-specific fade.
+The link-preview PNG and its source stamp are unchanged.
+
+The additional generated modules are:
+
+- `quiet.ts`: server exports (`splittingLineQuiet`, `toReviewRackQuiet`, `nettingStationQuiet`),
+  `quietFigureCss`, and the `QuietFigure` type. Each figure supplies `svg`, `css`, dimensions and
+  transparent PNG `stills.light` / `stills.dark` URLs for Reduce motion.
+- `quiet-tours.ts`: lazy `quietTours[id]()` loaders for the separate `<id>-quiet-tour.js` chunks.
+  These contain the same scenes as the framed tours, bundled against the decorative runner;
+  no framed stepping or live-region code ships in them.
+- `QUIET_TOUR_SPEED`: the exported `0.6` story-clock multiplier, sourced from
+  `src/quiet-tour.ts` and re-exported through the generated quiet modules. Change it in that
+  one source, then build. Both the unit tests and the generator check require the quiet speed.
+
+The page renders a wrapper with `class="iso" data-quiet data-theme="light"` (or `dark`) and
+`aria-hidden="true"`, applies `quietFigureCss` plus the figure's own `css`, then puts its SVG
+inside a `[data-stage]` element. It loads a tour only when appropriate:
+
+```ts
+const { play } = await quietTours[figure.id]!();
+const control = play(root);
+control.setPaused(true); // the page's single Pause animation button calls all three controls
+control.setPaused(false); // continues from the same frame; no storage
+control.stop(); // unmount: disconnect visibility/media observers and cancel the frame
+```
+
+The runner starts itself only while the stage intersects the viewport, immediately cancels frames
+when it leaves, and ignores clicks, ArrowRight, Space, Enter and Home. The page owns the one accessible
+Pause/Play button. Under Reduce motion the page uses the corresponding still and need not load a tour;
+even if loaded, the runner schedules nothing and poses the same still. A live preference change is
+also observed. CSS animations and transitions are disabled in quiet figures, so pausing holds all motion.
+
+`preview` now writes six additional `<id>-quiet-<theme>.html` pages. They show the transparent drawing
+against the matching page background, without page copy or masks. The check adds both quiet palettes'
+line ends at rest and through normal timed playback, plus the actual quiet bundles' autoplay,
+pause/resume, ignored inputs, offscreen cancellation, reduced-motion inactivity and every-frame
+counter invariants. The framed scenes still get their exhaustive stepped-pose and live-region checks.
+Unit tests also enforce each chunk's original framed raw/gzip budget; none may rise.
+
+The approved raw palette is not itself a guarantee of text contrast over every coloured detail:
+for example the light accent under secondary text is 2.47:1, and the dark lamp under secondary
+text is 1.77:1. Keep the approved tokens, then verify the actual masked text overlaps at ≥4.5:1
+in #1000; adjust the drawing's opacity or overlap there if a sampled region fails.

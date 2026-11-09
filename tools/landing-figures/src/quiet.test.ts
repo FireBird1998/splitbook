@@ -1,3 +1,4 @@
+import { gzipSync } from 'node:zlib';
 import { beforeAll, describe, expect, it, vi, afterEach } from 'vitest';
 import { buildFigures, generatedFiles, OUT_DIR, type Figure } from './generate.ts';
 import { QUIET_TOUR_SPEED, runTour } from './quiet-tour.ts';
@@ -27,6 +28,20 @@ describe('quiet public output', () => {
         expect(page).toContain('aria-hidden="true"');
       }
     }
+  });
+
+  it('keeps every quiet tour below the framed raw and gzip budgets', () => {
+    const budgets = [
+      [22_295, 7_314],
+      [44_471, 13_728],
+      [15_736, 5_395],
+    ];
+    const files = generatedFiles(figures);
+    figures.forEach((figure, i) => {
+      const source = files.get(`${OUT_DIR}/${figure.id}-quiet-tour.js`)!;
+      expect(Buffer.byteLength(source)).toBeLessThanOrEqual(budgets[i]![0]!);
+      expect(gzipSync(source, { level: 9 }).length).toBeLessThanOrEqual(budgets[i]![1]!);
+    });
   });
 
   it('ships the speed constant and a pause hook without stepping handlers', () => {
@@ -79,8 +94,8 @@ function browser(reduced = false) {
     poseStill: vi.fn(),
     settled: () => true,
   };
-  const root = { querySelector: () => ({}) } as unknown as HTMLElement;
-  const makeScene = vi.fn(() => scene);
+  const root = { querySelector: () => ({ querySelector: () => ({}) }) } as unknown as HTMLElement;
+  const makeScene = vi.fn<Parameters<typeof runTour>[1]>(() => scene);
   const control = runTour(root, makeScene);
   return {
     scene,

@@ -45,6 +45,9 @@ import {
 } from './pages.ts';
 import { drawStills, stillSource } from './stills.ts';
 import { story } from './story.ts';
+import { quietProblems } from './quiet-check.ts';
+import { quietPage } from './quiet.ts';
+import { drawQuietStills, quietStillSource, quietStillPath } from './quiet-stills.ts';
 
 const HERE = import.meta.dirname;
 const ROOT = resolve(HERE, '../../..');
@@ -58,6 +61,7 @@ function build() {
   const figures = buildFigures();
   const files = generatedFiles(figures);
   drawStills(figures, ROOT);
+  drawQuietStills(figures, ROOT);
   for (const path of staleOutputs(files, ROOT, OUT_DIR)) {
     if (!files.has(path)) rmSync(join(ROOT, path));
   }
@@ -238,6 +242,15 @@ function check() {
         (problem) => `${problem} Run ${BUILD}.`,
       ),
     );
+  for (const figure of figures)
+    for (const theme of THEMES)
+      problems.push(
+        ...stillDrift(
+          join(ROOT, quietStillPath(figure, theme)),
+          { width: figure.width, height: figure.height },
+          quietStillSource(figure, theme),
+        ),
+      );
   problems.push(...verifyStory(story()));
   problems.push(...vendorDrift(VENDOR).map((problem) => `vendor/anatomy: ${problem}`));
   for (const figure of figures) {
@@ -250,13 +263,14 @@ function check() {
   problems.push(...playingByItself(figures));
   problems.push(...statusAtEveryStep(figures));
   problems.push(...resumingAfterSteps(figures));
+  problems.push(...quietProblems(figures));
   if (problems.length) {
     console.error(problems.join('\n\n'));
     console.error(`\ncheck failed: ${count(problems.length, 'problem')}`);
     process.exitCode = 1;
   } else {
     console.log(
-      `check passed: ${count(figures.length, 'figure')}, output and stills current, story balanced, vendored kit unchanged, audit, line ends and console clean in light and dark, counters true in every frame, every step announced as drawn, every tour plays on after Pause`,
+      `check passed: ${count(figures.length, 'figure')}, output and stills current, story balanced, vendored kit unchanged, audit, line ends and console clean in light and dark, counters true in every frame, every step announced as drawn, every tour plays on after Pause, quiet tours autoplay at 0.6×, pause/resume and ignore stepping`,
     );
   }
 }
@@ -268,6 +282,9 @@ function preview(out: string) {
       const file = join(out, `${figure.id}-${theme}.html`);
       writeFileSync(file, livePage(figure, theme));
       console.log(`wrote ${file}`);
+      const quiet = join(out, `${figure.id}-quiet-${theme}.html`);
+      writeFileSync(quiet, quietPage(figure, theme));
+      console.log(`wrote ${quiet}`);
     }
   }
 }
