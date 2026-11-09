@@ -166,3 +166,9 @@ it.each([1.3, 2])('uses whole, single-line labels in compact hidden Balances at 
     ),
   ).toBe(true);
 });
+
+it('keeps the compact privacy caption on one line at 200% text', () => {
+  const v = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
+  expect(v.layout.privacyFontSize).toBe(8);
+  expect(v.layout.showPrivacyLabel).toBe(true);
+});
