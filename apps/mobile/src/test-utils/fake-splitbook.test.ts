@@ -203,4 +203,24 @@ describe('fake Splitbook', () => {
     expect((await pending).status).toBe(404);
     expect(server.unanswered).toEqual(['GET /api/not-a-route']);
   });
+  it('records requests on a disconnected device and answers again when its connection returns', async () => {
+    const server = fakeSplitbook();
+    server.online = false;
+    await expect(
+      server.fetch('http://local/api/auth/demo-persona/sign-in', {
+        method: 'POST',
+        body: JSON.stringify({ personaId: 'alex' }),
+      }),
+    ).rejects.toThrow('Network request failed');
+    server.online = true;
+    expect(
+      (
+        await server.fetch('http://local/api/auth/demo-persona/sign-in', {
+          method: 'POST',
+          body: JSON.stringify({ personaId: 'alex' }),
+        })
+      ).status,
+    ).toBe(200);
+    expect(server.requests).toHaveLength(2);
+  });
 });

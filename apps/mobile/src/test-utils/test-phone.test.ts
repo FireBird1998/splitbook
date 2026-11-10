@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fakeSplitbook } from './fake-splitbook';
 import { testPhone } from './test-phone';
 
@@ -64,5 +64,70 @@ describe('test phone', () => {
     await expect(phone.stores.cleanupMarker.mark()).rejects.toThrow(
       'Fictional device storage failure',
     );
+  });
+  it('purges every registered account store on sign-out and starts the next account empty', async () => {
+    const server = fakeSplitbook(),
+      phone = testPhone(server),
+      app = phone.open();
+    await app.signIn('alex');
+    const id = server.world.people.alex.id;
+    const rowStores = [
+      phone.stores.savedQueries,
+      phone.stores.expenseDrafts,
+      phone.stores.settlementAttempts,
+      phone.stores.draftRequests,
+      phone.stores.tagRequests,
+      phone.stores.groupCreations,
+    ];
+    for (const store of rowStores) store.records.set(id + '/fictional', { private: true });
+    await phone.stores.financialCleanup.save({ accountId: id, groupIds: [] });
+    await phone.stores.untrustedCopies.save({ accountId: id, scopes: {} });
+    await app.signOut();
+    for (const store of rowStores) expect(store.records.size).toBe(0);
+    for (const store of [
+      phone.stores.financialCleanup,
+      phone.stores.untrustedCopies,
+      phone.stores.offlineIdentity,
+    ])
+      expect(store.value).toBeNull();
+    expect(phone.stores.credentials.value).toBeNull();
+    expect(phone.stores.owner.value).toBeNull();
+    expect(phone.stores.cleanupMarker.value).toBe(false);
+    expect(phone.stores.signOutRecord.value).toBeNull();
+    await app.signIn('sam');
+    expect(app.getSnapshot().auth.user?.name).toBe('Sam Chen');
+    phone.dispose();
+  });
+  it('keeps a failed purge retryable and revokes even when a store cannot clear', async () => {
+    const server = fakeSplitbook(),
+      phone = testPhone(server),
+      app = phone.open();
+    await app.signIn('alex');
+    phone.stores.savedQueries.failNext('clear');
+    await app.signOut();
+    expect(app.getSnapshot().auth.status).not.toBe('authenticated');
+    expect(phone.stores.cleanupMarker.value).toBe(true);
+    expect(
+      server.requests.filter((r) => r.method === 'POST' && r.path === '/api/auth/sign-out'),
+    ).toHaveLength(1);
+    await app.signOut();
+    expect(phone.stores.savedQueries.records.size).toBe(0);
+    phone.dispose();
+  });
+  it('reports connection changes and moves the controller and query verification clock together', async () => {
+    const server = fakeSplitbook(),
+      phone = testPhone(server, { now: Date.parse('2026-09-28T12:00:00Z') });
+    const app = phone.open();
+    await app.signIn('alex');
+    expect(app.getSnapshot().home.refreshedAt).toBe(phone.clock.now);
+    phone.connect(false);
+    await app.refreshHome();
+    await vi.waitFor(() => expect(app.getSnapshot().offline.active).toBe(true));
+    phone.clock.now += 60_000;
+    expect(Date.now()).toBe(phone.clock.now);
+    phone.connect(true);
+    await vi.waitFor(() => expect(app.getSnapshot().home.refreshedAt).toBe(phone.clock.now));
+    expect(app.getSnapshot().offline.active).toBe(false);
+    phone.dispose();
   });
 });
