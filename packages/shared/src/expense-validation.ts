@@ -1,3 +1,4 @@
+import { Refusal } from './refusals';
 import { canRecordSettlement } from './settlement-authorization';
 import { isGroupCurrency, type GroupCurrencyList } from './group-currencies';
 
@@ -15,7 +16,7 @@ export function assertExpenseParticipants(
   );
 
   if (hasInvalidParticipant) {
-    throw new Error('INVALID_MEMBERS');
+    throw new Refusal('INVALID_MEMBERS', { variant: 'expense' });
   }
 }
 
