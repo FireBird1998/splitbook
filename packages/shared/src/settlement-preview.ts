@@ -16,6 +16,7 @@ import {
   sumMinorAmounts,
 } from './exact-money';
 import type { MinorBalance } from './debt-simplifier';
+import { amountMoney, firstName } from './cross-currency-payment';
 
 /** A payment Splitbook suggests, from the one who owes to the one who is owed. */
 export interface SuggestedSettlement {
@@ -144,4 +145,30 @@ export function settlementLedgerFromRead(
       return fromId && toId ? [{ from: fromId, to: toId, amountMinor: minor(amount) }] : [];
     }),
   };
+}
+
+/**
+ * The overpayment warning: how much more than suggested, and where the
+ * payer would stand afterwards in the Group (balances are simplified across the Group, so this
+ * is the payer's overall position, not a debt between these two).
+ */
+export function overpaymentMessage(
+  preview: SettlementPreview,
+  currency: string,
+  payer: { isViewer: boolean; name: string },
+  payeeName: string,
+): string {
+  const who = payer.isViewer ? 'you’d' : `${firstName(payer.name)} would`;
+  const after = preview.paidBy.afterMinor;
+  const position =
+    after > 0
+      ? `${who} be owed ${amountMoney(after, currency)}`
+      : after < 0
+        ? `${who} still owe ${amountMoney(after, currency)}`
+        : `${who} be settled up`;
+  const lead =
+    preview.suggestedMinor === 0
+      ? `No payment from ${payer.isViewer ? 'you' : firstName(payer.name)} to ${payeeName} is suggested.`
+      : `That’s ${amountMoney(preview.overpaidMinor, currency)} more than suggested.`;
+  return `${lead} Afterwards ${position} in this Group.`;
 }

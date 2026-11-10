@@ -3,7 +3,6 @@ import type { SettlementLedger } from '@splitbook/shared/settlement-preview';
 import {
   amountInputText,
   checkNewPayment,
-  overpaymentMessage,
   partyProblem,
   recordPaymentHref,
   recordPaymentLinkPair,
@@ -66,28 +65,6 @@ describe('partyProblem', () => {
   it('refuses the same person on both sides, and says nothing until both are chosen', () => {
     expect(partyProblem(YOU, SAM, SAM, nameOf)).toBe('Pick two different people.');
     expect(partyProblem(YOU, YOU, '', nameOf)).toBeNull();
-  });
-});
-
-describe('overpaymentMessage', () => {
-  it('says how much more than suggested, and where the payer stands afterwards', () => {
-    const { overpayment } = check({ amount: '1200' });
-    expect(overpayment).toBe(
-      'That’s ₹140.00 more than suggested. Afterwards you’d still owe ₹280.00 in this Group.',
-    );
-    expect(check({ amount: '1480', to: SAM }).overpayment).toBe(
-      'That’s ₹420.00 more than suggested. Afterwards you’d be settled up in this Group.',
-    );
-  });
-
-  it('names the payer when it is someone else, and says when nothing was suggested', () => {
-    expect(check({ from: SAM, to: YOU, amount: '50' }).overpayment).toBe(
-      'No payment from Sam to you is suggested. Afterwards Sam would be owed ₹1,110.00 in this Group.',
-    );
-    const preview = check({ from: YOU, to: PRIYA, amount: '2000' }).preview!;
-    expect(overpaymentMessage(preview, 'INR', { isViewer: true, name: 'You' }, 'Priya Shah')).toBe(
-      'That’s ₹1,580.00 more than suggested. Afterwards you’d be owed ₹520.00 in this Group.',
-    );
   });
 });
 

@@ -4,6 +4,7 @@ import { simplifyDebtsMinor } from './debt-simplifier';
 import { MoneyValidationError, parseAmountMinor, toMajorAmount } from './exact-money';
 import {
   previewSettlement,
+  overpaymentMessage,
   settlementLedgerFromRead,
   suggestedSettlementMinor,
   type SettlementLedger,
@@ -239,5 +240,77 @@ describe('settlementLedgerFromRead', () => {
         previewSettlement(ledger, { paidBy: YOU, paidTo: SAM, amountMinor: suggested + 1 }),
       ).toMatchObject({ overpays: true, overpaidMinor: 1, paidTo: { afterMinor: -1 } });
     }
+  });
+});
+
+// Moved from the web's Record payment suite: the exact same sentences, now read at their home.
+describe('overpaymentMessage', () => {
+  it('says how much more than suggested, and where the payer stands afterwards', () => {
+    const preview = previewSettlement(maple, { paidBy: YOU, paidTo: SAM, amountMinor: 120000 })!;
+    expect(overpaymentMessage(preview, 'INR', { isViewer: true, name: 'You' }, 'Sam Chen')).toBe(
+      'That’s ₹140.00 more than suggested. Afterwards you’d still owe ₹280.00 in this Group.',
+    );
+    expect(
+      overpaymentMessage(
+        previewSettlement(maple, { paidBy: YOU, paidTo: SAM, amountMinor: 148000 })!,
+        'INR',
+        { isViewer: true, name: 'You' },
+        'Sam Chen',
+      ),
+    ).toBe('That’s ₹420.00 more than suggested. Afterwards you’d be settled up in this Group.');
+  });
+
+  it('names the payer when it is someone else, and says when nothing was suggested', () => {
+    expect(
+      overpaymentMessage(
+        previewSettlement(maple, { paidBy: SAM, paidTo: YOU, amountMinor: 5000 })!,
+        'INR',
+        { isViewer: false, name: 'Sam Chen' },
+        'you',
+      ),
+    ).toBe(
+      'No payment from Sam to you is suggested. Afterwards Sam would be owed ₹1,110.00 in this Group.',
+    );
+    const preview = previewSettlement(maple, { paidBy: YOU, paidTo: PRIYA, amountMinor: 200000 })!;
+    expect(overpaymentMessage(preview, 'INR', { isViewer: true, name: 'You' }, 'Priya Shah')).toBe(
+      'That’s ₹1,580.00 more than suggested. Afterwards you’d be owed ₹520.00 in this Group.',
+    );
+  });
+
+  it.each([
+    [
+      120000,
+      'That’s ₹140.00 more than suggested. Afterwards Alex would still owe ₹280.00 in this Group.',
+    ],
+    [
+      148000,
+      'That’s ₹420.00 more than suggested. Afterwards Alex would be settled up in this Group.',
+    ],
+  ])('names another payer by first name after paying %i minor units', (amountMinor, words) => {
+    const preview = previewSettlement(maple, { paidBy: YOU, paidTo: SAM, amountMinor })!;
+    expect(
+      overpaymentMessage(preview, 'INR', { isViewer: false, name: 'Alex Rivera' }, 'Sam Chen'),
+    ).toBe(words);
+  });
+
+  it('keeps the viewer’s no-suggestion sentence and the payee’s name', () => {
+    const preview = previewSettlement(
+      { balances: [], suggestions: [] },
+      {
+        paidBy: YOU,
+        paidTo: SAM,
+        amountMinor: 5000,
+      },
+    )!;
+    expect(overpaymentMessage(preview, 'INR', { isViewer: true, name: 'You' }, 'Sam Chen')).toBe(
+      'No payment from you to Sam Chen is suggested. Afterwards you’d be owed ₹50.00 in this Group.',
+    );
+  });
+
+  it('keeps whole-yen money in the sentence', () => {
+    const preview = previewSettlement(maple, { paidBy: YOU, paidTo: SAM, amountMinor: 120000 })!;
+    expect(overpaymentMessage(preview, 'JPY', { isViewer: true, name: 'You' }, 'Sam Chen')).toBe(
+      'That’s ¥14,000 more than suggested. Afterwards you’d still owe ¥28,000 in this Group.',
+    );
   });
 });
