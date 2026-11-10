@@ -51,7 +51,8 @@ function record(key = randomUUID(), overrides: Partial<LedgerRecording<IExpenseD
             description: 'A record',
             amount: 10,
             currency: 'INR',
-            category: 'food', tag: 'Food',
+            category: 'food',
+            tag: 'Food',
             date: new Date('2026-11-11T12:00:00Z'),
             splitMethod: 'equal',
             paidBy: [{ user: new Types.ObjectId(alice), amount: 10 }],
@@ -79,22 +80,24 @@ describe('ledger recording', () => {
     expect(await Expense.countDocuments()).toBe(1);
     expect(await Activity.countDocuments({ type: 'expense_added' })).toBe(1);
   });
-  it.each([['actor', alice, 'FORBIDDEN'], ['named person', bob, 'INVALID_MEMBERS']])(
-    'refuses at the commit when the %s is no longer a member', async (_, person, code) => {
-      await Group.updateOne({ _id: groupId }, { $pull: { members: { user: person } } });
-      await expect(record()).rejects.toMatchObject({ message: code });
-      expect(await Expense.countDocuments()).toBe(0);
-      expect(await Activity.countDocuments()).toBe(0);
-      expect((await Group.findById(groupId))!.currencyLocked).toBe(false);
-    },
-  );
+  it.each([
+    ['actor', alice, 'FORBIDDEN'],
+    ['named person', bob, 'INVALID_MEMBERS'],
+  ])('refuses at the commit when the %s is no longer a member', async (_, person, code) => {
+    await Group.updateOne({ _id: groupId }, { $pull: { members: { user: person } } });
+    await expect(record()).rejects.toMatchObject({ message: code });
+    expect(await Expense.countDocuments()).toBe(0);
+    expect(await Activity.countDocuments()).toBe(0);
+    expect((await Group.findById(groupId))!.currencyLocked).toBe(false);
+  });
   it('can preserve pre-retry membership checks without checking again at the commit', async () => {
     const key = randomUUID();
     const compatibility = { membership: 'before-retry' as const, missingGroup: 'fault' as const };
     const [saved] = await record(key, { compatibility });
     await Group.updateOne({ _id: groupId }, { $pull: { members: { user: bob } } });
-    await expect(record(key, { compatibility })).rejects.toMatchObject({ message: 'INVALID_MEMBERS' });
+    await expect(record(key, { compatibility })).rejects.toMatchObject({
+      message: 'INVALID_MEMBERS',
+    });
     expect(String((await record(key))[0]._id)).toBe(String(saved._id));
   });
-
 });

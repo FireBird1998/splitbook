@@ -35,6 +35,7 @@ export interface LedgerRecording<T extends LedgerRecord> {
   actorId: string;
   model: Model<T>;
   source: ActivitySource;
+  compatibility?: { membership?: 'before-retry'; missingGroup?: 'fault' };
   retry?: { key: string; command: Record<string, unknown> };
   currencies: ReadonlyArray<{ currency: string; rule: 'listed' }>;
   checkPeople: (members: ReadonlySet<string>) => void;
@@ -46,6 +47,20 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
   const { groupId, actorId, model, retry } = description;
   await connectDB();
   await ensureLedgerWriteIndexes();
+  const checkMembers = (group: IGroupDocument) => {
+    const members = new Set(group.members.map((member) => String(member.user)));
+    if (!members.has(actorId)) throw new Refusal('FORBIDDEN');
+    description.checkPeople(members);
+  };
+  // Single payments historically validate people even before confirming a stored retry.
+  if (description.compatibility?.membership === 'before-retry') {
+    const admittedGroup = await Group.findById(groupId).lean();
+    if (!admittedGroup) {
+      if (description.compatibility.missingGroup === 'fault') throw new Error('Group not found');
+      throw new Refusal('FORBIDDEN');
+    }
+    checkMembers(admittedGroup);
+  }
   if (retry) {
     const existing = await model
       .findOne({ group: groupId, createdBy: actorId, 'creationRequest.key': retry.key })
@@ -67,6 +82,7 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
       const group = await Group.findById(groupId).lean();
       if (!group) throw new Refusal('FORBIDDEN');
       if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
+      if (description.compatibility?.membership !== 'before-retry') checkMembers(group);
       const result = [];
       for (const [index, entry] of (await description.entries(group)).entries()) {
         const event = makePendingActivity(
