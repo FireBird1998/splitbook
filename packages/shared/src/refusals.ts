@@ -130,13 +130,8 @@ export const refusalVocabulary = {
   },
   FORBIDDEN_SETTLEMENT: {
     status: 422,
-    words: 'Only the payer or recipient can record this settlement',
-    variants: {
-      payment: {
-        status: 422,
-        words: 'Only the payer or recipient can record this payment',
-      },
-    },
+    words: 'Only the payer or recipient can record this payment',
+    variants: {},
   },
   FORBIDDEN: { status: 403, words: 'Forbidden', variants: {} },
   GROUP_ARCHIVED: { status: 409, words: GROUP_ARCHIVED_MESSAGE, variants: {} },

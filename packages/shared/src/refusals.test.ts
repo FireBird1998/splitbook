@@ -27,11 +27,8 @@ describe('the server refusal vocabulary', () => {
     expect(cause.data).toEqual(data);
     expect(cause.message).toBe('CURRENCY_IN_USE');
   });
-  it('keeps caller-specific payment wordings in the vocabulary', () => {
+  it('uses the payment words for authorization refusals', () => {
     expect(refusalVocabulary.FORBIDDEN_SETTLEMENT.words).toBe(
-      'Only the payer or recipient can record this settlement',
-    );
-    expect(refusalVocabulary.FORBIDDEN_SETTLEMENT.variants.payment.words).toBe(
       'Only the payer or recipient can record this payment',
     );
   });

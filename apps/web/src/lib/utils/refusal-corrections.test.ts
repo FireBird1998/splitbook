@@ -56,3 +56,8 @@ it.each([
   expect(response.status).toBe(status);
   expect(await response.text()).toBe(body);
 });
+it('uses payment words for the default payer-or-recipient refusal', async () => {
+  const response = serverError(new Refusal('FORBIDDEN_SETTLEMENT'));
+  expect(response.status).toBe(422);
+  expect(await response.text()).toBe('{"error":"Only the payer or recipient can record this payment","status":422,"code":"FORBIDDEN_SETTLEMENT"}');
+});

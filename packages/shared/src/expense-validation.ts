@@ -1,4 +1,4 @@
-import { Refusal, type RefusalData } from './refusals';
+import { Refusal } from './refusals';
 import { canRecordSettlement } from './settlement-authorization';
 import { isGroupCurrency, type GroupCurrencyList } from './group-currencies';
 
@@ -52,10 +52,9 @@ export function assertSettlementAuthorization(
   actorId: string,
   paidBy: string,
   paidTo: string,
-  variant?: RefusalData<'FORBIDDEN_SETTLEMENT'>['variant'],
 ): void {
   if (!canRecordSettlement(actorId, paidBy, paidTo)) {
-    throw new Refusal('FORBIDDEN_SETTLEMENT', { variant });
+    throw new Refusal('FORBIDDEN_SETTLEMENT');
   }
 }
 

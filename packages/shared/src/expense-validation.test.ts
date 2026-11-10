@@ -144,7 +144,7 @@ it.each([
 it('keeps the payment caller’s authorization wording on its refusal', () => {
   let cause: unknown;
   try {
-    assertSettlementAuthorization('other', 'payer', 'payee', 'payment');
+    assertSettlementAuthorization('other', 'payer', 'payee');
   } catch (error) {
     cause = error;
   }
