@@ -36,6 +36,7 @@ const buckets = [
   { currency: 'EUR', debts: [{ from: alex, to: sam, amount: 20 }] },
 ];
 const ORDER = ['INR', 'EUR', 'JPY'];
+const MEMBERS = [ALEX, SAM, PRIYA];
 
 const frankfurter: RateSuggestion = {
   rate: '92.1',
@@ -53,7 +54,7 @@ const twoDebts = [
 
 describe('settleAllOffers', () => {
   it('offers one payment to each person the member owes in two currencies or more, in the Group’s order', () => {
-    expect(settleAllOffers(buckets, ALEX, ORDER)).toEqual([
+    expect(settleAllOffers(buckets, ALEX, ORDER, MEMBERS)).toEqual([
       {
         paidBy: ALEX,
         paidTo: SAM,
@@ -69,7 +70,7 @@ describe('settleAllOffers', () => {
       { currency: 'INR', debts: [{ from: sam, to: alex, amount: 500 }] },
       { currency: 'EUR', debts: [{ from: sam, to: alex, amount: 12.5 }] },
     ];
-    expect(settleAllOffers(owed, ALEX, ORDER)).toEqual([
+    expect(settleAllOffers(owed, ALEX, ORDER, MEMBERS)).toEqual([
       {
         paidBy: SAM,
         paidTo: ALEX,
@@ -82,11 +83,11 @@ describe('settleAllOffers', () => {
       },
     ]);
     // Priya owes Sam in one currency only, and Alex isn't one of them.
-    expect(settleAllOffers(buckets, PRIYA, ORDER)).toEqual([]);
+    expect(settleAllOffers(buckets, PRIYA, ORDER, MEMBERS)).toEqual([]);
   });
 
   it('words the offer and the sheet as the board does', () => {
-    const [offer] = settleAllOffers(buckets, ALEX, ORDER);
+    const [offer] = settleAllOffers(buckets, ALEX, ORDER, MEMBERS);
     expect(settleAllWords(offer)).toEqual({
       lead: 'You owe Sam Chen in 2\u00a0currencies',
       amounts: '₹1,480.00 and €20.00',
@@ -106,6 +107,7 @@ describe('settleAllOffers', () => {
       ],
       ALEX,
       ORDER,
+      MEMBERS,
     );
     expect(settleAllWords(owed)).toMatchObject({
       lead: 'Sam Chen owes you in 3\u00a0currencies',
@@ -278,12 +280,12 @@ describe('settleAllPayCurrencies', () => {
 
 describe('settleAllDebtsBetween', () => {
   it('reads every Debt one person owes another, in the Group’s order, as Record checks them', () => {
-    expect(settleAllDebtsBetween(buckets, ALEX, SAM, ORDER)).toEqual(twoDebts);
+    expect(settleAllDebtsBetween(buckets, ALEX, SAM, ORDER, MEMBERS)).toEqual(twoDebts);
     // One way only: what Sam owes Alex is a Debt of its own.
-    expect(settleAllDebtsBetween(buckets, SAM, ALEX, ORDER)).toEqual([
+    expect(settleAllDebtsBetween(buckets, SAM, ALEX, ORDER, MEMBERS)).toEqual([
       { currency: 'JPY', amountMinor: 8400 },
     ]);
-    expect(settleAllDebtsBetween(buckets, PRIYA, ALEX, ORDER)).toEqual([]);
+    expect(settleAllDebtsBetween(buckets, PRIYA, ALEX, ORDER, MEMBERS)).toEqual([]);
   });
 });
 
@@ -330,9 +332,111 @@ describe('a currency Splitbook no longer supports (#812)', () => {
       ...buckets,
       { currency: 'DEM', debts: [{ from: alex, to: sam, amount: 40 }] },
     ];
-    expect(settleAllOffers(withMarks, ALEX, ORDER)).toEqual([
+    expect(settleAllOffers(withMarks, ALEX, ORDER, MEMBERS)).toEqual([
       expect.objectContaining({ paidBy: ALEX, paidTo: SAM, debts: twoDebts }),
     ]);
-    expect(settleAllDebtsBetween(withMarks, ALEX, SAM, ORDER)).toEqual(twoDebts);
+    expect(settleAllDebtsBetween(withMarks, ALEX, SAM, ORDER, MEMBERS)).toEqual(twoDebts);
   });
+});
+
+it('does not offer Settle up with a person who has left the Group', () => {
+  expect(settleAllOffers(buckets, ALEX, ORDER, [ALEX, PRIYA])).toEqual([]);
+});
+
+it('waits for the suggestion even when a rate is typed while it is loading', () => {
+  const read = readSettleAll({
+    debts: twoDebts,
+    paidCurrency: 'INR',
+    rates: { EUR: { state: { status: 'loading' }, custom: '92.50' } },
+  });
+  expect(read.amounts).toBeNull();
+  expect(read.waiting).toBe('Getting the suggested rate for EUR…');
+  expect(read.lines[1]).toMatchObject({ paidMinor: null, rate: null, kind: null });
+});
+
+describe('Settle up waits with a reason and the Debt currency', () => {
+  it.each([null, '92.50'])('needs a connection even with the typed rate %s', (custom) => {
+    const read = readSettleAll({
+      debts: twoDebts,
+      paidCurrency: 'INR',
+      rates: { EUR: { state: { status: 'unreachable' }, custom } },
+    });
+    expect(read.amounts).toBeNull();
+    expect(read.reason).toEqual({ kind: 'unreachable', currency: 'EUR' });
+    expect(read.waiting).toBe('Recording a payment needs a connection.');
+    expect(read.lines[1]).toMatchObject({ paidMinor: null, rate: null, kind: null });
+  });
+
+  it('names the first Debt still looking up a rate, without hiding the known lines', () => {
+    const read = readSettleAll({
+      debts: [...twoDebts, { currency: 'JPY', amountMinor: 2500 }],
+      paidCurrency: 'INR',
+      rates: {},
+    });
+    expect(read.reason).toEqual({ kind: 'loading', currency: 'EUR' });
+    expect(read.waiting).toBe('Getting the suggested rate for EUR…');
+    expect(read.lines[0].paidMinor).toBe(148000);
+    expect(read.amounts).toBeNull();
+  });
+
+  it('names the currency with no rate entered yet', () => {
+    const read = readSettleAll({
+      debts: twoDebts,
+      paidCurrency: 'INR',
+      rates: { EUR: { state: { status: 'none', reason: null }, custom: null } },
+    });
+    expect(read.reason).toEqual({ kind: 'missing-rate', currency: 'EUR' });
+    expect(read.waiting).toBe('Enter the rate for the EUR Debt to record it.');
+    expect(read.amounts).toBeNull();
+  });
+
+  it('names an invalid rate without changing its words', () => {
+    const read = readSettleAll({
+      debts: twoDebts,
+      paidCurrency: 'INR',
+      rates: { EUR: { state: { status: 'ready', suggestion: frankfurter }, custom: '0' } },
+    });
+    expect(read.reason).toEqual({ kind: 'invalid-rate', currency: 'EUR' });
+    expect(read.waiting).toBe('Enter a rate above 0.');
+    expect(read.amounts).toBeNull();
+  });
+
+  it('names a payment-wide calculation failure without blaming an arbitrary Debt', () => {
+    const read = readSettleAll({
+      debts: [
+        { currency: 'INR', amountMinor: 100 },
+        { currency: 'INR', amountMinor: 100 },
+      ],
+      paidCurrency: 'INR',
+      rates: {},
+    });
+    expect(read.reason).toEqual({ kind: 'unworkable-rates' });
+    expect(read.waiting).toBe('This payment can’t be worked out from these rates. Check them.');
+    expect(read.amounts).toBeNull();
+  });
+
+  it('has no reason to wait once the rates can be recorded', () => {
+    const read = readSettleAll({
+      debts: twoDebts,
+      paidCurrency: 'INR',
+      rates: { EUR: { state: { status: 'ready', suggestion: frankfurter }, custom: null } },
+    });
+    expect(read.reason).toBeNull();
+    expect(read.amounts?.totalPaidMinor).toBe(332200);
+  });
+});
+
+it.each([{ memberIds: [ALEX, PRIYA] }, { memberIds: [SAM, PRIYA] }, { memberIds: [] }])(
+  'returns no Debts unless both people are current members: $memberIds',
+  ({ memberIds }) => {
+    expect(settleAllDebtsBetween(buckets, ALEX, SAM, ORDER, memberIds)).toEqual([]);
+  },
+);
+
+it('does not offer a former payer’s incoming Settle up', () => {
+  const incoming = [
+    { currency: 'INR', debts: [{ from: sam, to: alex, amount: 500 }] },
+    { currency: 'EUR', debts: [{ from: sam, to: alex, amount: 20 }] },
+  ];
+  expect(settleAllOffers(incoming, ALEX, ORDER, [ALEX, PRIYA])).toEqual([]);
 });

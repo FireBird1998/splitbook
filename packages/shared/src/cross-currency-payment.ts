@@ -53,6 +53,13 @@ export interface RateSuggestion {
   attribution: { text: string; url: string } | null;
 }
 
+/** What a client knows of a payment's suggested rate, before it can be recorded. */
+export type PaymentRateState =
+  | { status: 'loading' }
+  | { status: 'none'; reason: string | null }
+  | { status: 'ready'; suggestion: RateSuggestion }
+  | { status: 'unreachable' };
+
 /** What the three fields hold, as typed or worked out. */
 export interface CrossCurrencyEntry {
   cleared: string;

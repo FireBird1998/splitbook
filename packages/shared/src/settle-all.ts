@@ -10,6 +10,7 @@ import {
   readCrossCurrencyEntry,
   suggestedRateText,
   type RateSuggestion,
+  type PaymentRateState,
 } from './cross-currency-payment';
 import { getCurrency, getCurrencyPrecision } from './currency';
 import { minorMoney } from './cross-currency-settlement';
@@ -21,12 +22,6 @@ import {
   type SettlementBatchRate,
 } from './settlement-batch';
 import { NO_BREAK_SPACE } from './separator';
-
-/** What a client knows of a Debt's suggested rate: still reading, none, or the suggestion. */
-export type SettleAllRateState =
-  | { status: 'loading' }
-  | { status: 'none'; reason?: string | null }
-  | { status: 'ready'; suggestion: RateSuggestion };
 
 interface Person {
   _id: string;
@@ -59,16 +54,23 @@ export interface SettleAllOffer {
 
 /**
  * Each person the member owes, or who owes the member, in two currencies or more, as the
- * Suggested payments say: one offer each, its Debts in `currencies`' order.
+ * Suggested payments say: one offer each, its Debts in `currencies`' order. Both people must still
+ * be members: legacy Balances can name someone who left.
  */
 export function settleAllOffers(
   buckets: readonly SuggestedPayments[],
   viewerId: string,
   currencies: readonly string[],
+  memberIds: readonly string[],
 ): SettleAllOffer[] {
   const offers = new Map<string, SettleAllOffer>();
   for (const { currency, debt, amountMinor } of suggested(buckets, currencies)) {
-    if (!canRecordSettlement(viewerId, debt.from._id, debt.to._id)) continue;
+    if (
+      !memberIds.includes(debt.from._id) ||
+      !memberIds.includes(debt.to._id) ||
+      !canRecordSettlement(viewerId, debt.from._id, debt.to._id)
+    )
+      continue;
     const key = `${debt.from._id}:${debt.to._id}`;
     const youPay = debt.from._id === viewerId;
     const offer = offers.get(key) ?? {
@@ -93,7 +95,9 @@ export function settleAllDebtsBetween(
   paidBy: string,
   paidTo: string,
   currencies: readonly string[],
+  memberIds: readonly string[],
 ): SettleAllDebt[] {
+  if (!memberIds.includes(paidBy) || !memberIds.includes(paidTo)) return [];
   return suggested(buckets, currencies)
     .filter(({ debt }) => debt.from._id === paidBy && debt.to._id === paidTo)
     .map(({ currency, amountMinor }) => ({ currency, amountMinor }));
@@ -172,7 +176,7 @@ export function settleAllWords(offer: SettleAllOffer) {
 
 /** A Debt in another currency than the payment's: its suggested rate, and the member's own. */
 export interface SettleAllRate {
-  state: SettleAllRateState;
+  state: PaymentRateState;
   /** The member's own rate, as typed; null while it pays at the suggestion. */
   custom: string | null;
 }
@@ -199,7 +203,7 @@ export const rateKey = (currency: string, paidCurrency: string) => `${currency}>
 export function settleAllRates(
   debts: readonly SettleAllDebt[],
   paidCurrency: string,
-  known: Readonly<Record<string, SettleAllRateState | undefined>>,
+  known: Readonly<Record<string, PaymentRateState | undefined>>,
   custom: Readonly<Record<string, string | null | undefined>>,
 ): Record<string, SettleAllRate> {
   return Object.fromEntries(
@@ -217,6 +221,12 @@ export function settleAllRates(
 export const enterRateFor = (currency: string) =>
   `Enter the rate for the ${currency} Debt to record it.`;
 
+/** A per-Debt reason to wait, or a failure of the payment as a whole. */
+export type SettleAllWaitingReason =
+  | { kind: 'loading' | 'unreachable' | 'missing-rate' | 'invalid-rate'; currency: string }
+  // A batch can fail as a whole (for example an unsafe total): no single Debt is responsible.
+  | { kind: 'unworkable-rates' };
+
 /**
  * A settle-up read by the shared rules: each Debt's line, and once every rate is known the
  * payment's rows and total (`calculateSettlementBatch`), else what Record waits for.
@@ -229,8 +239,13 @@ export function readSettleAll({
   debts: readonly SettleAllDebt[];
   paidCurrency: string;
   rates: Readonly<Record<string, SettleAllRate | undefined>>;
-}): { lines: SettleAllLine[]; amounts: SettlementBatchAmounts | null; waiting: string | null } {
-  let waiting: string | null = null;
+}): {
+  lines: SettleAllLine[];
+  amounts: SettlementBatchAmounts | null;
+  waiting: string | null;
+  reason: SettleAllWaitingReason | null;
+} {
+  let waiting: { words: string; reason: SettleAllWaitingReason } | null = null;
   const choices: Record<string, SettlementBatchRate> = {};
   const lines = debts.map(({ currency, amountMinor: debtMinor }): SettleAllLine => {
     if (currency === paidCurrency)
@@ -245,12 +260,20 @@ export function readSettleAll({
     const { state, custom } = rates[currency] ?? { state: { status: 'loading' }, custom: null };
     const suggestion = state.status === 'ready' ? state.suggestion : null;
     const unknown = { currency, debtMinor, paidMinor: null, rate: null, kind: null, suggestion };
+    if (state.status === 'loading' || state.status === 'unreachable') {
+      // A typed rate still needs the suggestion checked, so its provenance isn't lost.
+      waiting ??= {
+        words:
+          state.status === 'loading'
+            ? `Getting the suggested rate for ${currency}…`
+            : 'Recording a payment needs a connection.',
+        reason: { kind: state.status, currency },
+      };
+      return unknown;
+    }
     const typed = custom?.trim() ? custom.trim() : suggestion && suggestedRateText(suggestion.rate);
     if (!typed) {
-      waiting ??=
-        state.status === 'loading'
-          ? `Getting the suggested rate for ${currency}…`
-          : enterRateFor(currency);
+      waiting ??= { words: enterRateFor(currency), reason: { kind: 'missing-rate', currency } };
       return unknown;
     }
     const pair = { currency, paidCurrency };
@@ -264,7 +287,10 @@ export function readSettleAll({
       pair,
     );
     if (reading.status !== 'valid') {
-      waiting ??= reading.status === 'invalid' ? reading.message : enterRateFor(currency);
+      waiting ??= {
+        words: reading.status === 'invalid' ? reading.message : enterRateFor(currency),
+        reason: { kind: reading.status === 'invalid' ? 'invalid-rate' : 'missing-rate', currency },
+      };
       return unknown;
     }
     const plain = plainRate(typed) ?? typed;
@@ -299,7 +325,10 @@ export function readSettleAll({
         rates: choices,
       });
     } catch {
-      waiting = 'This payment can’t be worked out from these rates. Check them.';
+      waiting = {
+        words: 'This payment can’t be worked out from these rates. Check them.',
+        reason: { kind: 'unworkable-rates' },
+      };
     }
-  return { lines, amounts, waiting };
+  return { lines, amounts, waiting: waiting?.words ?? null, reason: waiting?.reason ?? null };
 }
