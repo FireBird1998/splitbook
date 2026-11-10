@@ -131,9 +131,9 @@ A test compares every code and all of its statuses with the vocabulary.
 | `NOT_A_TRIP`                           | 409         |
 | `NOT_FOUND`                            | 404         |
 | `NOT_HOUSEHOLD`                        | 422         |
-| `NOTIFICATIONS_UNAVAILABLE`            | 503         |
 | `NOTIFICATION_SETTINGS_CHANGED`        | 409         |
 | `NOTIFICATION_TOKEN_REQUIRED`          | 400         |
+| `NOTIFICATIONS_UNAVAILABLE`            | 503         |
 | `OPEN_BALANCE`                         | 409         |
 | `PAYER_TOTAL_MISMATCH`                 | 422         |
 | `PERCENTAGE_TOTAL_MISMATCH`            | 422         |
