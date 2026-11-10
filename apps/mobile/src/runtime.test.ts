@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 
 // The real runtime wiring, with only the native modules and the controller replaced.
 const wired = vi.hoisted(() => {
@@ -6,6 +8,7 @@ const wired = vi.hoisted(() => {
   return {
     dependencies: undefined as Record<string, unknown> | undefined,
     reachability: undefined as Record<string, unknown> | undefined,
+    cache: '',
   };
 });
 vi.mock('@react-native-community/netinfo', () => ({
@@ -29,10 +32,53 @@ vi.mock('expo-secure-store', () => ({
 }));
 vi.mock('expo-crypto', () => ({ randomUUID: vi.fn(), getRandomBytes: vi.fn() }));
 vi.mock('expo/fetch', () => ({ fetch: vi.fn() }));
+vi.mock('expo-file-system', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const os = await import('node:os');
+  wired.cache = fs.mkdtempSync(path.join(os.tmpdir(), 'splitbook-http-store-'));
+  fs.mkdirSync(path.join(wired.cache, 'http-cache'));
+  fs.writeFileSync(
+    path.join(wired.cache, 'http-cache', 'old-response'),
+    'Fictional saved response',
+  );
+  fs.writeFileSync(path.join(wired.cache, 'bundled-font.ttf'), 'Keep the bundled asset');
+  return {
+    Paths: { cache: wired.cache },
+    Directory: class {
+      uri: string;
+      constructor(...parts: string[]) {
+        this.uri = path.join(...parts);
+      }
+      get exists() {
+        return fs.existsSync(this.uri);
+      }
+      delete() {
+        fs.rmSync(this.uri, { recursive: true });
+      }
+    },
+  };
+});
 
+await import('expo-file-system');
 await import('./runtime');
+afterAll(() => rmSync(wired.cache, { recursive: true, force: true }));
 
 describe('runtime storage wiring', () => {
+  it('empties only the HTTP store before the first request reaches native fetch (#1060)', async () => {
+    const { fetch } = await import('expo/fetch');
+    vi.mocked(fetch).mockImplementationOnce(async () => {
+      expect(existsSync(join(wired.cache, 'http-cache'))).toBe(false);
+      expect(readFileSync(join(wired.cache, 'bundled-font.ttf'), 'utf8')).toBe(
+        'Keep the bundled asset',
+      );
+      return Response.json({ user: null });
+    });
+    const request = wired.dependencies!.fetch as typeof fetch;
+    const response = await request('http://127.0.0.1:4138/api/auth/get-session');
+    expect(await response.json()).toEqual({ user: null });
+  });
+
   it('asks for no HTTP caching when NetInfo needs its reachability probe (#1060)', () => {
     expect(wired.reachability).toMatchObject({
       reachabilityHeaders: { 'Cache-Control': 'no-store' },
