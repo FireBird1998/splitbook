@@ -83,6 +83,7 @@ describe('the no-app check’s installation (#968)', () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           'X-Installation-Key': 'private-installation-proof-968968968',
+          'Cache-Control': 'no-store',
         }),
       }),
     );
