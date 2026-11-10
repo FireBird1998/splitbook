@@ -657,3 +657,21 @@ it('owns seeded and rotated sessions and refuses one after it expires or is revo
   expect((await call()).status).toBe(401);
   expect(server.auth.issuedTo.get(cookie)?.name).toBe('Alex Rivera');
 });
+
+it('refuses sign-in and revoke without silently changing the server session', async () => {
+  const server = fakeSplitbook();
+  const signIn = () => server.fetch('http://local/api/auth/demo-persona/sign-in', {method:'POST',body:'{"personaId":"alex"}'});
+  server.auth.signInStatus = 403;
+  expect((await signIn()).status).toBe(403);
+  expect(server.auth.sessions.size).toBe(0);
+  server.auth.signInStatus = 200;
+  const signed = await signIn();
+  const cookie = signed.headers.get('Set-Cookie')!.split(';')[0];
+  server.auth.signOutStatus = 503;
+  const revoke = () => server.fetch('http://local/api/auth/sign-out', {method:'POST',headers:{Cookie:cookie}});
+  expect((await revoke()).status).toBe(503);
+  expect(server.auth.sessions.has(cookie)).toBe(true);
+  server.auth.signOutStatus = 200;
+  expect((await revoke()).status).toBe(200);
+  expect(server.auth.sessions.has(cookie)).toBe(false);
+});
