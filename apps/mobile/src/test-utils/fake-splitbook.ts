@@ -1,3 +1,4 @@
+import type { TripSummaryRead } from '@splitbook/shared/trip-summary-read';
 import { bodyFails, gatewayReply, hangUntilAborted, type GatewayBody } from './transport-faults';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { FetchResponse, MobileFetch, PersonaId, SessionUser } from '../data/types';
@@ -84,6 +85,33 @@ export const rateSuggestion = (from: string, to: string, rate: string) => ({
   components: [],
 });
 
+function emptyTripSummary(currency: string): TripSummaryRead {
+  return {
+    timeZone: 'UTC',
+    currency,
+    tripDates: { start: null, end: null },
+    window: null,
+    dayCount: 0,
+    tooManyDays: false,
+    spentMinor: 0,
+    expenseCount: 0,
+    yourShareMinor: 0,
+    youPaidMinor: 0,
+    yourExpenseCount: 0,
+    peopleCount: 0,
+    perPersonPerDayMinor: null,
+    days: [],
+    dailyAverageMinor: null,
+    beforeTrip: null,
+    afterTrip: null,
+    byTag: [],
+    suggestedPayments: [],
+    otherCurrencies: [],
+    hasExpenses: false,
+    currencies: [],
+  };
+}
+
 /** Populate a recorded payment from its request, without applying anything to a ledger. */
 export function recordedSettlement(
   body: Record<string, unknown>,
@@ -162,6 +190,10 @@ export function fakeSplitbook() {
     expenses: { [group._id]: expensePage() } as Record<string, unknown>,
     settlements: { [group._id]: [] as unknown[] },
     rates: { [group._id]: {} } as Record<string, Record<string, unknown>>,
+    tripSummaries: { [group._id]: { '': emptyTripSummary(group.defaultCurrency) } } as Record<
+      string,
+      Record<string, TripSummaryRead>
+    >,
   };
   const unanswered: string[] = [];
   const requests: FakeRequest[] = [];
@@ -210,7 +242,7 @@ export function fakeSplitbook() {
       '/api/groups',
       '/api/user/balances',
       ...world.groups.flatMap((g) =>
-        ['', '/balances', '/expenses', '/settlements', '/rates'].map(
+        ['', '/balances', '/expenses', '/settlements', '/rates', '/trip-summary'].map(
           (suffix) => `/api/groups/${g._id}${suffix}`,
         ),
       ),
@@ -306,6 +338,13 @@ export function fakeSplitbook() {
         return Response.json({ code: 'NOT_FOUND' }, { status: 404 });
       }
       if (url.pathname === base + '/settlements') return answer(world.settlements[found._id]);
+      if (url.pathname === base + '/trip-summary') {
+        const currency = url.searchParams.get('currency') ?? '';
+        const data =
+          world.tripSummaries[found._id]?.[currency] ??
+          emptyTripSummary(currency || found.defaultCurrency);
+        return answer({ ...data, timeZone: url.searchParams.get('tz') ?? data.timeZone });
+      }
       if (url.pathname === base + '/rates') {
         const pair = `${url.searchParams.get('from')}→${url.searchParams.get('to')}`;
         const suggestion = world.rates[found._id]?.[pair] ?? null;
