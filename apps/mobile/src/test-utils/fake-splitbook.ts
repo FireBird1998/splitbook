@@ -308,6 +308,8 @@ export function fakeSplitbook() {
     sessions: new Map<string, SessionUser>(),
     issuedTo: new Map<string, SessionUser>(),
     expired: false,
+    signInStatus: 200,
+    signOutStatus: 200,
     rotate: false,
     cookie: (persona: PersonaId, sequence: number) => `better-auth.session_token=${persona}-${sequence}.signature`,
     issue(persona: PersonaId, cookie?: string): string {
@@ -389,6 +391,7 @@ export function fakeSplitbook() {
         return Response.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
       }
       if (url.pathname === '/api/auth/demo-persona/sign-in' && method === 'POST') {
+        if (auth.signInStatus !== 200) return Response.json({}, {status:auth.signInStatus});
         const persona = JSON.parse(String(init.body)).personaId as PersonaId;
         const user = world.people[persona];
         const cookie = auth.issue(persona);
@@ -400,6 +403,7 @@ export function fakeSplitbook() {
       const cookie = new Headers(init.headers).get('Cookie') ?? '';
       const user = auth.sessions.get(cookie);
       if (url.pathname === '/api/auth/sign-out' && method === 'POST') {
+        if (auth.signOutStatus !== 200) return Response.json({}, {status:auth.signOutStatus});
         auth.sessions.delete(cookie);
         return Response.json({ success: true });
       }
