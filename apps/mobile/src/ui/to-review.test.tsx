@@ -22,9 +22,10 @@ import type {
   DraftReview,
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
-import { createMobileController, type MobileController } from '../data/mobile-controller';
-import type { MobileFetch } from '../data/types';
-import { savedQueriesIn } from '../test-utils/saved-queries';
+import type { MobileController } from '../data/mobile-controller';
+import type { AccountGroupRecordStore } from '../data/account-record-storage';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { ThemeContext } from './theme';
 import { ToReviewHomeCard, ToReviewGroupBanner, ToReviewList, ToReviewOverlay } from './to-review';
@@ -90,30 +91,6 @@ const review = (draft: PersistedExpenseDraft): DraftReview => ({
   problems: [],
   duplicates: [],
 });
-function memory() {
-  const values = new Map<string, unknown>();
-  return {
-    values,
-    load: async (account: string, id: string) =>
-      structuredClone(values.get(`${account}:${id}`) ?? null),
-    save: async (account: string, id: string, value: unknown) => {
-      values.set(`${account}:${id}`, structuredClone(value));
-    },
-    remove: async (account: string, id: string) => {
-      values.delete(`${account}:${id}`);
-    },
-    clear: async () => {
-      values.clear();
-    },
-    list: async (account: string) =>
-      [...values]
-        .filter(([key]) => key.startsWith(`${account}:`))
-        .map(([key, value]) => ({
-          groupId: key.slice(account.length + 1),
-          value: structuredClone(value),
-        })),
-  };
-}
 const controllers: MobileController[] = [];
 const trees: ReactTestRenderer[] = [];
 afterEach(async () => {
@@ -249,68 +226,80 @@ function fixture(
         },
       };
     });
-  let cookie: string | null = null,
-    owner: string | null = null;
-  let offline = false,
-    denied = false,
-    identity: unknown = null;
-  const drafts = memory(),
-    requests = memory(),
-    cache = new Map<string, unknown>();
+  let denied = false;
   const saves: string[] = [],
     reviews: string[][] = [],
     calls: string[] = [];
   const committed = new Set<string>();
   const puts: Array<{ id: string; revision: string | null; values: Record<string, unknown> }> = [],
     deletes: string[] = [];
-  const fetch: MobileFetch = async (url, init) => {
-    const path = new URL(url).pathname;
-    if (path === '/api/notifications/device') return json({ data: notificationPreferences });
-    calls.push(`${init.method ?? 'GET'} ${path}`);
-    if (offline) throw new Error('Offline');
-    if (path.endsWith('/demo-persona/sign-in'))
-      return json({ user }, 200, 'better-auth.session_token=alex.signature; Max-Age=2592000');
-    if (path.endsWith('/get-session'))
-      return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
+  const backend = fakeSplitbook();
+  backend.world.people.alex = user;
+  backend.auth.cookie = () => 'better-auth.session_token=alex.signature';
+  Object.defineProperty(backend.world, 'toReview', {
+    get: () => ({
+      total: items.length,
+      groups: [groupId, otherGroupId].flatMap((id) => {
+        const own = items.filter((item) => item.draft.groupId === id);
+        return own.length
+          ? [
+              {
+                groupId: id,
+                groupName: id === groupId ? group.name : 'Later trip',
+                currency: 'INR',
+                alternateCurrencies: extras,
+                count: own.length,
+                items: own.map(reviewed),
+              },
+            ]
+          : [];
+      }),
+    }),
+  });
+  backend.world.home = { buckets: [], groups: [{ groupId, balances: [] }] };
+  Object.defineProperty(backend.world, 'groups', {
+    get: () => [
+      { ...group, alternateCurrencies: extras },
+      { ...group, _id: otherGroupId, name: 'Later trip' },
+    ],
+  });
+  backend.world.groupsByAccount[user.id] = options.laterReadyGroup
+    ? [group, { ...group, _id: otherGroupId, name: 'Later trip' }]
+    : [group];
+  for (const id of [groupId, otherGroupId]) {
+    // The original summary intentionally omits byMember; keep that reply for #1075.
+    const page = expensePage();
+    delete (page.summary as Partial<typeof page.summary>).byMember;
+    backend.world.expenses[id] = page;
+    backend.world.balances[id] = { byCurrency: [] };
+  }
+  backend.world.notifications = notificationPreferences;
+  backend.reply('*', '*', async ({ url, init }) => {
+    const path = url.pathname;
+    if (
+      [
+        '/api/auth/demo-persona/sign-in',
+        '/api/auth/get-session',
+        '/api/auth/sign-out',
+        '/api/notifications/device',
+      ].includes(path)
+    )
+      return undefined;
     if (path === '/api/user/to-review') {
       await options.held;
-      return json({
-        status: 200,
-        data: {
-          total: items.length,
-          groups: [groupId, otherGroupId].flatMap((id) => {
-            const own = items.filter((item) => item.draft.groupId === id);
-            return own.length
-              ? [
-                  {
-                    groupId: id,
-                    groupName: id === groupId ? group.name : 'Later trip',
-                    currency: 'INR',
-                    alternateCurrencies: extras,
-                    count: own.length,
-                    items: own.map(reviewed),
-                  },
-                ]
-              : [];
-          }),
-        },
-      });
+      return undefined;
     }
-    if (path === '/api/user/balances')
-      return json({ status: 200, data: { buckets: [], groups: [{ groupId, balances: [] }] } });
-    if (path === '/api/groups')
-      return json({
-        status: 200,
-        data: options.laterReadyGroup
-          ? [group, { ...group, _id: otherGroupId, name: 'Later trip' }]
-          : [group],
-      });
-    if (path === `/api/groups/${otherGroupId}`)
-      return json({ status: 200, data: { ...group, _id: otherGroupId, name: 'Later trip' } });
-    if (path === `/api/groups/${groupId}`)
-      return denied
-        ? json({ error: 'Forbidden', status: 403 }, 403)
-        : json({ status: 200, data: { ...group, alternateCurrencies: extras } });
+    if (path === `/api/groups/${groupId}` && denied)
+      return json({ error: 'Forbidden', status: 403 }, 403);
+    if (
+      [
+        '/api/user/balances',
+        '/api/groups',
+        `/api/groups/${groupId}`,
+        `/api/groups/${otherGroupId}`,
+      ].includes(path)
+    )
+      return undefined;
     // Any member adds a currency to the Group (#721).
     if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST') {
       if (options.refuseAdd || extras.length >= 4) {
@@ -396,66 +385,59 @@ function fixture(
     if (path.endsWith('/drafts')) return json({ data: items.map((item) => item.draft) });
     if (path.endsWith('/expenses') && init.method === 'POST' && options.lostExpense)
       throw new Error('Lost expense reply');
-    if (path.endsWith('/expenses'))
-      return json({
-        status: 200,
-        data: {
-          expenses: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0 },
-        },
-      });
-    if (path.endsWith('/balances')) return json({ status: 200, data: { byCurrency: [] } });
+    // The old default create fell through to a list-shaped (unreadable) receipt; preserve it for #1075.
+    if (path.endsWith('/expenses') && init.method !== 'GET')
+      return json({ status: 200, data: backend.world.expenses[groupId] });
+    if (path.endsWith('/expenses') || path.endsWith('/balances')) return undefined;
     return json({ error: 'Unavailable', status: 404 }, 404);
-  };
-  const makeController = () => {
-    const controller = createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4408',
-        authOrigin: 'http://localhost:4408',
-        developmentPersonaEnabled: true,
+  });
+  const phone = testPhone(
+    {
+      get online() {
+        return backend.online;
       },
-      {
-        fetch,
+      set online(value: boolean) {
+        backend.online = value;
+      },
+      fetch: (url, init) => {
+        if (new URL(url).pathname !== '/api/notifications/device')
+          calls.push(`${init.method ?? 'GET'} ${new URL(url).pathname}`);
+        return backend.fetch(url, init);
+      },
+    },
+    {
+      origin: 'http://localhost:4408',
+      now: Date.parse(iso),
+      recordSeparator: ':',
+      draftRequestSeparator: ':',
+      newSubmissionKey: () => 'fictional-review-request',
+      purge: ['expenseDrafts', 'draftRequests'],
+      parts: {
         notifications: notificationDevice,
-        now: () => Date.parse(iso),
-        newSubmissionKey: () => 'fictional-review-request',
-        credentials: {
-          load: async () => cookie,
-          save: async (next) => {
-            cookie = next;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        expenseDrafts: drafts,
-        draftRequests: requests,
-        savedQueries: savedQueriesIn(cache),
-        offlineIdentity: {
-          load: async () => identity,
-          save: async (next) => {
-            identity = next;
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
+        pendingInvitation: undefined,
+        settlementAttempts: undefined,
+        tagRequests: undefined,
+        groupCreations: undefined,
+        netInfo: undefined,
         accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (next) => {
-              owner = next;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
+          financialCleanup: undefined,
+          untrustedCopies: undefined,
+          signOutRecord: undefined,
           cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [drafts, requests],
         },
       },
-    );
+    },
+  );
+  delete phone.stores.savedQueries.retainGroups;
+  const drafts = Object.assign(phone.stores.expenseDrafts, {
+    values: phone.stores.expenseDrafts.records,
+  });
+  const requests = Object.assign(phone.stores.draftRequests, {
+    values: phone.stores.draftRequests.records,
+  });
+  for (const store of [drafts, requests]) delete (store as AccountGroupRecordStore).keys;
+  const makeController = () => {
+    const controller = phone.open();
     controllers.push(controller);
     return controller;
   };
@@ -474,7 +456,7 @@ function fixture(
       denied = true;
     },
     goOffline: () => {
-      offline = true;
+      backend.online = false;
     },
     addReady: () => {
       items.push(review(row(5, 'Museum', 5)));

@@ -16,7 +16,9 @@ import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
-import { createMobileController } from './data/mobile-controller';
+import { testPhone } from './test-utils/test-phone';
+import { fakeSplitbook } from './test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './data/account-record-storage';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
 import {
@@ -166,187 +168,93 @@ const activityPage = {
 };
 
 function backend() {
-  let cookie: string | null = null;
-  let account: string | null = null;
-  const drafts = new Map<string, unknown>();
   const device = {
     failDraftWrites: false,
     failDraftRemoval: false,
     submissionKey: 'native-app-test-0001',
   };
-  const draftRequestRecords = new Map<string, unknown>();
-  const draftRequests = {
-    load: async (accountId: string, id: string) => draftRequestRecords.get(accountId + id) ?? null,
-    save: async (accountId: string, id: string, value: unknown) => {
-      draftRequestRecords.set(accountId + id, structuredClone(value));
-    },
-    remove: async (accountId: string, id: string) => {
-      draftRequestRecords.delete(accountId + id);
-    },
-    clear: async () => {
-      draftRequestRecords.clear();
-    },
+  const server = fakeSplitbook();
+  server.world.people.sam = user;
+  server.auth.cookie = () => 'better-auth.session_token=test.signature';
+  server.world.groups = [group];
+  server.world.home = { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] };
+  server.world.activities[groupId] = activityPage.data.activities;
+  server.world.balances[groupId] = {
+    currency: 'INR',
+    balances: [],
+    debts: [],
+    byCurrency: [
+      {
+        currency: 'INR',
+        balances: [{ user: person, balance: -30 }],
+        debts: [{ from: person, to: alex, amount: 30 }],
+      },
+    ],
   };
-  const tagRecords = new Map<string, unknown>();
-  const tagRequests = {
-    load: async (accountId: string, id: string) =>
-      structuredClone(tagRecords.get(accountId + id) ?? null),
-    save: async (accountId: string, id: string, value: unknown) => {
-      tagRecords.set(accountId + id, structuredClone(value));
-    },
-    remove: async (accountId: string, id: string) => {
-      tagRecords.delete(accountId + id);
-    },
-    clear: async () => {
-      tagRecords.clear();
-    },
-  };
-  const payments = new Map<string, unknown>();
-  const settlementAttempts = {
-    load: async (accountId: string, id: string) =>
-      structuredClone(payments.get(accountId + id) ?? null),
-    save: async (accountId: string, id: string, value: unknown) => {
-      payments.set(accountId + id, structuredClone(value));
-    },
-    remove: async (accountId: string, id: string) => {
-      payments.delete(accountId + id);
-    },
-    clear: async () => {
-      payments.clear();
-    },
-  };
-
-  const creations = new Map<string, unknown>();
-  const groupCreations = {
-    load: async (accountId: string) => structuredClone(creations.get(accountId) ?? null),
-    save: async (accountId: string, value: unknown) => {
-      creations.set(accountId, structuredClone(value));
-    },
-    remove: async (accountId: string) => {
-      creations.delete(accountId);
-    },
-    clear: async () => creations.clear(),
-  };
-  const clock = { now: new Date(2026, 8, 27, 12).getTime() };
   /** Every request that isn't a read, as "METHOD path". */
   const writes: string[] = [];
   let handler: Handler = () => undefined;
-  const boot = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
+  server.reply('*', '*', ({ path, init }) => {
+    if (init.method && init.method !== 'GET') writes.push(`${init.method} ${path}`);
+    const override = handler(path, init);
+    if (override) return override;
+    // This fixture computes a Month's page; the fake's world stays unchanged by writes.
+    if (path.includes('/expenses?')) {
+      const from = new URL(path, 'http://local').searchParams.get('dateFrom');
+      return json(page(from === expenseMonthRange('2026-08').dateFrom ? [august] : [september]));
+    }
+    return undefined;
+  });
+  const phone = testPhone(server, {
+    // This screen suite also publishes hand-made notification states; report its undeclared transitions.
+    monitor: false,
+    now: new Date(2026, 8, 27, 12).getTime(),
+    recordSeparator: ':',
+    newSubmissionKey: () => device.submissionKey,
+    purge: ['groupCreations', 'settlementAttempts', 'tagRequests', 'draftRequests'],
+    parts: {
+      notifications: notificationDevice,
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      netInfo: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
       },
-      {
-        now: () => clock.now,
-        notifications: notificationDevice,
-        draftRequests,
-        settlementAttempts,
-        tagRequests,
-        expenseDrafts: {
-          load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
-          save: async (accountId, id, value) => {
-            if (device.failDraftWrites) throw new Error('Device storage full');
-            drafts.set(`${accountId}:${id}`, structuredClone(value));
-          },
-          remove: async (accountId, id) => {
-            if (device.failDraftRemoval) throw new Error('Device storage failed');
-            drafts.delete(`${accountId}:${id}`);
-          },
-          clear: async () => drafts.clear(),
-          list: async (accountId) =>
-            [...drafts]
-              .filter(([key]) => key.startsWith(`${accountId}:`))
-              .map(([key, value]) => ({
-                groupId: key.split(':')[1],
-                value: structuredClone(value),
-              })),
-        },
-        accountLocal: {
-          owner: {
-            load: async () => account,
-            save: async (value) => {
-              account = value;
-            },
-            clear: async () => {
-              account = null;
-            },
-          },
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [groupCreations, settlementAttempts, tagRequests, draftRequests],
-        },
-        groupCreations,
-        newSubmissionKey: () => device.submissionKey,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname + new URL(url).search;
-          if (init.method && init.method !== 'GET') writes.push(`${init.method} ${path}`);
-          const override = handler(path, init);
-          if (override) return override;
-          if (path.endsWith('/sign-in'))
-            return new Response(JSON.stringify({ user }), {
-              headers: {
-                'Set-Cookie': 'better-auth.session_token=test.signature; Path=/; HttpOnly',
-              },
-            });
-          if (path.endsWith('/get-session'))
-            return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
-          if (path === '/api/groups') return json({ data: [group], status: 200 });
-          if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
-          if (path === '/api/user/balances')
-            return json({
-              data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] },
-              status: 200,
-            });
-          if (path.includes('/expenses?')) {
-            const from = new URL(path, 'http://local').searchParams.get('dateFrom');
-            return json(
-              page(from === expenseMonthRange('2026-08').dateFrom ? [august] : [september]),
-            );
-          }
-          if (path.startsWith(`/api/groups/${groupId}/activity?`)) return json(activityPage);
-          if (path === `/api/groups/${groupId}/balances`)
-            return json({
-              data: {
-                currency: 'INR',
-                balances: [],
-                debts: [],
-                byCurrency: [
-                  {
-                    currency: 'INR',
-                    balances: [{ user: person, balance: -30 }],
-                    debts: [{ from: person, to: alex, amount: 30 }],
-                  },
-                ],
-              },
-              status: 200,
-            });
-          return json({}, 404);
-        },
-      },
-    );
-  const controller = boot();
+    },
+  });
+  for (const store of [
+    phone.stores.settlementAttempts,
+    phone.stores.tagRequests,
+    phone.stores.draftRequests,
+  ]) {
+    delete (store as AccountGroupRecordStore).keys;
+    delete (store as AccountGroupRecordStore).list;
+  }
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  phone.stores.expenseDrafts.failPersistently(
+    'save',
+    new Error('Device storage full'),
+    () => device.failDraftWrites,
+  );
+  phone.stores.expenseDrafts.failPersistently(
+    'remove',
+    new Error('Device storage failed'),
+    () => device.failDraftRemoval,
+  );
+  const controller = phone.open();
   return {
     controller,
-    restart: () => {
-      controller.dispose();
-      return boot();
-    },
-    clock,
+    restart: () => phone.open(),
+    clock: phone.clock,
     writes,
-    creations,
+    creations: phone.stores.groupCreations.records,
     device,
-    drafts,
-    payments,
+    drafts: phone.stores.expenseDrafts.records,
+    payments: phone.stores.settlementAttempts.records,
     use(next: Handler) {
       handler = next;
     },

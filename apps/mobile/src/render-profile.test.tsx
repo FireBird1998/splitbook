@@ -5,7 +5,9 @@ import { Profiler } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ceilingsFile, harnessCeilings, measures } from '../scripts/ceilings';
-import { createMobileController } from './data/mobile-controller';
+import { testPhone } from './test-utils/test-phone';
+import { fakeSplitbook } from './test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './data/account-record-storage';
 import { unbroken } from './test-utils/layout';
 import { emitAppState } from './test-utils/native';
 
@@ -321,12 +323,8 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
  * `payment`: Alex is in Maple House too, so Sam can record the payment Balances suggest (#333).
  */
 function backend({ expensePages = pages, activityPages = pages, payment = false } = {}) {
-  let cookie: string | null = null;
-  let account: string | null = null;
   let paid = false;
   let draftGate: Promise<void> | undefined;
-  const drafts = new Map<string, unknown>(),
-    attempts = new Map<string, unknown>();
   const shown = payment
     ? {
         ...group,
@@ -336,138 +334,112 @@ function backend({ expensePages = pages, activityPages = pages, payment = false 
         ],
       }
     : group;
-  const clock = { now: new Date(2026, 8, 27, 12).getTime() };
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
-    },
-    {
-      now: () => clock.now,
-      expenseDrafts: {
-        load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
-        save: async (accountId, id, value) => {
-          await draftGate;
-          drafts.set(`${accountId}:${id}`, structuredClone(value));
-        },
-        remove: async (accountId, id) => {
-          drafts.delete(`${accountId}:${id}`);
-        },
-        clear: async () => drafts.clear(),
-      },
-      accountLocal: {
-        owner: {
-          load: async () => account,
-          save: async (value) => {
-            account = value;
+  const server = fakeSplitbook();
+  server.world.people.sam = user;
+  server.auth.cookie = () => 'better-auth.session_token=test.signature';
+  server.world.groups = groups;
+  // The original profile's figures cover no Group; unknown row balances stay unknown (#333).
+  server.world.home = { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }], groups: [] };
+  server.reply('*', '*', async ({ path, init }) => {
+    // Every request the controller sends, as it leaves; the journey counts them.
+    sent.push(`${init.method ?? 'GET'} ${path}`);
+    // Like a network reply, each response arrives in a later task.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (
+      [
+        '/api/auth/demo-persona/sign-in',
+        '/api/auth/get-session',
+        '/api/auth/sign-out',
+        '/api/groups',
+        '/api/user/balances',
+      ].includes(path)
+    )
+      return undefined;
+    if (path === `/api/groups/${groupId}`) return json({ data: shown, status: 200 });
+    if (path === `/api/groups/${groupId}/settlements` && init.method === 'POST') {
+      paid = true;
+      const body = JSON.parse(String(init.body)) as { amount: number; note?: string };
+      return json(
+        {
+          status: 201,
+          data: {
+            _id: hex('e', 1),
+            group: groupId,
+            paidBy: person,
+            paidTo: alex,
+            createdBy: person,
+            amount: body.amount,
+            amountMinor: Math.round(body.amount * 100),
+            moneyVersion: 1,
+            currency: 'INR',
+            note: body.note ?? '',
+            createdAt: iso,
+            updatedAt: iso,
           },
-          clear: async () => {
-            account = null;
-          },
         },
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [],
-      },
-      newSubmissionKey: () => 'render-profile-0001',
-      ...(payment
-        ? {
-            settlementAttempts: {
-              load: async (accountId: string, id: string) =>
-                structuredClone(attempts.get(`${accountId}:${id}`) ?? null),
-              save: async (accountId: string, id: string, value: unknown) => {
-                attempts.set(`${accountId}:${id}`, structuredClone(value));
-              },
-              remove: async (accountId: string, id: string) => {
-                attempts.delete(`${accountId}:${id}`);
-              },
-              clear: async () => attempts.clear(),
-            },
-          }
-        : {}),
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      fetch: async (url, init) => {
-        const path = new URL(url).pathname + new URL(url).search;
-        // Every request the controller sends, as it leaves; the journey counts them.
-        sent.push(`${init.method ?? 'GET'} ${path}`);
-        // Like a network reply, each response arrives in a later task.
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        if (path.endsWith('/sign-in'))
-          return new Response(JSON.stringify({ user }), {
-            headers: { 'Set-Cookie': 'better-auth.session_token=test.signature; Path=/; HttpOnly' },
-          });
-        if (path.endsWith('/get-session'))
-          return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
-        if (path === '/api/groups') return json({ data: groups, status: 200 });
-        if (path === `/api/groups/${groupId}`) return json({ data: shown, status: 200 });
-        if (path === `/api/groups/${groupId}/settlements` && init.method === 'POST') {
-          paid = true;
-          const body = JSON.parse(String(init.body)) as { amount: number; note?: string };
-          return json(
+        201,
+      );
+    }
+    if (path.startsWith(`/api/groups/${groupId}/expenses?`))
+      return json(expensePage(pageOf(path), expensePages));
+    const expenseId = new URL(path, 'http://local').searchParams.get('expenseId');
+    if (path.startsWith(`/api/groups/${groupId}/activity?`))
+      return json(
+        expenseId
+          ? historyPage(expenseId, pageOf(path))
+          : activityPage(pageOf(path), activityPages),
+      );
+    if (path.startsWith(`/api/groups/${groupId}/expenses/`))
+      return json(expenseRecord(path.split('/').pop()!));
+    if (path === `/api/groups/${groupId}/balances`)
+      return json({
+        data: {
+          byCurrency: [
             {
-              status: 201,
-              data: {
-                _id: hex('e', 1),
-                group: groupId,
-                paidBy: person,
-                paidTo: alex,
-                createdBy: person,
-                amount: body.amount,
-                amountMinor: Math.round(body.amount * 100),
-                moneyVersion: 1,
-                currency: 'INR',
-                note: body.note ?? '',
-                createdAt: iso,
-                updatedAt: iso,
-              },
+              currency: 'INR',
+              balances: [{ user: person, balance: paid ? 0 : -30 }],
+              debts: paid ? [] : [{ from: person, to: alex, amount: 30 }],
             },
-            201,
-          );
-        }
-        // Home's figures say which Groups they cover, as Splitbook's do (#333): none here, so no
-        // Group the list leaves out, and each row's balance stays unknown, as this profile has
-        // always measured it.
-        if (path === '/api/user/balances')
-          return json({
-            data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }], groups: [] },
-            status: 200,
-          });
-        if (path.startsWith(`/api/groups/${groupId}/expenses?`))
-          return json(expensePage(pageOf(path), expensePages));
-        const expenseId = new URL(path, 'http://local').searchParams.get('expenseId');
-        if (path.startsWith(`/api/groups/${groupId}/activity?`))
-          return json(
-            expenseId
-              ? historyPage(expenseId, pageOf(path))
-              : activityPage(pageOf(path), activityPages),
-          );
-        if (path.startsWith(`/api/groups/${groupId}/expenses/`))
-          return json(expenseRecord(path.split('/').pop()!));
-        if (path === `/api/groups/${groupId}/balances`)
-          return json({
-            data: {
-              byCurrency: [
-                {
-                  currency: 'INR',
-                  balances: [{ user: person, balance: paid ? 0 : -30 }],
-                  debts: paid ? [] : [{ from: person, to: alex, amount: 30 }],
-                },
-              ],
-            },
-            status: 200,
-          });
-        return json({}, 404);
+          ],
+        },
+        status: 200,
+      });
+    return json({}, 404);
+  });
+  const phone = testPhone(server, {
+    now: new Date(2026, 8, 27, 12).getTime(),
+    recordSeparator: ':',
+    settlementSeparator: ':',
+    newSubmissionKey: () => 'render-profile-0001',
+    purge: [],
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
       },
     },
-  );
+  });
+  const drafts = phone.stores.expenseDrafts;
+  for (const store of [drafts, phone.stores.settlementAttempts]) {
+    delete (store as AccountGroupRecordStore).keys;
+    delete (store as AccountGroupRecordStore).list;
+  }
+  // Draft persistence always awaited this gate, even when the fixture had no held write.
+  drafts.stallPersistently('save', () => draftGate ?? Promise.resolve());
+  const controller = phone.open({
+    parts: { settlementAttempts: payment ? phone.stores.settlementAttempts : undefined },
+  });
+  const clock = phone.clock;
   return {
     controller,
     clock,

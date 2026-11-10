@@ -7,7 +7,9 @@ import {
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createMobileController, type MobileController } from '../data/mobile-controller';
+import type { MobileController } from '../data/mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { AccountGroupRecordStore } from '../data/account-record-storage';
 import type { MobileFetch } from '../data/types';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
@@ -24,7 +26,6 @@ import {
   unreadText,
 } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 import { TagManager, doneShownFor } from './tag-manager';
 import { ThemeContext } from './theme';
 
@@ -80,12 +81,8 @@ function held() {
 }
 const snapshot = () => ({ canManage: server.admin, tags: structuredClone(server.tags) });
 
-const fetch: MobileFetch = async (url, init) => {
+const answerTagRequest: MobileFetch = async (url, init) => {
   const path = new URL(url).pathname;
-  if (path.endsWith('/sign-in'))
-    return json({ user: alex }, 200, 'better-auth.session_token=alex.signature; Max-Age=2592000');
-  if (path.endsWith('/get-session'))
-    return json({ user: alex, session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' } });
   if (path.endsWith('/tag-actions') && init.method === 'POST') {
     const command = JSON.parse(String(init.body)) as TagCommand;
     if (server.refusal)
@@ -137,23 +134,23 @@ const fetch: MobileFetch = async (url, init) => {
   return json({ data: {} });
 };
 
-/** Kept Tag actions, on this device only. */
-function memoryRecords(): AccountGroupRecordStore {
-  const records = new Map<string, unknown>();
-  return {
-    load: async (accountId, id) => structuredClone(records.get(accountId + id) ?? null),
-    save: async (accountId, id, value) => {
-      records.set(accountId + id, structuredClone(value));
-    },
-    remove: async (accountId, id) => {
-      records.delete(accountId + id);
-    },
-    clear: async () => records.clear(),
-    keys: async (accountId) =>
-      [...records.keys()]
-        .filter((key) => key.startsWith(accountId))
-        .map((key) => key.slice(accountId.length)),
-  };
+/** Only this file's Tag command/receipt ledger is special; sessions belong to the fake. */
+function tagBackend() {
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.groups = [];
+  backend.auth.cookie = () => 'better-auth.session_token=alex.signature';
+  backend.reply('*', '*', ({ url, init }) => {
+    if (
+      ['/api/auth/demo-persona/sign-in', '/api/auth/get-session', '/api/auth/sign-out'].includes(
+        url.pathname,
+      )
+    )
+      return undefined;
+    // The original unsupported reads returned malformed empty data; retain that answer for #1075.
+    return answerTagRequest(url.href, init);
+  });
+  return backend;
 }
 
 let controller: MobileController | undefined;
@@ -219,43 +216,29 @@ const shows = (node: unknown, text: string): boolean =>
 
 /** Alex's Tags at 200% text, once they are read. */
 async function openManageTags(offline = false) {
-  let cookie: string | null = null;
-  let owner: string | null = null;
-  const tagRequests = memoryRecords();
-  controller = createMobileController(
-    {
-      apiBaseUrl: 'http://tags.example.test',
-      authOrigin: 'http://tags.example.test',
-      developmentPersonaEnabled: true,
-    },
-    {
-      fetch,
-      tagRequests,
-      newSubmissionKey: () => crypto.randomUUID(),
+  const phone = testPhone(tagBackend(), {
+    origin: 'http://tags.example.test',
+    newSubmissionKey: () => crypto.randomUUID(),
+    purge: ['tagRequests'],
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
       accountLocal: {
-        owner: {
-          load: async () => owner,
-          save: async (next) => {
-            owner = next;
-          },
-          clear: async () => {
-            owner = null;
-          },
-        },
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
         cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [tagRequests],
-      },
-      credentials: {
-        load: async () => cookie,
-        save: async (next) => {
-          cookie = next;
-        },
-        clear: async () => {
-          cookie = null;
-        },
       },
     },
-  );
+  });
+  delete (phone.stores.tagRequests as AccountGroupRecordStore).list;
+  controller = phone.open();
   await controller.signIn('alex');
   await showManageTags(offline);
 }
@@ -854,71 +837,40 @@ describe.each(['light', 'dark'] as const)('a long Tag at large text in %s (#639)
  * online and may open Tags, then the app starts again without a connection.
  */
 function coldPhone() {
-  let cookie: string | null = null,
-    owner: string | null = null,
-    identity: unknown = null,
-    offline = false;
-  const cache = new Map<string, unknown>();
-  const savedQueries = savedQueriesIn(cache);
-  const tagRequests = memoryRecords();
-  const boot = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://tags.example.test',
-        authOrigin: 'http://tags.example.test',
-        developmentPersonaEnabled: true,
+  const backend = tagBackend();
+  const phone = testPhone(backend, {
+    origin: 'http://tags.example.test',
+    newSubmissionKey: () => crypto.randomUUID(),
+    purge: ['tagRequests', 'savedQueries'],
+    parts: {
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
       },
-      {
-        fetch: async (url, init) => {
-          if (offline) throw new TypeError('Network request failed');
-          return fetch(url, init);
-        },
-        tagRequests,
-        savedQueries,
-        newSubmissionKey: () => crypto.randomUUID(),
-        offlineIdentity: {
-          load: async () => structuredClone(identity),
-          save: async (next) => {
-            identity = structuredClone(next);
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (next) => {
-              owner = next;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [tagRequests, savedQueries],
-        },
-        credentials: {
-          load: async () => cookie,
-          save: async (next) => {
-            cookie = next;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-      },
-    );
+    },
+  });
+  delete phone.stores.savedQueries.retainGroups;
+  delete (phone.stores.tagRequests as AccountGroupRecordStore).list;
+  const boot = () => phone.open();
   return {
     boot,
     /** Whether this phone keeps Harbour Flat's Tags. */
-    keepsTags: () => cache.has(`${alex.id}/api/groups/${groupId}/tag-actions`),
+    keepsTags: () =>
+      phone.stores.savedQueries.records.has(`${alex.id}/api/groups/${groupId}/tag-actions`),
     /** The app is closed and started again, without a connection. */
     async restartOffline() {
       act(() => renderer?.unmount());
       renderer = undefined;
       controller?.dispose();
-      offline = true;
+      backend.online = false;
       controller = boot();
       await controller.restore();
       expect(controller.getSnapshot()).toMatchObject({

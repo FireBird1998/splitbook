@@ -10,8 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { emptyExpenseEditor } from '../data/expense-draft';
-import { createMobileController, type MobileController } from '../data/mobile-controller';
-import type { FetchResponse, MobileFetch } from '../data/types';
+import type { MobileController } from '../data/mobile-controller';
+import type { AccountGroupRecordStore } from '../data/account-record-storage';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
+import type { FetchResponse } from '../data/types';
 import { clockTime } from './activity-format';
 import { ExpenseEditor } from './expense-editor';
 import { recordOutline, type RecordOutline } from './expense-record-view';
@@ -326,35 +329,30 @@ const json = (data: unknown, status = 200): FetchResponse =>
 
 function backend() {
   const writes: string[] = [];
-  const stored = new Map<string, unknown>();
-  const drafts = {
-    load: async (accountId: string, id: string) =>
-      structuredClone(stored.get(`${accountId}:${id}`) ?? null),
-    save: async (accountId: string, id: string, value: unknown) => {
-      stored.set(`${accountId}:${id}`, structuredClone(value));
-    },
-    remove: async (accountId: string, id: string) => {
-      stored.delete(`${accountId}:${id}`);
-    },
-    clear: async () => stored.clear(),
-  };
   const deleted = new Set<string>();
   let held: Promise<void> | null = null;
   let unreachable = false;
-  const fetch: MobileFetch = async (url, init) => {
-    const address = new URL(url);
-    const path = address.pathname;
-    const method = init.method ?? 'GET';
+  const server = fakeSplitbook();
+  server.world.people.alex = { ...alex, image: null };
+  server.auth.cookie = () => 'better-auth.session_token=alex.signature';
+  server.world.groups = [group];
+  server.world.expenses[groupId] = expensePage();
+  server.world.balances[groupId] = { currency: 'INR', balances: [], debts: [], byCurrency: [] };
+  server.reply('*', '*', async ({ url: address, init }) => {
+    const path = address.pathname,
+      method = init.method ?? 'GET';
     if (method !== 'GET' && path.startsWith('/api/groups')) writes.push(`${method} ${path}`);
-    if (path.endsWith('/demo-persona/sign-in'))
-      return new Response(JSON.stringify({ user: alex }), {
-        headers: { 'Set-Cookie': 'better-auth.session_token=alex.signature; Max-Age=2592000' },
-      });
-    if (path.endsWith('/get-session'))
-      return json({ user: alex, session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' } });
-    if (path === '/api/groups') return json({ data: [group], status: 200 });
-    if (path === '/api/user/balances') return json({ data: { buckets: [] }, status: 200 });
-    if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
+    if (
+      [
+        '/api/auth/demo-persona/sign-in',
+        '/api/auth/get-session',
+        '/api/auth/sign-out',
+        '/api/groups',
+        '/api/user/balances',
+        `/api/groups/${groupId}`,
+      ].includes(path)
+    )
+      return undefined;
     const id = path.split('/').pop()!;
     if (path === `/api/groups/${groupId}/expenses/${id}` && records[id]) {
       if (method === 'DELETE') deleted.add(id);
@@ -363,17 +361,7 @@ function backend() {
         data: { ...records[id], isDeleted: deleted.has(id) || records[id].isDeleted },
       });
     }
-    if (path.endsWith('/expenses'))
-      return json({
-        status: 200,
-        data: {
-          expenses: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
-        },
-      });
-    if (path.endsWith('/balances'))
-      return json({ data: { currency: 'INR', balances: [], debts: [], byCurrency: [] } });
+    if (path.endsWith('/expenses') || path.endsWith('/balances')) return undefined;
     const expenseId = address.searchParams.get('expenseId');
     if (path.endsWith('/activity') && expenseId !== null) {
       await held;
@@ -414,44 +402,32 @@ function backend() {
         },
       });
     return json({ error: 'Unavailable', status: 404 }, 404);
-  };
-  let cookie: string | null = null;
-  let account: string | null = null;
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
-    },
-    {
-      fetch,
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      expenseDrafts: drafts,
+  });
+  const phone = testPhone(server, {
+    now: Date.parse('2026-09-30T09:00:00.000Z'),
+    recordSeparator: ':',
+    newSubmissionKey: () => 'native-record-test-0001',
+    purge: ['expenseDrafts'],
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
       accountLocal: {
-        owner: {
-          load: async () => account,
-          save: async (value) => {
-            account = value;
-          },
-          clear: async () => {
-            account = null;
-          },
-        },
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
         cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [drafts],
       },
-      now: () => Date.parse('2026-09-30T09:00:00.000Z'),
-      newSubmissionKey: () => 'native-record-test-0001',
     },
-  );
+  });
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
+  const controller = phone.open();
   return {
     controller,
     writes,

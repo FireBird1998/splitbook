@@ -816,3 +816,19 @@ it('reads configured Connected assistants and Group scope through the controller
     assistants: [{ name: 'Fictional Helper', groups: { reached: 1, of: 1 } }],
   });
 });
+
+it('can fail a session check without revoking its still-valid cookie', async () => {
+  const server = fakeSplitbook();
+  const cookie = server.auth.issue('alex');
+  server.auth.sessionStatus = 500;
+  const failed = await server.fetch('http://local/api/auth/get-session', {
+    headers: { Cookie: cookie },
+  });
+  expect(failed.status).toBe(500);
+  server.auth.sessionStatus = 200;
+  const recovered = await server.fetch('http://local/api/auth/get-session', {
+    headers: { Cookie: cookie },
+  });
+  expect(recovered.status).toBe(200);
+  expect(await recovered.json()).toMatchObject({ user: { id: 'a00000000000000000000001' } });
+});

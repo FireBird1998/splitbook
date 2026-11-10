@@ -8,7 +8,10 @@ import {
 } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeStoredSession } from './data/cookies';
-import { createMobileController, type MobileController } from './data/mobile-controller';
+import type { MobileController } from './data/mobile-controller';
+import type { AccountGroupRecordStore } from './data/account-record-storage';
+import { testPhone } from './test-utils/test-phone';
+import { fakeSplitbook } from './test-utils/fake-splitbook';
 import type { FetchResponse } from './data/types';
 import { balanceWidth, HomeBalances } from './ui/home';
 import { refreshFeedback, refreshedLabel } from './ui/refresh-feedback';
@@ -33,7 +36,6 @@ import {
   timing,
 } from './test-utils/native';
 import { progressHeight, sweepTrack } from './ui/compact';
-import { savedQueriesIn } from './test-utils/saved-queries';
 import { mockDeviceLocale } from './test-utils/device-locale';
 
 /** The phone's zone as the app reads it, so these paths hold in every zone CI runs (#730). */
@@ -147,7 +149,6 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 /** One phone: its stored session and saved views outlive each controller, as across restarts. */
 function device() {
-  const clock = { now: new Date(2026, 8, 27, 10, 42).getTime() };
   const network = {
     online: true,
     session: 200,
@@ -181,16 +182,8 @@ function device() {
    * read (`failDraftRead`).
    */
   const storage = { failRemoval: false, failDraftRead: false };
-  let cookie: string | null = null,
-    owner: string | null = null,
-    identity: unknown = null,
-    untrusted: unknown = null;
-  const cache = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>(),
-    payments = new Map<string, unknown>();
   const holds: { prefix: string; arrive: () => void; response: Promise<void> }[] = [];
   /** Every request this phone sent, as `METHOD /path?query`. */
-  const sent: string[] = [];
   /** Each payment this phone sent, as its body. */
   const paymentBodies: Record<string, unknown>[] = [];
   /** Storage calls to hold, in order: a slow device's next reads, writes or removals. */
@@ -202,40 +195,77 @@ function device() {
     held.arrive();
     await held.response;
   };
-  const respond = (path: string, method: string, body?: unknown): FetchResponse => {
-    if (path.endsWith('/sign-out')) return json({ success: true });
-    if (path.endsWith('/sign-in'))
-      return new Response(JSON.stringify({ user: alex }), {
-        headers: { 'Set-Cookie': 'better-auth.session_token=test.signature; Path=/; HttpOnly' },
-      });
-    if (path.endsWith('/get-session'))
-      return network.session === 200
-        ? json({ user: alex, session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' } })
-        : json({}, network.session);
-    /** Lisbon Offsite as a Trip in three currencies, while `trip` is set. */
-    const asTrip = (group: (typeof groups)[number]) =>
-      network.trip && group._id === lisbon
-        ? { ...group, category: 'trip', alternateCurrencies: ['EUR', 'JPY'] }
-        : group;
-    if (path === '/api/groups')
-      return json({ data: network.noGroups ? [] : groups.map(asTrip), status: 200 });
-    if (path === '/api/user/balances')
-      return json({
-        data: {
-          buckets: network.noGroups
-            ? []
-            : [{ currency: 'INR', youOwe: network.paid ? 0 : 30, youAreOwed: 0 }],
-          // Home's figures say which Groups they cover, as Splitbook's do (#333): with no Group
-          // balances, none, so each row's balance stays unknown.
-          groups: network.groupBalances
-            ? [
-                { groupId: maple, balances: [{ currency: 'INR', balance: -30 }] },
-                { groupId: lisbon, balances: [] },
-              ]
-            : [],
-        },
-        status: 200,
-      });
+  const server = fakeSplitbook();
+  // The original fixture answered every persona choice as Alex; keep that inconsistency for #1075.
+  server.world.people.alex = alex;
+  server.world.people.sam = alex;
+  server.world.people.priya = alex;
+  server.auth.cookie = () => 'better-auth.session_token=test.signature';
+  Object.defineProperty(network, 'online', {
+    get: () => server.online,
+    set: (value: boolean) => {
+      server.online = value;
+    },
+  });
+  Object.defineProperty(network, 'session', {
+    get: () => server.auth.sessionStatus,
+    set: (value: number) => {
+      server.auth.sessionStatus = value;
+    },
+  });
+  /** Lisbon Offsite as a Trip in three currencies, while `trip` is set. */
+  const asTrip = (group: (typeof groups)[number]) =>
+    network.trip && group._id === lisbon
+      ? { ...group, category: 'trip', alternateCurrencies: ['EUR', 'JPY'] }
+      : group;
+  Object.defineProperty(server.world, 'groups', { get: () => groups.map(asTrip) });
+  Object.defineProperty(server.world.groupsByAccount, alex.id, {
+    get: () => (network.noGroups ? [] : groups.map(asTrip)),
+  });
+  Object.defineProperty(server.world, 'home', {
+    get: () => ({
+      buckets: network.noGroups
+        ? []
+        : [{ currency: 'INR', youOwe: network.paid ? 0 : 30, youAreOwed: 0 }],
+      // Unknown row balances stay unknown unless the figures cover their Groups (#333).
+      groups: network.groupBalances
+        ? [
+            { groupId: maple, balances: [{ currency: 'INR', balance: -30 }] },
+            { groupId: lisbon, balances: [] },
+          ]
+        : [],
+    }),
+  });
+  for (const group of groups)
+    server.world.expenses[group._id] = {
+      expenses: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
+    };
+  server.world.expenseRecords[maple] = { [expenseId]: expense };
+  for (const group of groups)
+    server.world.rates[group._id] = {
+      'EUR→INR': {
+        rate: '92.1',
+        source: 'frankfurter',
+        asOf: '2026-10-20',
+        fetchedAt: iso,
+        ageDays: 1,
+        attributionRequired: false,
+        attribution: null,
+      },
+    };
+  const respond = (path: string, method: string, body?: unknown): FetchResponse | undefined => {
+    if (
+      [
+        '/api/auth/demo-persona/sign-in',
+        '/api/auth/get-session',
+        '/api/auth/sign-out',
+        '/api/groups',
+        '/api/user/balances',
+      ].includes(path)
+    )
+      return undefined;
     // Sam's invitation to Cedar Flat, a Household Alex hasn't joined.
     if (path === '/api/join/deadbeef')
       return json({
@@ -325,41 +355,15 @@ function device() {
         },
       });
     }
-    if (path === `/api/groups/${maple}/expenses/${expenseId}`)
-      return json({ data: expense, status: 200 });
+    if (
+      path === `/api/groups/${maple}/expenses/${expenseId}` ||
+      path.startsWith(`/api/groups/${id}/expenses?`) ||
+      path.startsWith(`/api/groups/${id}/rates?`)
+    )
+      return undefined;
+    // The old create receipt deliberately lacked a full Expense DTO; retain it for #1075.
     if (path === `/api/groups/${id}/expenses` && method === 'POST')
       return json({ data: { _id: 'e00000000000000000000009', group: id }, status: 201 }, 201);
-    if (path.startsWith(`/api/groups/${id}/expenses?`))
-      return json({
-        status: 200,
-        data: {
-          expenses: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          summary: {
-            count: 0,
-            totalsByCurrency: [],
-            userOwes: 0,
-            userGetsBack: 0,
-            byMember: [],
-          },
-        },
-      });
-    // Frankfurter's rates of 20 Oct: ₹92.10 for each euro (#726).
-    if (path === `/api/groups/${id}/rates?from=EUR&to=INR`)
-      return json({
-        status: 200,
-        data: {
-          suggestion: {
-            rate: '92.1',
-            source: 'frankfurter',
-            asOf: '2026-10-20',
-            fetchedAt: iso,
-            ageDays: 1,
-            attributionRequired: false,
-            attribution: null,
-          },
-        },
-      });
     const payment = typeof body === 'string' ? JSON.parse(body) : null;
     // Alex settles both Debts to Sam in one payment (#734): one Settlement for each.
     if (path === `/api/groups/${id}/settlements/batch` && method === 'POST') {
@@ -569,116 +573,65 @@ function device() {
       });
     return json({}, 404);
   };
-  const controller = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
+  server.reply('*', '*', async ({ path, init }) => {
+    if (/\/settlements(\/batch)?$/.test(path) && init.method === 'POST')
+      paymentBodies.push(JSON.parse(String(init.body)));
+    const index = holds.findIndex((item) => path.startsWith(item.prefix));
+    if (index >= 0) {
+      const [item] = holds.splice(index, 1);
+      item.arrive();
+      await item.response;
+      if (!network.online) throw new Error('Offline');
+    }
+    return respond(path, init.method ?? 'GET', init.body);
+  });
+  const phone = testPhone(server, {
+    now: new Date(2026, 8, 27, 10, 42).getTime(),
+    recordSeparator: ':',
+    settlementSeparator: ':',
+    newSubmissionKey: () => 'app-states-test-0001',
+    purge: ['savedQueries', 'settlementAttempts'],
+    parts: {
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        signOutRecord: undefined,
+        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
       },
-      {
-        now: () => clock.now,
-        newSubmissionKey: () => 'app-states-test-0001',
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity),
-          save: async (value) => {
-            identity = structuredClone(value);
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
-        // A payment's retry identity, stored before it is sent.
-        settlementAttempts: {
-          load: async (account, id) => structuredClone(payments.get(`${account}:${id}`) ?? null),
-          save: async (account, id, value) => {
-            payments.set(`${account}:${id}`, structuredClone(value));
-          },
-          remove: async (account, id) => {
-            payments.delete(`${account}:${id}`);
-          },
-          clear: async () => payments.clear(),
-        },
-        savedQueries: savedQueriesIn(cache, {
-          load: async (account, path) => {
-            await disk();
-            return structuredClone(cache.get(account + path) ?? null);
-          },
-          remove: async (account, path) => {
-            await disk();
-            if (storage.failRemoval) throw new Error('The device storage is full');
-            cache.delete(account + path);
-          },
-        }),
-        expenseDrafts: {
-          load: async (account, id) => {
-            await disk();
-            if (storage.failDraftRead) throw new Error('The device storage is unreadable');
-            return structuredClone(drafts.get(`${account}:${id}`) ?? null);
-          },
-          save: async (account, id, value) => {
-            drafts.set(`${account}:${id}`, structuredClone(value));
-          },
-          remove: async (account, id) => {
-            drafts.delete(`${account}:${id}`);
-          },
-          clear: async () => drafts.clear(),
-        },
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          // Saved copies this phone couldn't remove, recorded for the next start (#212).
-          untrustedCopies: {
-            load: async () => structuredClone(untrusted),
-            save: async (value) => {
-              untrusted = structuredClone(value);
-            },
-            clear: async () => {
-              untrusted = null;
-            },
-          },
-          // As the app registers them: sign-out and an account change clear the saved copies.
-          stores: [{ clear: async () => cache.clear() }, { clear: async () => payments.clear() }],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname + new URL(url).search;
-          sent.push(`${init.method ?? 'GET'} ${path}`);
-          if (/\/settlements(\/batch)?$/.test(path) && init.method === 'POST')
-            paymentBodies.push(JSON.parse(String(init.body)));
-          if (!network.online) throw new Error('Offline');
-          const index = holds.findIndex((item) => path.startsWith(item.prefix));
-          if (index >= 0) {
-            const [item] = holds.splice(index, 1);
-            item.arrive();
-            await item.response;
-            // The connection may have dropped while it waited.
-            if (!network.online) throw new Error('Offline');
-          }
-          return respond(path, init.method ?? 'GET', init.body);
-        },
-      },
-    );
+    },
+  });
+  const clock = phone.clock,
+    cache = phone.stores.savedQueries.records;
+  // Preserve the original slow native read's extra turn, even when nothing is held.
+  phone.stores.savedQueries.stallPersistently('load', disk);
+  phone.stores.savedQueries.stallPersistently('remove', disk);
+  phone.stores.savedQueries.failPersistently(
+    'remove',
+    new Error('The device storage is full'),
+    () => storage.failRemoval,
+  );
+  delete phone.stores.savedQueries.retainGroups;
+  phone.stores.expenseDrafts.stallPersistently('load', disk);
+  phone.stores.expenseDrafts.failPersistently(
+    'load',
+    new Error('The device storage is unreadable'),
+    () => storage.failDraftRead,
+  );
+  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts]) {
+    delete (store as AccountGroupRecordStore).keys;
+    delete (store as AccountGroupRecordStore).list;
+  }
+  const controller = () => phone.open();
+  // The complete fake log includes failed offline attempts, like the original transport.
+  const logged = server.sent();
   return {
     clock,
     network,
-    sent,
+    sent: logged,
     paymentBodies,
     storage,
     controller,
@@ -714,7 +667,9 @@ function device() {
     },
     /** The saved session as an earlier version saved it: the cookie alone, unverified (#200). */
     unverifySession() {
-      cookie = cookie && (decodeStoredSession(cookie, false)?.cookie ?? cookie);
+      const cookie = phone.stores.credentials.value;
+      phone.stores.credentials.value =
+        cookie && (decodeStoredSession(cookie, false)?.cookie ?? cookie);
     },
   };
 }
