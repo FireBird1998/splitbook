@@ -22,8 +22,8 @@ import { parseGroups } from './dto';
 import { parseHomeBalances } from './financial-dto';
 import { parseHomeBalancesResponse } from '@splitbook/shared/home-balances-read';
 import { cachedRead } from './offline-cache';
-import { keepInvalidated, queryOwner } from './query-owner';
-import { createSavedCopyQueue, notSaved, notSavedHere, type Envelope } from './saved-read-engine';
+import { queryOwner } from './query-owner';
+import { createSavedReadEngine, parseOnce, type Envelope } from './saved-read-engine';
 import { RequestError, Superseded } from './transport';
 import type {
   AccountStorageLease,
@@ -112,23 +112,15 @@ export function draftSummaries(
 }
 
 /** One parse per answer: structural sharing keeps an unchanged answer, and its rows, the same. */
-const memo = <T>(parse: (value: unknown) => T) => {
-  const parsed = new WeakMap<object, T>();
-  return (value: unknown) => {
-    const known = parsed.get(value as object);
-    if (known) return known;
-    const fresh = parse(value);
-    parsed.set(value as object, fresh);
-    return fresh;
-  };
-};
-const listOf = memo(parseGroups);
-const figuresOf = memo(parseHomeBalances);
+const parsedList = parseOnce(parseGroups);
+const listOf = (value: unknown) => parsedList(value, '');
+const parsedFigures = parseOnce(parseHomeBalances);
+const figuresOf = (value: unknown) => parsedFigures(value, '');
 /** The Groups Home's figures were worked out over, or null when they don't say. */
-const namedOf = memo(
-  (value: unknown) =>
-    parseHomeBalancesResponse(value).groups?.map(({ groupId }) => groupId) ?? null,
+const parsedNames = parseOnce(
+  (value) => parseHomeBalancesResponse(value).groups?.map(({ groupId }) => groupId) ?? null,
 );
+const namedOf = (value: unknown) => parsedNames(value, '');
 
 /** `shown` again when nothing in `next` differs from it, so an unchanged read publishes nothing. */
 const same = <T extends object>(shown: T, next: T): T =>
@@ -243,6 +235,7 @@ export interface HomeSession {
   shows(): boolean;
   /** No live session check has succeeded since the last offline answer. */
   offline(): boolean;
+  freshness: number;
   lease(): AccountStorageLease | null;
   /** The account lease's own checks, at write time: still this account, with no clean-up. */
   owns(accountId: string): boolean;
@@ -289,7 +282,6 @@ const wired = new WeakMap<object, object>();
  */
 export function createHomeQueries(session: HomeSession) {
   const { client, rows } = session;
-  const queue = createSavedCopyQueue();
   /** Runs inside `quietly`: its reads' starts publish nothing, the publish after it shows them. */
   let quiet = 0;
   const reads = new Map<string, HomeRead>();
@@ -326,18 +318,21 @@ export function createHomeQueries(session: HomeSession) {
       return false;
     }
   };
-  /** How often `forget` removed each row: one being written meanwhile goes once it lands. */
-  const forgotten = new Map<string, number>();
   /** This device's saved figures hidden from Home: they name a Group a newer list leaves out. */
   const hidden = new WeakSet<object>();
-  /** The persister's row for `path`, read on the account queue, checked like every saved copy. */
-  const savedRow = async (lease: AccountStorageLease, path: string) =>
-    cachedRead(
-      await lease.write(() => rows!.load(lease.accountId, path)),
-      lease.accountId,
-      path,
-      session.now(),
-    );
+  const engine = createSavedReadEngine(session, {
+    path: (key) => queryKeyPath(key),
+    readable,
+    ownsKey: (key) => key[0] === 'groups' || key[0] === 'home',
+    rowScope: { kind: 'account', distrust: (key) => [key[0]] },
+    refusal: 'forbidden-only',
+    preview: 'fetching-unanswered',
+    // Keep native/client defaults per flag; the Groups mount rule stays in options (#673).
+    automaticRefetch: 'inherit',
+    cancelOnRemove: false,
+    staleWhenOffline: false,
+    freshnessSource: 'unless-saved',
+  });
   /**
    * The Groups this device's saved list lists, inside a lease write: null if it can't be read, or
    * is refused for now (dated after this device's clock), since it may list a Group later.
@@ -367,66 +362,9 @@ export function createHomeQueries(session: HomeSession) {
     }
   };
   /**
-   * Saves an answer as its row on the saved-copy queue, where a newer answer replaces it. The
-   * session, the account and the read's query owner are checked at write time, so nothing lands
-   * after sign-out, an account change or a change that made it obsolete.
-   */
-  const saveRow = (
-    key: QueryKey,
-    owner: number,
-    owns: () => boolean,
-    { refreshedAt, value }: Envelope,
-  ) => {
-    const lease = session.lease(),
-      path = queryKeyPath(key);
-    if (!lease || !rows) return;
-    queue.push(path, async () => {
-      if (!session.current(owner) || !session.owns(lease.accountId)) return;
-      if (!owns()) return;
-      const { accountId } = lease,
-        removed = forgotten.get(path),
-        row = { version: 1, accountId, path, groupId: null, refreshedAt, value };
-      await rows.save(accountId, path, row).catch(() => {
-        const { offline } = session.snapshot();
-        if (session.current(owner))
-          session.publish({ offline: { ...offline, message: notSavedHere } });
-      });
-      // Removed while it was being written: it goes too, since `forget` never waits for it.
-      if (forgotten.get(path) !== removed)
-        await rows.remove(accountId, path).catch(() => session.distrust(accountId, [key[0]]));
-    });
-  };
-  /**
-   * While a query is first read, the row this device saved for it shows, with its own time. Never
-   * one a change, a denial or a failed removal made obsolete, one it can't read, and never once
-   * the read answered.
-   */
-  const restoreRow = async (key: QueryKey, owner: number, read: HomeRead) => {
-    const lease = session.lease(),
-      owns = queryOwner(client, key);
-    if (!lease || !rows) return;
-    const row = await savedRow(lease, queryKeyPath(key)).catch(() => null);
-    const state = held(key);
-    // Its load waits on the account queue, where an answer's trim may already be waiting too.
-    if (
-      !row ||
-      read.answered ||
-      !session.current(owner) ||
-      !owns() ||
-      state?.fetchStatus !== 'fetching' ||
-      state.data !== undefined ||
-      row.refreshedAt <= session.distrusted(key, true) ||
-      !readable(key, row.value)
-    )
-      return;
-    client.setQueryData(key, { source: 'saved', refreshedAt: row.refreshedAt, value: row.value });
-  };
-
-  /**
-   * One read of a query. An answer still current is checked by `accept`, then what it sets off
-   * runs, and it is saved as its row; when Splitbook can't be reached, the row saved here answers
-   * with its own time, offline (M4-5). It takes no signal, so leaving Home never cancels it: its
-   * answer shows wherever it lands (#190).
+   * One read of a query. Home chooses when its preview starts, awaits acceptance side effects,
+   * and saves inside this read before it answers. The engine owns row fallback, ownership and
+   * queued saving. It takes no signal: leaving Home never cancels it (#190).
    */
   const readHome = async (
     key: QueryKey,
@@ -436,41 +374,24 @@ export function createHomeQueries(session: HomeSession) {
     before?: Promise<unknown>,
   ): Promise<Envelope> => {
     if (before) await before.catch(() => undefined);
-    const path = queryKeyPath(key),
-      owner = session.generation(),
-      owns = queryOwner(client, key),
-      lease = session.lease();
-    const obsolete = () => !session.current(owner) || !owns();
-    if (!shown()) void restoreRow(key, owner, read).catch(() => undefined);
-    let value: unknown;
+    const owner = session.generation(),
+      owns = queryOwner(client, key);
     read.since = answers;
-    try {
-      value = await session.read(path, owner);
-      read.answered = true;
-    } catch (error) {
-      read.answered = true;
-      if (!(error instanceof RequestError) || !error.networkFailure || !lease || !rows) throw error;
-      const row = obsolete() ? null : await savedRow(lease, path).catch(() => null);
-      // Overtaken by a change, a denial or a Groups list: it was read again, not shown.
-      if (obsolete()) throw new Superseded();
-      const saved =
-        row && row.refreshedAt > session.distrusted(key, false) && readable(key, row.value)
-          ? row
-          : null;
-      keepInvalidated(client, key);
-      session.answered(path, saved?.refreshedAt ?? null);
-      if (!saved)
-        throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
-      return { source: 'saved', refreshedAt: saved.refreshedAt, value: saved.value };
-    }
-    // An answer a change, a denial or a newer Groups list overtook sets off nothing.
-    if (obsolete()) throw new Superseded();
-    await accept(value, owner, read)?.();
-    const verified: Envelope = { source: 'network', refreshedAt: Date.now(), value };
-    if (obsolete()) throw new Superseded();
-    session.answered(path);
-    saveRow(key, owner, owns, verified);
-    return verified;
+    const answer = await engine.read({
+      key,
+      preview: !shown(),
+      // Home's list ordering changes at the same transport boundary as the preview guard.
+      onAnswer: () => {
+        read.answered = true;
+      },
+      accept: async (value) => {
+        // An overtaken answer sets off nothing; the engine checks ownership before and after
+        // this acceptance, including whatever its trim or outdated action waits for (#323).
+        await accept(value, owner, read)?.();
+      },
+    });
+    if (answer.source === 'network') engine.save(key, { owner, owns }, answer);
+    return answer;
   };
   const queryFn =
     (accept: Accept, shown: () => boolean) =>
@@ -615,7 +536,7 @@ export function createHomeQueries(session: HomeSession) {
         }
         // An older list still waiting to be saved would list them again: this list moves no
         // query owner, so nothing else refuses it.
-        queue.drop(listPath);
+        engine.drop([listPath]);
         await forget(lease.accountId);
       });
     } catch (error) {
@@ -630,6 +551,7 @@ export function createHomeQueries(session: HomeSession) {
   };
   const options = (): QueryObserverOptions<Envelope, Error, Envelope, Envelope, QueryKey>[] => [
     {
+      ...engine.shared,
       queryKey: keys()[0],
       queryFn: queryFn(acceptList, () => session.snapshot().groups.data.length > 0),
       // A saved list is never current. Returning from a live Group read must replace it too,
@@ -638,6 +560,7 @@ export function createHomeQueries(session: HomeSession) {
       refetchOnMount: (query) => query.state.data?.source === 'saved' && !session.offline(),
     },
     {
+      ...engine.shared,
       queryKey: keys()[1],
       queryFn: queryFn(acceptFigures, () => session.snapshot().home.data !== null),
       enabled: !figuresWait,
@@ -713,11 +636,8 @@ export function createHomeQueries(session: HomeSession) {
    * is refused, since what made these obsolete has already removed their query owner (or, for a list
    * that lost a Group, `trim` dropped it).
    */
-  const forget = async (accountId: string, paths = [listPath, homePath]) => {
-    if (!rows) return;
-    for (const path of paths) forgotten.set(path, (forgotten.get(path) ?? 0) + 1);
-    for (const path of paths) await rows.remove(accountId, path);
-  };
+  const forget = (accountId: string, paths = [listPath, homePath]) =>
+    engine.forgetRows(accountId, paths);
   /** Home's Expense drafts (`draftSummaries`), read from this device whenever Home settles. */
   const listDrafts = async () => {
     const lease = session.lease(),
@@ -956,11 +876,11 @@ export function createHomeQueries(session: HomeSession) {
       };
     },
     /** Settles once no saved copy is being written. */
-    idle: () => queue.idle(),
+    idle: engine.idle,
     /** The session ended (M10-2): nothing waiting is written, nothing is observed or awaited. */
     reset() {
       unbind();
-      queue.cancel();
+      engine.reset();
       reads.clear();
       figuresWait = false;
       answers = 0;

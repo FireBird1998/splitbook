@@ -5,6 +5,7 @@ import {
   createSavedReadEngine,
   rowPaths,
   parseOnce,
+  savedReadFreshness,
 } from './saved-read-engine';
 import { RequestError, Superseded } from './transport';
 import type { RefusalRule, SavedReadPorts, SavedReadView } from './saved-read-engine';
@@ -14,6 +15,8 @@ import {
   expenseRecordKey,
   groupKey,
   groupBalancesKey,
+  groupsKey,
+  homeBalancesKey,
   queryKeyPath,
   type QueryKey,
 } from '@splitbook/shared/query-keys';
@@ -131,6 +134,8 @@ describe('saved reads', () => {
 function engineFixture(
   rule: RefusalRule = 'forbidden-only',
   preview: SavedReadView['preview'] = 'same-run-unanswered',
+  automaticRefetch: SavedReadView['automaticRefetch'] = false,
+  cancelOnRemove = true,
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, networkMode: 'always', gcTime: Infinity } },
@@ -207,8 +212,8 @@ function engineFixture(
     },
     refusal: rule,
     preview,
-    automaticRefetch: false,
-    cancelOnRemove: true,
+    automaticRefetch,
+    cancelOnRemove,
     staleWhenOffline: true,
   });
   const stop = engine.listen();
@@ -271,7 +276,11 @@ it('answers an offline restart from the saved wire row with its original time, n
     -Infinity,
   );
   f.state.offline = false;
-  f.state.read = async () => ({ title: 'Reconnected' });
+  const reconnected = deferred();
+  f.state.read = async () => {
+    reconnected.resolve();
+    return { title: 'Reconnected' };
+  };
   await f.fetch();
   await f.engine.idle();
   expect(await f.rows.load('account', f.path)).toMatchObject({
@@ -1115,4 +1124,393 @@ it('distrusts only the late ledger row when its removal fails in a two-scope vie
   });
   f.stop();
   f.client.clear();
+});
+
+it('does not restore a Home preview when the query is no longer fetching', async () => {
+  const f = engineFixture('forbidden-only', 'fetching-unanswered');
+  await f.seed();
+  const copy = await f.engine.restore(f.key, 1);
+  expect(copy).toBeNull();
+  expect(f.client.getQueryData(f.key)).toBeUndefined();
+  f.stop();
+  f.client.clear();
+});
+
+it('inherits each refetch default rather than turning every flag on for Home', async () => {
+  const f = engineFixture('forbidden-only', 'same-run-unanswered', 'inherit');
+  f.client.setDefaultOptions({
+    queries: {
+      ...f.client.getDefaultOptions().queries,
+      retryOnMount: false,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+    },
+  });
+  await f.fetch();
+  f.state.time = 31_001;
+  const reconnected = deferred();
+  f.state.read = async () => {
+    reconnected.resolve();
+    return { title: 'Reconnected' };
+  };
+  f.client.mount();
+  const observer = new QueryObserver(f.client, {
+    ...f.engine.shared,
+    queryKey: f.key,
+    queryFn: () => f.engine.read({ key: f.key, accept: () => undefined }),
+  });
+  const stop = observer.subscribe(() => undefined);
+  try {
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(f.client.getQueryData(f.key)).toMatchObject({ value: { title: 'Read answer' } });
+    onlineManager.setOnline(false);
+    onlineManager.setOnline(true);
+    await reconnected.promise;
+    await f.client.getQueryCache().find({ queryKey: f.key })?.promise;
+    expect(f.client.getQueryData(f.key)).toMatchObject({ value: { title: 'Reconnected' } });
+  } finally {
+    stop();
+    observer.destroy();
+    f.client.unmount();
+    f.stop();
+    f.client.clear();
+  }
+});
+
+it('gives an uncancelled Home read no signal and lets it finish after query removal', async () => {
+  const f = engineFixture('forbidden-only', 'fetching-unanswered', 'inherit', false);
+  const answer = deferredValue<unknown>();
+  let received: AbortSignal | undefined;
+  f.state.read = (_path, _owner, signal) => {
+    received = signal;
+    return answer.promise;
+  };
+  const reading = f.fetch();
+  const refused = expect(reading).rejects.toBeInstanceOf(Superseded);
+  try {
+    expect(received).toBeUndefined();
+    f.client.removeQueries({ queryKey: f.key });
+    answer.resolve({ title: 'Finished after removal' });
+    await refused;
+    expect(f.client.getQueryData(f.key)).toBeUndefined();
+  } finally {
+    f.client.removeQueries({ queryKey: f.key });
+    answer.resolve({ title: 'Finished after removal' });
+    await refused;
+    f.stop();
+    f.client.clear();
+  }
+});
+
+it.each([
+  ['network-only', { source: 'network' }, 1000, false, 30000],
+  ['network-only', { source: 'saved' }, 1000, false, -Infinity],
+  ['network-only', { source: 'network' }, 1001, false, -Infinity],
+  ['network-only', { source: 'network' }, 1000, true, -Infinity],
+  ['network-only', undefined, 0, false, -Infinity],
+  ['unless-saved', undefined, 0, false, 30000],
+  ['unless-saved', { plain: 'read' }, 1000, false, 30000],
+  ['unless-saved', { source: 'saved' }, 1000, false, -Infinity],
+  ['unless-saved', { source: 'network' }, 1001, false, -Infinity],
+] as const)(
+  'keeps %s freshness for %j stamped %i with offline=%s',
+  (source, data, dataUpdatedAt, offline, expected) => {
+    const f = engineFixture();
+    expect(savedReadFreshness({ state: { data, dataUpdatedAt } }, 30000, { source, offline })).toBe(
+      expected,
+    );
+    f.stop();
+    f.client.clear();
+  },
+);
+
+function accountFixture() {
+  const f = engineFixture();
+  f.stop();
+  const key = groupsKey(f.ports.account()),
+    other = homeBalancesKey(f.ports.account());
+  const marks = new Map<string, number>();
+  const engine = createSavedReadEngine(
+    {
+      ...f.ports,
+      answered: (path, saved) => f.ports.answered(path, saved),
+      distrusted: (key) => Math.max(f.state.mark, marks.get(`${key[2]}:${key[0]}`) ?? -Infinity),
+      distrust: (accountId, scopes) => {
+        for (const scope of scopes) marks.set(`${accountId}:${scope}`, Infinity);
+      },
+      rows: {
+        load: (accountId, path) => f.rows.load(accountId, path),
+        save: (accountId, path, value) => f.rows.save(accountId, path, value),
+        remove: (accountId, path) => f.rows.remove(accountId, path),
+        clear: () => f.rows.clear(),
+      },
+    },
+    {
+      path: (key) => queryKeyPath(key),
+      readable: (_key, value) => !!value && typeof value === 'object' && 'title' in value,
+      ownsKey: (key) => key[0] === 'groups' || key[0] === 'home',
+      rowScope: { kind: 'account', distrust: (key) => [key[0]] },
+      refusal: 'forbidden-only',
+      preview: 'fetching-unanswered',
+      automaticRefetch: 'inherit',
+      cancelOnRemove: false,
+      staleWhenOffline: false,
+      freshnessSource: 'unless-saved',
+    },
+  );
+  return { ...f, engine, key, other, path: queryKeyPath(key), stop: () => undefined };
+}
+
+it('saves account-wide rows with no Group id or listed-Group eligibility check', async () => {
+  const f = accountFixture();
+  f.state.kept = false;
+  f.engine.save(
+    f.key,
+    { owner: 1, owns: () => true },
+    { refreshedAt: 750, value: { title: 'Groups' } },
+  );
+  await f.engine.idle();
+  expect(await f.rows.load('account', f.path)).toEqual({
+    version: 1,
+    accountId: 'account',
+    path: '/api/groups',
+    groupId: null,
+    refreshedAt: 750,
+    value: { title: 'Groups' },
+  });
+  f.client.clear();
+});
+
+it('retires an account row landing after its removal while keeping the other path', async () => {
+  const f = accountFixture(),
+    started = deferred(),
+    slow = deferred(),
+    save = f.rows.save;
+  const otherPath = queryKeyPath(f.other);
+  await save('account', otherPath, { title: 'Other row' });
+  f.rows.save = async (...args) => {
+    started.resolve();
+    await slow.promise;
+    await save(...args);
+  };
+  f.engine.save(
+    f.key,
+    { owner: 1, owns: () => true },
+    { refreshedAt: 750, value: { title: 'Groups' } },
+  );
+  await started.promise;
+  await f.engine.forgetRows('account', [f.path]);
+  slow.resolve();
+  await f.engine.idle();
+  expect(await f.rows.load('account', f.path)).toBeNull();
+  expect(await f.rows.load('account', otherPath)).toEqual({ title: 'Other row' });
+  f.client.clear();
+});
+
+it('starts the fetching-only Home preview beside its unanswered read', async () => {
+  const f = accountFixture(),
+    answer = deferredValue<unknown>();
+  await f.rows.save('account', f.path, {
+    version: 1,
+    accountId: 'account',
+    path: f.path,
+    groupId: null,
+    refreshedAt: 500,
+    value: { title: 'Saved Groups' },
+  });
+  f.state.read = () => answer.promise;
+  const reading = f.client.fetchQuery({
+    queryKey: f.key,
+    queryFn: () => f.engine.read({ key: f.key, preview: true, accept: () => undefined }),
+  });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(f.client.getQueryData(f.key)).toEqual({
+      source: 'saved',
+      refreshedAt: 500,
+      value: { title: 'Saved Groups' },
+    });
+  } finally {
+    answer.resolve({ title: 'Live Groups' });
+    await reading;
+    f.client.clear();
+  }
+});
+
+it('never restores a Home preview once its request answered, even while acceptance is still fetching', async () => {
+  const f = accountFixture(),
+    accepting = deferred(),
+    accept = deferred();
+  await f.rows.save('account', f.path, {
+    version: 1,
+    accountId: 'account',
+    path: f.path,
+    refreshedAt: 500,
+    value: { title: 'Saved Groups' },
+  });
+  const reading = f.client.fetchQuery({
+    queryKey: f.key,
+    queryFn: () =>
+      f.engine.read({
+        key: f.key,
+        accept: async () => {
+          accepting.resolve();
+          await accept.promise;
+        },
+      }),
+  });
+  await accepting.promise;
+  try {
+    await f.engine.restore(f.key, 1);
+    expect(f.client.getQueryState(f.key)?.fetchStatus).toBe('fetching');
+    expect(f.client.getQueryData(f.key)).toBeUndefined();
+  } finally {
+    accept.resolve();
+    await reading;
+    f.client.clear();
+  }
+});
+
+it.each([
+  ['network', 1000, 30000],
+  ['saved', 1000, -Infinity],
+  ['network', 1001, -Infinity],
+] as const)('preserves Home offline freshness for %s stamped %i', (source, time, expected) => {
+  const f = accountFixture();
+  f.state.offline = true;
+  f.client.setQueryData(f.key, { source, value: {} }, { updatedAt: time });
+  expect(f.engine.shared.staleTime(f.client.getQueryCache().find({ queryKey: f.key })!)).toBe(
+    expected,
+  );
+  f.client.clear();
+});
+
+it('marks every account path before a removal failure, so another late row is still retired', async () => {
+  const f = accountFixture(),
+    started = deferred(),
+    slow = deferred(),
+    save = f.rows.save,
+    remove = f.rows.remove;
+  f.rows.save = async (...args) => {
+    started.resolve();
+    await slow.promise;
+    await save(...args);
+  };
+  f.rows.remove = async (accountId, path) => {
+    if (path === f.path) throw new Error('Groups row cannot be removed');
+    await remove(accountId, path);
+  };
+  f.engine.save(
+    f.other,
+    { owner: 1, owns: () => true },
+    { refreshedAt: 750, value: { title: 'Home' } },
+  );
+  await started.promise;
+  await expect(f.engine.forgetRows('account', [f.path, queryKeyPath(f.other)])).rejects.toThrow(
+    'Groups row cannot be removed',
+  );
+  slow.resolve();
+  await f.engine.idle();
+  expect(await f.rows.load('account', queryKeyPath(f.other))).toBeNull();
+  f.client.clear();
+});
+
+it('distrusts only the account row whose late removal fails', async () => {
+  const f = accountFixture(),
+    started = deferred(),
+    slow = deferred(),
+    save = f.rows.save,
+    remove = f.rows.remove;
+  f.rows.save = async (...args) => {
+    started.resolve();
+    await slow.promise;
+    await save(...args);
+  };
+  f.rows.remove = async (accountId, path) => {
+    if (await f.rows.load(accountId, path)) throw new Error('Cannot remove');
+    await remove(accountId, path);
+  };
+  f.engine.save(
+    f.other,
+    { owner: 1, owns: () => true },
+    { refreshedAt: 750, value: { title: 'Home' } },
+  );
+  await started.promise;
+  await f.engine.forgetRows('account', [queryKeyPath(f.other)]);
+  slow.resolve();
+  await f.engine.idle();
+  const homePath = queryKeyPath(f.other);
+  expect(await f.rows.load('account', homePath)).toMatchObject({ value: { title: 'Home' } });
+  await save('account', f.path, {
+    version: 1,
+    accountId: 'account',
+    path: f.path,
+    refreshedAt: 500,
+    value: { title: 'Groups' },
+  });
+  f.state.read = async () => {
+    throw offlineFailure();
+  };
+  await expect(
+    f.client.fetchQuery({
+      queryKey: f.other,
+      queryFn: () => f.engine.read({ key: f.other, accept: () => undefined }),
+    }),
+  ).rejects.toMatchObject({ code: 'OFFLINE_UNAVAILABLE' });
+  expect(await f.engine.saved(f.key)).toMatchObject({ value: { title: 'Groups' } });
+  f.client.clear();
+});
+
+it('synchronizes the caller answer marker with preview eligibility in an overlapping disk/wire read', async () => {
+  const f = accountFixture(),
+    disk = deferredValue<unknown>(),
+    wire = deferredValue<unknown>(),
+    accepted = deferred(),
+    accepting = deferred();
+  const late: unknown[] = [];
+  let answered = false;
+  f.rows.load = () => disk.promise;
+  const stop = f.client.getQueryCache().subscribe(() => {
+    const data = f.client.getQueryData(f.key) as { source?: string } | undefined;
+    if (answered && data?.source === 'saved') late.push(data);
+  });
+  const reading = f.client.fetchQuery({
+    queryKey: f.key,
+    queryFn: () =>
+      f.engine.read({
+        key: f.key,
+        preview: true,
+        send: () => wire.promise,
+        onAnswer: () => {
+          answered = true;
+        },
+        accept: async () => {
+          accepting.resolve();
+          await accepted.promise;
+        },
+      }),
+  });
+  disk.resolve({
+    version: 1,
+    accountId: 'account',
+    path: f.path,
+    refreshedAt: 500,
+    value: { title: 'Saved' },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  wire.resolve({ title: 'Live' });
+  await accepting.promise;
+  try {
+    expect(answered).toBe(true);
+    expect(late).toEqual([]);
+  } finally {
+    accepted.resolve();
+    await reading;
+    stop();
+    f.client.clear();
+  }
 });

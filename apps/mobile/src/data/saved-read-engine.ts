@@ -11,7 +11,7 @@ import type { AccountStorageLease, MobileSnapshot } from './types';
 import { cachedRead } from './offline-cache';
 import { keepInvalidated, queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
-import type { FindableRecordStore } from './account-record-storage';
+import type { AccountGroupRecordStore, FindableRecordStore } from './account-record-storage';
 
 /**
  * A display read as the query cache holds it (ADR 0006, AMEND-2): the server's JSON as received,
@@ -87,6 +87,31 @@ export const MAX_PAGES = 5;
 /** A stale time that is stale whatever the clock says, even moved back past a read. */
 export const STALE = -Infinity;
 
+type FreshnessSource = 'network-only' | 'unless-saved';
+/**
+ * Fresh for the display window on TanStack's clock: never a saved copy or a future stamp.
+ * Group-scoped views require network envelopes and exclude offline answers. Home's inherited
+ * client default excludes only saved envelopes, including for data with no envelope (#718).
+ */
+export const savedReadFreshness = (
+  { state }: { state: { data?: unknown; dataUpdatedAt: number } },
+  freshness: number,
+  {
+    offline = false,
+    source = 'network-only',
+  }: { offline?: boolean; source?: FreshnessSource } = {},
+) => {
+  const data = state.data as Envelope | Pages | undefined;
+  const current =
+    source === 'unless-saved'
+      ? (data as Envelope | undefined)?.source !== 'saved'
+      : !!data &&
+        ('pages' in data
+          ? data.pages.every((page) => page.source === 'network')
+          : data.source === 'network');
+  return current && !offline && state.dataUpdatedAt <= Date.now() ? freshness : STALE;
+};
+
 /**
  * The paths of the persister's rows for this account: those it lists, so rows saved before this
  * session count too, and those named in `known`, for a store that can't list its rows. Only the
@@ -108,7 +133,7 @@ export const rowPaths = async (
 /** The controller's existing saved-read ports; rows already carry the account-lease write lane. */
 export interface SavedReadPorts {
   client: QueryClient;
-  rows?: FindableRecordStore;
+  rows?: AccountGroupRecordStore;
   account(): QueryAccount;
   generation(): number;
   current(owner: number): boolean;
@@ -116,7 +141,7 @@ export interface SavedReadPorts {
   owns(accountId: string): boolean;
   distrusted(key: QueryKey, early: boolean): number;
   distrust(accountId: string, scopes: string[]): void;
-  savable(key: QueryKey): boolean;
+  savable?(key: QueryKey): boolean;
   offline(): boolean;
   freshness: number;
   read(path: string, owner: number, signal?: AbortSignal): Promise<unknown>;
@@ -131,26 +156,30 @@ export interface SavedReadView<Scope extends string = never> {
   path(key: QueryKey, page?: number): string;
   readable(key: QueryKey, value: unknown, page?: number): boolean;
   ownsKey(key: QueryKey): boolean;
-  rowScope: {
-    groupId(key: QueryKey): string;
-    /** Scopes whose removal retires this row; omitted for one scope per Group. */
-    scopes?(key: QueryKey): readonly Scope[];
-    defaultScope?: Scope;
-    remove(
-      rows: FindableRecordStore,
-      accountId: string,
-      groupId: string,
-      known: Iterable<string>,
-      scope?: Scope,
-    ): Promise<void>;
-    pathGroup(path: string): string | null;
-    distrust(key: QueryKey): string[];
-  };
+  rowScope:
+    | {
+        kind?: 'group';
+        groupId(key: QueryKey): string;
+        /** Scopes whose removal retires this row; omitted for one scope per Group. */
+        scopes?(key: QueryKey): readonly Scope[];
+        defaultScope?: Scope;
+        remove(
+          rows: FindableRecordStore,
+          accountId: string,
+          groupId: string,
+          known: Iterable<string>,
+          scope?: Scope,
+        ): Promise<void>;
+        pathGroup(path: string): string | null;
+        distrust(key: QueryKey): string[];
+      }
+    | { kind: 'account'; distrust(key: QueryKey): string[] };
   refusal: RefusalRule;
-  preview: 'same-run-unanswered' | 'unanswered-since-open';
-  automaticRefetch: boolean;
+  preview: 'same-run-unanswered' | 'unanswered-since-open' | 'fetching-unanswered';
+  automaticRefetch: boolean | 'inherit';
   cancelOnRemove: boolean;
   staleWhenOffline: boolean;
+  freshnessSource?: FreshnessSource;
 }
 interface Run {
   answered: boolean;
@@ -167,18 +196,33 @@ interface RowRead<T> {
   key: QueryKey;
   page?: number;
   accept(value: unknown): void | Promise<void>;
+  /** The transport answered: the view's ordering marker changes with the preview guard. */
+  onAnswer?(): void;
+  /** The view asks for a saved preview beside this read, using its named guard. */
+  preview?: boolean;
   /** A screen-owned request, such as Tags' role-aware read (#638), keeps the same row rules. */
   send?(signal?: AbortSignal): Promise<unknown>;
   project?(answer: Envelope): T;
   failure?(error: unknown): T;
 }
 
+type GroupReadPorts = SavedReadPorts & {
+  rows?: FindableRecordStore;
+  savable(key: QueryKey): boolean;
+};
 /** Owns a view's saved rows and query ownership; no run or queue escapes to callers. */
 export function createSavedReadEngine<Scope extends string = never>(
-  session: SavedReadPorts,
-  view: SavedReadView<Scope>,
+  ...[session, view]:
+    | [
+        GroupReadPorts,
+        SavedReadView<Scope> & {
+          rowScope: Exclude<SavedReadView<Scope>['rowScope'], { kind: 'account' }>;
+        },
+      ]
+    | [SavedReadPorts, SavedReadView<Scope> & { rowScope: { kind: 'account' } }]
 ) {
   const { client, rows } = session;
+  const groupScope = view.rowScope.kind === 'account' ? null : view.rowScope;
   const queue = createSavedCopyQueue(),
     runs = new Map<string, Run>();
   /** Each fetch's start, by its promise: whose session, and which query owns it. */
@@ -203,12 +247,12 @@ export function createSavedReadEngine<Scope extends string = never>(
     scope === undefined ? groupId : `${groupId}:${scope}`;
   /** Every scope reaching the row counts: a ledger removal leaves the Group's own row alone. */
   const removals = (key: QueryKey) => {
-    const groupId = view.rowScope.groupId(key);
-    return (view.rowScope.scopes?.(key) ?? [undefined])
+    const groupId = groupScope ? groupScope.groupId(key) : view.path(key);
+    return (groupScope?.scopes?.(key) ?? [undefined])
       .map((scope) => forgotten.get(scopeKey(groupId, scope)) ?? 0)
       .join(':');
   };
-  const removed = (groupId: string, scope = view.rowScope.defaultScope) => {
+  const removed = (groupId: string, scope = groupScope?.defaultScope) => {
     const key = scopeKey(groupId, scope);
     forgotten.set(key, (forgotten.get(key) ?? 0) + 1);
   };
@@ -240,7 +284,7 @@ export function createSavedReadEngine<Scope extends string = never>(
     if (!lease || !rows) return;
     queue.push(path, async () => {
       if (!session.current(owner) || !session.owns(lease.accountId)) return;
-      if (!owns() || !session.savable(key)) return;
+      if (!owns() || (groupScope && !session.savable?.(key))) return;
       const { accountId } = lease,
         before = removals(key);
       known.add(path);
@@ -249,7 +293,7 @@ export function createSavedReadEngine<Scope extends string = never>(
           version: 1,
           accountId,
           path,
-          groupId: view.rowScope.groupId(key),
+          groupId: groupScope?.groupId(key) ?? null,
           refreshedAt,
           value,
         })
@@ -292,7 +336,8 @@ export function createSavedReadEngine<Scope extends string = never>(
       .then(() => run.reading)
       .catch(() => undefined)
       .finally(() => (run.ended = true));
-    if (query) {
+    // Home takes no signal: leaving it never cancels a read (#190).
+    if (query && view.cancelOnRemove) {
       run.abort = new AbortController();
       const running = reading.get(query) ?? new Set<AbortController>();
       reading.set(query, running.add(run.abort));
@@ -313,14 +358,18 @@ export function createSavedReadEngine<Scope extends string = never>(
       owns = queryOwner(client, key),
       lease = session.lease();
     const obsolete = () => !session.current(owner) || !owns();
+    // Its disk load waits on the account queue; the answer's trim may be waiting there too.
+    if (request.preview) void restore(key, owner).catch(() => undefined);
     let value: unknown;
     try {
       value = await (request.send
         ? request.send(run.abort?.signal)
-        : session.read(path, owner, run.abort?.signal));
-      answered(key, run);
+        : view.cancelOnRemove
+          ? session.read(path, owner, run.abort?.signal)
+          : session.read(path, owner));
     } catch (error) {
       answered(key, run);
+      request.onAnswer?.();
       if (!(error instanceof RequestError) || !error.networkFailure || !lease || !rows) throw error;
       const row = obsolete() ? null : await savedRow(lease, path).catch(() => null);
       // Overtaken by a change, a denial or a Groups list: it is read again, not shown.
@@ -337,6 +386,8 @@ export function createSavedReadEngine<Scope extends string = never>(
         throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
       return copy(saved);
     }
+    answered(key, run);
+    request.onAnswer?.();
     if (obsolete()) throw new Superseded();
     const acceptance = accept(value);
     if (acceptance) await acceptance;
@@ -345,23 +396,11 @@ export function createSavedReadEngine<Scope extends string = never>(
     session.answered(path);
     return { source: 'network', refreshedAt: Date.now(), value };
   };
-  /**
-   * Fresh for the display freshness window: never a saved copy, never an answer stamped ahead of
-   * this device's clock, and never while offline where the view says so.
-   */
-  const staleTime = (query: { state: { data?: unknown; dataUpdatedAt: number } }) => {
-    const data = query.state.data as Envelope | Pages | undefined;
-    const network = !data
-      ? false
-      : 'pages' in data
-        ? data.pages.every((page) => page.source === 'network')
-        : data.source === 'network';
-    return network &&
-      (!view.staleWhenOffline || !session.offline()) &&
-      query.state.dataUpdatedAt <= Date.now()
-      ? session.freshness
-      : STALE;
-  };
+  const staleTime = (query: { state: { data?: unknown; dataUpdatedAt: number } }) =>
+    savedReadFreshness(query, session.freshness, {
+      offline: view.staleWhenOffline && session.offline(),
+      source: view.freshnessSource,
+    });
   /**
    * While a query is first read, the row this device saved shows, with its own time. Never one
    * a change, a denial or a failed removal made obsolete, one the view can't read, and never
@@ -386,6 +425,8 @@ export function createSavedReadEngine<Scope extends string = never>(
         (latest !== started || latest.answered)) ||
       (view.preview === 'unanswered-since-open' &&
         (latest?.answered || answerOf(key) !== answers)) ||
+      (view.preview === 'fetching-unanswered' &&
+        (started?.answered || held(key)?.state.fetchStatus !== 'fetching')) ||
       !session.current(owner) ||
       !owns() ||
       held(key)?.state.data !== undefined ||
@@ -472,10 +513,14 @@ export function createSavedReadEngine<Scope extends string = never>(
     // foreground and a reconnect read in order.
     shared: {
       staleTime,
-      retryOnMount: view.automaticRefetch,
-      refetchOnMount: view.automaticRefetch,
-      refetchOnWindowFocus: view.automaticRefetch,
-      refetchOnReconnect: view.automaticRefetch,
+      ...(view.automaticRefetch === 'inherit'
+        ? {}
+        : {
+            retryOnMount: view.automaticRefetch,
+            refetchOnMount: view.automaticRefetch,
+            refetchOnWindowFocus: view.automaticRefetch,
+            refetchOnReconnect: view.automaticRefetch,
+          }),
     },
     /** Reads a query now, joining a read in flight; one a change cancels is read again. */
     async readNow<T>(
@@ -521,18 +566,29 @@ export function createSavedReadEngine<Scope extends string = never>(
         rebinding = false;
       }
     },
-    /** Removes a scope's rows, inside a lease write: a change or a loss. */
-    async forget(accountId: string, groupId: string, scope = view.rowScope.defaultScope) {
+    /**
+     * Removes named account-wide rows without waiting for saved writes. Mark all paths first:
+     * even if the first removal fails, a write to another path that lands late goes too (#323).
+     */
+    async forgetRows(accountId: string, paths: Iterable<string>) {
       if (!rows) return;
+      const removedPaths = [...paths];
+      for (const path of removedPaths) removed(path);
+      for (const path of removedPaths) await rows.remove(accountId, path);
+    },
+    /** Removes a scope's rows, inside a lease write: a change or a loss. */
+    async forget(accountId: string, groupId: string, scope = groupScope?.defaultScope) {
+      if (!rows || !groupScope) return;
       removed(groupId, scope);
-      await view.rowScope.remove(rows, accountId, groupId, known, scope);
+      // Group-scoped callers keep the findable-store contract; account rows use explicit paths.
+      await groupScope.remove(rows as FindableRecordStore, accountId, groupId, known, scope);
     },
     /** Keeps only these Groups' rows: a Groups list from the server left the others out. */
     async retain(accountId: string, listed: string[]) {
-      if (!rows) return;
+      if (!rows || !groupScope) return;
       const keep = new Set(listed);
-      for (const path of await rowPaths(rows, accountId, known)) {
-        const id = view.rowScope.pathGroup(path);
+      for (const path of await rowPaths(rows as FindableRecordStore, accountId, known)) {
+        const id = groupScope.pathGroup(path);
         if (!id || keep.has(id)) continue;
         removed(id);
         await rows.remove(accountId, path);
