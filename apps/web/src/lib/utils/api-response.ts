@@ -126,8 +126,7 @@ export function notFound(resource: string = 'Resource') {
 export function serverError(err?: unknown) {
   if (err instanceof Refusal) {
     const answer = refusalAnswer(err);
-    if (answer.status === 500) console.error('Server error:', err);
-    return NextResponse.json(answer.body, { status: answer.status });
+    return NextResponse.json(answer, { status: answer.status });
   }
   if (err instanceof MoneyValidationError) {
     // A refusal about one input field names it, such as a split row's amount (#497).

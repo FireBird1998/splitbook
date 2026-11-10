@@ -7,7 +7,8 @@ describe('the server refusal vocabulary', () => {
     for (const entry of Object.values(refusalVocabulary)) {
       expect(entry.status).toBeGreaterThanOrEqual(400);
       expect(entry.status).toBeLessThan(600);
-      expect(entry.words).toBeDefined();
+      if ('words' in entry) expect(entry.words).toBeDefined();
+      else expect(entry.moneyWords).toBe('from-rule');
     }
   });
   it('keeps the Error message equal to the code for callers still comparing it', () => {
@@ -30,7 +31,7 @@ describe('the server refusal vocabulary', () => {
     expect(refusalVocabulary.FORBIDDEN_SETTLEMENT.words).toBe(
       'Only the payer or recipient can record this settlement',
     );
-    expect(refusalVocabulary.FORBIDDEN_SETTLEMENT.variants.settlementBatch.words).toBe(
+    expect(refusalVocabulary.FORBIDDEN_SETTLEMENT.variants.payment.words).toBe(
       'Only the payer or recipient can record this payment',
     );
   });
@@ -45,15 +46,35 @@ it('rejects unknown codes, caller-supplied words and missing required data at co
     // @ts-expect-error The vocabulary owns the status and words.
     new Refusal('FORBIDDEN', { status: 403, words: 'Forbidden' });
     // @ts-expect-error The batch wording belongs to the payment refusal.
-    new Refusal('FORBIDDEN', { variant: 'settlementBatch' });
+    new Refusal('FORBIDDEN', { variant: 'payment' });
     // @ts-expect-error The refused Tag change carries its current snapshot.
     new Refusal('TAG_CHANGED');
     // @ts-expect-error A removal's words name the member.
-    new Refusal('OPEN_BALANCE', { balances: [], variant: 'membersRemove' });
-    // @ts-expect-error Restoring an unlisted currency names that currency.
-    new Refusal('CURRENCY_MISMATCH', { variant: 'restoredCurrency' });
+    new Refusal('OPEN_BALANCE', { balances: [], variant: 'removal' });
+    // @ts-expect-error Money-only refusals come from the rule's MoneyValidationError.
+    new Refusal('UNSAFE_MONEY');
     // @ts-expect-error A per-Expense refusal identifies the Expense and destination Tag.
     new Refusal('FORBIDDEN', { variant: 'expenseTagChange' });
   };
   expect(invalidCalls).toBeTypeOf('function');
+});
+
+it('catalogs request refusals and delegates money words to their rules', () => {
+  for (const entry of Object.values(refusalVocabulary)) {
+    expect(entry.status).toBeGreaterThanOrEqual(400);
+    expect(entry.status).toBeLessThan(600);
+    expect(entry.status).not.toBe(500);
+    expect(entry).not.toHaveProperty('delivery');
+    expect(entry).not.toHaveProperty('includeStatus');
+    for (const variant of Object.values(entry.variants)) {
+      expect(variant.status).toBeGreaterThanOrEqual(400);
+      expect(variant).not.toHaveProperty('delivery');
+      expect(variant).not.toHaveProperty('includeStatus');
+    }
+  }
+  expect(refusalVocabulary.UNSAFE_MONEY).toMatchObject({ status: 422, moneyWords: 'from-rule' });
+  expect(refusalVocabulary.UNSAFE_MONEY).not.toHaveProperty('words');
+  expect(refusalVocabulary).not.toHaveProperty('BACKUP_ALL_TIME');
+  expect(refusalVocabulary).not.toHaveProperty('GROUP_NOT_FOUND');
+  expect(refusalVocabulary.INVALID_CURRENCY.status).toBe(400);
 });

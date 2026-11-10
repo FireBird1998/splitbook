@@ -6,14 +6,14 @@ vi.mock('@/lib/auth', () => ({ auth: { api: { getSession: vi.fn() } } }));
 
 describe('serverError answers typed refusals', () => {
   it('answers the named payment caller with its original words', async () => {
-    const answer = serverError(new Refusal('FORBIDDEN_SETTLEMENT', { variant: 'settlementBatch' }));
+    const answer = serverError(new Refusal('FORBIDDEN_SETTLEMENT', { variant: 'payment' }));
     expect(answer.status).toBe(422);
     expect(await answer.text()).toBe(
       '{"error":"Only the payer or recipient can record this payment","status":422,"code":"FORBIDDEN_SETTLEMENT"}',
     );
   });
   it('preserves legacy route answers with no code', async () => {
-    const answer = serverError(new Refusal('LAST_ADMIN', { variant: 'membersRemove' }));
+    const answer = serverError(new Refusal('LAST_ADMIN', { variant: 'removal' }));
     expect(answer.status).toBe(409);
     expect(await answer.text()).toBe('{"error":"Cannot remove the last admin.","status":409}');
   });
@@ -43,21 +43,26 @@ describe('serverError answers typed refusals', () => {
 
 // Literal answers captured on main. This matrix covers every default and named wording.
 import cases from './refusal-vocabulary-answers.json';
-import { refusalVocabulary, type RefusalCode } from '@splitbook/shared/refusals';
+import { refusalVocabulary } from '@splitbook/shared/refusals';
 
 it.each(cases)('keeps $code / $variant byte for byte', async ({ code, data, status, body }) => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  const answer = serverError(new Refusal(code as RefusalCode, data as never));
+  const answer = serverError(
+    new Refusal(code as ConstructorParameters<typeof Refusal>[0], data as never),
+  );
   expect(answer.status).toBe(status);
   expect(await answer.text()).toBe(body);
 });
 it('has exactly the census codes and a recorded answer for every named variant', () => {
-  expect([...new Set(cases.map(({ code }) => code))].sort()).toEqual(
-    Object.keys(refusalVocabulary).sort(),
-  );
+  expect(
+    [
+      ...new Set([...cases.map(({ code }) => code), ...inputs.moneyCases.map(({ code }) => code)]),
+    ].sort(),
+  ).toEqual(Object.keys(refusalVocabulary).sort());
   for (const [code, entry] of Object.entries(refusalVocabulary)) {
     const covered = cases.filter((row) => row.code === code).map((row) => row.variant);
-    expect(covered).toContain('default');
+    if ('words' in entry) expect(covered).toContain('default');
+    else expect(entry.moneyWords).toBe('from-rule');
     for (const variant of Object.keys(entry.variants)) expect(covered, code).toContain(variant);
   }
 });
@@ -91,5 +96,23 @@ it('uses only answers and codes recorded by the unchanged-main census', () => {
     'EXPORT_TOO_LARGE',
     'DATABASE_UNAVAILABLE',
   ]);
+  for (const code of [
+    'BACKUP_ALL_TIME',
+    'INVALID_REQUEST_FINGERPRINT',
+    'GROUP_DELETION_NOT_REQUESTED',
+    'GROUP_DELETION_CHANGED',
+    'GROUP_NOT_FOUND',
+  ])
+    recordedCodes.delete(code);
+  for (const code of [
+    'DRAFT_UNCONFIRMED',
+    'INVALID_MONTH',
+    'INVALID_COMPARE',
+    'INVALID_MONTHS',
+    'INVALID_TIME_ZONE',
+    'QUERY_TOO_LONG',
+    'NOT_A_TRIP',
+  ])
+    recordedCodes.add(code);
   expect([...recordedCodes].sort()).toEqual(Object.keys(refusalVocabulary).sort());
 });

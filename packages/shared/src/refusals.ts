@@ -3,10 +3,8 @@ import { DATABASE_UNAVAILABLE_MESSAGE } from './database-unavailable';
 import { DRAFT_GROUP_LIMIT_MESSAGE } from './validators/expense-draft';
 import { formatCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
-import { extraCurrenciesProblem } from './group-currencies';
 import type { ExtraCurrencyUse } from './group-currency-settings';
 import type { TagSnapshot } from './tag-management';
-import { unsupportedCurrencyEditRefusal } from './expense-money-edit';
 
 interface Balance {
   currency: string;
@@ -20,9 +18,6 @@ interface BrokenRecurringExpense {
 /** Inputs to the vocabulary's words. Status and words are never supplied by a service. */
 interface RefusalContext {
   variant?: string;
-  tagId?: string;
-  expenseId?: string;
-  field?: ReadonlyArray<string | number>;
   snapshot?: TagSnapshot;
   existingTagId?: string;
   currency?: string;
@@ -34,23 +29,18 @@ interface RefusalContext {
   recurringExpenses?: BrokenRecurringExpense[];
   admin?: boolean;
   memberName?: string;
-  digits?: number;
-  mainCurrency?: string;
-  extraCurrencies?: string[];
 }
 interface Answer {
-  delivery?: 'expenseTagChange';
-  includeStatus?: boolean;
   status: number;
   words: string | ((data: RefusalContext) => string);
   includeCode: boolean;
 }
+type Entry = { status: number; includeCode: boolean; variants: Record<string, Answer> } & (
+  | { words: Answer['words']; moneyWords?: 'from-rule' }
+  | { moneyWords: 'from-rule'; words?: never }
+);
 
-/**
- * Answers recorded before migration (#1079). A 500 entry records an unhandled code, including
- * codes confined to maintenance operations. Naming it here does not approve a new HTTP answer.
- * Variants name the caller whose existing answer differs from the default.
- */
+/** Request answers. Money codes identify rules whose own errors carry their words and field. */
 export const refusalVocabulary = {
   ACCOUNT_CHANGED: {
     status: 419,
@@ -62,14 +52,7 @@ export const refusalVocabulary = {
     status: 503,
     words: 'The audit feed is temporarily unavailable. Please retry later.',
     includeCode: true,
-    variants: {
-      expenseTagChange: {
-        status: 200,
-        words: 'Splitbook couldn’t record this change just now. Try it again later.',
-        includeCode: true,
-        delivery: 'expenseTagChange',
-      },
-    },
+    variants: {},
   },
   ALREADY_INVITED: {
     status: 409,
@@ -81,12 +64,6 @@ export const refusalVocabulary = {
     status: 409,
     words: 'This Tag has ambiguous historical references and cannot be renamed.',
     includeCode: true,
-    variants: {},
-  },
-  BACKUP_ALL_TIME: {
-    status: 500,
-    words: 'Internal server error',
-    includeCode: false,
     variants: {},
   },
   CURRENCY_IN_USE: {
@@ -113,29 +90,8 @@ export const refusalVocabulary = {
     status: 422,
     words: 'Currency is not one of this Group’s currencies',
     includeCode: true,
-    variants: {
-      debtSimplifierDifferentCurrenciesCannotBeAdded: {
-        status: 422,
-        words: 'Different currencies cannot be added',
-        includeCode: true,
-      },
-      debtsBeforeSimplifyingDifferentCurrenciesCannotBeAdded: {
-        status: 422,
-        words: 'Different currencies cannot be added',
-        includeCode: true,
-      },
-      expenseSummaryDifferentCurrenciesCannotBeAdded: {
-        status: 422,
-        words: 'Different currencies cannot be added',
-        includeCode: true,
-      },
-      restoredCurrency: {
-        status: 422,
-        words: (data: RefusalContext) =>
-          `Add ${data.currency} to the Group’s currencies to restore it.`,
-        includeCode: true,
-      },
-    },
+    moneyWords: 'from-rule',
+    variants: {},
   },
   CURRENCY_NOT_LISTED: {
     status: 404,
@@ -146,12 +102,6 @@ export const refusalVocabulary = {
   DATABASE_UNAVAILABLE: {
     status: 503,
     words: DATABASE_UNAVAILABLE_MESSAGE,
-    includeCode: true,
-    variants: {},
-  },
-  DRAFTS_DISABLED: {
-    status: 404,
-    words: 'Drafts are not enabled',
     includeCode: true,
     variants: {},
   },
@@ -168,30 +118,21 @@ export const refusalVocabulary = {
     includeCode: true,
     variants: {},
   },
-  DUPLICATE_PARTICIPANTS: {
-    status: 422,
-    words: 'Each participant may appear only once',
+  DRAFT_UNCONFIRMED: {
+    status: 503,
+    words:
+      'Draft request not confirmed. Reload before retrying; reuse the original creation request.',
     includeCode: true,
-    variants: {
-      exactMoneyEachPersonCanAppearOnlyOnce: {
-        status: 422,
-        words: 'Each person can appear only once',
-        includeCode: true,
-      },
-    },
+    variants: {},
   },
-  EMPTY_PARTICIPANTS: {
-    status: 422,
-    words: 'Stored participants are missing',
+  DRAFTS_DISABLED: {
+    status: 404,
+    words: 'Drafts are not enabled',
     includeCode: true,
-    variants: {
-      exactMoneyAtLeastOnePayerAndParticipantAreRequired: {
-        status: 422,
-        words: 'At least one payer and participant are required',
-        includeCode: true,
-      },
-    },
+    variants: {},
   },
+  DUPLICATE_PARTICIPANTS: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  EMPTY_PARTICIPANTS: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
   EXPORT_TOO_LARGE: {
     status: 413,
     words: (data: RefusalContext) =>
@@ -199,63 +140,30 @@ export const refusalVocabulary = {
     includeCode: true,
     variants: {},
   },
-  FORBIDDEN: {
-    status: 403,
-    words: 'Forbidden',
-    includeCode: true,
-    variants: {
-      expenseTagChange: {
-        status: 200,
-        words: 'You’re no longer a member of this Group.',
-        includeCode: true,
-        delivery: 'expenseTagChange',
-      },
-
-      legacyRoute: { status: 403, words: 'Forbidden', includeCode: false },
-    },
-  },
   FORBIDDEN_SETTLEMENT: {
     status: 422,
     words: 'Only the payer or recipient can record this settlement',
     includeCode: true,
     variants: {
-      settlementBatch: {
+      payment: {
         status: 422,
         words: 'Only the payer or recipient can record this payment',
         includeCode: true,
       },
     },
   },
-  GROUP_ARCHIVED: {
-    status: 409,
-    words: GROUP_ARCHIVED_MESSAGE,
+  FORBIDDEN: {
+    status: 403,
+    words: 'Forbidden',
     includeCode: true,
-    variants: {
-      expenseTagChange: {
-        status: 200,
-        words: GROUP_ARCHIVED_MESSAGE,
-        includeCode: true,
-        delivery: 'expenseTagChange',
-      },
-    },
+    variants: { membership: { status: 403, words: 'Forbidden', includeCode: false } },
   },
-  GROUP_DELETION_CHANGED: {
-    status: 500,
-    words: 'Internal server error',
-    includeCode: false,
-    variants: {},
-  },
+  GROUP_ARCHIVED: { status: 409, words: GROUP_ARCHIVED_MESSAGE, includeCode: true, variants: {} },
   GROUP_DELETION_CONFIRMATION_REQUIRED: {
     status: 409,
     words:
       'You are the last member. Leaving will permanently delete this Group and its history. Confirm deletion to continue.',
     includeCode: true,
-    variants: {},
-  },
-  GROUP_DELETION_NOT_REQUESTED: {
-    status: 500,
-    words: 'Internal server error',
-    includeCode: false,
     variants: {},
   },
   GROUP_DELETION_UNAVAILABLE: {
@@ -265,81 +173,36 @@ export const refusalVocabulary = {
     includeCode: true,
     variants: {},
   },
-  GROUP_NOT_FOUND: {
-    status: 500,
-    words: 'Internal server error',
-    includeCode: false,
-    variants: {},
-  },
   IDEMPOTENCY_CONFLICT: {
     status: 409,
     words: 'This submission key was already used for different data. Start a new submission.',
     includeCode: true,
     variants: {},
   },
-  INVALID_AMOUNT_RANGE: {
-    status: 422,
-    words: 'The lowest amount must not be more than the highest',
+  INVALID_AMOUNT_RANGE: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  INVALID_COMPARE: {
+    status: 400,
+    words: 'Compare with 1 to 12 earlier months.',
     includeCode: true,
     variants: {},
   },
   INVALID_CROSS_CURRENCY_SETTLEMENT: {
     status: 422,
-    words: 'Enter a positive rate with at most 18 decimal places',
+    moneyWords: 'from-rule',
     includeCode: true,
-    variants: {
-      crossCurrencySettlementTheRateMustBePositive: {
-        status: 422,
-        words: 'The rate must be positive',
-        includeCode: true,
-      },
-      crossCurrencySettlementBothAmountsMustBeAtLeastOneMinorUnit: {
-        status: 422,
-        words: 'Both amounts must be at least one minor unit',
-        includeCode: true,
-      },
-      crossCurrencySettlementTheRateIsTooSmallToRepresent: {
-        status: 422,
-        words: 'The rate is too small to represent',
-        includeCode: true,
-      },
-      crossCurrencySettlementChooseTwoDifferentCurrencies: {
-        status: 422,
-        words: 'Choose two different currencies',
-        includeCode: true,
-      },
-      crossCurrencySettlementEnterExactlyTwoOfTheClearedAmountPaidAmountAndRate: {
-        status: 422,
-        words: 'Enter exactly two of the cleared amount, paid amount and rate',
-        includeCode: true,
-      },
-    },
+    variants: {},
   },
   INVALID_CURRENCY: {
-    status: 500,
-    words: 'Internal server error',
-    includeCode: false,
-    variants: {
-      insightsQuery: {
-        status: 400,
-        words: 'Send a currency code, such as INR.',
-        includeCode: true,
-      },
-    },
+    status: 400,
+    words: 'Send a currency code, such as INR.',
+    includeCode: true,
+    variants: {},
   },
   INVALID_GROUP_CURRENCIES: {
     status: 422,
-    words: (data: RefusalContext) =>
-      extraCurrenciesProblem(data.mainCurrency!, data.extraCurrencies!)!,
+    moneyWords: 'from-rule',
     includeCode: true,
-    variants: {
-      alreadyListed: {
-        status: 422,
-        words: (data: RefusalContext) =>
-          `${data.currency} is already one of this Group’s currencies.`,
-        includeCode: true,
-      },
-    },
+    variants: {},
   },
   INVALID_ID: { status: 400, words: 'Invalid id', includeCode: true, variants: {} },
   INVALID_IDEMPOTENCY_KEY: {
@@ -354,140 +217,59 @@ export const refusalVocabulary = {
     words: 'Both payer and recipient must be group members',
     includeCode: true,
     variants: {
-      expenses: {
+      expense: {
         status: 422,
         words: 'All payers and split participants must be group members',
-        includeCode: true,
-      },
-      expenseEdit: {
-        status: 422,
-        words: 'All payers and split participants must be group members',
-        includeCode: true,
-      },
-      recurring: {
-        status: 422,
-        words: 'All payers and split participants must be group members',
-        includeCode: true,
-      },
-      recurringEdit: {
-        status: 422,
-        words: 'All payers and split participants must be group members',
-        includeCode: true,
-      },
-    },
-  },
-  INVALID_MONEY: {
-    status: 422,
-    words: 'Enter a positive amount with the currency’s supported precision.',
-    includeCode: true,
-    variants: {
-      exactMoneyEnterAValidDecimalAmount: {
-        status: 422,
-        words: 'Enter a valid decimal amount',
-        includeCode: true,
-      },
-      exactMoneyStoredAmountIsMissing: {
-        status: 422,
-        words: 'Stored amount is missing',
         includeCode: true,
       },
     },
   },
   INVALID_MONEY_PRECISION: {
     status: 422,
-    words: (data: RefusalContext) => `Amount supports at most ${data.digits} decimal places`,
+    moneyWords: 'from-rule',
     includeCode: true,
     variants: {},
   },
-  INVALID_MONEY_RANGE: {
+  INVALID_MONEY_RANGE: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  INVALID_MONEY_VERSION: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  INVALID_MONEY: {
     status: 422,
-    words: 'Stored amount must be positive',
+    words: 'Enter a positive amount with the currency’s supported precision.',
     includeCode: true,
-    variants: {
-      exactMoneyAmountMustBePositiveAndAtMost10000000: {
-        status: 422,
-        words: 'Amount must be positive and at most 10,000,000',
-        includeCode: true,
-      },
-    },
+    moneyWords: 'from-rule',
+    variants: {},
   },
-  INVALID_MONEY_VERSION: {
-    status: 422,
-    words: 'Stored money version is invalid',
+  INVALID_MONTH: {
+    status: 400,
+    words: 'Send a Month as YYYY-MM, such as 2026-09.',
     includeCode: true,
     variants: {},
   },
-  INVALID_PARTY: { status: 422, words: 'Choose both people', includeCode: true, variants: {} },
-  INVALID_PAYER_AMOUNT: {
-    status: 422,
-    words: 'Payer amounts cannot be negative',
+  INVALID_MONTHS: {
+    status: 400,
+    words: 'Ask for 1 to 12 months of spending.',
     includeCode: true,
     variants: {},
   },
-  INVALID_PERCENTAGE: {
-    status: 422,
-    words: 'Percentages must be between 0 and 100',
-    includeCode: true,
-    variants: {},
-  },
-  INVALID_REQUEST_FINGERPRINT: {
-    status: 500,
-    words: 'Internal server error',
-    includeCode: false,
-    variants: {},
-  },
+  INVALID_PARTY: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  INVALID_PAYER_AMOUNT: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  INVALID_PERCENTAGE: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
   INVALID_SETTLEMENT_BATCH: {
     status: 422,
-    words: 'Choose between 1 and 32 Debts',
+    moneyWords: 'from-rule',
     includeCode: true,
-    variants: {
-      settlementBatchChooseEachClearedCurrencyOnce: {
-        status: 422,
-        words: 'Choose each cleared currency once',
-        includeCode: true,
-      },
-      missingRate: {
-        status: 422,
-        words: (data: RefusalContext) => `Enter a rate for ${data.currency}`,
-        includeCode: true,
-      },
-    },
+    variants: {},
   },
-  INVALID_SHARES: {
-    status: 422,
-    words: 'Shares must be whole numbers within the supported range',
+  INVALID_SHARES: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  INVALID_SPLIT: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  INVALID_TAG_COMMAND: {
+    status: 400,
+    words: 'Check the Tag name and submitted action, then try again.',
     includeCode: true,
     variants: {
-      exactMoneySharesCannotBeNegative: {
-        status: 422,
-        words: 'Shares cannot be negative',
-        includeCode: true,
-      },
-      exactMoneyTotalSplitWeightMustBePositive: {
-        status: 422,
-        words: 'Total split weight must be positive',
-        includeCode: true,
-      },
-    },
-  },
-  INVALID_SPLIT: {
-    status: 422,
-    words: 'Stored allocations cannot be negative',
-    includeCode: true,
-    variants: {
-      exactMoneyANonnegativeAmountAndParticipantsAreRequired: {
-        status: 422,
-        words: 'A nonnegative amount and participants are required',
-        includeCode: true,
-      },
-      exactMoneySplitAmountsCannotBeNegative: {
-        status: 422,
-        words: 'Split amounts cannot be negative',
-        includeCode: true,
-      },
-      exactMoneyChooseAValidSplitMethod: {
-        status: 422,
-        words: 'Choose a valid split method',
+      identity: {
+        status: 400,
+        words: 'Invalid Group, Tag or request identity.',
         includeCode: true,
       },
     },
@@ -496,26 +278,13 @@ export const refusalVocabulary = {
     status: 422,
     words: 'Tag must be an active group tag',
     includeCode: true,
-    variants: {
-      expenseTagChange: {
-        status: 200,
-        words: 'The Tag isn’t active any more.',
-        includeCode: true,
-        delivery: 'expenseTagChange',
-      },
-    },
+    variants: {},
   },
-  INVALID_TAG_COMMAND: {
+  INVALID_TIME_ZONE: {
     status: 400,
-    words: 'Check the Tag name and submitted action, then try again.',
+    words: 'Send a named IANA time zone, such as Asia/Kolkata.',
     includeCode: true,
-    variants: {
-      invalidIdentity: {
-        status: 400,
-        words: 'Invalid Group, Tag or request identity.',
-        includeCode: true,
-      },
-    },
+    variants: {},
   },
   INVALID_WINDOW: {
     status: 422,
@@ -546,12 +315,12 @@ export const refusalVocabulary = {
     words: 'Make someone else an admin before you leave.',
     includeCode: true,
     variants: {
-      membersDemote: {
+      demotion: {
         status: 409,
         words: 'Cannot demote the last admin. Promote another member first.',
         includeCode: false,
       },
-      membersRemove: { status: 409, words: 'Cannot remove the last admin.', includeCode: false },
+      removal: { status: 409, words: 'Cannot remove the last admin.', includeCode: false },
     },
   },
   LEAVE_CONFLICT: {
@@ -560,21 +329,10 @@ export const refusalVocabulary = {
     includeCode: true,
     variants: {},
   },
-  MISSING_SPLIT_AMOUNT: {
-    status: 422,
-    words: 'Enter an amount for each person in the split',
-    includeCode: true,
-    variants: {},
-  },
+  MISSING_SPLIT_AMOUNT: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
   MONEY_REPRESENTATION_MISMATCH: {
     status: 422,
-    words: 'Stored amounts disagree',
-    includeCode: true,
-    variants: {},
-  },
-  NOT_HOUSEHOLD: {
-    status: 422,
-    words: 'Recurring expenses are only available in Household groups',
+    moneyWords: 'from-rule',
     includeCode: true,
     variants: {},
   },
@@ -585,13 +343,25 @@ export const refusalVocabulary = {
     includeCode: true,
     variants: {},
   },
+  NOT_A_TRIP: {
+    status: 409,
+    words: 'Only a Trip has a Trip summary.',
+    includeCode: true,
+    variants: {},
+  },
+  NOT_HOUSEHOLD: {
+    status: 422,
+    words: 'Recurring expenses are only available in Household groups',
+    includeCode: true,
+    variants: {},
+  },
   OPEN_BALANCE: {
     status: 409,
     words: (data: RefusalContext) =>
       `Settle up before you leave: you ${owing(data.balances!, false)} in this Group.`,
     includeCode: true,
     variants: {
-      membersRemove: {
+      removal: {
         status: 409,
         words: (data: RefusalContext) =>
           `${data.memberName} ${owing(data.balances!, true)} in this Group. Settle up before removing them.`,
@@ -599,21 +369,16 @@ export const refusalVocabulary = {
       },
     },
   },
-  PAYER_TOTAL_MISMATCH: {
-    status: 422,
-    words: 'Payer amounts must add up to the expense amount',
-    includeCode: true,
-    variants: {},
-  },
+  PAYER_TOTAL_MISMATCH: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
   PERCENTAGE_TOTAL_MISMATCH: {
     status: 422,
-    words: 'Percentages must add up to 100',
+    moneyWords: 'from-rule',
     includeCode: true,
     variants: {},
   },
-  RECURRING_EXPENSES_OFF: {
-    status: 409,
-    words: 'Recurring Expenses are turned off.',
+  QUERY_TOO_LONG: {
+    status: 422,
+    words: 'Search for at most 100 characters.',
     includeCode: true,
     variants: {},
   },
@@ -622,12 +387,18 @@ export const refusalVocabulary = {
     words: (data: RefusalContext) => leaveRecurringWords(data),
     includeCode: true,
     variants: {
-      membersRemove: {
+      removal: {
         status: 409,
         words: (data: RefusalContext) => removalRecurringWords(data),
         includeCode: true,
       },
     },
+  },
+  RECURRING_EXPENSES_OFF: {
+    status: 409,
+    words: 'Recurring Expenses are turned off.',
+    includeCode: true,
+    variants: {},
   },
   REMOVAL_CONFLICT: {
     status: 409,
@@ -641,14 +412,7 @@ export const refusalVocabulary = {
     includeCode: true,
     variants: {},
   },
-  REQUEST_TOO_LARGE: {
-    status: 413,
-    words: 'Request too large',
-    includeCode: true,
-    variants: {
-      mcp: { status: 413, words: 'Request too large', includeCode: false, includeStatus: false },
-    },
-  },
+  REQUEST_TOO_LARGE: { status: 413, words: 'Request too large', includeCode: true, variants: {} },
   REVISION_REQUIRED: {
     status: 428,
     words: 'Reload this record before changing it.',
@@ -659,13 +423,8 @@ export const refusalVocabulary = {
     status: 422,
     words: 'Payer and recipient must be different people',
     includeCode: true,
-    variants: {
-      settlementPreviewAPaymentNeedsTwoDifferentPeople: {
-        status: 422,
-        words: 'A payment needs two different people',
-        includeCode: true,
-      },
-    },
+    moneyWords: 'from-rule',
+    variants: {},
   },
   SELF_REMOVE: {
     status: 400,
@@ -680,12 +439,7 @@ export const refusalVocabulary = {
     includeCode: true,
     variants: {},
   },
-  SPLIT_TOTAL_MISMATCH: {
-    status: 422,
-    words: 'Split amounts must add up to the expense amount',
-    includeCode: true,
-    variants: {},
-  },
+  SPLIT_TOTAL_MISMATCH: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
   STALE_REVISION: {
     status: 409,
     words: 'This record changed while you were editing. Reload the latest version before saving.',
@@ -728,50 +482,16 @@ export const refusalVocabulary = {
     includeCode: true,
     variants: {},
   },
-  UNBALANCED_LEDGER: {
-    status: 422,
-    words: 'Ledger contributions do not balance',
-    includeCode: true,
-    variants: {
-      debtsBeforeSimplifyingUnableToAllocateExactDebts: {
-        status: 422,
-        words: 'Unable to allocate exact Debts',
-        includeCode: true,
-      },
-      exactMoneyStoredAllocationsDoNotEqualTheExpenseAmount: {
-        status: 422,
-        words: 'Stored allocations do not equal the Expense amount',
-        includeCode: true,
-      },
-    },
-  },
-  UNBALANCED_TEMPLATE: {
-    status: 422,
-    words: 'Recurring allocations must equal the amount',
-    includeCode: true,
-    variants: {},
-  },
-  UNSAFE_MONEY: {
-    status: 422,
-    words: 'Amount is outside the supported exact range',
-    includeCode: true,
-    variants: {
-      exactMoneyAmountCannotBeRepresentedByThisClient: {
-        status: 422,
-        words: 'Amount cannot be represented by this client',
-        includeCode: true,
-      },
-    },
-  },
-  UNSUPPORTED_CURRENCY: {
-    status: 422,
-    words: (data: RefusalContext) => unsupportedCurrencyEditRefusal(data.currency!),
-    includeCode: true,
-    variants: {},
-  },
-} as const satisfies Record<string, Answer & { variants: Record<string, Answer> }>;
+  UNBALANCED_LEDGER: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  UNBALANCED_TEMPLATE: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  UNSAFE_MONEY: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  UNSUPPORTED_CURRENCY: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+} as const satisfies Record<string, Entry>;
 
 export type RefusalCode = keyof typeof refusalVocabulary;
+type RequestRefusalCode = {
+  [C in RefusalCode]: (typeof refusalVocabulary)[C] extends { words: unknown } ? C : never;
+}[RefusalCode];
 
 type RequiredData = {
   TAG_ADMIN_REQUIRED: { snapshot: TagSnapshot };
@@ -787,41 +507,30 @@ type RequiredData = {
   EXPORT_TOO_LARGE: { rows: number; limit: number };
   OPEN_BALANCE: { balances: Balance[] };
   RECURRING_EXPENSE_PROBLEM: { recurringExpenses: BrokenRecurringExpense[]; admin?: boolean };
-  UNSUPPORTED_CURRENCY: { currency: string };
-  INVALID_GROUP_CURRENCIES: { mainCurrency: string; extraCurrencies: string[] };
-  INVALID_MONEY_PRECISION: { digits: number };
 };
-type Data<C extends RefusalCode> = C extends keyof RequiredData ? RequiredData[C] : object;
-type Variant<C extends RefusalCode> = Extract<
+type Data<C extends RequestRefusalCode> = C extends keyof RequiredData ? RequiredData[C] : object;
+type Variant<C extends RequestRefusalCode> = Extract<
   keyof (typeof refusalVocabulary)[C]['variants'],
   string
 >;
-type VariantData<C extends RefusalCode> = {
-  [V in Variant<C>]: { variant: V } & (V extends 'alreadyListed'
-    ? { currency: string }
-    : Data<C> &
-        (V extends 'expenseTagChange'
-          ? { tagId: string; expenseId: string }
-          : C extends 'OPEN_BALANCE' | 'RECURRING_EXPENSE_PROBLEM'
-            ? V extends 'membersRemove'
-              ? { memberName: string }
-              : object
-            : V extends 'restoredCurrency' | 'missingRate'
-              ? { currency: string }
-              : object));
+type VariantData<C extends RequestRefusalCode> = {
+  [V in Variant<C>]: { variant: V } & Data<C> &
+    (C extends 'OPEN_BALANCE' | 'RECURRING_EXPENSE_PROBLEM'
+      ? V extends 'removal'
+        ? { memberName: string }
+        : object
+      : object);
 }[Variant<C>];
-export type RefusalData<C extends RefusalCode> = (
+export type RefusalData<C extends RequestRefusalCode> = (
   | (Data<C> & { variant?: never })
   | VariantData<C>
 ) & {
-  currency?: string;
-  field?: ReadonlyArray<string | number>;
   snapshot?: TagSnapshot;
   existingTagId?: string;
 };
 
 /** One service call. The Error message remains its code during the incremental migration. */
-export class Refusal<C extends RefusalCode = RefusalCode> extends Error {
+export class Refusal<C extends RequestRefusalCode = RequestRefusalCode> extends Error {
   readonly data: RefusalContext;
   constructor(
     readonly code: C,
@@ -833,51 +542,36 @@ export class Refusal<C extends RefusalCode = RefusalCode> extends Error {
   }
 }
 
-/** Framework-free body and HTTP status, serialized by the web's serverError. */
+/** The request refusal body serialized by serverError. */
 export function refusalAnswer(refusal: Refusal) {
   const entry = refusalVocabulary[refusal.code];
   const variants: Readonly<Record<string, Answer>> = entry.variants;
   const { data, code } = refusal;
   const answer: Answer = data.variant ? variants[data.variant] : entry;
   const words = typeof answer.words === 'function' ? answer.words(data) : answer.words;
-  if (answer.delivery === 'expenseTagChange')
-    return {
-      body: {
-        data: {
-          tagId: data.tagId,
-          results: [{ expenseId: data.expenseId, outcome: 'refused', code, reason: words }],
-        },
-        status: answer.status,
-      },
-      status: answer.status,
-    };
   return {
+    error: words,
     status: answer.status,
-    body: {
-      error: words,
-      ...(answer.includeStatus === false ? {} : { status: answer.status }),
-      ...(answer.includeCode ? { code } : {}),
-      ...(data.field ? { field: data.field } : {}),
-      ...(data.use ? { use: data.use } : {}),
-      ...(data.snapshot ? { snapshot: data.snapshot } : {}),
-      ...(data.existingTagId ? { existingTagId: data.existingTagId } : {}),
-      ...(data.balances
-        ? {
-            balances: data.balances.map(({ currency, amountMinor }) => ({
-              currency,
-              amount: toMajorAmount(amountMinor, currency),
-            })),
-          }
-        : {}),
-      ...(data.recurringExpenses
-        ? {
-            recurringExpenses: data.recurringExpenses.map(({ id, description }) => ({
-              id,
-              description,
-            })),
-          }
-        : {}),
-    },
+    ...(answer.includeCode ? { code } : {}),
+    ...(data.use ? { use: data.use } : {}),
+    ...(data.snapshot ? { snapshot: data.snapshot } : {}),
+    ...(data.existingTagId ? { existingTagId: data.existingTagId } : {}),
+    ...(data.balances
+      ? {
+          balances: data.balances.map(({ currency, amountMinor }) => ({
+            currency,
+            amount: toMajorAmount(amountMinor, currency),
+          })),
+        }
+      : {}),
+    ...(data.recurringExpenses
+      ? {
+          recurringExpenses: data.recurringExpenses.map(({ id, description }) => ({
+            id,
+            description,
+          })),
+        }
+      : {}),
   };
 }
 
