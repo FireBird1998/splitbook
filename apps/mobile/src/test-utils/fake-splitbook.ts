@@ -1,3 +1,4 @@
+import { onTestFinished } from 'vitest';
 import type { TripSummaryRead } from '@splitbook/shared/trip-summary-read';
 import { bodyFails, gatewayReply, hangUntilAborted, type GatewayBody } from './transport-faults';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
@@ -263,6 +264,9 @@ export function fakeSplitbook() {
     >,
   };
   const unanswered: string[] = [];
+  onTestFinished(() => {
+    if (unanswered.length) throw new Error(`Unanswered requests: ${unanswered.join(' | ')}`);
+  });
   const requests: FakeRequest[] = [];
   const sentViews = new Map<string, { query: boolean; method: boolean; rows: string[] }>();
   const label = (r: FakeRequest, query: boolean, method: boolean) =>
