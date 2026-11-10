@@ -1,0 +1,3277 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`draft-save record of recordings > Activity fails after the commit, then feed 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 120,
+          "currency": "INR",
+          "description": "Recorded dinner",
+          "expenseId": "<expense-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+            "<member-c>",
+          ],
+          "recordId": "<expense-1>",
+          "version": 2,
+        },
+        "type": "expense_added",
+      },
+    ],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "first": {
+    "body": {
+      "data": [
+        {
+          "expenseId": "<expense-1>",
+          "id": "<draft-1>",
+          "status": "saved",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "pending": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [
+          {
+            "_id": "<event-1>",
+            "actor": "<member-a>",
+            "group": "<group-1>",
+            "metadata": {
+              "amount": 120,
+              "currency": "INR",
+              "description": "Recorded dinner",
+              "expenseId": "<expense-1>",
+            },
+            "notificationContext": {
+              "eventId": "<event-1>",
+              "groupId": "<group-1>",
+              "kind": "expense_added",
+              "occurredAt": "2026-11-11T12:00:00.000Z",
+              "recipientIds": [
+                "<member-b>",
+                "<member-c>",
+              ],
+              "recordId": "<expense-1>",
+              "version": 2,
+            },
+            "occurredAt": "2026-11-11T12:00:00.000Z",
+            "type": "expense_added",
+          },
+        ],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "recovered": {
+    "body": {
+      "data": {
+        "activities": [
+          {
+            "__v": 0,
+            "_id": "<event-1>",
+            "actor": {
+              "_id": "<member-a>",
+              "name": "Alex Rivera",
+            },
+            "createdAt": "2026-11-11T12:00:00.000Z",
+            "group": "<group-1>",
+            "metadata": {
+              "amount": 120,
+              "currency": "INR",
+              "description": "Recorded dinner",
+              "expenseId": "<expense-1>",
+            },
+            "type": "expense_added",
+          },
+        ],
+        "pagination": {
+          "limit": 20,
+          "page": 1,
+          "total": 1,
+          "totalPages": 1,
+        },
+      },
+      "status": 200,
+    },
+    "status": 200,
+  },
+}
+`;
+
+exports[`draft-save record of recordings > Activity fails after the commit, then retry 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [
+          {
+            "_id": "<event-1>",
+            "actor": "<member-a>",
+            "group": "<group-1>",
+            "metadata": {
+              "amount": 120,
+              "currency": "INR",
+              "description": "Recorded dinner",
+              "expenseId": "<expense-1>",
+            },
+            "notificationContext": {
+              "eventId": "<event-1>",
+              "groupId": "<group-1>",
+              "kind": "expense_added",
+              "occurredAt": "2026-11-11T12:00:00.000Z",
+              "recipientIds": [
+                "<member-b>",
+                "<member-c>",
+              ],
+              "recordId": "<expense-1>",
+              "version": 2,
+            },
+            "occurredAt": "2026-11-11T12:00:00.000Z",
+            "type": "expense_added",
+          },
+        ],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "first": {
+    "body": {
+      "data": [
+        {
+          "expenseId": "<expense-1>",
+          "id": "<draft-1>",
+          "status": "saved",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "pending": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [
+          {
+            "_id": "<event-1>",
+            "actor": "<member-a>",
+            "group": "<group-1>",
+            "metadata": {
+              "amount": 120,
+              "currency": "INR",
+              "description": "Recorded dinner",
+              "expenseId": "<expense-1>",
+            },
+            "notificationContext": {
+              "eventId": "<event-1>",
+              "groupId": "<group-1>",
+              "kind": "expense_added",
+              "occurredAt": "2026-11-11T12:00:00.000Z",
+              "recipientIds": [
+                "<member-b>",
+                "<member-c>",
+              ],
+              "recordId": "<expense-1>",
+              "version": 2,
+            },
+            "occurredAt": "2026-11-11T12:00:00.000Z",
+            "type": "expense_added",
+          },
+        ],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "recovered": {
+    "body": {
+      "data": [
+        {
+          "expenseId": "<expense-1>",
+          "id": "<draft-1>",
+          "status": "saved",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+}
+`;
+
+exports[`draft-save record of recordings > actor is no longer a member before the request 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": [
+        {
+          "id": "<draft-1>",
+          "message": "FORBIDDEN",
+          "status": "failed",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > actor leaves between the checks and the commit 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": [
+        {
+          "id": "<draft-1>",
+          "message": "FORBIDDEN",
+          "status": "failed",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > archive commits after the checks and before the recording fence 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": true,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": [
+        {
+          "id": "<draft-1>",
+          "message": "This Group was archived, so nothing more can be saved in it.",
+          "status": "failed",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > changed command under the original retry identity 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 120,
+          "currency": "INR",
+          "description": "Recorded dinner",
+          "expenseId": "<expense-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+            "<member-c>",
+          ],
+          "recordId": "<expense-1>",
+          "version": 2,
+        },
+        "type": "expense_added",
+      },
+    ],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": [
+    {
+      "body": {
+        "data": [
+          {
+            "expenseId": "<expense-1>",
+            "id": "<draft-1>",
+            "status": "saved",
+          },
+        ],
+        "status": 200,
+      },
+      "status": 200,
+    },
+    {
+      "body": {
+        "data": [
+          {
+            "id": "<draft-1>",
+            "message": "STALE_REVISION",
+            "status": "failed",
+          },
+        ],
+        "status": 200,
+      },
+      "status": 200,
+    },
+  ],
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > first save in an archived Group 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": true,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "code": "GROUP_ARCHIVED",
+      "error": "This Group was archived, so nothing more can be saved in it.",
+      "status": 409,
+    },
+    "status": 409,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": true,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > first save, Expense alerts off, Payment alerts off 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 120,
+          "currency": "INR",
+          "description": "Recorded dinner",
+          "expenseId": "<expense-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+            "<member-c>",
+          ],
+          "recordId": "<expense-1>",
+          "version": 2,
+        },
+        "type": "expense_added",
+      },
+    ],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": [
+        {
+          "expenseId": "<expense-1>",
+          "id": "<draft-1>",
+          "status": "saved",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > first save, Expense alerts off, Payment alerts on 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 120,
+          "currency": "INR",
+          "description": "Recorded dinner",
+          "expenseId": "<expense-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+            "<member-c>",
+          ],
+          "recordId": "<expense-1>",
+          "version": 2,
+        },
+        "type": "expense_added",
+      },
+    ],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": [
+        {
+          "expenseId": "<expense-1>",
+          "id": "<draft-1>",
+          "status": "saved",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > first save, Expense alerts on, Payment alerts off 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 120,
+          "currency": "INR",
+          "description": "Recorded dinner",
+          "expenseId": "<expense-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+            "<member-c>",
+          ],
+          "recordId": "<expense-1>",
+          "version": 2,
+        },
+        "type": "expense_added",
+      },
+    ],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": [
+        {
+          "expenseId": "<expense-1>",
+          "id": "<draft-1>",
+          "status": "saved",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > first save, Expense alerts on, Payment alerts on 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 120,
+          "currency": "INR",
+          "description": "Recorded dinner",
+          "expenseId": "<expense-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+            "<member-c>",
+          ],
+          "recordId": "<expense-1>",
+          "version": 2,
+        },
+        "type": "expense_added",
+      },
+    ],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": [
+        {
+          "expenseId": "<expense-1>",
+          "id": "<draft-1>",
+          "status": "saved",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > named person is no longer a member before the request 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": [
+        {
+          "id": "<draft-1>",
+          "message": "Review changed. Reload this Draft and review it again.",
+          "status": "failed",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > named person leaves between the checks and the commit 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": [
+        {
+          "id": "<draft-1>",
+          "message": "Review changed. Reload this Draft and review it again.",
+          "status": "failed",
+        },
+      ],
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > retry after the Group is archived 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 120,
+          "currency": "INR",
+          "description": "Recorded dinner",
+          "expenseId": "<expense-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+            "<member-c>",
+          ],
+          "recordId": "<expense-1>",
+          "version": 2,
+        },
+        "type": "expense_added",
+      },
+    ],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": true,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": [
+    {
+      "body": {
+        "data": [
+          {
+            "expenseId": "<expense-1>",
+            "id": "<draft-1>",
+            "status": "saved",
+          },
+        ],
+        "status": 200,
+      },
+      "status": 200,
+    },
+    {
+      "body": {
+        "data": [
+          {
+            "expenseId": "<expense-1>",
+            "id": "<draft-1>",
+            "status": "saved",
+          },
+        ],
+        "status": 200,
+      },
+      "status": 200,
+    },
+  ],
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > same command and retry identity twice 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 120,
+          "currency": "INR",
+          "description": "Recorded dinner",
+          "expenseId": "<expense-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+            "<member-c>",
+          ],
+          "recordId": "<expense-1>",
+          "version": 2,
+        },
+        "type": "expense_added",
+      },
+    ],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": [
+    {
+      "body": {
+        "data": [
+          {
+            "expenseId": "<expense-1>",
+            "id": "<draft-1>",
+            "status": "saved",
+          },
+        ],
+        "status": 200,
+      },
+      "status": 200,
+    },
+    {
+      "body": {
+        "data": [
+          {
+            "expenseId": "<expense-1>",
+            "id": "<draft-1>",
+            "status": "saved",
+          },
+        ],
+        "status": 200,
+      },
+      "status": 200,
+    },
+  ],
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`draft-save record of recordings > two requests race with the same retry identity 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 120,
+          "currency": "INR",
+          "description": "Recorded dinner",
+          "expenseId": "<expense-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+            "<member-c>",
+          ],
+          "recordId": "<expense-1>",
+          "version": 2,
+        },
+        "type": "expense_added",
+      },
+    ],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "expenseId": "<expense-1>",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 1,
+        "savedReview": "<digest-3>",
+        "state": "saved",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-2>",
+          "fingerprintVersion": 1,
+          "key": "draft:<draft-1>",
+          "legacyTagAlias": "Food",
+          "tagId": "<tag-food-1>",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": [
+    {
+      "body": {
+        "data": [
+          {
+            "expenseId": "<expense-1>",
+            "id": "<draft-1>",
+            "status": "saved",
+          },
+        ],
+        "status": 200,
+      },
+      "status": 200,
+    },
+    {
+      "body": {
+        "data": [
+          {
+            "expenseId": "<expense-1>",
+            "id": "<draft-1>",
+            "status": "saved",
+          },
+        ],
+        "status": 200,
+      },
+      "status": 200,
+    },
+  ],
+  "before": {
+    "activities": [],
+    "drafts": [
+      {
+        "_id": "<draft-1>",
+        "changedBy": {
+          "kind": "member",
+        },
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "group": "<group-1>",
+        "itemIndex": 0,
+        "owner": "<member-a>",
+        "preparedBy": {
+          "kind": "member",
+        },
+        "requestFingerprint": "<digest-1>",
+        "requestKey": "fixture-draft-0001",
+        "revision": 0,
+        "state": "active",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+        "values": {
+          "amount": 120,
+          "category": "food",
+          "currency": "INR",
+          "date": "2026-11-01",
+          "description": "Recorded dinner",
+          "paidBy": [
+            {
+              "amount": 120,
+              "user": "<member-a>",
+            },
+          ],
+          "splitBetween": [
+            {
+              "user": "<member-b>",
+            },
+            {
+              "user": "<member-c>",
+            },
+          ],
+          "splitMethod": "equal",
+          "tag": "Food",
+          "tagId": "<tag-food-1>",
+        },
+      },
+    ],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
