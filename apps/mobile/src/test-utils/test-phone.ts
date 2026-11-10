@@ -126,6 +126,9 @@ function cell<T>(initial: T) {
     get value() {
       return structuredClone(value);
     },
+    set value(next:T) {
+      value=structuredClone(next);
+    },
     load: async () => structuredClone(value),
     save: async (next: T) => {
       value = structuredClone(next);

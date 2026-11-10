@@ -228,6 +228,7 @@ export interface FakeRequest {
   method: string;
   path: string;
   at: number;
+  online: boolean;
   headers: Headers;
   body: Record<string, unknown> | undefined;
   init: RequestInit;
@@ -249,6 +250,7 @@ export function fakeSplitbook() {
     expenses: { [group._id]: expensePage() } as Record<string, unknown>,
     expenseRecords: {} as Record<string, Record<string, unknown>>,
     activities: {} as Record<string, unknown[]>,
+    tags: {} as Record<string,unknown>,
     settlements: { [group._id]: [] as unknown[] },
     rates: { [group._id]: {} } as Record<string, Record<string, unknown>>,
     tripSummaries: { [group._id]: { '': emptyTripSummary(group.defaultCurrency) } } as Record<
@@ -308,6 +310,7 @@ export function fakeSplitbook() {
       url,
       method,
       at: Date.now(),
+      online,
       path: url.pathname + url.search,
       headers: new Headers(init.headers),
       body: init.body ? JSON.parse(String(init.body)) : undefined,
@@ -350,6 +353,7 @@ export function fakeSplitbook() {
             '/rates',
             '/trip-summary',
             '/activity',
+            '/tag-actions',
             ...Object.keys(world.expenseRecords[g._id] ?? {}).map((id) => '/expenses/' + id),
           ].map((suffix) => `/api/groups/${g._id}${suffix}`),
         ),
@@ -452,6 +456,7 @@ export function fakeSplitbook() {
           unanswered.push(`${method} ${request.path}`);
           return Response.json({ code: 'NOT_FOUND' }, { status: 404 });
         }
+        if (url.pathname === base + '/tag-actions') return answer(world.tags[found._id] ?? {canManage:false,tags:[]});
         if (url.pathname === base + '/settlements') return answer(world.settlements[found._id]);
         if (url.pathname === base + '/trip-summary') {
           const currency = url.searchParams.get('currency') ?? '';
