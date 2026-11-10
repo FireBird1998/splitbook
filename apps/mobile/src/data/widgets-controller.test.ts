@@ -75,6 +75,10 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     }),
   });
   backend.world.toReview = { total: 0, groups: [] };
+  backend.world.pages[`/api/groups/${groupId}/currencies`] = {
+    mainCurrency: { code: 'INR', locked: true },
+    extraCurrencies: [],
+  };
   backend.reply('*', '*', ({ url, init }) => {
     const path = url.pathname;
     requests.push({ path, method: init.method ?? 'GET' });

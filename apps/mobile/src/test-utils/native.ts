@@ -43,11 +43,6 @@ export function emitAppState(state: string) {
   for (const listener of [...appStateListeners]) listener(state);
 }
 
-/** NetInfo reports the device's connection: false when it drops, true when it's back. */
-export function emitConnection(isConnected: boolean) {
-  for (const listener of [...connectionListeners]) listener({ isConnected });
-}
-
 /** Android's hardware or gesture Back; returns whether a listener handled it. */
 export function pressBack() {
   return backListeners.some((listener) => listener());
@@ -73,7 +68,7 @@ export function setReduceMotion(enabled: boolean) {
 }
 
 /** Where a finger is on the screen, in dp, as a touch event reports it. */
-export interface TouchPoint {
+interface TouchPoint {
   pageX: number;
   pageY: number;
 }
@@ -136,7 +131,7 @@ export const spring = vi.fn(() => ({ start: vi.fn() }));
  * An animation the stand-ins hand back: it never runs, so no value moves and a rendered test
  * never depends on timing. A test checks what was started and stopped, and with what config.
  */
-export interface StandInAnimation {
+interface StandInAnimation {
   kind: 'timing' | 'loop';
   value?: unknown;
   config?: Record<string, unknown>;
@@ -305,7 +300,7 @@ export const reactNative = {
   useWindowDimensions: () => ({ ...currentWindow }),
 };
 
-/** `@react-native-community/netinfo`: its listeners hear `emitConnection`. */
+/** `@react-native-community/netinfo`: the runtime can subscribe and dispose its listener. */
 export const netInfo = {
   default: {
     configure: () => undefined,

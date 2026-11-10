@@ -1,5 +1,5 @@
 import { testPhone } from '../test-utils/test-phone';
-import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import { fakeSplitbook, expensePage, emptyTripSummary } from '../test-utils/fake-splitbook';
 import type { MobileController } from './mobile-controller';
 import { describe, expect, it, vi } from 'vitest';
 import { decodeStoredSession } from './cookies';
@@ -84,6 +84,12 @@ function nativeDevice() {
     summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0 },
   };
   backend.world.balances[groupId] = { byCurrency: [] };
+  // These Groups are joined or created by this fixture's existing receipt ledger.
+  for (const id of [otherGroupId, 'a00000000000000000000020', 'a00000000000000000000021']) {
+    backend.world.pages[`/api/groups/${id}/expenses`] = expensePage();
+    backend.world.pages[`/api/groups/${id}/balances`] = { byCurrency: [] };
+    backend.world.pages[`/api/groups/${id}/trip-summary`] = emptyTripSummary('INR');
+  }
   backend.auth.cookie = (persona) => (persona === 'sam' ? samCookie : alexCookie);
   backend.auth.issue('alex', alexCookie);
   backend.auth.issue('sam', samCookie);
@@ -178,6 +184,7 @@ function memoryDevice({ store = true, kit = nativeDevice() } = {}) {
 
 function setup(
   options: {
+    expectedUnanswered?: [string, string][];
     saved?: string;
     concurrent?: boolean;
     noSession?: boolean | (() => boolean);
@@ -204,6 +211,8 @@ function setup(
   const device =
     options.device ?? (options.accountLocal ? undefined : memoryDevice({ kit: store.kit }));
   const { native, backend, send } = store.kit;
+  for (const [method, path] of options.expectedUnanswered ?? [])
+    backend.expectUnanswered(method, path);
   store.kit.setReply(options.intercept);
   backend.auth.signInStatus = options.signInStatus ?? 200;
   backend.auth.signOutStatus = options.signOutStatus ?? 200;
@@ -1707,6 +1716,7 @@ describe('native session and Group boundary', () => {
   it('retains the requested verified Group on malformed detail refresh and recovers with Retry', async () => {
     let invalid = false;
     const { controller } = setup({
+      expectedUnanswered: [['GET', `/api/groups/${otherGroupId}`]],
       intercept: (path) =>
         invalid && path === `/api/groups/${groupId}`
           ? json({ data: { ...group(), tags: [{ _id: 'invalid', name: 'Broken' }] }, status: 200 })

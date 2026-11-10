@@ -78,6 +78,7 @@ describe('fake Splitbook', () => {
   );
   it('replaces the next or every matching answer and records requests including unanswered ones', async () => {
     const server = fakeSplitbook();
+    server.expectUnanswered('GET', '/probe');
     server.reply(
       'GET',
       '/probe',
@@ -204,6 +205,7 @@ describe('fake Splitbook', () => {
   );
   it('can hold a request before deferring to its normal answer, and lists unknown API requests', async () => {
     const server = fakeSplitbook();
+    server.expectUnanswered('GET', '/api/not-a-route');
     let release!: () => void;
     const wait = new Promise<void>((done) => {
       release = done;
@@ -247,6 +249,8 @@ describe('fake Splitbook', () => {
     const server = fakeSplitbook(),
       sent = server.sent(),
       paths = server.sent({ query: false });
+    server.expectUnanswered('GET', '/probe?page=1');
+    server.expectUnanswered('POST', '/probe?page=2');
     await server.fetch('http://local/probe?page=1', {});
     expect(sent).toEqual(['GET /probe?page=1']);
     expect(paths).toEqual(['GET /probe']);
@@ -476,6 +480,7 @@ describe('fake Splitbook', () => {
   });
   it('logs the time a request was sent, including an offline attempt', async () => {
     const server = fakeSplitbook();
+    server.expectUnanswered('GET', '/first');
     const now = vi.spyOn(Date, 'now').mockReturnValue(100);
     try {
       await server.fetch('http://local/first', {});
@@ -580,6 +585,7 @@ describe('fake Splitbook', () => {
   });
   it('distinguishes offline attempts from requests sent while connected', async () => {
     const server = fakeSplitbook();
+    server.expectUnanswered('GET', '/probe');
     server.online = false;
     await expect(server.fetch('http://local/probe', {})).rejects.toThrow('Network request failed');
     server.online = true;
@@ -634,6 +640,8 @@ describe('fake Splitbook', () => {
   it('keeps a mutable pathname-only view without clearing the complete request log', async () => {
     const server = fakeSplitbook(),
       paths = server.sent({ query: false, method: false });
+    server.expectUnanswered('GET', '/first?page=1');
+    server.expectUnanswered('POST', '/second?page=2');
     await server.fetch('http://local/first?page=1', {});
     expect(paths).toEqual(['/first']);
     paths.length = 0;
@@ -831,4 +839,67 @@ it('can fail a session check without revoking its still-valid cookie', async () 
   });
   expect(recovered.status).toBe(200);
   expect(await recovered.json()).toMatchObject({ user: { id: 'a00000000000000000000001' } });
+});
+
+it.fails('fails the sending test when a request has no answer', async () => {
+  const server = fakeSplitbook();
+  const response = await server.fetch('http://local/api/not-a-read', {});
+  expect(response.status).toBe(404);
+});
+
+it('accepts an explicitly declared unanswered method and path', async () => {
+  const server = fakeSplitbook();
+  server.expectUnanswered('GET', '/api/not-a-read');
+  const response = await server.fetch('http://local/api/not-a-read', {});
+  expect(response.status).toBe(404);
+  expect(server.unanswered).toEqual(['GET /api/not-a-read']);
+});
+
+it('refuses catch-all unanswered declarations', () => {
+  const server = fakeSplitbook();
+  expect(() => server.expectUnanswered('*', '/api/not-a-read')).toThrow('method and path');
+  expect(() => server.expectUnanswered('GET', '*')).toThrow('method and path');
+  expect(() => server.expectUnanswered('GET', '/api/groups/*')).toThrow('method and path');
+});
+
+it.fails('reports a declared unanswered request that never happens', () => {
+  const server = fakeSplitbook();
+  server.expectUnanswered('GET', '/api/not-a-read');
+});
+
+it('answers empty ancillary reads from the default world through the app readers', async () => {
+  const server = fakeSplitbook();
+  const cookie = server.auth.issue('alex');
+  const read = async (path: string) =>
+    (await server.fetch('http://localhost:4138' + path, { headers: { Cookie: cookie } })).json();
+  expect(parseToReviewResponse(await read('/api/user/to-review'))).toEqual({
+    total: 0,
+    groups: [],
+  });
+  expect(parseNotificationPreferences(await read('/api/notifications/device'))).toMatchObject({
+    available: true,
+    enabled: false,
+    revision: 0,
+    activation: null,
+  });
+  const phone = testPhone(server);
+  const app = phone.open();
+  await app.signIn('alex');
+  app.openSettings();
+  await vi.waitFor(() => expect(app.getSnapshot().assistants.available).toBe(true));
+  app.openAssistants();
+  await vi.waitFor(() => expect(app.getSnapshot().assistants.status).toBe('ready'));
+  expect(app.getSnapshot().assistants.assistants).toEqual([]);
+});
+
+it('answers an explicitly stated page without requiring a separate Group read', async () => {
+  const server = fakeSplitbook();
+  const groupId = 'b00000000000000000000009';
+  server.world.groups = [];
+  server.world.pages[`/api/groups/${groupId}/expenses`] = expensePage();
+  const cookie = server.auth.issue('alex');
+  const response = await server.fetch(`http://local/api/groups/${groupId}/expenses?page=1`, {
+    headers: { Cookie: cookie },
+  });
+  expect(parseExpensePage(await response.json(), groupId, 'INR').expenses).toEqual([]);
 });

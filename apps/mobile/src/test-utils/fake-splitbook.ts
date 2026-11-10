@@ -1,10 +1,11 @@
+import { onTestFinished } from 'vitest';
 import type { TripSummaryRead } from '@splitbook/shared/trip-summary-read';
 import { bodyFails, gatewayReply, hangUntilAborted, type GatewayBody } from './transport-faults';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { FetchResponse, MobileFetch, PersonaId, SessionUser } from '../data/types';
 
 /** The personas and ids most controller suites use. Each fake gets its own mutable world. */
-export const demoPeople = {
+const demoPeople = {
   alex: {
     id: 'a00000000000000000000001',
     name: 'Alex Rivera',
@@ -20,7 +21,7 @@ export const demoPeople = {
   },
 };
 const iso = '2026-09-28T12:00:00.000Z';
-export interface WireGroup {
+interface WireGroup {
   _id: string;
   createdBy: string;
   name: string;
@@ -35,7 +36,7 @@ export interface WireGroup {
   createdAt: string;
   updatedAt: string;
 }
-export function groupFixture(overrides: Partial<WireGroup> = {}): WireGroup {
+function groupFixture(overrides: Partial<WireGroup> = {}): WireGroup {
   return {
     _id: 'b00000000000000000000001',
     createdBy: demoPeople.alex.id,
@@ -140,7 +141,7 @@ export const rateSuggestion = (from: string, to: string, rate: string) => ({
   components: [],
 });
 
-function emptyTripSummary(currency: string): TripSummaryRead {
+export function emptyTripSummary(currency: string): TripSummaryRead {
   return {
     timeZone: 'UTC',
     currency,
@@ -223,7 +224,7 @@ export function recordedBatch(
   };
 }
 
-export interface FakeRequest {
+interface FakeRequest {
   url: URL;
   method: string;
   path: string;
@@ -245,10 +246,23 @@ export function fakeSplitbook() {
     pages: {} as Record<string, unknown>,
     groupsByAccount: {} as Record<string, WireGroup[]>,
     homeByAccount: {} as Record<string, unknown>,
-    toReview: null as unknown,
-    notifications: null as unknown,
-    connections: null as unknown,
-    assistantGroups: null as unknown,
+    toReview: { total: 0, groups: [] } as unknown,
+    notifications: {
+      available: true,
+      enabled: false,
+      expenseUpdates: false,
+      payments: false,
+      revision: 0,
+      activation: null,
+      expenseCutoff: null,
+      paymentCutoff: null,
+    } as unknown,
+    connections: {
+      resource: 'http://localhost:4138/api/mcp',
+      connections: [],
+      nextOffset: null,
+    } as unknown,
+    assistantGroups: { groups: [] } as unknown,
     home: { buckets: [] } as { buckets: unknown[]; groups?: unknown[] },
     balances: { [group._id]: { byCurrency: [] } } as Record<string, unknown>,
     expenses: { [group._id]: expensePage() } as Record<string, unknown>,
@@ -263,6 +277,25 @@ export function fakeSplitbook() {
     >,
   };
   const unanswered: string[] = [];
+  const expectedAbsences = new Set<string>();
+  const matchesAbsence = (expected: string, actual: string) =>
+    expected === actual || (!expected.includes('?') && expected === actual.split('?')[0]);
+  const expectUnanswered = (method: string, path: string) => {
+    if (!/^[A-Z]+$/.test(method) || !path.startsWith('/') || path.includes('*'))
+      throw new Error('Name an exact method and path for an expected unanswered request.');
+    expectedAbsences.add(`${method} ${path}`);
+  };
+  onTestFinished(() => {
+    const unexpected = unanswered.filter(
+      (actual) => ![...expectedAbsences].some((expected) => matchesAbsence(expected, actual)),
+    );
+    if (unexpected.length) throw new Error(`Unanswered requests: ${unexpected.join(' | ')}`);
+    const unused = [...expectedAbsences].filter(
+      (expected) => !unanswered.some((actual) => matchesAbsence(expected, actual)),
+    );
+    if (unused.length)
+      throw new Error(`Expected unanswered requests were not sent: ${unused.join(' | ')}`);
+  });
   const requests: FakeRequest[] = [];
   const sentViews = new Map<string, { query: boolean; method: boolean; rows: string[] }>();
   const label = (r: FakeRequest, query: boolean, method: boolean) =>
@@ -395,6 +428,7 @@ export function fakeSplitbook() {
         '/api/notifications/device',
         '/api/auth/mcp/connections',
         '/api/user/assistant-groups',
+        ...Object.keys(world.pages).map((path) => new URL(path, 'http://local').pathname),
         ...world.groups.flatMap((g) =>
           [
             '',
@@ -608,6 +642,7 @@ export function fakeSplitbook() {
     requests,
     sent,
     unanswered,
+    expectUnanswered,
     reply,
     hold,
     fault(

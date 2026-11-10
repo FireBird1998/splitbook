@@ -39,8 +39,10 @@ function setup(
     url: URL,
     init: RequestInit,
   ) => FetchResponse | Promise<FetchResponse> | undefined = () => undefined,
+  expectedUnanswered: [string, string][] = [],
 ) {
   const backend = fakeSplitbook();
+  for (const [method, path] of expectedUnanswered) backend.expectUnanswered(method, path);
   backend.world.people.alex = user;
   backend.world.groups = [group];
   backend.world.activities[groupId] = [event];
@@ -232,7 +234,7 @@ describe('native Group Activity', () => {
     },
   );
   it('keeps an unavailable record distinct from denied Group access', async () => {
-    const controller = setup();
+    const controller = setup(undefined, [['GET', `/api/groups/${groupId}/expenses/${expenseId}`]]);
     await controller.signIn('alex');
     await controller.openActivity(groupId);
     await controller.selectActivity(eventId);

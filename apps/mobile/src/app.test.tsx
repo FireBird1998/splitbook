@@ -252,6 +252,7 @@ function backend() {
     clock: phone.clock,
     writes,
     creations: phone.stores.groupCreations.records,
+    world: server.world,
     device,
     drafts: phone.stores.expenseDrafts.records,
     payments: phone.stores.settlementAttempts.records,
@@ -2179,6 +2180,10 @@ describe('App Expense window (#219)', () => {
 
   it('returns to where scrolling stopped after an Expense opened from the list', async () => {
     const app = await renderApp();
+    const opened = `e${String(102).padStart(23, '0')}`;
+    app.world.expenseRecords[groupId] = {
+      [opened]: { ...expense(opened, 'Fictional row 1-3'), revision: 0, isDeleted: false },
+    };
     app.use(sixPages);
     await app.press('Open Maple House');
     await app.scrollTo(220);

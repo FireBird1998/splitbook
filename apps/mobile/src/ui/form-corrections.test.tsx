@@ -5,7 +5,7 @@ import { visibleFieldErrors } from '../data/field-feedback';
 import { groupFields } from '../data/group-draft';
 import type { MobileController } from '../data/mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
-import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import type { FetchResponse } from '../data/types';
 import { GroupCreateForm } from './group-workflows';
 import { RecordPaymentSheet, recordPaymentFootnote } from './record-payment-sheet';
@@ -55,25 +55,22 @@ function backend() {
     ],
   };
   // Preserve this file's old server exactly: its create reply is still a Household even when
-  // the form sent a Trip, and its Expense-list request answers 404. These are fixture defects,
+  // the form sent a Trip, and the original Group's Expense-list request answers 404. These are fixture defects,
   // not the shared fake's defaults; correcting them belongs outside this move (#1063).
   server.reply('GET', `/api/groups/${groupId}/expenses`, () => json({}, 404));
-  server.reply('POST', '/api/groups', ({ body }) =>
-    json(
-      {
-        status: 201,
-        data: {
-          ...group,
-          _id: 'b00000000000000000000009',
-          name: body!.name,
-          members: [
-            { user: { _id: sam.id, name: 'Sam', email: sam.email }, role: 'admin', joinedAt: iso },
-          ],
-        },
-      },
-      201,
-    ),
-  );
+  server.reply('POST', '/api/groups', ({ body }) => {
+    const created = {
+      ...group,
+      _id: 'b00000000000000000000009',
+      name: String(body!.name),
+      members: [
+        { user: { _id: sam.id, name: 'Sam', email: sam.email }, role: 'admin', joinedAt: iso },
+      ],
+    };
+    server.world.groups.push(created);
+    server.world.expenses[created._id] = expensePage();
+    return json({ status: 201, data: created }, 201);
+  });
   const writes: string[] = [];
   let holdWrites: Promise<void> | null = null;
   server.reply('*', '*', async ({ method, url }) => {

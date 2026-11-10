@@ -443,6 +443,7 @@ function fixture(
   };
   const controller = makeController();
   return {
+    expectUnanswered: backend.expectUnanswered,
     restart: makeController,
     controller,
     saves,
@@ -1052,6 +1053,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
   });
   it('keeps a committed lost-reply save reachable from Home after restart when the account list is empty', async () => {
     const f = fixture({ lost: true });
+    f.expectUnanswered('POST', '/api/notifications/device');
     await signIn(f);
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     await tap(list, 'Save 2 ready');
