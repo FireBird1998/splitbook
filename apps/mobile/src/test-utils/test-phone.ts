@@ -251,8 +251,8 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
       moment = next;
     },
   };
-  let key = 0,
-    active: MobileController | undefined;
+  let key = 0;
+  const runtimes = new Set<MobileController>();
   type Connection = { isConnected: boolean; isInternetReachable?: boolean | null };
   let connection: Connection | undefined;
   const listeners = new Set<(state: Connection) => void>();
@@ -310,6 +310,35 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
       .filter((store) => store !== undefined);
   const omitAccount =
     options.parts && 'accountLocal' in options.parts && accountParts === undefined;
+  type OpenOptions = {
+    config?: Partial<MobileConfig>;
+    parts?: Omit<Partial<MobileDependencies>, 'fetch'>;
+  };
+  const start = (overrides: OpenOptions = {}) => {
+    const controller = (
+      options.monitor === false ? createMobileController : createCheckedMobileController
+    )(
+      {
+        apiBaseUrl: options.origin ?? 'http://localhost:4138',
+        authOrigin: options.origin ?? 'http://localhost:4138',
+        developmentPersonaEnabled: true,
+        ...options.config,
+        ...overrides.config,
+      },
+      {
+        ...parts,
+        accountLocal: omitAccount ? undefined : accountLocal,
+        ...overrides.parts,
+        fetch: server.fetch,
+      },
+    );
+    runtimes.add(controller);
+    return controller;
+  };
+  const dispose = () => {
+    for (const controller of runtimes) controller.dispose();
+    runtimes.clear();
+  };
   const phone = {
     stores,
     clock,
@@ -321,34 +350,14 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
       server.online = value && isInternetReachable !== false;
       listeners.forEach((listener) => listener(connection!));
     },
-    open(
-      overrides: {
-        config?: Partial<MobileConfig>;
-        parts?: Omit<Partial<MobileDependencies>, 'fetch'>;
-      } = {},
-    ) {
-      active?.dispose();
-      active = (options.monitor === false ? createMobileController : createCheckedMobileController)(
-        {
-          apiBaseUrl: options.origin ?? 'http://localhost:4138',
-          authOrigin: options.origin ?? 'http://localhost:4138',
-          developmentPersonaEnabled: true,
-          ...options.config,
-          ...overrides.config,
-        },
-        {
-          ...parts,
-          accountLocal: omitAccount ? undefined : accountLocal,
-          ...overrides.parts,
-          fetch: server.fetch,
-        },
-      );
-      return active;
+    open(overrides: OpenOptions = {}) {
+      dispose();
+      return start(overrides);
     },
-    dispose() {
-      active?.dispose();
-      active = undefined;
-    },
+    // Only tests that deliberately keep old I/O and its runtime alive opt into concurrency.
+    // An ordinary open is still a restart and disposes every prior runtime.
+    openConcurrent: start,
+    dispose,
   };
   onTestFinished(phone.dispose);
   return phone;

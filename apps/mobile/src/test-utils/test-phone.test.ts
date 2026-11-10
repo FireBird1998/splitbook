@@ -501,15 +501,21 @@ it('reopens the same phone with the caller’s current runtime parts and build c
   expect(phone.stores.credentials.value).not.toBeNull();
 });
 
-it('can explicitly keep two runtimes on one phone until a normal restart disposes both',async()=>{
-  const server=fakeSplitbook(),phone=testPhone(server);
-  const first=phone.open();await first.signIn('alex');
-  const second=phone.openConcurrent();await second.restore();
+it('can explicitly keep two runtimes on one phone until a normal restart disposes both', async () => {
+  const server = fakeSplitbook(),
+    phone = testPhone(server);
+  const first = phone.open();
+  await first.signIn('alex');
+  const second = phone.openConcurrent();
+  await second.restore();
+  expect(first.getSnapshot().auth.status).toBe('authenticated');
+  expect(second.getSnapshot().auth.status).toBe('authenticated');
   await first.openGroup('b00000000000000000000001');
   expect(first.getSnapshot().screen).toBe('group');
-  const restarted=phone.open();await restarted.restore();
-  const before=server.requests.length;
-  await first.refresh('pull');await second.refresh('pull');
-  expect(server.requests).toHaveLength(before);
+  const restarted = phone.open();
+  expect(first.getSnapshot().auth.status).toBe('signed-out');
+  expect(second.getSnapshot().auth.status).toBe('signed-out');
+  expect(first.getSnapshot().detail.data).toBeNull();
+  await restarted.restore();
   expect(restarted.getSnapshot().auth.user?.id).toBe('a00000000000000000000001');
 });
