@@ -43,7 +43,11 @@ export interface LedgerRecording<T extends LedgerRecord> {
   actorId: string;
   model: Model<T>;
   transactions: 'allow-standalone' | { required: Refusal };
-  compatibility?: { membership: 'before-retry'; missingGroup?: 'fault' };
+  compatibility?: {
+    membership: 'before-retry';
+    missingGroup?: 'fault';
+    standaloneArchive?: 'fence-only';
+  };
   retry?: { key: string; command: Record<string, unknown> };
   currencies: ReadonlyArray<{ currency: string; rule: 'listed' | 'held-by-ledger' }>;
   checkPeople: (members: Set<string>) => void;
@@ -108,7 +112,14 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
         }
         const group = await Group.findById(groupId).lean();
         if (!group) throw new Refusal('FORBIDDEN');
-        if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
+        if (group.isArchived) {
+          // Standalone payments historically rely on the fence's earlier archive check.
+          // A real independent archive can commit after it, while currencies are being locked.
+          const legacyStandalone =
+            description.compatibility?.standaloneArchive === 'fence-only' &&
+            !(await supportsGroupTransactions());
+          if (!legacyStandalone) throw new Refusal('GROUP_ARCHIVED');
+        }
         if (description.compatibility?.membership !== 'before-retry') checkMembers(group);
         const result: HydratedDocument<T>[] = [];
         for (const [index, build] of descriptions.entries()) {

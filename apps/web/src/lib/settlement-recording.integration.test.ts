@@ -47,14 +47,31 @@ it('preserves a standalone payment when an archive commits after its fence check
     if (!uri) throw new Error('Standalone payment coverage requires STANDALONE_TEST_MONGODB_URI');
     const directory = await mkdtemp(join(tmpdir(), 'splitbook-payment-'));
     try {
-      await promisify(execFile)(process.execPath, [resolve('node_modules/vitest/vitest.mjs'), 'run',
-        'src/lib/settlement-recording.integration.test.ts', '-t',
-        'preserves a standalone payment', '--maxWorkers', '1'], {
-        cwd: process.cwd(), timeout: 15000,
-        env: { ...process.env, TEST_MONGODB_URI: uri, PAYMENT_ARCHIVE_STANDALONE: 'true',
-          RECORDING_STANDALONE_RESULT: join(directory, 'unused.json') },
-      });
-    } finally { await rm(directory, { recursive: true, force: true }); }
+      await promisify(execFile)(
+        process.execPath,
+        [
+          resolve('node_modules/vitest/vitest.mjs'),
+          'run',
+          'src/lib/settlement-recording.integration.test.ts',
+          '-t',
+          'preserves a standalone payment',
+          '--maxWorkers',
+          '1',
+        ],
+        {
+          cwd: process.cwd(),
+          timeout: 15000,
+          env: {
+            ...process.env,
+            TEST_MONGODB_URI: uri,
+            PAYMENT_ARCHIVE_STANDALONE: 'true',
+            RECORDING_STANDALONE_RESULT: join(directory, 'unused.json'),
+          },
+        },
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
     return;
   }
   const update = Group.collection.updateOne;
@@ -72,6 +89,10 @@ it('preserves a standalone payment when an archive commits after its fence check
   expect(archived).toBe(true);
   expect(answer.status).toBe(201);
   const feed = await fixture.http(fixture.routes.feed.GET, 'GET', 'activity');
-  expect(feed.body.data.activities.filter((event: { type: string }) => event.type === 'settlement_recorded')).toHaveLength(1);
+  expect(
+    feed.body.data.activities.filter(
+      (event: { type: string }) => event.type === 'settlement_recorded',
+    ),
+  ).toHaveLength(1);
   expect((await Group.findById(fixture.groupId))!.isArchived).toBe(true);
 });

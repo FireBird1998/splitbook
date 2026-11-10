@@ -50,7 +50,11 @@ export class SettlementService {
       actorId: userId,
       model: Settlement,
       transactions: 'allow-standalone',
-      compatibility: { membership: 'before-retry', missingGroup: 'fault' },
+      compatibility: {
+        membership: 'before-retry',
+        missingGroup: 'fault',
+        standaloneArchive: 'fence-only',
+      },
       retry: requestKey ? { key: requestKey, command } : undefined,
       currencies: [
         { currency: data.currency, rule: 'held-by-ledger' },
