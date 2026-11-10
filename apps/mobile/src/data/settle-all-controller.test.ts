@@ -406,10 +406,10 @@ describe('settling up in several currencies at once (#734)', () => {
         paidCurrency: 'INR',
         // The Group's order: its main currency first.
         debts: [
-          { currency: 'INR', amount: 1480 },
-          { currency: 'EUR', amount: 20 },
+          { currency: 'INR', amountMinor: 148000 },
+          { currency: 'EUR', amountMinor: 2000 },
         ],
-        rates: { EUR: { rate: { status: 'ready', suggestion: { rate: '92.1' } }, custom: null } },
+        rates: { EUR: { state: { status: 'ready', suggestion: { rate: '92.1' } }, custom: null } },
       },
     });
     await controller.recordSettlement();
@@ -456,8 +456,8 @@ describe('settling up in several currencies at once (#734)', () => {
     expect(controller.getSnapshot().settlement.batch).toMatchObject({
       paidCurrency: 'INR',
       debts: [
-        { currency: 'EUR', amount: 20 },
-        { currency: 'JPY', amount: 2500 },
+        { currency: 'EUR', amountMinor: 2000 },
+        { currency: 'JPY', amountMinor: 2500 },
       ],
     });
     await controller.recordSettlement();
@@ -493,7 +493,7 @@ describe('settling up in several currencies at once (#734)', () => {
     expect(sent).toContain(`GET /api/groups/${groupId}/rates?from=INR&to=EUR`);
     expect(controller.getSnapshot().settlement.batch).toMatchObject({
       paidCurrency: 'EUR',
-      rates: { INR: { rate: { status: 'ready' } } },
+      rates: { INR: { state: { status: 'ready' } } },
     });
     expect(controller.getSnapshot().settlement.batch?.rates.EUR).toBeUndefined();
     await controller.recordSettlement();
@@ -538,7 +538,7 @@ describe('settling up in several currencies at once (#734)', () => {
       pathname.endsWith('/rates') ? rates(null) : undefined,
     );
     expect(controller.getSnapshot().settlement.batch?.rates.EUR).toEqual({
-      rate: { status: 'none', reason: 'unavailable' },
+      state: { status: 'none', reason: 'unavailable' },
       custom: null,
     });
     await controller.recordSettlement();
@@ -606,8 +606,8 @@ describe('settling up in several currencies at once (#734)', () => {
       message: 'The Debts changed. Check the payment, then record again.',
       batch: {
         debts: [
-          { currency: 'INR', amount: 1480 },
-          { currency: 'EUR', amount: 15 },
+          { currency: 'INR', amountMinor: 148000 },
+          { currency: 'EUR', amountMinor: 1500 },
         ],
       },
     });
