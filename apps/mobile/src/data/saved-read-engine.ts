@@ -440,7 +440,10 @@ export function createSavedReadEngine<Scope extends string = never>(
     client.setQueryData(key, data);
     return data;
   };
-  return {
+  const engine = {
+    paging(config: PagingConfig): SavedPaging {
+      return createPaging(client, engine.read, engine.refuses, config);
+    },
     /** An answer already verified elsewhere is saved with its original time and owner (#219). */
     save: saveRow,
     /**
@@ -613,6 +616,7 @@ export function createSavedReadEngine<Scope extends string = never>(
     /** Settles once no saved copy is being written. */
     idle: () => queue.idle(),
   };
+  return engine;
 }
 
 /** One parse per wire answer and view scope, shared by record and page parsers. */
@@ -627,3 +631,159 @@ export const parseOnce = <T>(parse: (value: unknown, scope: string) => T) => {
     return fresh;
   };
 };
+
+interface PagingConfig {
+  pagination(key: QueryKey, value: unknown, page: number): { page: number; totalPages: number };
+  failedMessage(error: unknown): string;
+  reopen: 'fetching' | 'multiple-pages';
+}
+interface PageRead {
+  accept(value: unknown): void | Promise<void>;
+  before?(fresh: boolean): void;
+  validate?(answer: Envelope, first: PageEnvelope | undefined): void;
+}
+interface PageObserver {
+  fetchNextPage(options: { cancelRefetch: false }): Promise<{ error: Error | null }>;
+  fetchPreviousPage(options: { cancelRefetch: false }): Promise<{ error: Error | null }>;
+}
+interface PagingOptions {
+  initialPageParam: number;
+  getNextPageParam(last: PageEnvelope): number | undefined;
+  getPreviousPageParam(first: PageEnvelope, all: PageEnvelope[], param: number): number | undefined;
+  maxPages: number;
+  structuralSharing: typeof sharePages;
+}
+interface SavedPaging {
+  options(key: QueryKey, start?: number): PagingOptions;
+  read(
+    context: { queryKey: QueryKey; pageParam: unknown },
+    request: PageRead,
+  ): Promise<PageEnvelope>;
+  older(
+    key: QueryKey,
+    bind: () => PageObserver | undefined,
+  ): Promise<{ error: Error | null } | undefined | false>;
+  newer(
+    key: QueryKey,
+    bind: () => PageObserver | undefined,
+  ): Promise<{ error: Error | null } | undefined | false>;
+  reopen(key: QueryKey): void;
+}
+/** The shared five-page window; screen eligibility, parsing and post-read effects stay in views. */
+function createPaging(
+  client: QueryClient,
+  read: <T = Envelope>(request: RowRead<T>) => Promise<T>,
+  refuses: (error: unknown) => boolean,
+  config: PagingConfig,
+): SavedPaging {
+  /** Each fetch's page count and first answer: later failures end there; validation sees its window. */
+  const pagesRead = new WeakMap<object, number>(),
+    firstAnswers = new WeakMap<object, PageEnvelope>();
+  const held = (key: QueryKey) => client.getQueryCache().get<Pages, Error>(hashKey(key));
+  return {
+    options: (key, start = 1) => ({
+      initialPageParam: start,
+      getNextPageParam: (last) => {
+        if (last.source === 'failed') return undefined;
+        const { page, totalPages } = config.pagination(key, last.value, last.page);
+        return page < totalPages ? page + 1 : undefined;
+      },
+      getPreviousPageParam: (_first, _all, param) => (param > 1 ? param - 1 : undefined),
+      maxPages: MAX_PAGES,
+      structuralSharing: sharePages,
+    }),
+    read({ queryKey: key, pageParam }, request) {
+      const page = pageParam as number,
+        query = held(key),
+        fetch = query?.promise ?? {};
+      const index = pagesRead.get(fetch) ?? 0;
+      pagesRead.set(fetch, index + 1);
+      const more = Boolean(query?.state.fetchMeta?.fetchMore);
+      request.before?.(index === 0 && !more);
+      return read<PageEnvelope>({
+        key,
+        page,
+        accept: request.accept,
+        project: (answer) => {
+          const first = more
+            ? query?.state.data?.pages[0]
+            : index > 0
+              ? firstAnswers.get(fetch)
+              : undefined;
+          request.validate?.(answer, first);
+          const result = { ...answer, page };
+          if (index === 0 && !more) firstAnswers.set(fetch, result);
+          return result;
+        },
+        failure: (error) => {
+          // A failed later page ends a re-read there; Load older retries it. A refusal, a cancelled
+          // request or the first page's failure stays an error, never a page (#219, #222).
+          if (
+            index === 0 ||
+            more ||
+            refuses(error) ||
+            error instanceof Superseded ||
+            (error instanceof RequestError && error.kind === 'cancelled')
+          )
+            throw error;
+          return {
+            source: 'failed',
+            page,
+            refreshedAt: Date.now(),
+            value: null,
+            message: config.failedMessage(error),
+          };
+        },
+      });
+    },
+    async older(key, bind) {
+      const query = held(key),
+        state = query?.state;
+      if (!state?.data || state.fetchStatus === 'fetching') return false;
+      const { pages, pageParams } = state.data,
+        last = pages[pages.length - 1];
+      // Retry the failed slot in its place; preserve the list's verification time (#215).
+      if (last.source === 'failed')
+        client.setQueryData<Pages>(
+          key,
+          { pages: pages.slice(0, -1), pageParams: pageParams.slice(0, -1) },
+          { updatedAt: state.dataUpdatedAt },
+        );
+      else {
+        const { page, totalPages } = config.pagination(key, last.value, last.page);
+        if (page >= totalPages) return false;
+      }
+      return bind()?.fetchNextPage({ cancelRefetch: false });
+    },
+    async newer(key, bind) {
+      const state = held(key)?.state;
+      if (!state?.data || state.fetchStatus === 'fetching' || (state.data.pageParams[0] ?? 1) <= 1)
+        return false;
+      return bind()?.fetchPreviousPage({ cancelRefetch: false });
+    },
+    reopen(key) {
+      const query = held(key),
+        data = query?.state.data;
+      // An Expense's earlier open owns every fetching read; the other lists keep a one-page
+      // window, including its Load older. This unresolved difference stays named (B9).
+      if (config.reopen === 'fetching' && query?.state.fetchStatus === 'fetching')
+        return void client.removeQueries({ queryKey: key, exact: true });
+      if (!query || !data || data.pages.length < 2) return;
+      if (data.pageParams[0] === 1 && query.state.fetchStatus !== 'fetching')
+        client.setQueryData<Pages>(
+          key,
+          { pages: data.pages.slice(0, 1), pageParams: [1] },
+          { updatedAt: query.state.dataUpdatedAt },
+        );
+      else client.removeQueries({ queryKey: key, exact: true });
+    },
+  };
+}
+
+/** A row seen on two pages is listed once, in its first position with its latest value (#219). */
+export function uniqueRows<T>(pages: T[][], id: (row: T) => string, shown: T[]): T[] {
+  const rows = [...new Map(pages.flat().map((row) => [id(row), row])).values()];
+  return rows.length === shown.length && rows.every((row, index) => row === shown[index])
+    ? shown
+    : rows;
+}

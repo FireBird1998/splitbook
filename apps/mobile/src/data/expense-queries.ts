@@ -24,11 +24,10 @@ import { emptyExpenseHistory, parseActivityPage, type ExpenseHistoryState } from
 import { draftFromExpense, parseExpenseContext, previewExpense } from './expense-draft';
 import { parseExpenseRecord, type ExpenseRecord } from './expense-record';
 import {
-  MAX_PAGES,
   createSavedReadEngine,
   parseOnce,
+  uniqueRows,
   rowPaths,
-  sharePages,
   STALE,
   type Envelope,
   type PageEnvelope,
@@ -174,8 +173,6 @@ type Read = {
  */
 export function createExpenseQueries(session: ExpenseSession) {
   const { client } = session;
-  /** How many pages each fetch of the changes has read so far, by its promise. */
-  const pagesRead = new WeakMap<object, number>();
   /**
    * The open each query's data was answered in, by a read from the server or this device's copy
    * when the server couldn't be reached; data restored to show while it is read, or read in an
@@ -266,43 +263,21 @@ export function createExpenseQueries(session: ExpenseSession) {
       accept: (value) => checkIdentity(value, key[3] as string, expenseOf(key)),
     });
   };
-  /**
-   * A page of the changes. When a later page of a read can't be read, the history ends there
-   * (`failed`), keeping the pages read before it; offline, the page's saved copy answers for it.
-   */
-  const readPage = (context: QueryFunctionContext<QueryKey, unknown>) => {
-    const key = context.queryKey,
-      scope = `${key[3]}:${expenseOf(key)}`,
-      page = context.pageParam as number,
-      query = held(key),
-      fetch = query?.promise ?? {};
-    const index = pagesRead.get(fetch) ?? 0;
-    pagesRead.set(fetch, index + 1);
-    const more = Boolean(query?.state.fetchMeta?.fetchMore);
-    return engine.read<PageEnvelope>({
-      key,
-      page,
-      accept: (value) => void pageOf(value, `${scope}:${page}`),
-      project: (answer) => ({ ...answer, page }),
-      failure: (error) => {
-        if (
-          index === 0 ||
-          more ||
-          engine.refuses(error) ||
-          error instanceof Superseded ||
-          (error instanceof RequestError && error.kind === 'cancelled')
-        )
-          throw error;
-        return {
-          source: 'failed',
-          page,
-          refreshedAt: Date.now(),
-          value: null,
-          message: historyFailed,
-        };
-      },
+  const paging = engine.paging({
+    pagination: (key, value, page) =>
+      pageOf(value, `${key[3]}:${expenseOf(key)}:${page}`).pagination,
+    failedMessage: () => historyFailed,
+    reopen: 'fetching',
+  });
+  /** The Expense's history parser checks each page and its Expense. */
+  const readPage = (context: QueryFunctionContext<QueryKey, unknown>) =>
+    paging.read(context, {
+      accept: (value) =>
+        void pageOf(
+          value,
+          `${context.queryKey[3]}:${expenseOf(context.queryKey)}:${context.pageParam}`,
+        ),
     });
-  };
   const shared = engine.shared;
   const recordOptions = (groupId: string, expenseId: string, enabled = true, fresh = false) => ({
     ...shared,
@@ -312,21 +287,12 @@ export function createExpenseQueries(session: ExpenseSession) {
     ...(fresh ? { staleTime: STALE } : {}),
   });
   const historyOptions = (groupId: string, expenseId: string, enabled = true, fresh = false) => {
-    const scope = `${groupId}:${expenseId}`;
+    const key = historyKey(groupId, expenseId);
     return {
       ...shared,
-      queryKey: historyKey(groupId, expenseId),
+      queryKey: key,
       queryFn: readPage,
-      initialPageParam: 1,
-      getNextPageParam: (last: PageEnvelope) => {
-        if (last.source === 'failed') return undefined;
-        const { pagination } = pageOf(last.value, `${scope}:${last.page}`);
-        return pagination.page < pagination.totalPages ? pagination.page + 1 : undefined;
-      },
-      getPreviousPageParam: (_first: PageEnvelope, _all: PageEnvelope[], param: number) =>
-        param > 1 ? param - 1 : undefined,
-      maxPages: MAX_PAGES,
-      structuralSharing: sharePages,
+      ...paging.options(key),
       enabled,
       ...(fresh ? { staleTime: STALE } : {}),
     };
@@ -461,18 +427,15 @@ export function createExpenseQueries(session: ExpenseSession) {
       const parsed = read.map((page) => pageOf(page.value, `${groupId}:${expenseId}:${page.page}`));
       // A change read on two pages, as changes are added above it, is listed once; the changes
       // shown stay the same list when nothing in them changed.
-      const events = [
-        ...new Map(
-          parsed.flatMap((page) => page.events).map((event) => [event._id, event]),
-        ).values(),
-      ];
-      const kept =
-        events.length === base.events.length &&
-        events.every((event, index) => event === base.events[index]);
+      const events = uniqueRows(
+        parsed.map((page) => page.events),
+        (event) => event._id,
+        base.events,
+      );
       base = {
         ...base,
         expenseId,
-        events: kept ? base.events : events,
+        events,
         pagination: parsed[parsed.length - 1].pagination,
         firstPage: read[0].page,
         // Never fresher than its oldest page (#215).
@@ -709,20 +672,7 @@ export function createExpenseQueries(session: ExpenseSession) {
     want(expenseId: string) {
       if (!view || view.expenseId === expenseId) return;
       view.expenseId = expenseId;
-      const key = historyKey(view.groupId, expenseId),
-        query = held<Pages>(key),
-        pages = query?.state.data;
-      // A read an earlier open began, such as its Load older, isn't this open's: it goes.
-      if (query?.state.fetchStatus === 'fetching')
-        return void client.removeQueries({ queryKey: key, exact: true });
-      if (!query || !pages || pages.pages.length < 2) return;
-      if (pages.pageParams[0] === 1)
-        client.setQueryData<Pages>(
-          key,
-          { pages: pages.pages.slice(0, 1), pageParams: [1] },
-          { updatedAt: query.state.dataUpdatedAt },
-        );
-      else client.removeQueries({ queryKey: key, exact: true });
+      paging.reopen(historyKey(view.groupId, expenseId));
     },
     /**
      * What this device already knows of the record, an earlier read or its saved copy, shows at
@@ -831,42 +781,20 @@ export function createExpenseQueries(session: ExpenseSession) {
      */
     async loadOlder() {
       const opened = view;
-      if (!opened?.expenseId || !recordShown()) return;
-      const key = historyKey(opened.groupId, opened.expenseId),
-        state = stateOf<Pages>(key);
-      if (!state?.data || state.fetchStatus === 'fetching' || !opened.history) return;
-      const { pages, pageParams } = state.data;
-      const last = pages[pages.length - 1];
-      if (last.source === 'failed')
-        client.setQueryData<Pages>(
-          key,
-          { pages: pages.slice(0, -1), pageParams: pageParams.slice(0, -1) },
-          { updatedAt: held(key)?.state.dataUpdatedAt },
-        );
-      else {
-        const { pagination } = pageOf(
-          last.value,
-          `${opened.groupId}:${opened.expenseId}:${last.page}`,
-        );
-        if (pagination.page >= pagination.totalPages) return;
-      }
-      bind();
-      await observers.history?.fetchNextPage({ cancelRefetch: false });
+      if (!opened?.expenseId || !recordShown() || !opened.history) return;
+      await paging.older(historyKey(opened.groupId, opened.expenseId), () => {
+        bind();
+        return observers.history;
+      });
     },
-    /** Load newer: the page before the window, which drops the window's oldest page. */
+    /** Load newer: the page before the window, which drops its oldest page. */
     async loadNewer() {
       const opened = view;
-      if (!opened?.expenseId || !recordShown()) return;
-      const state = stateOf<Pages>(historyKey(opened.groupId, opened.expenseId));
-      if (
-        !state?.data ||
-        state.fetchStatus === 'fetching' ||
-        !opened.history ||
-        (state.data.pageParams[0] ?? 1) <= 1
-      )
-        return;
-      bind();
-      await observers.history?.fetchPreviousPage({ cancelRefetch: false });
+      if (!opened?.expenseId || !recordShown() || !opened.history) return;
+      await paging.newer(historyKey(opened.groupId, opened.expenseId), () => {
+        bind();
+        return observers.history;
+      });
     },
     /** Settles once the foreground's read of the screen has. */
     settle: () => foreground,
