@@ -273,4 +273,89 @@ describe('test phone', () => {
     await restarted.signOut();
     expect(phone.stores.expenseDrafts.records.size).toBe(0);
   });
+  it('holds and fails only the requested saved-query path', async () => {
+    const phone = testPhone(fakeSplitbook()),
+      store = phone.stores.savedQueries;
+    const held = store.at('/api/second').holdNext('save');
+    await store.save('alex', '/api/first', { saved: 1 });
+    const writing = store.save('alex', '/api/second', { saved: 2 });
+    await held.arrived;
+    expect(await store.load('alex', '/api/first')).toEqual({ saved: 1 });
+    expect(await store.load('alex', '/api/second')).toBeNull();
+    held.release();
+    await writing;
+    store.at('/api/second').failNext('load', new Error('Unreadable row'));
+    expect(await store.load('alex', '/api/first')).toEqual({ saved: 1 });
+    await expect(store.load('alex', '/api/second')).rejects.toThrow('Unreadable row');
+    expect(await store.load('alex', '/api/second')).toEqual({ saved: 2 });
+  });
+
+  it('keeps a native failure active until disabled or removed, independently of failNext', async () => {
+    const phone = testPhone(fakeSplitbook()),
+      store = phone.stores.savedQueries;
+    await store.save('alex', '/api/group', { saved: 1 });
+    let broken = true;
+    const stop = store
+      .at('/api/group')
+      .failPersistently('load', new Error('Broken storage'), () => broken);
+    for (let i = 0; i < 2; i++)
+      await expect(store.load('alex', '/api/group')).rejects.toThrow('Broken storage');
+    broken = false;
+    expect(await store.load('alex', '/api/group')).toEqual({ saved: 1 });
+    broken = true;
+    await expect(store.load('alex', '/api/group')).rejects.toThrow('Broken storage');
+    stop();
+    expect(await store.load('alex', '/api/group')).toEqual({ saved: 1 });
+  });
+
+  it('delays native reads while the device is slow and can remove that delay', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = testPhone(fakeSplitbook()).stores.savedQueries;
+      await store.save('alex', '/api/group', { saved: 1 });
+      let delay = 50;
+      const stop = store.delayPersistently('load', () => delay);
+      let answered = false;
+      const reading = store.load('alex', '/api/group').then((value) => {
+        answered = true;
+        return value;
+      });
+      await vi.advanceTimersByTimeAsync(49);
+      expect(answered).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await reading).toEqual({ saved: 1 });
+      delay = 0;
+      expect(await store.load('alex', '/api/group')).toEqual({ saved: 1 });
+      delay = 50;
+      stop();
+      expect(await store.load('alex', '/api/group')).toEqual({ saved: 1 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports connected without internet, keeps that signal on restart, and reconnects', async () => {
+    const server = fakeSplitbook(),
+      phone = testPhone(server);
+    const app = phone.open();
+    await app.signIn('alex');
+    phone.connect(true, false);
+    expect(server.online).toBe(false);
+    await app.refreshHome();
+    expect(app.getSnapshot().offline.active).toBe(true);
+    const restarted = phone.open();
+    await restarted.restore();
+    expect(restarted.getSnapshot().offline.active).toBe(true);
+    phone.connect(true, true);
+    await vi.waitFor(() => expect(restarted.getSnapshot().offline.active).toBe(false));
+    expect(server.online).toBe(true);
+  });
+
+  it('can persistently refuse the native saved-copy retention step', async () => {
+    const store = testPhone(fakeSplitbook()).stores.savedQueries;
+    const stop = store.failPersistently('retainGroups', new Error('Cannot retain rows'));
+    await expect(store.retainGroups!('alex', ['maple'])).rejects.toThrow('Cannot retain rows');
+    stop();
+    await expect(store.retainGroups!('alex', ['maple'])).resolves.toBeUndefined();
+  });
 });

@@ -3,8 +3,9 @@ import { createCheckedMobileController } from './flow-monitor';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { AccountLocalStorage, MobileDependencies } from '../data/types';
 import { savedQueriesIn } from './saved-queries';
+import type { SavedQueryRecords } from '../data/saved-copy-budget';
 
-type StoreOperation = 'load' | 'save' | 'remove' | 'clear' | 'list' | 'keys';
+type StoreOperation = 'load' | 'save' | 'remove' | 'clear' | 'list' | 'keys' | 'retainGroups';
 
 type PurgeStore =
   | 'savedQueries'
@@ -22,10 +23,28 @@ type PhoneParts = Omit<Partial<Omit<MobileDependencies, 'fetch'>>, 'accountLocal
 
 /** Faults stop at the native storage boundary, before its atomic read or write. */
 function faultable<T extends object>(store: T) {
-  const next = new Map<string, (() => Promise<void>)[]>();
-  const enqueue = (operation: StoreOperation, action: () => Promise<void>) => {
+  const next = new Map<string, { path?: string; action: () => Promise<void> }[]>();
+  const persistent = new Set<{
+    operation: StoreOperation;
+    path?: string;
+    when: () => boolean;
+    action: () => Promise<void>;
+  }>();
+  const persist = (
+    operation: StoreOperation,
+    action: () => Promise<void>,
+    when: () => boolean,
+    path?: string,
+  ) => {
+    const rule = { operation, action, when, path };
+    persistent.add(rule);
+    return () => {
+      persistent.delete(rule);
+    };
+  };
+  const enqueue = (operation: StoreOperation, action: () => Promise<void>, path?: string) => {
     const queue = next.get(operation) ?? [];
-    queue.push(action);
+    queue.push({ path, action });
     next.set(operation, queue);
   };
   for (const [operation, value] of Object.entries(store)) {
@@ -35,17 +54,42 @@ function faultable<T extends object>(store: T) {
       enumerable: true,
       configurable: true,
       value: async (...args: unknown[]) => {
-        await next.get(operation)?.shift()?.();
+        for (const rule of persistent)
+          if (
+            rule.operation === operation &&
+            (rule.path === undefined || rule.path === args[1]) &&
+            rule.when()
+          )
+            await rule.action();
+        const queue = next.get(operation);
+        const index =
+          queue?.findIndex((step) => step.path === undefined || step.path === args[1]) ?? -1;
+        await (index < 0 ? undefined : queue!.splice(index, 1)[0].action());
         return call.apply(store, args);
       },
     });
   }
-  return Object.assign(store, {
+  const controls = (path?: string) => ({
     failNext(operation: StoreOperation, error = new Error('Fictional device storage failure')) {
-      enqueue(operation, () => Promise.reject(error));
+      enqueue(operation, () => Promise.reject(error), path);
+    },
+    failPersistently(
+      operation: StoreOperation,
+      error = new Error('Fictional device storage failure'),
+      when = () => true,
+    ) {
+      return persist(operation, () => Promise.reject(error), when, path);
+    },
+    delayPersistently(operation: StoreOperation, milliseconds: () => number) {
+      return persist(
+        operation,
+        () => new Promise<void>((resolve) => setTimeout(resolve, milliseconds())),
+        () => milliseconds() > 0,
+        path,
+      );
     },
     stallNext(operation: StoreOperation, until: Promise<void>) {
-      enqueue(operation, () => until);
+      enqueue(operation, () => until, path);
     },
     holdNext(operation: StoreOperation) {
       let arrive!: () => void, release!: () => void;
@@ -55,13 +99,18 @@ function faultable<T extends object>(store: T) {
       const released = new Promise<void>((done) => {
         release = done;
       });
-      enqueue(operation, () => {
-        arrive();
-        return released;
-      });
+      enqueue(
+        operation,
+        () => {
+          arrive();
+          return released;
+        },
+        path,
+      );
       return { arrived, release };
     },
   });
+  return Object.assign(store, controls(), { at: (path: string) => controls(path) });
 }
 
 /** Native cells clone at the boundary, as the persisted adapters do. */
@@ -83,11 +132,13 @@ function cell<T>(initial: T) {
 function records(savedQueries = false, separator = '') {
   const rows = new Map<string, unknown>();
   const adapter = savedQueriesIn(rows, {}, separator);
+  const retainGroups: NonNullable<SavedQueryRecords['retainGroups']> = async () => {};
   // Saved-query helpers intentionally find API paths only. Native Draft/payment stores also
   // list plain Group ids, which is how Home discovers recovery copies after a restart.
   return faultable({
     records: rows,
     ...adapter,
+    ...(savedQueries ? { retainGroups } : {}),
     list: async (account: string) =>
       savedQueries
         ? adapter.list!(account)
@@ -170,10 +221,11 @@ export function testPhone(
       moment = next;
     },
   };
-  let online = server.online,
-    key = 0,
+  let key = 0,
     active: MobileController | undefined;
-  const listeners = new Set<(state: { isConnected: boolean }) => void>();
+  type Connection = { isConnected: boolean; isInternetReachable?: boolean | null };
+  let connection: Connection | undefined;
+  const listeners = new Set<(state: Connection) => void>();
   const parts = {
     credentials: stores.credentials,
     savedQueries: stores.savedQueries,
@@ -185,9 +237,9 @@ export function testPhone(
     tagRequests: stores.tagRequests,
     groupCreations: stores.groupCreations,
     netInfo: {
-      addEventListener(listener: (state: { isConnected: boolean }) => void) {
+      addEventListener(listener: (state: Connection) => void) {
         listeners.add(listener);
-        listener({ isConnected: online });
+        listener(connection ?? { isConnected: server.online });
         return () => {
           listeners.delete(listener);
         };
@@ -230,10 +282,13 @@ export function testPhone(
   const phone = {
     stores,
     clock,
-    connect(value: boolean) {
-      online = value;
-      server.online = value;
-      listeners.forEach((listener) => listener({ isConnected: online }));
+    connect(value: boolean, isInternetReachable?: boolean | null) {
+      connection = {
+        isConnected: value,
+        ...(isInternetReachable === undefined ? {} : { isInternetReachable }),
+      };
+      server.online = value && isInternetReachable !== false;
+      listeners.forEach((listener) => listener(connection!));
     },
     open() {
       active?.dispose();

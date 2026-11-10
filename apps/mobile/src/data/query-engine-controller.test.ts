@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
 import { hangUntilAborted } from '../test-utils/transport-faults';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #214: TanStack Query owns the display reads under the controller. These checks drive the
 // controller's public commands, as the app does, and look only at the requests sent, the
@@ -72,56 +73,39 @@ function fixture(options: { freshness?: number } = {}) {
   const state = { ledger: 0, offline: false, revoked: false };
   /** How many times this device purged a lost Group's saved copies. */
   let purges = 0;
-  let cookie: string | null = null,
-    owner: string | null = null,
-    cleanup = false,
-    keys = 0;
-  const disk = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>(),
-    attempts = new Map<string, unknown>();
-  /** Every request sent, answered or not. */
-  const calls: { method: string; path: string }[] = [];
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.people.sam = sam;
+  backend.world.groups = [group];
+  Object.defineProperty(state, 'offline', {
+    get: () => !backend.online,
+    set: (value: boolean) => {
+      backend.online = !value;
+    },
+  });
+  let keys = 0;
+  const calls = () => backend.requests.map(({ method, path }) => ({ method, path }));
   const held = gate();
   let answer: (
     path: string,
     method: string,
     init: RequestInit,
   ) => Promise<FetchResponse> | null = () => null;
-  const records = (map: Map<string, unknown>) => ({
-    load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
-    save: async (account: string, key: string, value: unknown) => {
-      map.set(account + key, structuredClone(value));
-    },
-    remove: async (account: string, key: string) => {
-      map.delete(account + key);
-    },
-    clear: async () => {
-      map.clear();
-    },
+
+  for (const user of [alex, sam])
+    Object.defineProperty(backend.world.groupsByAccount, user.id, {
+      get: () => (state.revoked ? [] : [group]),
+    });
+  Object.defineProperty(backend.world, 'home', {
+    get: () => ({ buckets: [{ currency: 'INR', youOwe: 30 + state.ledger, youAreOwed: 0 }] }),
   });
-  const signedIn = (init: RequestInit) =>
-    String((init.headers as Record<string, string>).Cookie ?? '').includes('sam.') ? sam : alex;
-  const respond = (path: string, init: RequestInit): FetchResponse => {
+  const respond = (path: string, init: RequestInit): FetchResponse | undefined => {
+    if (path.startsWith('/api/auth/')) return undefined;
     const method = init.method ?? 'GET';
-    const user = signedIn(init);
-    if (path.endsWith('/sign-in')) {
-      const persona = String(init.body).includes('sam') ? 'sam' : 'alex';
-      return new Response(JSON.stringify({ user: persona === 'sam' ? sam : alex }), {
-        headers: {
-          'Set-Cookie': `better-auth.session_token=${persona}.signature; Path=/; HttpOnly`,
-        },
-      });
-    }
-    if (path.endsWith('/get-session'))
-      return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
-    if (path.endsWith('/sign-out')) return json({ success: true });
+
+    if ((path === '/api/groups' && method === 'GET') || path === '/api/user/balances')
+      return undefined;
     if (state.revoked && path.startsWith(groupPath)) return json({}, 403);
-    if (path === '/api/groups') return json({ status: 200, data: state.revoked ? [] : [group] });
-    if (path === '/api/user/balances')
-      return json({
-        status: 200,
-        data: { buckets: [{ currency: 'INR', youOwe: 30 + state.ledger, youAreOwed: 0 }] },
-      });
     if (path === groupPath) return json({ status: 200, data: group });
     if (path.startsWith(expensesPath))
       return json({
@@ -176,72 +160,45 @@ function fixture(options: { freshness?: number } = {}) {
       });
     return json({}, 404);
   };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
+  backend.reply(
+    '*',
+    '*',
+    async ({ path, method, init }) => (await answer(path, method, init)) ?? respond(path, init),
+  );
+  const phone = testPhone(backend, {
+    newSubmissionKey: () => `attempt-${String(++keys).padStart(4, '0')}`,
+    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts'],
+    parts: {
+      displayFreshnessMs: options.freshness,
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      offlineIdentity: { load: async () => null, save: async () => {}, clear: async () => {} },
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
       },
-      {
-        displayFreshnessMs: options.freshness,
-        newSubmissionKey: () => `attempt-${String(++keys).padStart(4, '0')}`,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        savedQueries: savedQueriesIn(disk, {
-          remove: async (account, path) => {
-            // Observes the per-query removal of the Group row, once per denial purge.
-            if (path === groupPath) purges += 1;
-            disk.delete(account + path);
-          },
-        }),
-        offlineIdentity: {
-          load: async () => null,
-          save: async () => undefined,
-          clear: async () => undefined,
-        },
-        expenseDrafts: records(drafts),
-        settlementAttempts: records(attempts),
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          stores: [records(disk), records(drafts), records(attempts)],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname + new URL(url).search;
-          const method = init.method ?? 'GET';
-          calls.push({ method, path });
-          if (state.offline) throw new TypeError('Network request failed');
-          return (await answer(path, method, init)) ?? respond(path, init);
-        },
-      },
-    );
+    },
+  });
+  const disk = phone.stores.savedQueries.records;
+  delete phone.stores.savedQueries.retainGroups;
+  const remove = phone.stores.savedQueries.remove;
+  phone.stores.savedQueries.remove = async (account, path) => {
+    // The original counter observes removal of the Group’s query row, once per denial purge.
+    if (path === groupPath) purges++;
+    await remove(account, path);
+  };
+  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts]) {
+    delete (store as AccountGroupRecordStore).keys;
+    delete (store as AccountGroupRecordStore).list;
+  }
+  const create = () => phone.open();
   /** GET requests sent for exactly this path, or starting with it when it ends in `?`. */
   const reads = (match: string) =>
-    calls.filter(
+    calls().filter(
       (call) =>
         call.method === 'GET' &&
         (call.path === match || (match.endsWith('?') && call.path.startsWith(match))),
@@ -249,7 +206,9 @@ function fixture(options: { freshness?: number } = {}) {
   return {
     create,
     state,
-    calls,
+    get calls() {
+      return calls();
+    },
     disk,
     reads,
     held,
@@ -262,7 +221,12 @@ function fixture(options: { freshness?: number } = {}) {
       answer = (path, method) => (match(path, method) ? held.hold(path) : null);
     },
     /** The response Alex would get for this path from the backend as it is now. */
-    now: (path: string) => respond(path, { headers: { Cookie: 'alex.signature' } }),
+    now: (path: string) =>
+      path === '/api/user/balances'
+        ? json({ status: 200, data: backend.world.home })
+        : path === '/api/groups'
+          ? json({ status: 200, data: backend.world.groupsByAccount[alex.id] })
+          : (respond(path, { headers: { Cookie: 'alex.signature' } }) ?? json({}, 404)),
     /** Every saved copy on this device of anything in the Group. */
     savedOfGroup: () => [...disk.keys()].filter((key) => key.includes(groupPath)),
     purges: () => purges,

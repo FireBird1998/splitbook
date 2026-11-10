@@ -2,7 +2,9 @@ import { createElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { ToReviewHomeCard } from '../ui/to-review';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, pagesFor } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse, MobileSnapshot } from './types';
 
 // #217: the Groups list and Home on declarative queries, their saved copies on the new
@@ -92,116 +94,66 @@ function fixture() {
     /** A status the Groups list answers with, instead of the list. */
     failList: 0,
   };
-  let cookie: string | null = null,
-    owner: string | null = null,
-    cleanup = false;
-  /** The persister's rows, by account and path; and the older saved-copy store's, the same way. */
-  const rows = new Map<string, unknown>(),
-    disk = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>(),
-    attempts = new Map<string, unknown>();
-  /**
-   * What the saved-copy databases can't do: remove copies, save a row, keep listed Groups, or
-   * read a row.
-   */
-  const device = { failRemoval: false, failSave: false, failRetain: false, failLoad: false };
-  /** Paths whose next load of a row fails, once. */
-  const failOnce = new Set<string>();
-  /** Loads, writes and removals of rows held part-way, as on a slow disk, by path. */
-  const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [],
-    removals: typeof writes = [],
-    loads: typeof writes = [];
-  /** Waits while the next step of this kind for `path` is held. */
-  const pause = async (steps: typeof writes, path: string) => {
-    const index = steps.findIndex((step) => step.path === path);
-    if (index < 0) return;
-    const [step] = steps.splice(index, 1);
-    step.arrive();
-    await step.released;
-  };
-  /** Every request sent, answered or not. */
-  const calls: { method: string; path: string; account: string }[] = [];
-  /** Requests held until released, by path. */
-  const held: {
-    path: string;
-    arrive: () => void;
-    answer: Promise<void>;
-    lost: boolean;
-    late: boolean;
-  }[] = [];
-  let connectionState: { isConnected: boolean | null; isInternetReachable?: boolean | null } = {
-    isConnected: true,
-  };
-  const connection = new Set<(state: typeof connectionState) => void>();
-  const records = (map: Map<string, unknown>) => ({
-    load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
-    save: async (account: string, key: string, value: unknown) => {
-      map.set(account + key, structuredClone(value));
-    },
-    remove: async (account: string, key: string) => {
-      map.delete(account + key);
-    },
-    clear: async () => {
-      map.clear();
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.people.sam = sam;
+  backend.world.groups = [maple, cabin, zed];
+  Object.defineProperty(server, 'offline', {
+    get: () => !backend.online,
+    set: (value: boolean) => {
+      backend.online = !value;
     },
   });
-  /** Saved copies this device couldn't remove, recorded outside their stores. */
-  const untrustedCopies = {
-    load: async () => structuredClone(untrusted.value),
-    save: async (value: unknown) => {
-      untrusted.value = structuredClone(value);
-    },
-    clear: async () => {
-      untrusted.value = null;
-    },
-  };
-  const savedQueries = {
-    retainGroups: async () => {
-      if (device.failRetain) throw new Error('The device storage is full');
-    },
-    ...records(rows),
-    load: async (account: string, key: string) => {
-      if (device.failLoad || failOnce.delete(key))
-        throw new Error('The device storage can’t be read');
-      await pause(loads, key);
-      return structuredClone(rows.get(account + key) ?? null);
-    },
-    save: async (account: string, key: string, value: unknown) => {
-      if (device.failSave) throw new Error('The device storage is full');
-      await pause(writes, key);
-      rows.set(account + key, structuredClone(value));
-    },
-    remove: async (account: string, key: string) => {
-      if (device.failRemoval) throw new Error('The device storage is full');
-      await pause(removals, key);
-      rows.delete(account + key);
-    },
-    list: async (account: string) =>
-      [...rows]
-        .filter(([key]) => key.startsWith(account))
-        .map(([key, value]) => ({
-          groupId: key.slice(account.length),
-          value: structuredClone(value),
-        })),
-  };
-  const signedIn = (init: RequestInit) =>
-    String((init.headers as Record<string, string>).Cookie ?? '').includes('sam.') ? sam : alex;
+  const device = { failRemoval: false, failSave: false, failRetain: false, failLoad: false };
+  const calls = () =>
+    backend.requests.map(({ method, path, headers }) => ({
+      method,
+      path,
+      account: headers.get('Cookie')?.includes('sam-') ? sam.id : alex.id,
+    }));
   const listed = () => server.listed.filter(({ _id }) => !server.revoked.has(_id));
-  const respond = (path: string, init: RequestInit): FetchResponse => {
+
+  for (const user of [alex, sam]) {
+    Object.defineProperty(backend.world.groupsByAccount, user.id, { get: () => listed() });
+    Object.defineProperty(backend.world.homeByAccount, user.id, {
+      get: () => ({
+        buckets: [{ currency: 'INR', youOwe: user === sam ? 50 : server.owe, youAreOwed: 0 }],
+        ...(server.groupFigures
+          ? { groups: listed().map(({ _id }) => ({ groupId: _id, balances: [] })) }
+          : {}),
+      }),
+    });
+  }
+
+  for (const { _id: id } of [maple, cabin, zed])
+    Object.assign(
+      backend.world.pages,
+      pagesFor(`/api/groups/${id}/expenses`, [
+        [
+          {},
+          {
+            expenses: [{ ...rent, group: id }],
+            pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+            summary: {
+              count: 1,
+              totalsByCurrency: [{ currency: 'INR', totalAmount: 10 }],
+              userOwes: 0,
+              userGetsBack: 0,
+              byMember: [],
+            },
+          },
+        ],
+      ]),
+    );
+  const respond = (path: string, init: RequestInit): FetchResponse | undefined => {
+    if (server.expired && !path.endsWith('/sign-in') && !path.endsWith('/sign-out'))
+      return json({}, 401);
+    if (path.startsWith('/api/auth/')) return undefined;
     const method = init.method ?? 'GET';
-    if (path.endsWith('/sign-in')) {
-      const persona = String(init.body).includes('sam') ? 'sam' : 'alex';
-      return new Response(JSON.stringify({ user: persona === 'sam' ? sam : alex }), {
-        headers: {
-          'Set-Cookie': `better-auth.session_token=${persona}.signature; Path=/; HttpOnly`,
-        },
-      });
-    }
-    if (path.endsWith('/sign-out')) return json({ success: true });
-    if (server.expired) return json({}, 401);
-    const user = signedIn(init);
-    if (path.endsWith('/get-session'))
-      return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
+    if (path === '/api/groups' && method === 'GET' && server.failList)
+      return json({}, server.failList);
+    if ((path === '/api/groups' && method === 'GET') || path === '/api/user/balances')
+      return undefined;
     if (path === '/api/user/to-review')
       return json({ status: 200, data: { total: 0, groups: [] } });
     if (path === listPath && method === 'POST') {
@@ -211,18 +163,6 @@ function fixture() {
       const admin = zed.members.map((member) => ({ ...member, role: 'admin' }));
       return json({ status: 201, data: { ...zed, members: admin } }, 201);
     }
-    if (path === listPath)
-      return server.failList ? json({}, server.failList) : json({ status: 200, data: listed() });
-    if (path === homePath)
-      return json({
-        status: 200,
-        data: {
-          buckets: [{ currency: 'INR', youOwe: user === sam ? 50 : server.owe, youAreOwed: 0 }],
-          ...(server.groupFigures
-            ? { groups: listed().map(({ _id }) => ({ groupId: _id, balances: [] })) }
-            : {}),
-        },
-      });
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
     const group = [maple, cabin, zed].find(({ _id }) => _id === id);
     if (!id || !group) return json({}, 404);
@@ -231,21 +171,7 @@ function fixture() {
       return id === mapleId && server.failGroup
         ? json({}, server.failGroup)
         : json({ status: 200, data: group });
-    if (path.startsWith(`/api/groups/${id}/expenses?`))
-      return json({
-        status: 200,
-        data: {
-          expenses: [{ ...rent, group: id }],
-          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
-          summary: {
-            count: 1,
-            totalsByCurrency: [{ currency: 'INR', totalAmount: 10 }],
-            userOwes: 0,
-            userGetsBack: 0,
-            byMember: [],
-          },
-        },
-      });
+    if (path.startsWith(`/api/groups/${id}/expenses?`)) return undefined;
     if (path === `/api/groups/${id}/expenses/${expenseId}`)
       return json({ status: 200, data: { ...rent, group: id } });
     if (path.startsWith(`/api/groups/${id}/activity?`))
@@ -253,6 +179,7 @@ function fixture() {
         status: 200,
         data: { activities: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } },
       });
+    // Preserve this fixture’s fixed receipt and +1 figures, rather than applying the body.
     if (path === `/api/groups/${id}/expenses` && method === 'POST') {
       server.owe += 1;
       return json({ status: 201, data: { _id: 'd00000000000000000000009', group: id } }, 201);
@@ -272,119 +199,55 @@ function fixture() {
       });
     return json({}, 404);
   };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
+  backend.reply('*', '*', ({ path, init }) => respond(path, init));
+  const phone = testPhone(backend, {
+    newSubmissionKey: () => 'home-queries-attempt-0001',
+    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts', 'untrustedCopies'],
+    parts: {
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: {
+        load: (account) => phone.stores.settlementAttempts.load('creation:', account),
+        save: (account, value) => phone.stores.settlementAttempts.save('creation:', account, value),
+        remove: (account) => phone.stores.settlementAttempts.remove('creation:', account),
+        clear: async () => {},
       },
-      {
-        newSubmissionKey: () => 'home-queries-attempt-0001',
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        savedQueries,
-        netInfo: {
-          // As NetInfo does, a new listener hears the connection as it is now.
-          addEventListener: (listener) => {
-            connection.add(listener);
-            listener(connectionState);
-            return () => connection.delete(listener);
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity.value),
-          save: async (value) => {
-            identity.value = structuredClone(value);
-          },
-          clear: async () => {
-            identity.value = null;
-          },
-        },
-        expenseDrafts: {
-          ...records(drafts),
-          list: async (account) =>
-            [...drafts]
-              .filter(([key]) => key.startsWith(account))
-              .map(([key, value]) => ({
-                groupId: key.slice(account.length),
-                value: structuredClone(value),
-              })),
-        },
-        settlementAttempts: records(attempts),
-        groupCreations: {
-          load: async (account) => structuredClone(attempts.get(`creation:${account}`) ?? null),
-          save: async (account, value) => {
-            attempts.set(`creation:${account}`, structuredClone(value));
-          },
-          remove: async (account) => {
-            attempts.delete(`creation:${account}`);
-          },
-          clear: async () => undefined,
-        },
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          untrustedCopies,
-          stores: [savedQueries, records(drafts), records(attempts), untrustedCopies],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname + new URL(url).search;
-          calls.push({ method: init.method ?? 'GET', path, account: signedIn(init).id });
-          if (server.offline) throw new TypeError('Network request failed');
-          const index = held.findIndex((request) => path === request.path);
-          if (index >= 0) {
-            // The server answers as it is when the request arrives, unless it answers `late`, as it
-            // is on release; the reply comes on release.
-            const [request] = held.splice(index, 1),
-              reply = request.late ? null : respond(path, init);
-            request.arrive();
-            return request.answer.then(() => {
-              if (request.lost) throw new TypeError('Network request failed');
-              return reply ?? respond(path, init);
-            });
-          }
-          return respond(path, init);
-        },
-      },
+      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
+    },
+  });
+  // Home’s original NetInfo always reported connected until explicitly changed, even if fetch failed.
+  phone.connect(true);
+  const rows = phone.stores.savedQueries.records,
+    drafts = phone.stores.expenseDrafts.records;
+  const disk = new Map<string, unknown>();
+  const store = phone.stores.savedQueries;
+  delete (store as AccountGroupRecordStore).keys;
+  for (const operation of ['load', 'save', 'remove', 'retainGroups'] as const) {
+    const broken = () =>
+      operation === 'load'
+        ? device.failLoad
+        : operation === 'save'
+          ? device.failSave
+          : operation === 'remove'
+            ? device.failRemoval
+            : device.failRetain;
+    store.failPersistently(
+      operation,
+      new Error(
+        operation === 'load' ? 'The device storage can’t be read' : 'The device storage is full',
+      ),
+      broken,
     );
-  const identity = { value: null as unknown },
-    untrusted = { value: null as unknown };
-  const holdRow = (held: typeof writes, path: string) => {
-    let arrive!: () => void;
-    let release!: () => void;
-    const reached = new Promise<void>((resolve) => {
-      arrive = resolve;
-    });
-    const released = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    held.push({ path, arrive, released });
-    return { reached, release };
+  }
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  delete (phone.stores.settlementAttempts as AccountGroupRecordStore).keys;
+  delete (phone.stores.settlementAttempts as AccountGroupRecordStore).list;
+  const holdRow = (operation: 'load' | 'save' | 'remove', path: string) => {
+    const held = store.at(path).holdNext(operation);
+    return { reached: held.arrived, release: held.release };
   };
+  const create = () => phone.open();
   return {
     create,
     server,
@@ -392,42 +255,40 @@ function fixture() {
     rows,
     disk,
     drafts,
-    calls,
+    get calls() {
+      return calls();
+    },
     /** The record of saved copies this device couldn't remove, kept outside their stores. */
-    untrusted: () => untrusted.value,
+    untrusted: () => phone.stores.untrustedCopies.value,
     /** GET requests sent for exactly this path since `from`. */
     reads: (path: string, from = 0) =>
-      calls.slice(from).filter((call) => call.method === 'GET' && call.path === path).length,
+      calls()
+        .slice(from)
+        .filter((call) => call.method === 'GET' && call.path === path).length,
     /**
      * The next request for exactly this path is answered by the server at once, and its reply
      * arrives when released: late, or `lost` on the way, as when the connection drops. A `late`
      * one is answered by the server as it is on release.
      */
     hold(path: string, { lost = false, late = false } = {}) {
-      let arrive!: () => void;
-      let release!: () => void;
-      const reached = new Promise<void>((resolve) => {
-        arrive = resolve;
-      });
-      const answer = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      held.push({ path, arrive, answer, lost, late });
-      return { reached, release };
+      const held = backend.hold('*', path, { at: late ? 'request' : 'reply' });
+      return {
+        reached: held.arrived,
+        release: () => held.release(lost ? 'lost-reply' : undefined),
+      };
     },
     /** The next write of this path's row waits until released. */
-    holdWrite: (path: string) => holdRow(writes, path),
+    holdWrite: (path: string) => holdRow('save', path),
     /** The next removal of this path's row waits until released. */
-    holdRemoval: (path: string) => holdRow(removals, path),
+    holdRemoval: (path: string) => holdRow('remove', path),
     /** The next load of this path's row waits until released. */
-    holdLoad: (path: string) => holdRow(loads, path),
+    holdLoad: (path: string) => holdRow('load', path),
     /** The next load of this path's row fails, as a read of the device's storage can. */
-    failLoadOnce: (path: string) => void failOnce.add(path),
+    failLoadOnce: (path: string) =>
+      store.at(path).failNext('load', new Error('The device storage can’t be read')),
     /** NetInfo reports the device's connection. */
     connect(isConnected: boolean, isInternetReachable?: boolean | null) {
-      server.offline = !isConnected || isInternetReachable === false;
-      connectionState = { isConnected, isInternetReachable };
-      connection.forEach((listener) => listener(connectionState));
+      phone.connect(isConnected, isInternetReachable);
     },
     /** This account's row for `path`, if this device has one. */
     row: (path: string, account = alex.id) =>
