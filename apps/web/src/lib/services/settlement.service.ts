@@ -1,11 +1,6 @@
-import { Refusal } from '@splitbook/shared/refusals';
-import { withGroupMutation } from '@/lib/group-mutation';
+import { recordLedger, type LedgerRecording } from '@/lib/ledger-recording';
 import connectDB from '@/lib/db';
-import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
-import { lockClearedCurrency, lockLedgerCurrency } from '@/lib/ledger-currency';
-import Group from '@/lib/models/Group';
-import Settlement from '@/lib/models/Settlement';
-import { activityService } from './activity.service';
+import Settlement, { type ISettlementDocument } from '@/lib/models/Settlement';
 import {
   assertSettlementAuthorization,
   assertSettlementMembers,
@@ -16,15 +11,8 @@ import {
   type CreateSettlementInput,
 } from '@splitbook/shared/validators/settlement';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
-import {
-  assertCreateReplay,
-  createRequestMetadata,
-  makePendingActivity,
-  paymentAlertAudience,
-} from '@/lib/financial-write';
 import User from '@/lib/models/User';
 import { Types } from 'mongoose';
-import { settlementDebtSnapshot } from './settlement-debt';
 import { PERSON_FIELDS } from './person-fields';
 
 export class SettlementService {
@@ -33,19 +21,7 @@ export class SettlementService {
    * Either the payer or the recipient may record it when authorized.
    */
   async create(groupId: string, data: CreateSettlementInput, userId: string, requestKey?: string) {
-    await connectDB();
-    await ensureLedgerWriteIndexes();
-
-    const group = await Group.findById(groupId);
-    if (!group) throw new Error('Group not found');
-
-    const memberIds = new Set(group.members.map((member) => member.user.toString()));
     const paidBy = data.paidBy || userId;
-
-    if (!memberIds.has(userId)) throw new Refusal('FORBIDDEN');
-
-    assertSettlementMembers(memberIds, paidBy, data.paidTo);
-    assertSettlementAuthorization(userId, paidBy, data.paidTo);
     if (
       Object.keys(crossCurrencySettlementShape).some(
         (key) => data[key as keyof CreateSettlementInput] !== undefined,
@@ -67,106 +43,70 @@ export class SettlementService {
       amount: toMajorAmount(amountMinor, data.currency),
       note: data.note ?? '',
     };
-    const replay = requestKey
-      ? await Settlement.findOne({
-          group: groupId,
-          createdBy: userId,
-          'creationRequest.key': requestKey,
-        }).select('+creationRequest +pendingActivity')
-      : null;
-    if (replay) {
-      assertCreateReplay(replay.creationRequest!, command);
-      await activityService.publishPending('settlements', replay._id, replay.pendingActivity);
-      return replay.populate([
-        { path: 'paidBy', select: PERSON_FIELDS },
-        { path: 'paidTo', select: PERSON_FIELDS },
-        { path: 'createdBy', select: PERSON_FIELDS },
-      ]);
-    }
-    // A retry of a payment recorded before the archive is confirmed above; nothing new is (#578).
-    if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
     const settlementId = new Types.ObjectId();
-    const names = await User.find({ _id: { $in: [paidBy, data.paidTo] } })
-      .select('name')
-      .lean();
-
-    let settlement;
-    try {
-      settlement = await withGroupMutation(
-        groupId,
-        async () => {
-          // Both currencies are checked in the insert's own mutation, so a removal of either can't
-          // come in between (#721): the cleared one may be an older currency the ledger still
-          // holds (#727); the paid one must be on the Group's list.
-          await lockClearedCurrency(groupId, data.currency);
-          if (data.paidCurrency) await lockLedgerCurrency(groupId, data.paidCurrency);
-          const debtSnapshot = data.paidCurrency
-            ? await settlementDebtSnapshot(groupId, data.currency, paidBy, data.paidTo, amountMinor)
-            : {};
-          const event = makePendingActivity(groupId, 'settlement_recorded', userId, {
-            settlementId: String(settlementId),
-            paidBy,
-            paidTo: data.paidTo,
-            amount: command.amount,
-            currency: data.currency,
-            ...(data.paidCurrency ? { amountMinor, ...crossCurrency, ...debtSnapshot } : {}),
-            paidByName: names.find((person) => String(person._id) === paidBy)?.name,
-            paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
-          });
-          // Payment alert audience (#842), from the Group's members in this same commit.
-          await paymentAlertAudience(event, {
-            groupId,
-            recordId: String(settlementId),
-            paidBy,
-            paidTo: data.paidTo,
-            members: async () =>
-              (await Group.findById(groupId).select('members').lean())?.members ?? [],
-          });
-          return Settlement.create({
-            _id: settlementId,
-            group: groupId,
-            paidBy,
-            paidTo: data.paidTo,
-            amount: command.amount,
-            amountMinor,
-            moneyVersion: 1,
-            currency: data.currency,
-            ...crossCurrency,
-            ...debtSnapshot,
-            note: data.note,
-            createdBy: userId,
-            ...(requestKey ? { creationRequest: createRequestMetadata(requestKey, command) } : {}),
-            pendingActivity: [event],
-          });
-        },
-        { ledger: true },
-      );
-    } catch (err) {
-      if (requestKey && (err as { code?: number }).code === 11000) {
-        const existing = await Settlement.findOne({
-          group: groupId,
-          createdBy: userId,
-          'creationRequest.key': requestKey,
-        }).select('+creationRequest +pendingActivity');
-        if (existing) {
-          assertCreateReplay(existing.creationRequest!, command);
-          await activityService.publishPending(
-            'settlements',
-            existing._id,
-            existing.pendingActivity,
-          );
-          return existing.populate([
-            { path: 'paidBy', select: PERSON_FIELDS },
-            { path: 'paidTo', select: PERSON_FIELDS },
-            { path: 'createdBy', select: PERSON_FIELDS },
-          ]);
-        }
-      }
-      throw err;
-    }
-
-    // Attempt recoverable publication before response preparation can fail after commit.
-    await activityService.publishPending('settlements', settlement._id, settlement.pendingActivity);
+    const [settlement] = await recordLedger({
+      groupId,
+      actorId: userId,
+      model: Settlement,
+      source: 'settlements',
+      transactions: 'allow-standalone',
+      compatibility: { membership: 'before-retry', missingGroup: 'fault' },
+      retry: requestKey ? { key: requestKey, command } : undefined,
+      currencies: [
+        { currency: data.currency, rule: 'held-by-ledger' },
+        ...(data.paidCurrency ? [{ currency: data.paidCurrency, rule: 'listed' as const }] : []),
+      ],
+      checkPeople(memberIds) {
+        assertSettlementMembers(memberIds, paidBy, data.paidTo);
+        assertSettlementAuthorization(userId, paidBy, data.paidTo);
+      },
+      async entries(): ReturnType<LedgerRecording<ISettlementDocument>['entries']> {
+        const names = await User.find({ _id: { $in: [paidBy, data.paidTo] } })
+          .select('name')
+          .lean();
+        return [
+          {
+            paymentDebt: {
+              sameCurrency: 'allow-without-debt',
+              currency: data.currency,
+              paidCurrency: data.paidCurrency,
+              paidBy,
+              paidTo: data.paidTo,
+              amountMinor,
+            },
+            document: {
+              _id: settlementId,
+              paidBy: new Types.ObjectId(paidBy),
+              paidTo: new Types.ObjectId(data.paidTo),
+              amount: command.amount,
+              amountMinor,
+              moneyVersion: 1,
+              currency: data.currency,
+              ...crossCurrency,
+              note: data.note,
+            },
+            activity: {
+              type: 'settlement_recorded',
+              metadata: {
+                settlementId: String(settlementId),
+                paidBy,
+                paidTo: data.paidTo,
+                amount: command.amount,
+                currency: data.currency,
+                ...(data.paidCurrency ? { amountMinor, ...crossCurrency } : {}),
+                paidByName: names.find((person) => String(person._id) === paidBy)?.name,
+                paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
+              },
+              alert: {
+                kind: 'settlement_recorded',
+                involved: [paidBy, data.paidTo],
+                switch: 'payments',
+              },
+            },
+          },
+        ];
+      },
+    });
     return settlement.populate([
       { path: 'paidBy', select: PERSON_FIELDS },
       { path: 'paidTo', select: PERSON_FIELDS },

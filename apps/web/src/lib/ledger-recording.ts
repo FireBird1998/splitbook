@@ -3,9 +3,9 @@ import { Refusal } from '@splitbook/shared/refusals';
 import type { ActivityType } from '@splitbook/shared/types';
 import type { HydratedDocument, Model, Types } from 'mongoose';
 import connectDB from './db';
-import { afterGroupCommit, withGroupMutation } from './group-mutation';
+import { afterGroupCommit, supportsGroupTransactions, withGroupMutation } from './group-mutation';
 import { ensureLedgerWriteIndexes } from './ledger-indexes';
-import { lockLedgerCurrency } from './ledger-currency';
+import { lockClearedCurrency, lockLedgerCurrency } from './ledger-currency';
 import {
   assertCreateReplay,
   createRequestMetadata,
@@ -17,6 +17,7 @@ import {
   type IPendingActivity,
   type NotificationKind,
 } from './financial-write';
+import { settlementDebtSnapshot } from './services/settlement-debt';
 import Group, { type IGroupDocument } from './models/Group';
 import { activityService, type ActivitySource } from './services/activity.service';
 
@@ -26,6 +27,15 @@ interface LedgerRecord {
   pendingActivity: IPendingActivity[];
 }
 interface RecordingEntry<T> {
+  /** Single payments require no Debt for a same-currency recording. */
+  paymentDebt?: {
+    sameCurrency: 'allow-without-debt';
+    currency: string;
+    paidCurrency?: string;
+    paidBy: string;
+    paidTo: string;
+    amountMinor: number;
+  };
   document: Partial<T> & { _id: Types.ObjectId };
   activity: {
     type: ActivityType;
@@ -42,10 +52,11 @@ export interface LedgerRecording<T extends LedgerRecord> {
   actorId: string;
   model: Model<T>;
   source: ActivitySource;
-  compatibility?: { membership?: 'before-retry'; missingGroup?: 'fault' };
+  transactions: 'allow-standalone' | { required: Refusal };
+  compatibility?: { membership: 'before-retry'; missingGroup?: 'fault' };
   retry?: { key: string; command: Record<string, unknown> };
-  currencies: ReadonlyArray<{ currency: string; rule: 'listed' }>;
-  checkPeople: (members: ReadonlySet<string>) => void;
+  currencies: ReadonlyArray<{ currency: string; rule: 'listed' | 'held-by-ledger' }>;
+  checkPeople: (members: Set<string>) => void;
   entries: (group: IGroupDocument) => Promise<RecordingEntry<T>[]>;
 }
 
@@ -85,24 +96,37 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
   };
   const existing = await replay();
   if (existing) return publish([existing]);
+  if (description.transactions !== 'allow-standalone' && !(await supportsGroupTransactions()))
+    throw description.transactions.required;
   let saved: HydratedDocument<T>[];
   try {
     saved = await withGroupMutation(
       groupId,
       async () => {
-        for (const use of description.currencies) await lockLedgerCurrency(groupId, use.currency);
+        for (const use of description.currencies) {
+          if (use.rule === 'held-by-ledger') await lockClearedCurrency(groupId, use.currency);
+          else await lockLedgerCurrency(groupId, use.currency);
+        }
         const group = await Group.findById(groupId).lean();
         if (!group) throw new Refusal('FORBIDDEN');
         if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
         if (description.compatibility?.membership !== 'before-retry') checkMembers(group);
         const result = [];
         for (const [index, entry] of (await description.entries(group)).entries()) {
-          const event = makePendingActivity(
-            groupId,
-            entry.activity.type,
-            actorId,
-            entry.activity.metadata,
-          );
+          const debt = entry.paymentDebt;
+          const debtSnapshot = debt?.paidCurrency
+            ? await settlementDebtSnapshot(
+                groupId,
+                debt.currency,
+                debt.paidBy,
+                debt.paidTo,
+                debt.amountMinor,
+              )
+            : {};
+          const event = makePendingActivity(groupId, entry.activity.type, actorId, {
+            ...entry.activity.metadata,
+            ...debtSnapshot,
+          });
           const alert = entry.activity.alert;
           const capture =
             alert.switch === 'always' ||
@@ -118,6 +142,7 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
           result.push(
             await model.create({
               ...entry.document,
+              ...debtSnapshot,
               group: groupId,
               createdBy: actorId,
               ...(index === 0 && retry

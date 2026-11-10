@@ -5,7 +5,7 @@ import { withGroupMutation } from './group-mutation';
 import { Refusal } from '@splitbook/shared/refusals';
 import { recordLedger, type LedgerRecording } from './ledger-recording';
 import Expense, { type IExpenseDocument } from './models/Expense';
-import Group from './models/Group';
+import Group, { type IGroupDocument } from './models/Group';
 import Activity from './models/Activity';
 import { integrationTestDb } from './test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from './test-utils/fixtures';
@@ -44,13 +44,14 @@ function record(
     actorId: alice,
     model: Expense,
     source: 'expenses',
+    transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
     retry: { key, command: { description: 'A record', amount: 10 } },
     currencies: [{ currency: 'INR', rule: 'listed' }],
     checkPeople(members) {
       if (!members.has(bob)) throw new Refusal('INVALID_MEMBERS');
     },
     ...overrides,
-    async entries() {
+    async entries(): ReturnType<LedgerRecording<IExpenseDocument>['entries']> {
       const id = new Types.ObjectId();
       return [
         {
@@ -95,12 +96,47 @@ describe('ledger recording', () => {
   it.each([
     ['actor', alice, 'FORBIDDEN'],
     ['named person', bob, 'INVALID_MEMBERS'],
-  ])('refuses at the commit when the %s is no longer a member', async (_, person, code) => {
-    await Group.updateOne({ _id: groupId }, { $pull: { members: { user: person } } });
-    await expect(record()).rejects.toMatchObject({ message: code });
-    expect(await Expense.countDocuments()).toBe(0);
-    expect(await Activity.countDocuments()).toBe(0);
-    expect((await Group.findById(groupId))!.currencyLocked).toBe(false);
+  ])(
+    'refuses at the commit when the %s leaves after the request starts',
+    async (_, person, code) => {
+      const transaction = mongoose.connection.transaction.bind(mongoose.connection);
+      vi.spyOn(mongoose.connection, 'transaction').mockImplementationOnce(
+        async (write, options) => {
+          await mongoose.connection
+            .db!.collection<IGroupDocument>('groups')
+            .updateOne(
+              { _id: new Types.ObjectId(groupId) },
+              { $pull: { members: { user: new Types.ObjectId(person) } } },
+            );
+          return transaction(write, options);
+        },
+      );
+      await expect(record()).rejects.toMatchObject({ message: code });
+      expect(await Expense.countDocuments()).toBe(0);
+      expect(await Activity.countDocuments()).toBe(0);
+      expect((await Group.findById(groupId))!.currencyLocked).toBe(false);
+    },
+  );
+  it.each([
+    ['actor', alice],
+    ['named person', bob],
+  ])('can preserve a recording when the %s leaves after its pre-retry check', async (_, person) => {
+    const transaction = mongoose.connection.transaction.bind(mongoose.connection);
+    vi.spyOn(mongoose.connection, 'transaction').mockImplementationOnce(async (write, options) => {
+      await mongoose.connection
+        .db!.collection<IGroupDocument>('groups')
+        .updateOne(
+          { _id: new Types.ObjectId(groupId) },
+          { $pull: { members: { user: new Types.ObjectId(person) } } },
+        );
+      return transaction(write, options);
+    });
+    await record(randomUUID(), {
+      compatibility: { membership: 'before-retry', missingGroup: 'fault' },
+    });
+    expect(await Expense.countDocuments()).toBe(1);
+    const event = await Activity.findOne({ type: 'expense_added' }).select('+notificationContext');
+    expect(event!.notificationContext!.recipientIds).toEqual(person === bob ? [] : [bob]);
   });
   it('can preserve pre-retry membership checks without checking again at the commit', async () => {
     const key = randomUUID();
@@ -227,5 +263,15 @@ describe('ledger recording', () => {
     expect(
       (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity,
     ).toHaveLength(0);
+  });
+  it('refuses an archived Group even inside a non-ledger outer fence', async () => {
+    await expect(
+      withGroupMutation(groupId, async () => {
+        await Group.updateOne({ _id: groupId }, { $set: { isArchived: true } });
+        await record();
+      }),
+    ).rejects.toMatchObject({ message: 'GROUP_ARCHIVED' });
+    expect(await Expense.countDocuments()).toBe(0);
+    expect(await Activity.countDocuments()).toBe(0);
   });
 });
