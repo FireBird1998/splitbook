@@ -70,7 +70,8 @@ export async function createSettlementBatch(
     }).select('+creationRequest +batchSettlementIds');
     if (!first) return null;
     assertCreateReplay(first.creationRequest!, command);
-    if (!first.batchSettlementIds?.length) throw new Refusal('IDEMPOTENCY_CONFLICT');
+    // A matching batch receipt carries the ids committed atomically with it.
+    if (!first.batchSettlementIds?.length) throw new Error('IDEMPOTENCY_CONFLICT');
     const saved = await Settlement.find({
       group: groupId,
       _id: { $in: first.batchSettlementIds },
