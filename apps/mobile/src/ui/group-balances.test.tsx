@@ -1162,6 +1162,12 @@ describe('Balances, one currency at a time (#725)', () => {
       expect(onSettleAll).toHaveBeenCalledWith(you, sam);
     });
 
+    it('does not count a Debt in an unsupported currency toward a Settle up offer (#1051)', () => {
+      const { root } = settleAll([tripInr(), { ...eur, currency: 'DEM' }]);
+      expect(labelled(root, 'Settle both with Sam Chen')).toHaveLength(0);
+      expect(text(root)).not.toContain('You owe Sam Chen in 2\u00a0currencies');
+    });
+
     it('offers to settle both with Sam in one payment, on every currency’s tab', () => {
       const { root, onSettleAll } = settleAll(buckets());
       const shown = text(root);
