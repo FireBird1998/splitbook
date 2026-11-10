@@ -1,12 +1,10 @@
 import {
   getAuthUser,
   unauthorized,
-  forbidden,
   success,
   notFound,
   serverError,
   validationError,
-  error,
   readJson,
   routeIds,
 } from '@/lib/utils/api-response';
@@ -14,24 +12,6 @@ import { recurringExpenseService } from '@/lib/services/recurring-expense.servic
 import { updateRecurringExpenseSchema } from '@splitbook/shared/validators/recurring-expense';
 import { requestRevision } from '@/lib/ledger-revision';
 import { assertRecurringExpensesOn } from '@/lib/recurring-expenses-switch';
-
-const recurringValidationMessages: Record<string, string> = {
-  INVALID_MEMBERS: 'All payers and split participants must be group members',
-  INVALID_TAG: 'Tag must be an active group tag',
-  CURRENCY_MISMATCH: 'Currency is not one of this Group’s currencies',
-  INVALID_WINDOW: 'End date must be on or after the start date',
-};
-
-function mapServiceError(err: unknown) {
-  if (err instanceof Error) {
-    if (err.message === 'FORBIDDEN') return forbidden();
-    if (err.message in recurringValidationMessages) {
-      // The code docs/api.md names, as the Expense routes send it (#523).
-      return error(recurringValidationMessages[err.message], 422, err.message);
-    }
-  }
-  return serverError(err);
-}
 
 // PATCH /api/groups/[id]/recurring/[recurringId] — Edit, pause or resume a template (admin
 // only). While recurring Expenses are off: 409 RECURRING_EXPENSES_OFF, before the body is read.
@@ -60,7 +40,7 @@ export async function PATCH(
 
     return success(template);
   } catch (err) {
-    return mapServiceError(err);
+    return serverError(err, 'membership');
   }
 }
 
@@ -88,6 +68,6 @@ export async function DELETE(
 
     return success({ message: 'Recurring expense deleted' });
   } catch (err) {
-    return mapServiceError(err);
+    return serverError(err, 'membership');
   }
 }

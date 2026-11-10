@@ -6,7 +6,6 @@ import {
   success,
   serverError,
   validationError,
-  error,
   readJson,
   routeIds,
 } from '@/lib/utils/api-response';
@@ -14,12 +13,6 @@ import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
 import { updateExpenseSchema } from '@splitbook/shared/validators/expense';
 import { requestRevision } from '@/lib/ledger-revision';
-
-const expenseValidationMessages: Record<string, string> = {
-  INVALID_MEMBERS: 'All payers and split participants must be group members',
-  INVALID_TAG: 'Tag must be an active group tag',
-  CURRENCY_MISMATCH: 'Currency is not one of this Group’s currencies',
-};
 
 // GET /api/groups/[id]/expenses/[expenseId]
 export async function GET(
@@ -37,8 +30,7 @@ export async function GET(
 
     return success(expense);
   } catch (err) {
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    return serverError(err);
+    return serverError(err, 'membership');
   }
 }
 
@@ -70,12 +62,7 @@ export async function PATCH(
 
     return success(expense);
   } catch (err) {
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    if (err instanceof Error && err.message in expenseValidationMessages) {
-      return error(expenseValidationMessages[err.message], 422, err.message);
-    }
-
-    return serverError(err);
+    return serverError(err, 'membership');
   }
 }
 
@@ -98,7 +85,6 @@ export async function DELETE(
 
     return success({ message: 'Expense deleted', revision: expense.revision ?? 0 });
   } catch (err) {
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    return serverError(err);
+    return serverError(err, 'membership');
   }
 }

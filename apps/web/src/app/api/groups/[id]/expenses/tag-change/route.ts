@@ -5,7 +5,6 @@ import {
   success,
   serverError,
   validationError,
-  error,
   readJson,
   routeIds,
 } from '@/lib/utils/api-response';
@@ -30,9 +29,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const results = await expenseService.changeTags(id, user.id!, parsed.data);
     return success({ tagId: parsed.data.tagId, results });
   } catch (err) {
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    if (err instanceof Error && err.message === 'INVALID_TAG')
-      return error('Tag must be an active group tag', 422, 'INVALID_TAG');
-    return serverError(err);
+    return serverError(err, 'membership');
   }
 }

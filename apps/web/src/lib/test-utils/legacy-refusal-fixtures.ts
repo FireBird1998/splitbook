@@ -112,7 +112,17 @@ export function currencyIsMainCase(currency: string) {
 }
 
 /** Keep the baseline descriptions while injecting the type the migrated producer now throws. */
-export function currentCause(cause: Error, caller?: 'leave' | 'demotion' | 'removal'): Error {
+export function currentCause(
+  cause: Error,
+  caller?:
+    | 'leave'
+    | 'demotion'
+    | 'removal'
+    | 'expense'
+    | 'recurring'
+    | 'recurring-create'
+    | 'tag-change',
+): Error {
   const currency = currentCurrencies.get(cause);
   if (currency) return currency;
   if (caller === 'leave' && cause instanceof LeaveBlockedError) {
@@ -138,6 +148,14 @@ export function currentCause(cause: Error, caller?: 'leave' | 'demotion' | 'remo
   }
   if (cause.constructor === Error) {
     const code = cause.message;
+    if (caller === 'expense' || caller === 'recurring' || caller === 'recurring-create') {
+      if (code === 'INVALID_MEMBERS') return new Refusal(code, { variant: 'expense' });
+      if (code === 'INVALID_TAG' || code === 'CURRENCY_MISMATCH') return new Refusal(code);
+      if (caller !== 'expense' && code === 'INVALID_WINDOW') return new Refusal(code);
+      if (caller === 'recurring-create' && code === 'NOT_HOUSEHOLD') return new Refusal(code);
+    }
+    if (caller === 'tag-change' && code === 'INVALID_TAG') return new Refusal(code);
+
     if (code === 'LAST_ADMIN' && (caller === 'demotion' || caller === 'removal'))
       return new Refusal(code, { variant: caller });
     if (caller === 'removal' && (code === 'SELF_REMOVE' || code === 'REMOVAL_CONFLICT'))

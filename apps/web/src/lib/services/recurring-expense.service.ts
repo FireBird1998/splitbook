@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import mongoose, { type HydratedDocument } from 'mongoose';
@@ -65,19 +66,19 @@ type TemplateData = {
 function assertAdmin(group: IGroupDocument, userId: string): void {
   const member = group.members.find((m) => m.user.toString() === userId);
   if (!member || member.role !== 'admin') {
-    throw new Error('FORBIDDEN');
+    throw new Refusal('FORBIDDEN');
   }
 }
 
 function assertHouseholdTheme(category: IGroupDocument['category']): void {
   if (!getGroupTheme(category).recurringExpenses) {
-    throw new Error('NOT_HOUSEHOLD');
+    throw new Refusal('NOT_HOUSEHOLD');
   }
 }
 
 function assertValidWindow(startsOn: Date, endsOn: Date | null | undefined): void {
   if (endsOn && endsOn < startsOn) {
-    throw new Error('INVALID_WINDOW');
+    throw new Refusal('INVALID_WINDOW');
   }
 }
 
@@ -279,7 +280,7 @@ export class RecurringExpenseService {
           { runValidators: true },
         ),
       );
-      if (!result.matchedCount) throw new Error('STALE_REVISION');
+      if (!result.matchedCount) throw new Refusal('STALE_REVISION');
       template.revision = (template.revision ?? 0) + 1;
     } else {
       await withGroupMutation(groupId, async () => template.save());
@@ -320,7 +321,7 @@ export class RecurringExpenseService {
         revision: template.revision ?? { $exists: false },
       }),
     );
-    if (!result.deletedCount) throw new Error('STALE_REVISION');
+    if (!result.deletedCount) throw new Refusal('STALE_REVISION');
     return template;
   }
 
