@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const body = await readJson(req);
     const parsed = inviteSchema.safeParse(body);
     if (!parsed.success) {
-      return error('Invalid email address', 422);
+      return error('Invalid email address', 422, 'VALIDATION_ERROR');
     }
 
     const invitation = await invitationService.create(id, parsed.data.email, user.id!);

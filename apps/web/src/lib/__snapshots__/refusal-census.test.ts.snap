@@ -107,16 +107,16 @@ exports[`records invitation schema refusals before persistence 1`] = `
 [
   {
     "answer": {
-      "body": "{"error":"Invalid action","status":422}",
-      "hasCode": false,
+      "body": "{"error":"Invalid action","status":422,"code":"VALIDATION_ERROR"}",
+      "hasCode": true,
       "status": 422,
     },
     "state": "invalid invitation action",
   },
   {
     "answer": {
-      "body": "{"error":"Invalid email address","status":422}",
-      "hasCode": false,
+      "body": "{"error":"Invalid email address","status":422,"code":"VALIDATION_ERROR"}",
+      "hasCode": true,
       "status": 422,
     },
     "state": "invalid invite email",

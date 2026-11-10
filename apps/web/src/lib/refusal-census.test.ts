@@ -514,15 +514,23 @@ it('records invitation schema refusals before persistence', async () => {
   } as never);
   const census = [];
   try {
-    for (const { state, handler, body } of [
-      { state: 'invalid invitation action', handler: answerInvitation, body: { action: 'wait' } },
-      { state: 'invalid invite email', handler: sendInvitation, body: { email: 'not-an-email' } },
+    for (const { state, handler, body, expected } of [
+      {
+        state: 'invalid invitation action', handler: answerInvitation, body: { action: 'wait' },
+        expected: '{"error":"Invalid action","status":422,"code":"VALIDATION_ERROR"}',
+      },
+      {
+        state: 'invalid invite email', handler: sendInvitation, body: { email: 'not-an-email' },
+        expected: '{"error":"Invalid email address","status":422,"code":"VALIDATION_ERROR"}',
+      },
     ]) {
       const answer = await handler(
         new Request('http://localhost/api/census', { method: 'POST', body: JSON.stringify(body) }),
         { params: Promise.resolve({ id: 'a00000000000000000000001' }) },
       );
-      census.push({ state, answer: await recorded(answer) });
+      const result = await recorded(answer);
+      expect.soft(result.body).toBe(expected);
+      census.push({ state, answer: result });
     }
     expect(census).toMatchSnapshot();
   } finally {
