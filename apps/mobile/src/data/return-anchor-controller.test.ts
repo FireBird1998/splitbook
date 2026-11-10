@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createMobileController } from './mobile-controller';
-import type { FetchResponse, MobileFetch } from './types';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
+import type { FetchResponse } from './types';
 
 // #225: fictional ledger, public commands, displayed rows and requests only.
 const alex = { id: 'a00000000000000000000001', name: 'Alex', email: 'alex@example.test' };
@@ -25,11 +27,8 @@ const group = {
 function fixture() {
   const requests: { method: string; path: string }[] = [];
   const stored: unknown[] = [];
-  let cookie: string | null = null;
   let refused = false;
   let expired = false;
-  let owner: string | null = null;
-  let cleanup = false;
   const expenses = Array.from({ length: 130 }, (_, index) => ({
     _id: id('c', index + 1),
     group: groupId,
@@ -67,24 +66,15 @@ function fixture() {
   }));
   const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
     Response.json(body, { status, headers }) as FetchResponse;
-  const fetch: MobileFetch = async (address, init) => {
-    const url = new URL(address),
-      path = url.pathname;
+  const backend = fakeSplitbook();
+  backend.world.people.alex = { ...alex, image: null };
+  backend.world.people.sam = { ...sam, image: null };
+  backend.world.groups = [group];
+  backend.reply('*', '*', async ({ url, init }) => {
+    const path = url.pathname;
     requests.push({ method: init.method ?? 'GET', path: path + url.search });
-    const user =
-      String(init.body).includes('sam') ||
-      new Headers(init.headers).get('Cookie')?.includes('sam.signature')
-        ? sam
-        : alex;
-    if (path.endsWith('/demo-persona/sign-in'))
-      return json({ user }, 200, {
-        'Set-Cookie': `better-auth.session_token=${user === sam ? 'sam' : 'alex'}.signature`,
-      });
-    if (path.endsWith('/get-session'))
-      return expired
-        ? json({ status: 401 }, 401)
-        : json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
-    if (path.endsWith('/sign-out')) return json({ success: true });
+    if (path.startsWith('/api/auth/')) return undefined;
+    if (expired) return json({ status: 401 }, 401);
     if (path === '/api/groups') return json({ status: 200, data: refused ? [] : [group] });
     if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
     if (refused) return json({ status: 403, message: 'Not a member' }, 403);
@@ -117,56 +107,41 @@ function fixture() {
       });
     const expense = expenses.find((row) => path.endsWith(row._id));
     return expense ? json({ status: 200, data: expense }) : json({ status: 404 }, 404);
-  };
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
-    },
-    {
-      fetch,
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      expenseDrafts: {
-        load: async () => null,
-        save: async (_account, _group, value) => {
-          stored.push(value);
-        },
-        remove: async () => undefined,
-        clear: async () => undefined,
-      },
+  });
+  const phone = testPhone(backend, {
+    now: Date.parse(iso),
+    purge: [],
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
       accountLocal: {
-        owner: {
-          load: async () => owner,
-          save: async (value) => {
-            owner = value;
-          },
-          clear: async () => {
-            owner = null;
-          },
-        },
-        cleanupMarker: {
-          load: async () => cleanup,
-          mark: async () => {
-            cleanup = true;
-          },
-          clear: async () => {
-            cleanup = false;
-          },
-        },
-        stores: [{ clear: async () => undefined }],
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
       },
-      now: () => Date.parse(iso),
     },
-  );
+  });
+  const drafts = phone.stores.expenseDrafts;
+  delete (drafts as AccountGroupRecordStore).list;
+  delete (drafts as AccountGroupRecordStore).keys;
+  // The old Draft adapter was deliberately write-only; this file observes each save, not reload.
+  drafts.load = async () => null;
+  drafts.remove = async () => {};
+  drafts.clear = async () => {};
+  const save = drafts.save;
+  drafts.save = (account, id, value) => {
+    stored.push(value);
+    return save(account, id, value);
+  };
+  const controller = phone.open();
+
   return {
     controller,
     requests,
@@ -176,6 +151,7 @@ function fixture() {
     },
     expire: () => {
       expired = true;
+      backend.auth.expired = true;
     },
   };
 }

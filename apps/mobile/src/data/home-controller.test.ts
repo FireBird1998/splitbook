@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import { buildExpenseBody, draftFromExpense, type ExpenseDraft } from './expense-draft';
 import { expenseRecordSchema } from './expense-record';
 import type { MobileGroup } from './types';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #126: Home keeps each Group's balance from the Home response and lists every Expense draft.
 const accountId = 'a00000000000000000000001',
@@ -72,118 +73,50 @@ const emptyPage = {
 };
 
 function fixture() {
-  let offline = false,
-    cookie: string | null = null,
-    // Alex used this device before, so a sign-in keeps Alex's drafts.
-    owner: string | null = accountId,
-    identity: unknown = null,
-    cleanup = false,
-    balances: unknown = homeBalances;
-  const cache = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>();
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4146',
-        authOrigin: 'http://localhost:4146',
-        developmentPersonaEnabled: true,
+  let balances: unknown = homeBalances;
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.groups = groups;
+  Object.defineProperty(backend.world, 'home', {
+    get: () => (balances as typeof homeBalances).data,
+  });
+  for (const item of groups) {
+    backend.world.expenses[item._id] = emptyPage.data;
+    backend.world.balances[item._id] = { byCurrency: [] };
+  }
+  const phone = testPhone(backend, {
+    origin: 'http://localhost:4146',
+    now,
+    recordSeparator: ':',
+    parts: {
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        stores: [
+          {
+            clear: async (): Promise<void> => {
+              phone.stores.savedQueries.records.clear();
+              phone.stores.offlineIdentity.value = null;
+              phone.stores.expenseDrafts.records.clear();
+            },
+          },
+        ],
       },
-      {
-        now: () => now,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity),
-          save: async (value) => {
-            identity = structuredClone(value);
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
-        savedQueries: savedQueriesIn(cache),
-        expenseDrafts: {
-          load: async (account, id) => structuredClone(drafts.get(`${account}:${id}`) ?? null),
-          save: async (account, id, value) => {
-            drafts.set(`${account}:${id}`, structuredClone(value));
-          },
-          remove: async (account, id) => {
-            drafts.delete(`${account}:${id}`);
-          },
-          clear: async () => {
-            drafts.clear();
-          },
-          list: async (account) =>
-            [...drafts]
-              .filter(([key]) => key.startsWith(`${account}:`))
-              .map(([key, value]) => ({
-                groupId: key.split(':')[1],
-                value: structuredClone(value),
-              })),
-        },
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          stores: [
-            {
-              clear: async () => {
-                cache.clear();
-                identity = null;
-                drafts.clear();
-              },
-            },
-          ],
-        },
-        fetch: async (url, init) => {
-          if (offline) throw new Error('Offline');
-          const path = new URL(url).pathname;
-          if (path.endsWith('/sign-in'))
-            return new Response(JSON.stringify({ user: alex }), {
-              headers: {
-                'Set-Cookie': 'better-auth.session_token=alex.signature; Max-Age=2592000',
-              },
-            });
-          if (path.endsWith('/get-session'))
-            return Response.json({
-              user: alex,
-              session: { userId: accountId, expiresAt: '2030-01-01T00:00:00.000Z' },
-            });
-          if (path.endsWith('/sign-out')) return Response.json({ success: true });
-          if (path === '/api/groups') return Response.json({ status: 200, data: groups });
-          if (path === '/api/user/balances') return Response.json(balances);
-          const listed = groups.find(({ _id }) => path.startsWith(`/api/groups/${_id}`));
-          if (listed && path === `/api/groups/${listed._id}`)
-            return Response.json({ status: 200, data: listed });
-          if (listed && path.endsWith('/expenses')) return Response.json(emptyPage);
-          if (listed && path.endsWith('/balances'))
-            return Response.json({ status: 200, data: { byCurrency: [] } });
-          throw new Error(`Unexpected fixture request ${init.method} ${path}`);
-        },
-      },
-    );
+    },
+  });
+  phone.stores.owner.value = accountId;
+  delete phone.stores.savedQueries.retainGroups;
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  const drafts = phone.stores.expenseDrafts.records;
+  const create = () => phone.open();
   return {
     create,
     drafts,
@@ -194,7 +127,7 @@ function fixture() {
       balances = value;
     },
     goOffline: () => {
-      offline = true;
+      backend.online = false;
     },
   };
 }

@@ -1,19 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { createMobileController } from '../data/mobile-controller';
+import { testPhone } from './test-phone';
+import { fakeSplitbook } from './fake-splitbook';
 import { monitorFlows } from './flow-monitor';
 
 function publisher() {
-  const original = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4000',
-      authOrigin: 'http://localhost:4000',
-      developmentPersonaEnabled: true,
+  const phone = testPhone(fakeSplitbook(), {
+    origin: 'http://localhost:4000',
+    monitor: false,
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
+      accountLocal: undefined,
     },
-    {
-      fetch: async () => Response.json({}),
-      credentials: { load: async () => null, save: async () => {}, clear: async () => {} },
-    },
-  );
+  });
+  const original = phone.open();
   let snapshot = original.getSnapshot();
   const listeners = new Set<() => void>();
   const controller = {

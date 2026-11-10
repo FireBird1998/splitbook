@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FreshSnapshot, Unrouted } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // The route as a member meets it (ADR 0006, M8-2, #216): where Back goes from every screen and
 // what holds it, that moving around never writes, that reads never move the member, and that
@@ -125,9 +126,13 @@ const googleClient = 'route-test.apps.example';
 
 /** One phone, its storage and a fictional server. `google`: a staging build with Google sign-in. */
 function world({ google = false } = {}) {
-  const clock = { now: Date.parse(iso) };
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.people.sam = sam;
+  backend.world.groups = groups;
+  backend.auth.bootstrap = { environment: 'staging', googleWebClientId: googleClient };
   const server = {
-    sessions: new Map<string, Person>(),
+    sessions: backend.auth.sessions,
     /** Groups whose reads are refused (403), as when the member loses access. */
     refused: new Set<string>(),
     /** Groups that are gone (404). */
@@ -137,7 +142,12 @@ function world({ google = false } = {}) {
     /** Every Expense page read fails with a server error (500). */
     failExpenses: false,
     /** Every signed-in request is answered 401, as when the session ends on the server. */
-    expired: false,
+    get expired() {
+      return backend.auth.expired;
+    },
+    set expired(value: boolean) {
+      backend.auth.expired = value;
+    },
   };
   /** The Google account chooser: who the next one picks, and a hook for when it opens. */
   const chooser: { next: Promise<Person>; opened: () => void } = {
@@ -145,36 +155,14 @@ function world({ google = false } = {}) {
     opened: () => undefined,
   };
   const requests: { method: string; path: string }[] = [];
-  const holds: { method: string; match: RegExp; wait: Promise<void>; arrive: () => void }[] = [];
-  const device = {
-    cookie: null as string | null,
-    owner: null as string | null,
-    identity: null as unknown,
-    cleanup: false,
-    pending: null as string | null,
-    failDraftWrites: false,
-    cache: new Map<string, unknown>(),
-    drafts: new Map<string, unknown>(),
-    payments: new Map<string, unknown>(),
-    creations: new Map<string, unknown>(),
-  };
   let keys = 0;
 
   const respond = (method: string, url: URL, init: RequestInit, cookie: string | null) => {
     const path = url.pathname;
-    if (path === '/.well-known/splitbook-mobile.json')
-      return json({ environment: 'staging', googleWebClientId: googleClient });
-    if (path === '/api/auth/demo-persona/sign-in' || path === '/api/auth/sign-in/social') {
-      const user = String(init.body).includes('sam') ? sam : alex;
-      const issued = `better-auth.session_token=${user === sam ? 'sam' : 'alex'}-${server.sessions.size + 1}.signature`;
-      server.sessions.set(issued, user);
-      return json({ user }, 200, issued);
-    }
-    if (path === '/api/auth/sign-out') return json({ success: true });
+    if (path.startsWith('/api/auth/') || path === '/.well-known/splitbook-mobile.json')
+      return undefined;
     const user = cookie ? server.sessions.get(cookie) : undefined;
     if (!user || server.expired) return json({ error: 'Unauthorized' }, 401);
-    if (path === '/api/auth/get-session')
-      return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00.000Z' } });
     if (path === '/api/groups' && method === 'POST')
       return json({ status: 201, data: group(createdId, 'Corner Flat', 'home') }, 201);
     if (path === '/api/groups')
@@ -293,129 +281,99 @@ function world({ google = false } = {}) {
     return record ? json({ status: 200, data: record }) : json({ status: 404 }, 404);
   };
 
-  const records = (map: Map<string, unknown>, writable = () => true) => ({
-    load: async (account: string, id: string) =>
-      structuredClone(map.get(`${account}:${id}`) ?? null),
-    save: async (account: string, id: string, value: unknown) => {
-      if (!writable()) throw new Error('This device could not store the record.');
-      map.set(`${account}:${id}`, structuredClone(value));
-    },
-    remove: async (account: string, id: string) => {
-      map.delete(`${account}:${id}`);
-    },
-    clear: async () => {
-      map.clear();
-    },
-    list: async (account: string) =>
-      [...map]
-        .filter(([key]) => key.startsWith(`${account}:`))
-        .map(([key, value]) => ({ groupId: key.split(':')[1], value: structuredClone(value) })),
-  });
-
+  backend.reply('*', '*', ({ method, url, init, headers }) =>
+    respond(method, url, init, headers.get('Cookie')),
+  );
+  const fetch: typeof backend.fetch = (address, init) => {
+    const url = new URL(address);
+    requests.push({ method: init.method ?? 'GET', path: url.pathname + url.search });
+    return backend.fetch(address, init);
+  };
   const origin = google ? 'https://staging.splitbook.test' : 'http://localhost:4150';
-  const controller = createMobileController(
+  const native = testPhone(
+    { ...backend, fetch },
     {
-      apiBaseUrl: origin,
-      authOrigin: origin,
-      developmentPersonaEnabled: true,
-      ...(google && { googleWebClientId: googleClient }),
-    },
-    {
-      googleSignIn: async () => {
-        chooser.opened();
-        const user = await chooser.next;
-        return { status: 'success', idToken: `${user === sam ? 'sam' : 'alex'}-id`, nonce: 'n' };
-      },
-      now: () => clock.now,
+      origin,
+      config: { ...(google && { googleWebClientId: googleClient }) },
+      now: Date.parse(iso),
+      recordSeparator: ':',
+      settlementSeparator: ':',
       newSubmissionKey: () => `route-key-${String(++keys).padStart(4, '0')}`,
-      credentials: {
-        load: async () => device.cookie,
-        save: async (value) => {
-          device.cookie = value;
+      parts: {
+        draftRequests: undefined,
+        tagRequests: undefined,
+        netInfo: undefined,
+        googleSignIn: async () => {
+          chooser.opened();
+          const user = await chooser.next;
+          return { status: 'success', idToken: `${user === sam ? 'sam' : 'alex'}-id`, nonce: 'n' };
         },
-        clear: async () => {
-          device.cookie = null;
-        },
-      },
-      pendingInvitation: {
-        load: async () => device.pending,
-        save: async (value) => {
-          device.pending = value;
-        },
-        clear: async () => {
-          device.pending = null;
-        },
-      },
-      offlineIdentity: {
-        load: async () => structuredClone(device.identity),
-        save: async (value) => {
-          device.identity = structuredClone(value);
-        },
-        clear: async () => {
-          device.identity = null;
-        },
-      },
-      savedQueries: savedQueriesIn(device.cache),
-      expenseDrafts: records(device.drafts, () => !device.failDraftWrites),
-      settlementAttempts: records(device.payments),
-      groupCreations: {
-        load: async (account) => structuredClone(device.creations.get(account) ?? null),
-        save: async (account, value) => {
-          device.creations.set(account, structuredClone(value));
-        },
-        remove: async (account) => {
-          device.creations.delete(account);
-        },
-        clear: async () => {
-          device.creations.clear();
-        },
-      },
-      accountLocal: {
-        owner: {
-          load: async () => device.owner,
-          save: async (value) => {
-            device.owner = value;
-          },
-          clear: async () => {
-            device.owner = null;
-          },
-        },
-        cleanupMarker: {
-          load: async () => device.cleanup,
-          mark: async () => {
-            device.cleanup = true;
-          },
-          clear: async () => {
-            device.cleanup = false;
-          },
-        },
-        stores: [
-          {
-            clear: async () => {
-              device.cache.clear();
-              device.drafts.clear();
-              device.payments.clear();
-              device.creations.clear();
-              device.identity = null;
+        accountLocal: {
+          financialCleanup: undefined,
+          untrustedCopies: undefined,
+          signOutRecord: undefined,
+          stores: [
+            {
+              clear: async (): Promise<void> => {
+                native.stores.savedQueries.records.clear();
+                native.stores.expenseDrafts.records.clear();
+                native.stores.settlementAttempts.records.clear();
+                native.stores.groupCreations.records.clear();
+                native.stores.offlineIdentity.value = null;
+              },
             },
-          },
-        ],
-      },
-      fetch: async (address, init) => {
-        const url = new URL(address);
-        const method = init.method ?? 'GET';
-        requests.push({ method, path: url.pathname + url.search });
-        const held = holds.find((hold) => hold.method === method && hold.match.test(url.pathname));
-        if (held) {
-          holds.splice(holds.indexOf(held), 1);
-          held.arrive();
-          await held.wait;
-        }
-        const cookie = new Headers(init.headers).get('Cookie');
-        return respond(method, url, init, cookie);
+          ],
+        },
       },
     },
   );
+  delete native.stores.savedQueries.retainGroups;
+  for (const store of [native.stores.expenseDrafts, native.stores.settlementAttempts])
+    delete (store as AccountGroupRecordStore).keys;
+  const device = {
+    get cookie() {
+      return native.stores.credentials.value;
+    },
+    set cookie(v: string | null) {
+      native.stores.credentials.value = v;
+    },
+    get owner() {
+      return native.stores.owner.value;
+    },
+    set owner(v: string | null) {
+      native.stores.owner.value = v;
+    },
+    get identity() {
+      return native.stores.offlineIdentity.value;
+    },
+    set identity(v: unknown) {
+      native.stores.offlineIdentity.value = v;
+    },
+    get cleanup() {
+      return native.stores.cleanupMarker.value;
+    },
+    set cleanup(v: boolean) {
+      native.stores.cleanupMarker.value = v;
+    },
+    get pending() {
+      return native.stores.pendingInvitation.value;
+    },
+    set pending(v: string | null) {
+      native.stores.pendingInvitation.value = v;
+    },
+    failDraftWrites: false,
+    cache: native.stores.savedQueries.records,
+    drafts: native.stores.expenseDrafts.records,
+    payments: native.stores.settlementAttempts.records,
+    creations: native.stores.groupCreations.records,
+  };
+  native.stores.expenseDrafts.failPersistently(
+    'save',
+    new Error('This device could not store the record.'),
+    () => device.failDraftWrites,
+  );
+  const clock = native.clock;
+  const controller = native.open();
 
   return {
     controller,
@@ -426,11 +384,10 @@ function world({ google = false } = {}) {
     chooser,
     /** Holds the next matching request until released. */
     hold(method: string, match: RegExp): Hold {
-      let arrive!: () => void, release!: () => void;
-      const reached = new Promise<void>((resolve) => (arrive = resolve));
-      const wait = new Promise<void>((resolve) => (release = resolve));
-      holds.push({ method, match, wait, arrive });
-      return { reached, release };
+      // The old matcher sees pathname only, not the query appended by the shared log.
+      const pathMatch = new RegExp(match.source.replace(/\$$/, '(?:\\?.*)?$'), match.flags);
+      const held = backend.hold(method, pathMatch, { at: 'request' });
+      return { reached: held.arrived, release: held.release };
     },
     /** What was sent from here on, other than reads. */
     writesSince(from: number) {

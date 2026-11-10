@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { gatewayReply } from '../test-utils/transport-faults';
 import { decodeStoredSession } from './cookies';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type {
   GoogleIdentityResult,
   MobileDependencies,
@@ -46,61 +47,69 @@ function setup(
     dependencies?: Partial<MobileDependencies>;
     insecure?: boolean;
     bootstrap?: unknown;
+    signInStatus?: number;
+    signInCode?: string;
+    noSession?: boolean;
   } = {},
 ) {
-  let saved: string | null = options.saved ?? null;
-  const credentials = {
-    load: vi.fn(async () => saved),
-    save: vi.fn(async (value: string) => {
-      saved = value;
-    }),
-    clear: vi.fn(async () => {
-      saved = null;
-    }),
-  };
+  const backend = fakeSplitbook();
+  backend.world.people.alex = user;
+  backend.world.groups = [];
+  backend.auth.secureCookies = true;
+  backend.auth.cookie = () => 'better-auth.session_token=signed-session.signature';
+  backend.auth.bootstrap =
+    options.bootstrap === undefined
+      ? { environment: 'staging', googleWebClientId: '123-test.apps.googleusercontent.com' }
+      : options.bootstrap;
+  backend.auth.signInStatus = options.signInStatus ?? 200;
+  backend.auth.signInCode = options.signInCode ?? null;
+  backend.auth.sessionPresent = !options.noSession;
+  if (options.saved)
+    backend.auth.issue('alex', decodeStoredSession(options.saved, true)?.cookie ?? options.saved);
+  if (options.intercept)
+    backend.reply('*', '*', ({ url, init }) =>
+      url.pathname === '/.well-known/splitbook-mobile.json'
+        ? undefined
+        : options.intercept!(url.href, init),
+    );
+  if (options.dependencies?.fetch)
+    backend.reply('*', '*', ({ url, init }) => options.dependencies!.fetch!(url.href, init));
   const acquire = vi.fn(options.acquire ?? (async () => identity));
-  const transport = vi.fn<MobileFetch>(
-    options.intercept ??
-      (async (url, init) => {
-        const path = new URL(url).pathname;
-        if (path === '/api/auth/sign-in/social')
-          return response(
-            { user, token: 'raw-session-is-not-a-cookie' },
-            200,
-            `${cookie}; Path=/; HttpOnly; Secure; Max-Age=2592000`,
-          );
-        if (!new Headers(init.headers).get('Cookie')) return response({}, 401);
-        if (path === '/api/auth/get-session')
-          return response({
-            user,
-            session: { userId: user.id, expiresAt: '2030-01-01T00:00:00.000Z' },
-          });
-        if (path === '/api/groups') return response({ data: [], status: 200 });
-        if (path === '/api/user/balances') return response({ data: { buckets: [] }, status: 200 });
-        if (path === '/api/auth/sign-out') return response({ success: true });
-        return response({}, 404);
-      }),
-  );
-  const fetch = vi.fn<MobileFetch>(async (url, init) => {
-    if (url.endsWith('/.well-known/splitbook-mobile.json')) {
-      return response(
-        options.bootstrap === undefined
-          ? { environment: 'staging', googleWebClientId: '123-test.apps.googleusercontent.com' }
-          : options.bootstrap,
-      );
-    }
-    return transport(url, init);
-  });
-  const controller = createMobileController(
+  const fetch = vi.fn(backend.fetch);
+  const origin = options.insecure ? base.replace('https:', 'http:') : base;
+  const phone = testPhone(
+    { ...backend, fetch },
     {
-      apiBaseUrl: options.insecure ? base.replace('https:', 'http:') : base,
-      authOrigin: options.insecure ? base.replace('https:', 'http:') : base,
-      developmentPersonaEnabled: false,
-      googleWebClientId: '123-test.apps.googleusercontent.com',
+      origin,
+      config: {
+        developmentPersonaEnabled: false,
+        googleWebClientId: '123-test.apps.googleusercontent.com',
+      },
+      parts: {
+        savedQueries: undefined,
+        offlineIdentity: undefined,
+        pendingInvitation: undefined,
+        expenseDrafts: undefined,
+        settlementAttempts: undefined,
+        draftRequests: undefined,
+        tagRequests: undefined,
+        groupCreations: undefined,
+        netInfo: undefined,
+        newSubmissionKey: undefined,
+        accountLocal: undefined,
+        googleSignIn: acquire,
+        ...options.dependencies,
+      },
     },
-    { fetch, googleSignIn: acquire, credentials, ...options.dependencies },
   );
-  return { controller, acquire, fetch, credentials, saved: () => saved };
+  phone.stores.credentials.value = options.saved ?? null;
+  const credentials = Object.assign(phone.stores.credentials, {
+    load: vi.fn(phone.stores.credentials.load),
+    save: vi.fn<(value: string) => Promise<void>>(phone.stores.credentials.save),
+    clear: vi.fn(phone.stores.credentials.clear),
+  });
+  const controller = phone.open();
+  return { controller, acquire, fetch, credentials, saved: () => phone.stores.credentials.value };
 }
 
 describe('Google login within the native session boundary', () => {
@@ -151,13 +160,13 @@ describe('Google login within the native session boundary', () => {
     },
   );
   it('explains beta denial rather than treating it as a Group authorization failure', async () => {
-    const test = setup({ intercept: async () => response({ code: 'email_not_allowed' }, 403) });
+    const test = setup({ signInStatus: 403, signInCode: 'email_not_allowed' });
     await test.controller.signInWithGoogle();
     expect(test.controller.getSnapshot().auth.message).toContain('not invited');
     expect(test.saved()).toBeNull();
   });
   it('treats rejected identity tokens as login failures, not expired app sessions', async () => {
-    const test = setup({ intercept: async () => response({ code: 'INVALID_ID_TOKEN' }, 401) });
+    const test = setup({ signInStatus: 401, signInCode: 'INVALID_ID_TOKEN' });
     await test.controller.signInWithGoogle();
     expect(test.controller.getSnapshot().auth.message).toContain('sign-in was not accepted');
     expect(test.saved()).toBeNull();
@@ -333,7 +342,7 @@ describe('Google login within the native session boundary', () => {
     expect(test.fetch).not.toHaveBeenCalled();
   });
   it('clears an expired saved Google session instead of showing protected content', async () => {
-    const test = setup({ saved: cookie, intercept: async () => response(null) });
+    const test = setup({ saved: cookie, noSession: true });
     await test.controller.restore();
     expect(test.controller.getSnapshot().auth.status).toBe('signed-out');
     expect(test.saved()).toBeNull();

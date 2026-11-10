@@ -1,8 +1,9 @@
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import { describe, expect, it } from 'vitest';
 import { buildExpenseBody, type ExpenseDraft } from './expense-draft';
 import type { MobileGroup } from './types';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // Leave Group from Members and Group details. Fictional people and Groups only.
 const accountId = 'a00000000000000000000001',
@@ -64,12 +65,7 @@ const refusals = {
 
 function fixture(memberCount = 2) {
   const currentGroup = { ...group, members: group.members.slice(0, memberCount) };
-  let offline = false,
-    cookie: string | null = null,
-    owner: string | null = accountId,
-    identity: unknown = null,
-    cleanup = false,
-    member = true,
+  let member = true,
     held: Promise<void> | null = null;
   let leave: () => Response | Promise<Response> = () => {
     member = false;
@@ -77,125 +73,70 @@ function fixture(memberCount = 2) {
   };
   const calls: string[] = [];
   const leaveBodies: unknown[] = [];
-  const cache = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>(),
-    payments = new Map<string, unknown>();
-  const records = (map: Map<string, unknown>) => ({
-    load: async (account: string, id: string) =>
-      structuredClone(map.get(`${account}:${id}`) ?? null),
-    save: async (account: string, id: string, value: unknown) => {
-      map.set(`${account}:${id}`, structuredClone(value));
-    },
-    remove: async (account: string, id: string) => {
-      map.delete(`${account}:${id}`);
-    },
-    clear: async () => {
-      map.clear();
-    },
-    list: async (account: string) =>
-      [...map]
-        .filter(([key]) => key.startsWith(`${account}:`))
-        .map(([key, value]) => ({ groupId: key.split(':')[1], value: structuredClone(value) })),
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.people.sam = sam;
+  backend.world.groups = [currentGroup];
+  Object.defineProperty(backend.world.groupsByAccount, accountId, {
+    get: () => (member ? [currentGroup] : []),
   });
-  const build = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4147',
-        authOrigin: 'http://localhost:4147',
-        developmentPersonaEnabled: true,
+  Object.defineProperty(backend.world, 'home', {
+    get: () => ({ buckets: [], groups: member ? [{ groupId, balances: [] }] : [] }),
+  });
+  backend.world.expenses[groupId] = emptyPage.data;
+  backend.world.balances[groupId] = { byCurrency: [] };
+  // Keep the original log’s reached requests only.
+  backend.reply('POST', `/api/groups/${groupId}/leave`, async ({ init }) => {
+    leaveBodies.push(init.body ? JSON.parse(String(init.body)) : null);
+    await held;
+    return leave();
+  });
+  backend.reply('*', '*', ({ path }) =>
+    !member && path.startsWith(`/api/groups/${groupId}`) && !path.endsWith('/leave')
+      ? Response.json({ error: 'Forbidden', status: 403 }, { status: 403 })
+      : undefined,
+  );
+  backend.reply('*', '*', ({ method, url }) => {
+    calls.push(`${method} ${url.pathname}`);
+    return undefined;
+  });
+  const phone = testPhone(backend, {
+    origin: 'http://localhost:4147',
+    now,
+    recordSeparator: ':',
+    settlementSeparator: ':',
+    parts: {
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        stores: [
+          {
+            clear: async (): Promise<void> => {
+              phone.stores.savedQueries.records.clear();
+              phone.stores.offlineIdentity.value = null;
+              phone.stores.expenseDrafts.records.clear();
+              phone.stores.settlementAttempts.records.clear();
+            },
+          },
+        ],
       },
-      {
-        now: () => now,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity),
-          save: async (value) => {
-            identity = structuredClone(value);
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
-        savedQueries: savedQueriesIn(cache),
-        expenseDrafts: records(drafts),
-        settlementAttempts: records(payments),
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          stores: [
-            {
-              clear: async () => {
-                cache.clear();
-                identity = null;
-                drafts.clear();
-                payments.clear();
-              },
-            },
-          ],
-        },
-        fetch: async (url, init) => {
-          if (offline) throw new Error('Offline');
-          const path = new URL(url).pathname;
-          calls.push(`${init.method ?? 'GET'} ${path}`);
-          if (path.endsWith('/sign-in'))
-            return new Response(JSON.stringify({ user: alex }), {
-              headers: {
-                'Set-Cookie': 'better-auth.session_token=alex.signature; Max-Age=2592000',
-              },
-            });
-          if (path.endsWith('/get-session'))
-            return Response.json({
-              user: alex,
-              session: { userId: accountId, expiresAt: '2030-01-01T00:00:00.000Z' },
-            });
-          if (path === '/api/groups')
-            return Response.json({ status: 200, data: member ? [currentGroup] : [] });
-          // Like Splitbook's, Home's figures name the Groups they were worked out over (#333).
-          if (path === '/api/user/balances')
-            return Response.json({
-              status: 200,
-              data: { buckets: [], groups: member ? [{ groupId, balances: [] }] : [] },
-            });
-          if (path === `/api/groups/${groupId}/leave`) {
-            leaveBodies.push(init.body ? JSON.parse(String(init.body)) : null);
-            await held;
-            return leave();
-          }
-          if (!member && path.startsWith(`/api/groups/${groupId}`))
-            return Response.json({ error: 'Forbidden', status: 403 }, { status: 403 });
-          if (path === `/api/groups/${groupId}`)
-            return Response.json({ status: 200, data: currentGroup });
-          if (path.endsWith('/expenses')) return Response.json(emptyPage);
-          if (path.endsWith('/balances'))
-            return Response.json({ status: 200, data: { byCurrency: [] } });
-          throw new Error(`Unexpected fixture request ${init.method} ${path}`);
-        },
-      },
-    );
+    },
+  });
+  phone.stores.owner.value = accountId;
+  delete phone.stores.savedQueries.retainGroups;
+  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts])
+    delete (store as AccountGroupRecordStore).keys;
+  const cache = phone.stores.savedQueries.records,
+    drafts = phone.stores.expenseDrafts.records,
+    payments = phone.stores.settlementAttempts.records;
+  const build = () => phone.open();
   let controller = build();
   return {
     get controller() {
@@ -230,7 +171,7 @@ function fixture(memberCount = 2) {
       };
     },
     goOffline: () => {
-      offline = true;
+      backend.online = false;
     },
     /** Stores this Group's draft record, as the Expense form would. */
     keep: (record: object) =>
