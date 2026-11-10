@@ -565,7 +565,7 @@ describe('settling up in several currencies at once (#734)', () => {
     const { controller, batches, connect } = await opened(({ pathname }) =>
       down && pathname.endsWith('/rates') ? offline() : undefined,
     );
-    expect(controller.getSnapshot().settlement.batch?.rates.EUR?.rate).toEqual({
+    expect(controller.getSnapshot().settlement.batch?.rates.EUR?.state).toEqual({
       status: 'unreachable',
     });
     controller.editBatchRate('EUR', '92.40');
@@ -577,7 +577,7 @@ describe('settling up in several currencies at once (#734)', () => {
     down = false;
     connect(false);
     connect(true);
-    await until(controller, (now) => now.settlement.batch?.rates.EUR?.rate.status === 'ready');
+    await until(controller, (now) => now.settlement.batch?.rates.EUR?.state.status === 'ready');
     // The member's own rate stays theirs, beside the suggestion now known.
     await controller.recordSettlement();
     expect(batches[0]?.body.settlements).toEqual([

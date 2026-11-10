@@ -5,20 +5,12 @@ import {
   crossCurrencySettlementReadShape,
   crossCurrencySettlementShape,
 } from '@splitbook/shared/validators/settlement';
-import {
-  crossCurrencyRateKind,
-  readCrossCurrencyEntry,
-  suggestedRateText,
-  type CrossCurrencyEntry,
-  type RateSuggestion,
+import type {
+  CrossCurrencyEntry,
+  PaymentRateState,
 } from '@splitbook/shared/cross-currency-payment';
-import { getCurrencyPrecision } from '@splitbook/shared/currency';
-import {
-  calculateSettlementBatch,
-  type SettlementBatchAmounts,
-  type SettlementBatchItem,
-  type SettlementBatchRate,
-} from '@splitbook/shared/settlement-batch';
+import type { SettlementBatchItem } from '@splitbook/shared/settlement-batch';
+import type { readSettleAll, SettleAllDebt, SettleAllRate } from '@splitbook/shared/settle-all';
 import { createSettlementBatchSchema } from '@splitbook/shared/validators/settlement-batch';
 import type { CrossCurrencySettlementFields } from '@splitbook/shared/cross-currency-settlement';
 import {
@@ -63,119 +55,31 @@ export const recordWhileOffline = `You’re offline. ${recordNeedsConnection}`;
 export const recordWaitsForRate = 'Record is available once a suggested rate is looked up.';
 /** Record's reason while a payment in another currency has a field left to enter (#728). */
 export const enterRateOrPaid = 'Enter the rate or the amount paid to record it.';
-/** What the sheet knows of a suggested rate between the Debt's currency and another (#728). */
-export type RateState =
-  | { status: 'loading' }
-  | { status: 'ready'; suggestion: RateSuggestion }
-  /** The rate service has no suggestion, `reason` saying why; null when its read failed. */
-  | { status: 'none'; reason: string | null }
-  /** The phone couldn't reach Splitbook: the rate, and recording, wait for a connection. */
-  | { status: 'unreachable' };
-/** One Debt of a payment settling several at once, paid in another currency (#734). */
-export interface BatchRate {
-  rate: RateState;
-  /** The member's own rate, as typed; null while it pays at the suggestion. */
-  custom: string | null;
-}
 /**
  * Settle up (#734): one payment, in one currency, that clears every Debt between two people,
- * each at its own rate. A Debt in the paying currency needs none.
+ * each at its own rate. A Debt in the paying currency needs none. Only this entered state
+ * changes shape; an unconfirmed payment keeps its original request body on this phone.
  */
 export interface BatchPayment {
   paidBy: string;
   paidTo: string;
-  /** The Debts it clears, in the Group's order, in major units, as the latest Balances show them. */
-  debts: { currency: string; amount: number }[];
-  /** The one currency it is paid in: one of the Debts'. */
+  /** The Debts it clears, in the Group's order, in exact minor units. */
+  debts: SettleAllDebt[];
+  /** The one currency it is paid in. */
   paidCurrency: string;
   /** Each Debt in another currency, by its currency. */
-  rates: Record<string, BatchRate>;
+  rates: Record<string, SettleAllRate>;
 }
-/** Record's reason while a Debt of a settle-up has no rate yet (#734). */
-export const enterBatchRate = (currency: string) =>
-  `Enter the rate for the ${currency} Debt to record it.`;
-/** One Debt of a settle-up, as the sheet shows it. */
-export interface BatchLine {
-  currency: string;
-  debtMinor: number;
-  /** What it pays, in the paying currency; null until its rate is known. */
-  paidMinor: number | null;
-  /** The rate it is paid at, as a decimal; null in the paying currency, or until it is known. */
-  rate: string | null;
-  kind: 'same' | CrossCurrencySettlementFields['rateKind'] | null;
-}
-/**
- * A settle-up read by the shared rules: each Debt's line, and the payment's rows and total once
- * every rate is known (`calculateSettlementBatch`); else what Record waits for.
- */
-export function readBatchPayment({ debts, paidCurrency, rates }: BatchPayment) {
-  let waiting: string | null = null;
-  const choices: Record<string, SettlementBatchRate> = {};
-  const lines = debts.map(({ currency, amount }): BatchLine => {
-    const debtMinor = parseAmountMinor(amount, currency);
-    if (currency === paidCurrency)
-      return { currency, debtMinor, paidMinor: debtMinor, rate: null, kind: 'same' };
-    const unknown = { currency, debtMinor, paidMinor: null, rate: null, kind: null };
-    const { rate, custom } = rates[currency] ?? { rate: { status: 'loading' }, custom: null };
-    if (rate.status === 'loading' || rate.status === 'unreachable') {
-      waiting ??= rate.status === 'loading' ? recordWaitsForRate : recordNeedsConnection;
-      return unknown;
-    }
-    const suggestion = rate.status === 'ready' ? rate.suggestion : null;
-    const typed = custom?.trim() ? custom : suggestion && suggestedRateText(suggestion.rate);
-    if (!typed) {
-      waiting ??= enterBatchRate(currency);
-      return unknown;
-    }
-    const pair = { currency, paidCurrency };
-    const places = getCurrencyPrecision(currency);
-    const reading = readCrossCurrencyEntry(
-      {
-        cleared: toMajorAmount(debtMinor, currency).toFixed(places),
-        rate: typed,
-        paid: '',
-        drivers: ['rate', 'cleared'],
-      },
-      pair,
-    );
-    if (reading.status !== 'valid') {
-      waiting ??= reading.status === 'invalid' ? reading.message : enterBatchRate(currency);
-      return unknown;
-    }
-    const plain = typed.trim().replaceAll(',', '').replace(/\.$/, '');
-    const kind = crossCurrencyRateKind(pair, reading.amounts, suggestion);
-    const provenance = suggestion && {
-      suggestedRate: suggestion.rate,
-      rateSource: suggestion.source,
-      rateAsOf: suggestion.asOf,
-      rateFetchedAt: suggestion.fetchedAt,
-    };
-    choices[currency] =
-      !provenance || kind === 'entered'
-        ? { rateKind: 'entered', rate: plain }
-        : kind === 'suggested'
-          ? { rateKind: 'suggested', ...provenance }
-          : { rateKind: 'custom', rate: plain, ...provenance };
-    return {
-      currency,
-      debtMinor,
-      paidMinor: reading.amounts.amountPaidMinor,
-      rate: kind === 'suggested' && suggestion ? suggestion.rate : plain,
-      kind,
-    };
-  });
-  let amounts: SettlementBatchAmounts | null = null;
-  if (!waiting)
-    try {
-      amounts = calculateSettlementBatch({
-        debts: lines.map(({ currency, debtMinor }) => ({ currency, amountMinor: debtMinor })),
-        paidCurrency,
-        rates: choices,
-      });
-    } catch {
-      waiting = 'This payment can’t be worked out from these rates. Check them.';
-    }
-  return { lines, amounts, waiting };
+/** Android keeps its two waiting sentences; every other reason uses the shared words. */
+export function settleAllWaiting({
+  waiting,
+  reason,
+}: Pick<ReturnType<typeof readSettleAll>, 'waiting' | 'reason'>) {
+  return reason?.kind === 'loading'
+    ? recordWaitsForRate
+    : reason?.kind === 'unreachable'
+      ? recordNeedsConnection
+      : waiting;
 }
 /** A settle-up's body: the payment's people, its currency and one row for each Debt. */
 export function batchBody({ paidBy, paidTo, currency, batch }: SettlementDraft) {
@@ -206,7 +110,7 @@ export interface CrossCurrencyPayment {
   paidCurrency: string;
   /** The amount cleared, the rate and the amount paid, as typed or worked out. */
   entry: CrossCurrencyEntry;
-  rate: RateState;
+  rate: PaymentRateState;
 }
 const paidSideFields = Object.keys(
   crossCurrencySettlementShape,

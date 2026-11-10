@@ -5,19 +5,18 @@ import {
   rateText,
   suggestedRateText,
   type RateSuggestion,
+  type PaymentRateState,
 } from '@splitbook/shared/cross-currency-payment';
 import { decimalMoney, minorMoney } from '@splitbook/shared/cross-currency-settlement';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import { groupCurrencies } from '@splitbook/shared/group-currencies';
-import { settleAllPayCurrencies } from '@splitbook/shared/settle-all';
-import { acceptsNumericText } from '../data/field-feedback';
 import {
-  readBatchPayment,
-  recordWhileOffline,
-  type BatchLine,
-  type RateState,
-  type SettlementState,
-} from '../data/settlement';
+  readSettleAll,
+  settleAllPayCurrencies,
+  type SettleAllLine,
+} from '@splitbook/shared/settle-all';
+import { acceptsNumericText } from '../data/field-feedback';
+import { settleAllWaiting, recordWhileOffline, type SettlementState } from '../data/settlement';
 import {
   Banner,
   BottomSheet,
@@ -61,8 +60,8 @@ const sourceWords = (suggestion: RateSuggestion) =>
     : `rates of ${rateDay(suggestion.asOf)}`;
 
 /** One Debt of the payment as the sheet shows it: from the member's entries, or as it was sent. */
-interface Leg extends BatchLine {
-  rateState: RateState | null;
+interface Leg extends SettleAllLine {
+  rateState: PaymentRateState | null;
   custom: string | null;
 }
 
@@ -298,12 +297,12 @@ export function SettleAllSheet({
   const checking = status === 'loading';
   const editable = !!batch && ['editing', 'review'].includes(status) && !attempt;
   // While entered, each Debt as the shared rules read it; once sent, as it was sent.
-  const reading = batch && !attempt ? readBatchPayment(batch) : null;
+  const reading = batch && !attempt ? readSettleAll(batch) : null;
   const paidCurrency = (reading ? batch?.paidCurrency : draft?.currency) ?? '';
   const legs: Leg[] = reading
     ? reading.lines.map((line) => ({
         ...line,
-        rateState: batch!.rates[line.currency]?.rate ?? null,
+        rateState: batch!.rates[line.currency]?.state ?? null,
         custom: batch!.rates[line.currency]?.custom ?? null,
       }))
     : (draft?.batch ?? []).map((row) => {
@@ -314,6 +313,7 @@ export function SettleAllSheet({
           paidMinor: row.amountPaidMinor ?? debtMinor,
           rate: row.appliedRate ?? null,
           kind: row.amountPaidMinor === undefined ? ('same' as const) : (row.rateKind ?? null),
+          suggestion: null,
           rateState: null,
           custom: null,
         };
@@ -323,7 +323,7 @@ export function SettleAllSheet({
     : draft?.batch && draft.amount
       ? parseAmountMinor(draft.amount, draft.currency)
       : null;
-  const waiting = reading?.waiting ?? null;
+  const waiting = reading ? settleAllWaiting(reading) : null;
   const count = legs.length;
   // The main currency first, then each Debt's own (#872).
   const payCurrencies =

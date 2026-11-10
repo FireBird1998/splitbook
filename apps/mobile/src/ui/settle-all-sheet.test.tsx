@@ -85,10 +85,10 @@ const paying = (patch: Partial<BatchPayment> = {}): BatchPayment => ({
   paidTo: sam,
   paidCurrency: 'INR',
   debts: [
-    { currency: 'INR', amount: 1480 },
-    { currency: 'EUR', amount: 20 },
+    { currency: 'INR', amountMinor: 148000 },
+    { currency: 'EUR', amountMinor: 2000 },
   ],
-  rates: { EUR: { rate: { status: 'ready', suggestion: frankfurter }, custom: null } },
+  rates: { EUR: { state: { status: 'ready', suggestion: frankfurter }, custom: null } },
   ...patch,
 });
 const state = (
@@ -220,13 +220,13 @@ describe('Settle up with Sam (#734)', () => {
   it('offers the main currency first in Pay in, then each Debt’s own (#872)', () => {
     const extras = paying({
       debts: [
-        { currency: 'EUR', amount: 20 },
-        { currency: 'JPY', amount: 2500 },
+        { currency: 'EUR', amountMinor: 2000 },
+        { currency: 'JPY', amountMinor: 2500 },
       ],
       rates: {
-        EUR: { rate: { status: 'ready', suggestion: frankfurter }, custom: null },
+        EUR: { state: { status: 'ready', suggestion: frankfurter }, custom: null },
         JPY: {
-          rate: { status: 'ready', suggestion: { ...frankfurter, rate: '0.56' } },
+          state: { status: 'ready', suggestion: { ...frankfurter, rate: '0.56' } },
           custom: null,
         },
       },
@@ -266,7 +266,7 @@ describe('Settle up with Sam (#734)', () => {
     const custom = render(
       state(
         paying({
-          rates: { EUR: { rate: { status: 'ready', suggestion: frankfurter }, custom: '92.50' } },
+          rates: { EUR: { state: { status: 'ready', suggestion: frankfurter }, custom: '92.50' } },
         }),
       ),
     );
@@ -282,7 +282,7 @@ describe('Settle up with Sam (#734)', () => {
     const { root } = render(
       state(
         paying({
-          rates: { EUR: { rate: { status: 'none', reason: 'unavailable' }, custom: null } },
+          rates: { EUR: { state: { status: 'none', reason: 'unavailable' }, custom: null } },
         }),
       ),
     );
@@ -307,7 +307,7 @@ describe('Settle up with Sam (#734)', () => {
     };
     const { root, on } = render(
       state(
-        paying({ rates: { EUR: { rate: { status: 'ready', suggestion: mixed }, custom: null } } }),
+        paying({ rates: { EUR: { state: { status: 'ready', suggestion: mixed }, custom: null } } }),
       ),
     );
     expect(text(root)).toContain('Suggested\u00a0· rates of 21\u00a0Oct');
@@ -331,7 +331,7 @@ describe('Settle up with Sam (#734)', () => {
       recordNeedsConnection,
     ],
   ])('while the rate is %s, says so, and Record waits', (_, rate, words, hint) => {
-    const { root } = render(state(paying({ rates: { EUR: { rate, custom: null } } })));
+    const { root } = render(state(paying({ rates: { EUR: { state: rate, custom: null } } })));
     expect(text(root)).toContain(words);
     expect(text(root)).not.toContain('No rate suggested');
     expect(record(root).props.accessibilityState?.disabled).toBe(true);

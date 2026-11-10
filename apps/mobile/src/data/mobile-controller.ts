@@ -60,6 +60,7 @@ import {
   suggestedRateText,
   type CrossCurrencyField,
   type PaymentCurrencies,
+  type PaymentRateState,
 } from '@splitbook/shared/cross-currency-payment';
 import { getCurrencyPrecision } from '@splitbook/shared/currency';
 import {
@@ -68,7 +69,7 @@ import {
   enterRateOrPaid,
   isBatchBody,
   parseRecordedBatch,
-  readBatchPayment,
+  settleAllWaiting,
   parseRecordedSettlement,
   parseSettlementAttempt,
   settlementBody,
@@ -80,13 +81,17 @@ import {
   recordWaitsForRate,
   validateSettlementDraft,
   type PendingPayment,
-  type RateState,
   type SettlementChoice,
   type SettlementDraft,
   type SettlementField,
 } from './settlement';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
-import { settleAllPayCurrencies } from '@splitbook/shared/settle-all';
+import {
+  readSettleAll,
+  settleAllDebtsBetween,
+  settleAllPayCurrencies,
+} from '@splitbook/shared/settle-all';
+import { paymentBalances } from './payment-balances';
 import {
   assertSettlementMembers,
   assertSettlementAuthorization,
@@ -5222,14 +5227,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       );
       return (
         suggestion ? { status: 'ready', suggestion } : { status: 'none', reason }
-      ) as RateState;
+      ) as PaymentRateState;
     } catch (error) {
       // "No rate suggested" is for the rate service alone: offline, the sheet waits instead.
       return (
         error instanceof RequestError && error.networkFailure
           ? { status: 'unreachable' }
           : { status: 'none', reason: null }
-      ) as RateState;
+      ) as PaymentRateState;
     }
   };
   const lookUpRate = async (groupId: string, pair: PaymentCurrencies, asked: number) => {
@@ -5291,27 +5296,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       editCrossCurrency('rate', suggestedRateText(rate.suggestion.rate));
   };
   /**
-   * The Debts between two people as the Balances read them, one way, in the Group's order: its
-   * main currency, its others, then any it no longer lists (#734).
-   */
-  const debtsBetween = (
-    balances: GroupCurrencyBalance[],
-    group: MobileGroup,
-    paidBy: string,
-    paidTo: string,
-  ) => {
-    const listed = groupCurrencies(group);
-    const rank = (currency: string) =>
-      listed.includes(currency) ? listed.indexOf(currency) : listed.length;
-    return balances
-      .flatMap(({ currency, debts }) =>
-        debts
-          .filter((debt) => debt.from.id === paidBy && debt.to.id === paidTo && debt.amount > 0)
-          .map(({ amount }) => ({ currency, amount })),
-      )
-      .sort((a, b) => rank(a.currency) - rank(b.currency) || a.currency.localeCompare(b.currency));
-  };
-  /**
    * Settle up (#734, board "Settle both currencies at once"): one payment, in one currency, for
    * every Debt the payer owes the other in two currencies or more, each at its own rate. It is
    * paid in the Group's main currency, the first Pay in offers, even when no Debt is in it (#872);
@@ -5332,7 +5316,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !state.group.members.some((m) => m.user.id === paidTo)
     )
       return;
-    const debts = debtsBetween(state.balances, state.group, paidBy, paidTo);
+    const debts = settleAllDebtsBetween(
+      paymentBalances(state.balances),
+      paidBy,
+      paidTo,
+      groupCurrencies(state.group),
+      state.group.members.map((member) => member.user.id),
+    );
     const [paidCurrency] = settleAllPayCurrencies(
       debts,
       groupCurrencies(state.group),
@@ -5363,7 +5353,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         .filter(({ currency }) => currency !== paidCurrency)
         .map(({ currency }) => [
           currency,
-          { rate: { status: 'loading' } as RateState, custom: null },
+          { state: { status: 'loading' } as PaymentRateState, custom: null },
         ]),
     );
   /** The settle-up's rates, looked up live, each into its Debt as it comes. */
@@ -5390,7 +5380,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             ...snapshot.settlement,
             batch: {
               ...latest,
-              rates: { ...latest.rates, [currency]: { ...latest.rates[currency]!, rate } },
+              rates: { ...latest.rates, [currency]: { ...latest.rates[currency]!, state: rate } },
             },
           },
         });
@@ -5503,11 +5493,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     // Settling up waits for every Debt's rate, by the same rules (#734).
     const batch = state.attempt ? null : state.batch;
-    const batchReading = batch ? readBatchPayment(batch) : null;
-    if (batchReading?.waiting) {
+    const batchReading = batch ? readSettleAll(batch) : null;
+    const batchWaiting = batchReading && settleAllWaiting(batchReading);
+    if (batchWaiting) {
       publish({
         ...snapshot,
-        settlement: { ...state, status: 'editing', message: batchReading.waiting },
+        settlement: { ...state, status: 'editing', message: batchWaiting },
       });
       return;
     }
@@ -5571,7 +5562,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!attempt && batch && batchReading?.amounts) {
         // Each Debt as the Balances just read it: one gone ends the payment; one changed shows,
         // and waits to be recorded again. Nobody pays a Debt that isn't there (#734).
-        const latest = debtsBetween(context.balances, context.group, batch.paidBy, batch.paidTo);
+        const latest = settleAllDebtsBetween(
+          paymentBalances(context.balances),
+          batch.paidBy,
+          batch.paidTo,
+          groupCurrencies(context.group),
+          context.group.members.map((member) => member.user.id),
+        );
         const debts = batch.debts.map(({ currency }) =>
           latest.find((debt) => debt.currency === currency),
         );
@@ -5590,7 +5587,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           });
           return;
         }
-        if (debts.some((debt, index) => debt!.amount !== batch.debts[index]!.amount)) {
+        if (debts.some((debt, index) => debt!.amountMinor !== batch.debts[index]!.amountMinor)) {
           publish({
             ...snapshot,
             settlement: {
@@ -7208,7 +7205,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const batchWaits =
       !!batch &&
       !!snapshot.settlement.groupId &&
-      Object.values(batch.rates).some(({ rate }) => rate.status === 'unreachable');
+      Object.values(batch.rates).some(({ state }) => state.status === 'unreachable');
     if (!check && !rate && !batchWaits && !bannerShown()) return null;
     return async () => {
       if (batchWaits && batch && snapshot.settlement.groupId) {
