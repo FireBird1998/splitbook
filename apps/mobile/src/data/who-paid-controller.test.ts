@@ -1,3 +1,4 @@
+import { expenseReceipt } from '../test-utils/expense-receipt';
 import type { AccountGroupRecordStore } from './account-record-storage';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
@@ -49,10 +50,12 @@ async function setup() {
   server.world.groups = [group];
   server.world.expenses[groupId] = expensePage();
   server.world.balances[groupId] = { currency: 'INR', balances: [], debts: [], byCurrency: [] };
-  // Keep the original minimal create acknowledgement and its captured request bodies.
   server.reply('POST', `/api/groups/${groupId}/expenses`, ({ body }) => {
     posts.push(body);
-    return json({ status: 201, data: { _id: tagId, group: groupId } }, 201);
+    return json(
+      { status: 201, data: expenseReceipt(group, body, 'e00000000000000000000001', memberIds[0]) },
+      201,
+    );
   });
   const phone = testPhone(server, {
     now: Date.parse(iso),
