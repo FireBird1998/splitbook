@@ -130,9 +130,11 @@ function faultable<T extends object>(store: T) {
 /** Native cells clone at the boundary, as the persisted adapters do. */
 function cell<T>(initial: T) {
   let value = structuredClone(initial);
-  const writes:T[]=[];
+  const writes: T[] = [];
   return faultable({
-    get writes(){return structuredClone(writes)},
+    get writes() {
+      return structuredClone(writes);
+    },
     get value() {
       return structuredClone(value);
     },
@@ -319,7 +321,12 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
       server.online = value && isInternetReachable !== false;
       listeners.forEach((listener) => listener(connection!));
     },
-    open() {
+    open(
+      overrides: {
+        config?: Partial<MobileConfig>;
+        parts?: Omit<Partial<MobileDependencies>, 'fetch'>;
+      } = {},
+    ) {
       active?.dispose();
       active = (options.monitor === false ? createMobileController : createCheckedMobileController)(
         {
@@ -327,10 +334,12 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
           authOrigin: options.origin ?? 'http://localhost:4138',
           developmentPersonaEnabled: true,
           ...options.config,
+          ...overrides.config,
         },
         {
           ...parts,
           accountLocal: omitAccount ? undefined : accountLocal,
+          ...overrides.parts,
           fetch: server.fetch,
         },
       );

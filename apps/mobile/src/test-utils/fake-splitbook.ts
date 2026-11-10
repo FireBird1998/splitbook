@@ -287,7 +287,7 @@ export function fakeSplitbook() {
   const hold = (
     method: string,
     path: string | RegExp,
-    { at = 'reply', abortable=false }: { at?: 'request' | 'reply'; abortable?:boolean } = {},
+    { at = 'reply', abortable = false }: { at?: 'request' | 'reply'; abortable?: boolean } = {},
   ) => {
     let arrive!: () => void, release!: () => void, lose!: (error: Error) => void;
     const arrived = new Promise<void>((done) => {
@@ -304,20 +304,25 @@ export function fakeSplitbook() {
         fault ? lose(new TypeError('Network request failed')) : release(),
     };
   };
-  let issued = 0, online = true;
+  let issued = 0,
+    online = true;
   const auth = {
     sessions: new Map<string, SessionUser>(),
     issuedTo: new Map<string, SessionUser>(),
     expired: false,
     signInStatus: 200,
-    signInCode: null as string|null,
+    signInCode: null as string | null,
     sessionPresent: true,
     signOutStatus: 200,
-    bootstrap: {environment:'staging',googleWebClientId:'123-test.apps.googleusercontent.com'} as unknown,
+    bootstrap: {
+      environment: 'staging',
+      googleWebClientId: '123-test.apps.googleusercontent.com',
+    } as unknown,
     expiresAt: '2030-01-01T00:00:00Z',
     secureCookies: false,
     rotate: false,
-    cookie: (persona: PersonaId, sequence: number) => `better-auth.session_token=${persona}-${sequence}.signature`,
+    cookie: (persona: PersonaId, sequence: number) =>
+      `better-auth.session_token=${persona}-${sequence}.signature`,
     issue(persona: PersonaId, cookie?: string): string {
       const user = world.people[persona];
       const value = cookie ?? auth.cookie(persona, ++issued);
@@ -349,12 +354,18 @@ export function fakeSplitbook() {
         (typeof h.path === 'string' ? h.path === request.path : h.path.test(request.path)),
     );
     const held = index < 0 ? undefined : holds.splice(index, 1)[0];
-    const waitForHold = () => !held?.abortable ? held?.wait : new Promise<void>((resolve,reject)=>{
-      const abort=()=>reject(new TypeError('Network request failed'));
-      if(init.signal?.aborted)return abort();
-      init.signal?.addEventListener('abort',abort);
-      void held.wait.then(()=>{init.signal?.removeEventListener('abort',abort);resolve()},reject);
-    });
+    const waitForHold = () =>
+      !held?.abortable
+        ? held?.wait
+        : new Promise<void>((resolve, reject) => {
+            const abort = () => reject(new TypeError('Network request failed'));
+            if (init.signal?.aborted) return abort();
+            init.signal?.addEventListener('abort', abort);
+            void held.wait.then(() => {
+              init.signal?.removeEventListener('abort', abort);
+              resolve();
+            }, reject);
+          });
     if (held?.at === 'request') {
       held.arrive();
       await waitForHold();
@@ -369,7 +380,8 @@ export function fakeSplitbook() {
         const answer = await entry.answer(request);
         if (answer !== undefined) return answer;
       }
-      if(url.pathname === '/.well-known/splitbook-mobile.json') return Response.json(auth.bootstrap);
+      if (url.pathname === '/.well-known/splitbook-mobile.json')
+        return Response.json(auth.bootstrap);
       const readPaths = [
         '/api/auth/get-session',
         '/api/groups',
@@ -404,32 +416,54 @@ export function fakeSplitbook() {
         unanswered.push(`${method} ${request.path}`);
         return Response.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
       }
-      if ((url.pathname === '/api/auth/demo-persona/sign-in' || url.pathname === '/api/auth/sign-in/social') && method === 'POST') {
-        if (auth.signInStatus !== 200) return Response.json(auth.signInCode?{code:auth.signInCode}:{}, {status:auth.signInStatus});
-        const persona = (url.pathname.endsWith('/social')
-          ? (String(init.body).includes('sam') ? 'sam' : 'alex')
-          : JSON.parse(String(init.body)).personaId) as PersonaId;
+      if (
+        (url.pathname === '/api/auth/demo-persona/sign-in' ||
+          url.pathname === '/api/auth/sign-in/social') &&
+        method === 'POST'
+      ) {
+        if (auth.signInStatus !== 200)
+          return Response.json(auth.signInCode ? { code: auth.signInCode } : {}, {
+            status: auth.signInStatus,
+          });
+        const persona = (
+          url.pathname.endsWith('/social')
+            ? String(init.body).includes('sam')
+              ? 'sam'
+              : 'alex'
+            : JSON.parse(String(init.body)).personaId
+        ) as PersonaId;
         const user = world.people[persona];
-        const cookie = auth.issue(persona, auth.secureCookies ? '__Secure-' + auth.cookie(persona, ++issued) : undefined);
+        const cookie = auth.issue(
+          persona,
+          auth.secureCookies ? '__Secure-' + auth.cookie(persona, ++issued) : undefined,
+        );
         return Response.json(
           { user },
-          { headers: { 'Set-Cookie': `${cookie}; Max-Age=2592000; Path=/; HttpOnly${auth.secureCookies ? '; Secure' : ''}` } },
+          {
+            headers: {
+              'Set-Cookie': `${cookie}; Max-Age=2592000; Path=/; HttpOnly${auth.secureCookies ? '; Secure' : ''}`,
+            },
+          },
         );
       }
       const cookie = new Headers(init.headers).get('Cookie') ?? '';
       const user = auth.sessions.get(cookie);
       if (url.pathname === '/api/auth/sign-out' && method === 'POST') {
-        if (auth.signOutStatus !== 200) return Response.json({}, {status:auth.signOutStatus});
+        if (auth.signOutStatus !== 200) return Response.json({}, { status: auth.signOutStatus });
         auth.sessions.delete(cookie);
         return Response.json({ success: true });
       }
       if (!user || auth.expired)
         return Response.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 });
       if (url.pathname === '/api/auth/get-session')
-        return Response.json(auth.sessionPresent ? {
-          user,
-          session: { userId: user.id, expiresAt: auth.expiresAt },
-        } : null);
+        return Response.json(
+          auth.sessionPresent
+            ? {
+                user,
+                session: { userId: user.id, expiresAt: auth.expiresAt },
+              }
+            : null,
+        );
       const answer = (data: unknown) => Response.json({ status: 200, data });
       if (method === 'GET') {
         const page = world.pages[queryKey(request.path)] ?? world.pages[url.pathname];
@@ -528,7 +562,9 @@ export function fakeSplitbook() {
     let rotated: string | undefined;
     if (auth.rotate && holder) {
       auth.rotate = false;
-      const persona = (Object.keys(world.people) as PersonaId[]).find(p => world.people[p] === holder)!;
+      const persona = (Object.keys(world.people) as PersonaId[]).find(
+        (p) => world.people[p] === holder,
+      )!;
       rotated = auth.issue(persona);
     }
     const response = await respond();
