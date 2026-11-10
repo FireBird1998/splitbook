@@ -52,8 +52,8 @@ async function handlers() {
 }
 
 /** A real database and signed-in exported HTTP handlers. Only Next's request scope is supplied. */
-export function recordingFixture(writer: Writer) {
-  const db = integrationTestDb(`recording-${writer}`);
+export function recordingFixture(writer: Writer, namespace: string = writer) {
+  const db = integrationTestDb(`recording-${namespace}`);
   let routes: Awaited<ReturnType<typeof handlers>>;
   let cookie: string;
   let readerCookie: string;
