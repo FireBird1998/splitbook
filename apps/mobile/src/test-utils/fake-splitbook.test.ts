@@ -858,3 +858,22 @@ it.fails('reports a declared unanswered request that never happens', () => {
   const server = fakeSplitbook();
   server.expectUnanswered('GET', '/api/not-a-read');
 });
+
+it('answers empty ancillary reads from the default world through the app readers', async () => {
+  const server = fakeSplitbook();
+  const cookie = server.auth.issue('alex');
+  const read = async (path: string) =>
+    (await server.fetch('http://localhost:4138' + path, { headers: { Cookie: cookie } })).json();
+  expect(parseToReviewResponse(await read('/api/user/to-review'))).toEqual({ total: 0, groups: [] });
+  expect(parseNotificationPreferences(await read('/api/notifications/device'))).toMatchObject({
+    available: true, enabled: false, revision: 0, activation: null,
+  });
+  const phone = testPhone(server);
+  const app = phone.open();
+  await app.signIn('alex');
+  app.openSettings();
+  await vi.waitFor(() => expect(app.getSnapshot().assistants.available).toBe(true));
+  app.openAssistants();
+  await vi.waitFor(() => expect(app.getSnapshot().assistants.status).toBe('ready'));
+  expect(app.getSnapshot().assistants.assistants).toEqual([]);
+});
