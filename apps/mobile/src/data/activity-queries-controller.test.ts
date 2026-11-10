@@ -244,13 +244,11 @@ function fixture() {
   const phone = testPhone(backend, {
     newSubmissionKey: () =>
       `activity-queries-attempt-${String(server.created + 1).padStart(4, '0')}`,
-    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts', 'untrustedCopies'],
     parts: {
       pendingInvitation: undefined,
       draftRequests: undefined,
       tagRequests: undefined,
       groupCreations: undefined,
-      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
     },
   });
   const rows = phone.stores.savedQueries.records,
