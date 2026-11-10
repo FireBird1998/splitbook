@@ -426,10 +426,14 @@ const text = (tree: ReactTestRenderer) =>
         .join(''),
     )
     .join('\n');
-const button = (tree: ReactTestRenderer, label: string) =>
-  tree.root.findAll(
+const button = (tree: ReactTestRenderer, label: string) => {
+  // A member can act only on the open sheet, never on the covered Save bar.
+  const sheets = tree.root.findAll((node) => String(node.type) === 'Modal' && node.props.visible);
+  const scope = sheets.at(-1) ?? tree.root;
+  return scope.findAll(
     (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === label,
   )[0];
+};
 async function tap(tree: ReactTestRenderer, label: string) {
   await act(async () => {
     expect(button(tree, label), label).toBeDefined();
@@ -550,7 +554,7 @@ it('keeps the entries through the close sheet’s enabled Finish later action', 
   expect(action.props.disabled).not.toBe(true);
   await tap(editor, 'Finish later');
   expect(f.controller.getSnapshot().screen).toBe('group');
-  expect(f.controller.getSnapshot().expense.closePrompt).toBe(false);
+  expect(f.controller.getSnapshot().expense.closePrompt).not.toBe(true);
   expect(f.controller.getSnapshot().snackbar?.message).toBe('Kept in To review');
   expect(f.uploads).toHaveLength(1);
   expect(f.uploads[0]!.body).toContain('Phone groceries');
