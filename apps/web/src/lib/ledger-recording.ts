@@ -26,9 +26,8 @@ interface LedgerRecord {
   pendingActivity: IPendingActivity[];
 }
 interface NewLedgerRecord<T> {
-  document: Partial<Omit<T, 'group' | 'createdBy' | 'creationRequest' | 'pendingActivity'>> & {
-    _id: Types.ObjectId;
-  };
+  // The module overwrites Group, actor, retry metadata and pending Activity below.
+  document: Partial<T> & { _id: Types.ObjectId };
   activity: {
     type: ActivityType;
     metadata: Record<string, unknown>;
@@ -111,7 +110,7 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
         if (!group) throw new Refusal('FORBIDDEN');
         if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
         if (description.compatibility?.membership !== 'before-retry') checkMembers(group);
-        const result = [];
+        const result: HydratedDocument<T>[] = [];
         for (const [index, build] of descriptions.entries()) {
           const record = await build(group);
           const event = makePendingActivity(
