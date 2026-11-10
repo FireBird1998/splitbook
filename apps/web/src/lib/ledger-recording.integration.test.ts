@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { withGroupMutation } from './group-mutation';
 import { Refusal } from '@splitbook/shared/refusals';
 import { recordLedger, type LedgerRecording } from './ledger-recording';
@@ -174,4 +174,44 @@ describe('ledger recording', () => {
     expect(await Expense.countDocuments()).toBe(0);
     expect(await Activity.countDocuments()).toBe(0);
   });
+  it('treats two concurrent saves of the retry identity as one recording', async () => {
+    const key = randomUUID();
+    const transaction = mongoose.connection.transaction.bind(mongoose.connection);
+    let arrivals = 0;
+    let release!: () => void;
+    let reject!: (error: Error) => void;
+    const gate = new Promise<void>((resolve, fail) => { release = resolve; reject = fail; });
+    const barrier = vi.spyOn(mongoose.connection, 'transaction').mockImplementation(async (write, options) => {
+      if (++arrivals === 2) release();
+      await gate;
+      return transaction(write, options);
+    });
+    const timeout = setTimeout(() => reject(new Error('Concurrent writers did not arrive')), 1000);
+    try {
+      const results = await Promise.allSettled([record(key), record(key)]);
+      expect(results.every(result => result.status === 'fulfilled')).toBe(true);
+      const ids = results.flatMap(result => result.status === 'fulfilled' ? result.value.map(row => String(row._id)) : []);
+      expect(ids).toHaveLength(2);
+      expect(ids[0]).toBe(ids[1]);
+      expect(await Expense.countDocuments()).toBe(1);
+      expect(await Activity.countDocuments()).toBe(1);
+    } finally { clearTimeout(timeout); barrier.mockRestore(); release(); }
+  });
+  it('leaves an atomic pending event when publication fails and recovers it on retry', async () => {
+    const key = randomUUID();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const outage = vi.spyOn(Activity, 'updateOne').mockImplementation(() => { throw new Error('Storage unavailable'); });
+    const [saved] = await record(key);
+    expect(await Activity.countDocuments()).toBe(0);
+    const pending = (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity;
+    expect(pending).toHaveLength(1);
+    expect(pending[0].notificationContext!.recipientIds).toEqual([bob]);
+    outage.mockRestore();
+    const [replayed] = await record(key);
+    expect(String(replayed._id)).toBe(String(saved._id));
+    expect(await Expense.countDocuments()).toBe(1);
+    expect(await Activity.countDocuments()).toBe(1);
+    expect((await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity).toHaveLength(0);
+  });
+
 });
