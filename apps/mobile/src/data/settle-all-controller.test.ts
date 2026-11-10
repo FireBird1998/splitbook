@@ -65,6 +65,11 @@ const suggestions: Record<string, ReturnType<typeof frankfurter>> = {
   'EUR→INR': frankfurter('EUR', 'INR', '92.1'),
   'INR→EUR': frankfurter('INR', 'EUR', '0.010858'),
 };
+/** Version 1 recovery bodies, as the app sent them before the shared-reading move (#1050). */
+const storedSingleBody =
+  '{"paidBy":"a00000000000000000000001","paidTo":"a00000000000000000000002","amount":1480,"currency":"INR","note":"Paid already"}';
+const storedBatchBody =
+  '{"paidBy":"a00000000000000000000001","paidTo":"a00000000000000000000002","paidCurrency":"INR","settlements":[{"amount":1480,"currency":"INR"},{"amountPaidMinor":185000,"appliedRate":"92.50","suggestedRate":"92.1","rateSource":"frankfurter","rateAsOf":"2026-10-20","rateFetchedAt":"2026-10-21T00:30:00.000Z","rateKind":"custom","amount":20,"currency":"EUR"}]}';
 /** The Group's rate read: its suggestion for the pair, or none. */
 const rates = (suggestion: unknown, reason = 'unavailable') =>
   json({
@@ -319,6 +324,76 @@ describe('settling up in several currencies at once (#734)', () => {
       },
     ],
   };
+
+  it('keeps the exact batch request bytes, including Debt order and the typed rate (#1050)', async () => {
+    let body: BodyInit | null | undefined;
+    const { controller } = await opened(({ pathname }, init) => {
+      if (pathname.endsWith('/settlements/batch') && init.method === 'POST') body = init.body;
+      return undefined;
+    });
+    controller.editBatchRate('EUR', '92.50');
+    await controller.recordSettlement();
+    expect(body).toBe(storedBatchBody);
+    controller.dispose();
+  });
+
+  it('offers version 1 unconfirmed single and batch payments again and retries their original bytes (#1050)', async () => {
+    for (const [body, suffix, draft] of [
+      [storedSingleBody, '', { currency: 'INR', amount: '1480', note: 'Paid already' }],
+      [
+        storedBatchBody,
+        '/batch',
+        {
+          currency: 'INR',
+          amount: '3330',
+          note: '',
+          batch: [
+            { amount: 1480, currency: 'INR' },
+            {
+              amountPaidMinor: 185000,
+              appliedRate: '92.50',
+              suggestedRate: '92.1',
+              rateSource: 'frankfurter',
+              rateAsOf: '2026-10-20',
+              rateFetchedAt: '2026-10-21T00:30:00.000Z',
+              rateKind: 'custom',
+              amount: 20,
+              currency: 'EUR',
+            },
+          ],
+        },
+      ],
+    ] as const) {
+      const writes: { body: BodyInit | null | undefined; key: string | null }[] = [];
+      const { controller, create, records } = setup(({ pathname }, init) => {
+        if (pathname === `/api/groups/${groupId}/settlements${suffix}` && init.method === 'POST')
+          writes.push({ body: init.body, key: new Headers(init.headers).get('Idempotency-Key') });
+        return undefined;
+      });
+      await controller.signIn('alex');
+      records.set(alex + groupId, {
+        version: 1,
+        accountId: alex,
+        groupId,
+        key: 'original-payment-key',
+        body,
+      });
+      controller.dispose();
+      const restarted = create();
+      await restarted.restore();
+      await restarted.openSettlements(groupId);
+      expect(restarted.getSnapshot().settlement).toMatchObject({
+        status: 'uncertain',
+        attempt: { key: 'original-payment-key', body },
+        draft: { paidBy: alex, paidTo: sam, ...draft },
+      });
+      expect(writes).toEqual([]);
+      await restarted.recordSettlement();
+      expect(writes).toEqual([{ key: 'original-payment-key', body }]);
+      expect(records.size).toBe(0);
+      restarted.dispose();
+    }
+  });
 
   it('settles both Debts in one payment, each at its own rate, all in one request', async () => {
     const { controller, batches, payments, sent, records } = await opened();
