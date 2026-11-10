@@ -535,6 +535,27 @@ async function enter(f: ReturnType<typeof fixture>) {
   });
 }
 
+it('keeps the entries through the close sheet’s enabled Finish later action', async () => {
+  const f = fixture({ empty: true });
+  await signIn(f);
+  await enter(f);
+  const editor = await form(f, 'light');
+  await act(async () => {
+    await f.controller.back();
+  });
+  const sheet = editor.root.find((node) => String(node.type) === 'Modal' && node.props.visible);
+  const action = sheet.find(
+    (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Finish later',
+  );
+  expect(action.props.disabled).not.toBe(true);
+  await tap(editor, 'Finish later');
+  expect(f.controller.getSnapshot().screen).toBe('group');
+  expect(f.controller.getSnapshot().expense.closePrompt).toBe(false);
+  expect(f.controller.getSnapshot().snackbar?.message).toBe('Kept in To review');
+  expect(f.uploads).toHaveLength(1);
+  expect(f.uploads[0]!.body).toContain('Phone groceries');
+});
+
 describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (mode) => {
   it('keeps an online item and closes with a View confirmation', async () => {
     const f = fixture({ empty: true });
