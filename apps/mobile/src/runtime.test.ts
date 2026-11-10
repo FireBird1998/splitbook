@@ -72,7 +72,7 @@ describe('runtime storage wiring', () => {
       expect(readFileSync(join(wired.cache, 'bundled-font.ttf'), 'utf8')).toBe(
         'Keep the bundled asset',
       );
-      return Response.json({ user: null });
+      return Response.json({ user: null }) as unknown as Awaited<ReturnType<typeof fetch>>;
     });
     const request = wired.dependencies!.fetch as typeof fetch;
     const response = await request('http://127.0.0.1:4138/api/auth/get-session');

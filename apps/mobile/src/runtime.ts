@@ -8,7 +8,8 @@ import { createExpenseDraftStore } from './data/expense-storage';
 import { createGroupCreationStore } from './data/group-creation-storage';
 import { createAccountGroupRecordStore, createSignOutRecord } from './data/account-record-storage';
 import NetInfo from '@react-native-community/netinfo';
-import { fetch } from 'expo/fetch';
+import { fetch as nativeFetch } from 'expo/fetch';
+import { httpResponseStore } from './http-response-store';
 import * as SecureStore from 'expo-secure-store';
 import { createMobileController } from './data';
 import { mobileConfig } from './config';
@@ -17,6 +18,15 @@ import { createAppearanceController } from './data/appearance';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import { decodeStoredSession } from './data/cookies';
 import type { NotificationAccess } from './data/notification-receipt';
+
+// No marker survives a restart. Both app and headless notification requests wait for cleanup.
+const httpStoreReady = httpResponseStore.clear();
+// Startup may finish before any request is made; the request still observes a cleanup failure.
+void httpStoreReady.catch(() => undefined);
+const fetch: typeof nativeFetch = async (...args) => {
+  await httpStoreReady;
+  return nativeFetch(...args);
+};
 
 // Android normally uses native reachability; the library's HTTP fallback must not cache either.
 NetInfo.configure({ reachabilityHeaders: { 'Cache-Control': 'no-store' } });
