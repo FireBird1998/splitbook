@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expensePage, activityPage } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 
 // Fictional people and Groups only.
 const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
@@ -75,106 +77,48 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 /** `served` is the record the server answers with: the Electricity bill unless a test says. */
 function setup(served: Record<string, unknown> = record) {
-  let cookie: string | null = null;
-  let account: string | null = null;
-  const drafts = new Map<string, unknown>();
-  const reads: string[] = [];
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
-    },
-    {
-      now: () => new Date(2026, 8, 27, 12).getTime(),
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      expenseDrafts: {
-        load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
-        save: async (accountId, id, value) => {
-          drafts.set(`${accountId}:${id}`, structuredClone(value));
-        },
-        remove: async (accountId, id) => {
-          drafts.delete(`${accountId}:${id}`);
-        },
-        clear: async () => drafts.clear(),
-      },
-      accountLocal: {
-        owner: {
-          load: async () => account,
-          save: async (value) => {
-            account = value;
-          },
-          clear: async () => {
-            account = null;
-          },
-        },
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [],
-      },
-      fetch: async (url) => {
-        const address = new URL(url);
-        const path = address.pathname;
-        reads.push(path + address.search);
-        if (path.endsWith('/sign-in'))
-          return new Response(JSON.stringify({ user: sam }), {
-            headers: { 'Set-Cookie': 'better-auth.session_token=test.signature; Path=/; HttpOnly' },
-          });
-        if (path.endsWith('/get-session'))
-          return json({
-            user: sam,
-            session: { userId: sam.id, expiresAt: '2030-01-01T00:00:00Z' },
-          });
-        if (path === '/api/groups') return json({ status: 200, data: [group] });
-        if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
-        if (path === `/api/groups/${groupId}`) return json({ status: 200, data: group });
-        if (path === `/api/groups/${groupId}/expenses/${expenseId}`)
-          return json({ status: 200, data: served });
-        if (path === `/api/groups/${groupId}/expenses`)
-          return json({
-            status: 200,
-            data: {
-              expenses: [record],
-              pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
-              summary: {
-                count: 1,
-                totalsByCurrency: [],
-                userOwes: 0,
-                userGetsBack: 0,
-                byMember: [],
-              },
-            },
-          });
-        if (path === `/api/groups/${groupId}/balances`)
-          return json({
-            status: 200,
-            data: { currency: 'INR', balances: [], debts: [], byCurrency: [] },
-          });
-        if (path === `/api/groups/${groupId}/activity`) {
-          const page = Number(address.searchParams.get('page'));
-          return json({
-            status: 200,
-            data: {
-              activities: events.slice((page - 1) * 20, page * 20),
-              pagination: { page, limit: 20, total: events.length, totalPages: 2 },
-            },
-          });
-        }
-        return json({}, 404);
-      },
-    },
+  const server = fakeSplitbook();
+  server.world.people.sam = { ...sam, image: null };
+  server.world.groups = [group];
+  server.world.expenseRecords[groupId] = { [expenseId]: served };
+  server.world.expenses[groupId] = expensePage([record]);
+  server.world.balances[groupId] = { currency: 'INR', balances: [], debts: [], byCurrency: [] };
+  // The old backend ignored the Expense filter and returned the Group’s events.
+  server.reply('GET', `/api/groups/${groupId}/activity`, ({ url }) =>
+    json({ status: 200, data: activityPage(events, Number(url.searchParams.get('page'))) }),
   );
+  const phone = testPhone(server, {
+    now: new Date(2026, 8, 27, 12).getTime(),
+    recordSeparator: ':',
+    purge: [],
+    parts: {
+      newSubmissionKey: undefined,
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
+      },
+    },
+  });
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  const controller = phone.open(),
+    drafts = phone.stores.expenseDrafts.records;
   /** The Group's Activity pages read since the last call; a record reads its own apart. */
   const activityPages = () =>
-    reads
+    server
+      .sent()
       .splice(0)
+      .map((path) => path.slice(path.indexOf(' ') + 1))
       .filter((path) => path.includes('/activity?') && !path.includes('expenseId='))
       .map((path) => Number(new URL(path, 'http://local').searchParams.get('page')));
   return { controller, drafts, activityPages };

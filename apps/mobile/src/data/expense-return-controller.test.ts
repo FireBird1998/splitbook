@@ -1,9 +1,11 @@
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import type { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import { describe, expect, it } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import type { ExpenseDraft } from './expense-draft';
-import type { FetchResponse, MobileFetch, MobileSnapshot } from './types';
-import { savedQueriesIn } from '../test-utils/saved-queries';
+import type { FetchResponse, MobileSnapshot } from './types';
 
 // Fictional people and Groups only.
 const people = [
@@ -62,27 +64,37 @@ interface Held {
  * With `savedCopies`, the app keeps saved copies on the device and can restart offline.
  */
 function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
-  const requests: { method: string; path: string; key: string | null; body: string }[] = [];
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.groups = groups;
+  for (const target of groups) {
+    backend.world.balances[target._id] = {
+      currency: 'INR',
+      balances: [],
+      debts: [],
+      byCurrency: [],
+    };
+    // This fixture never supplied an Expense-history read.
+    backend.reply('GET', `/api/groups/${target._id}/activity`, () => json({ status: 404 }, 404));
+  }
+  const requests = () =>
+    backend.requests.map(({ method, path, headers, init }) => ({
+      method,
+      path,
+      key: headers.get('Idempotency-Key'),
+      body: String(init.body ?? ''),
+    }));
   const records = new Map<string, Record<string, unknown>>();
   const created = new Map<string, string>();
-  const drafts = new Map<string, unknown>();
-  /** Saved copies on the device, by account and path. */
-  const copies = new Map<string, unknown>();
-  let identity: unknown = null;
-  let offline = false;
   let savesFirst: ((record: Record<string, unknown>) => void) | null = null;
   /** What the ledger answered each edit and delete it received, delivered or not. */
   const answers: string[] = [];
-  let cookie: string | null = null;
-  let account: string | null = null;
-  let cleanup = false;
   let loseResponses = 0;
   let writeFault: 'request' | 'reply' | 'resend' | null = null;
   let failPage: number | null = null;
   /** Reads that answer with a server error once each, by path. */
   const failReads: RegExp[] = [];
   let nextId = 2;
-  const holds: { match: (method: string, path: string) => boolean; wait: Promise<void> }[] = [];
   const person = (id: string) => ({
     _id: id,
     name: people.find((row) => row.id === id)?.name,
@@ -166,24 +178,8 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
   const respond = async (method: string, path: string, init: RequestInit) => {
     const url = new URL(path, 'http://local');
     const route = url.pathname;
-    if (route.endsWith('/demo-persona/sign-in'))
-      return json({ user: alex }, 200, 'better-auth.session_token=alex.signature; Max-Age=2592000');
-    if (route.endsWith('/get-session'))
-      return json({
-        user: alex,
-        session: { userId: people[0].id, expiresAt: '2030-01-01T00:00:00Z' },
-      });
-    if (route.endsWith('/sign-out')) return json({ success: true });
-    if (route === '/api/groups') return json({ data: groups, status: 200 });
-    if (route === '/api/user/balances') return json({ data: { buckets: [] }, status: 200 });
     const target = groups.find((row) => route.startsWith(`/api/groups/${row._id}`));
     if (!target) return json({ status: 404 }, 404);
-    if (route === `/api/groups/${target._id}`) return json({ data: target, status: 200 });
-    if (route.endsWith('/balances'))
-      return json({
-        data: { currency: 'INR', balances: [], debts: [], byCurrency: [] },
-        status: 200,
-      });
     if (route.endsWith('/expenses') && method === 'POST') {
       const key = new Headers(init.headers).get('Idempotency-Key')!;
       if (!created.has(key)) {
@@ -268,25 +264,12 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
     return response;
   };
 
-  const fetch: MobileFetch = async (url, init) => {
-    const { pathname, search } = new URL(url);
-    const method = init.method ?? 'GET';
-    requests.push({
-      method,
-      path: pathname + search,
-      key: new Headers(init.headers).get('Idempotency-Key'),
-      body: String(init.body ?? ''),
-    });
-    if (offline) throw new TypeError('Network request failed');
+  backend.reply('*', '*', async ({ url, path, method, init }) => {
+    const pathname = url.pathname;
     const failing = method === 'GET' && failReads.findIndex((route) => route.test(pathname));
     if (failing !== false && failing >= 0) {
       failReads.splice(failing, 1);
       return json({ status: 500 }, 500);
-    }
-    const held = holds.find((hold) => hold.match(method, pathname + search));
-    if (held) {
-      holds.splice(holds.indexOf(held), 1);
-      await held.wait;
     }
     const differ = method === 'PATCH' ? savesFirst : null;
     if (differ) {
@@ -296,98 +279,60 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
       applyEdit(record, JSON.parse(String(init.body)), people[1].id);
       differ(record);
     }
-    if (method !== 'PATCH' && method !== 'DELETE') return respond(method, pathname + search, init);
+    if (!/\/expenses(?:\/[a-f\d]{24})?$/.test(pathname)) return undefined;
+    if (method !== 'PATCH' && method !== 'DELETE') return respond(method, path, init);
     const fault = writeFault;
     writeFault = null;
     if (fault === 'request') throw new Error('The connection dropped before the request arrived');
-    const first = await answer(method, pathname + search, init);
+    const first = await answer(method, path, init);
     if (fault === 'reply') throw new Error('The connection dropped the answer');
     // Android's OkHttp sends the identical request again when a pooled connection drops its
     // answer. The ledger applies the first; only the second's answer reaches the app.
-    if (fault === 'resend') return answer(method, pathname + search, init);
+    if (fault === 'resend') return answer(method, path, init);
     return first;
+  });
+  const purge: { clear(): Promise<void> }[] = [];
+  const phone = testPhone(backend, {
+    now: Date.parse(iso),
+    recordSeparator: ':',
+    newSubmissionKey: () => `native-return-${backend.requests.length}-0001`,
+    parts: {
+      ...(savedCopies ? {} : { offlineIdentity: undefined, savedQueries: undefined }),
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        stores: purge,
+      },
+    },
+  });
+  purge.push(phone.stores.expenseDrafts, phone.stores.savedQueries);
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
+  const drafts = phone.stores.expenseDrafts.records,
+    copies = phone.stores.savedQueries.records;
+  const create = (now = Date.parse(iso)) => {
+    phone.clock.now = now;
+    return phone.open();
   };
-
-  const create = (now = Date.parse(iso)) =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
-      },
-      {
-        fetch,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        ...(savedCopies
-          ? {
-              offlineIdentity: {
-                load: async () => structuredClone(identity),
-                save: async (value: unknown) => {
-                  identity = structuredClone(value);
-                },
-                clear: async () => {
-                  identity = null;
-                },
-              },
-              savedQueries: savedQueriesIn(copies),
-            }
-          : {}),
-        expenseDrafts: {
-          load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
-          save: async (accountId, id, value) => {
-            drafts.set(`${accountId}:${id}`, structuredClone(value));
-          },
-          remove: async (accountId, id) => {
-            drafts.delete(`${accountId}:${id}`);
-          },
-          clear: async () => {
-            drafts.clear();
-          },
-        },
-        accountLocal: {
-          owner: {
-            load: async () => account,
-            save: async (value) => {
-              account = value;
-            },
-            clear: async () => {
-              account = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          stores: [{ clear: async () => drafts.clear() }, { clear: async () => copies.clear() }],
-        },
-        now: () => now,
-        newSubmissionKey: () => `native-return-${requests.length}-0001`,
-      },
-    );
-
   return {
     create,
-    requests,
+    get requests() {
+      return requests();
+    },
     records,
     drafts,
     /** Every Expense this ledger holds for the Group, created by any request. */
     expensesIn: (groupId: string) => [...records.values()].filter((row) => row.group === groupId),
     /** Ledger writes only; signing in and out are not financial writes. */
     writes: () =>
-      requests.filter(
+      requests().filter(
         (request) => request.method !== 'GET' && request.path.startsWith('/api/groups/'),
       ),
     /** Adds fictional Expenses on the given days of a Month, returning their identities. */
@@ -422,7 +367,7 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
       failReads.push(route);
     },
     pagesRead: () =>
-      requests
+      requests()
         .filter((request) => request.method === 'GET' && /\/expenses\?/.test(request.path))
         .map((request) => Number(new URL(request.path, 'http://local').searchParams.get('page'))),
     loseNextResponse: () => {
@@ -432,7 +377,7 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
     copies,
     /** Every later request fails as a lost connection does. */
     goOffline: () => {
-      offline = true;
+      backend.online = false;
     },
     /**
      * When Alex's next edit arrives, Sam has just saved the same change, but for what `differ`
@@ -451,26 +396,11 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
     },
     /** Hold the next matching request until released. */
     hold(method: string, route: RegExp): Held {
-      let release!: () => void;
-      let arrived!: () => void;
-      const reached = new Promise<void>((resolve) => {
-        arrived = resolve;
-      });
-      const wait = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      holds.push({
-        match: (requested, path) => {
-          const matched = requested === method && route.test(path);
-          if (matched) arrived();
-          return matched;
-        },
-        wait,
-      });
-      return { release, reached };
+      const held = backend.hold(method, route, { at: 'request' });
+      return { reached: held.arrived, release: () => held.release() };
     },
     monthsRead: () =>
-      requests
+      requests()
         .filter((request) => request.method === 'GET' && /\/expenses\?/.test(request.path))
         .map((request) =>
           monthOf(new URL(request.path, 'http://local').searchParams.get('dateFrom')),

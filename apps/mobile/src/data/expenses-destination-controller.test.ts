@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { calculateSplitAmountsMinor } from '@splitbook/shared/split-calculation';
 import { mobileExpensePosition } from './expense-position';
-import { createMobileController } from './mobile-controller';
-import type { FetchResponse, MobileFetch } from './types';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
+import type { FetchResponse } from './types';
 
 // #116: the Expenses destination's reads, the member's position on each Expense, and the
 // Group's kept draft. Fictional people and Groups only.
@@ -78,136 +80,105 @@ const stored = (
 
 /** A fictional ledger: Expenses by Group, draft storage on the device, and lost responses. */
 function ledger() {
-  const requests: { method: string; path: string }[] = [];
+  const backend = fakeSplitbook();
+  backend.world.people.alex = { ...alex, email: 'person0@example.test', image: null };
+  backend.world.groups = groups;
   const expenses = new Map<string, Record<string, unknown>[]>();
-  const drafts = new Map<string, unknown>();
-  let cookie: string | null = null;
-  let account: string | null = null;
   let loseNextCreate = false;
   let nextId = 1;
-  const fetch: MobileFetch = async (url, init) => {
-    const { pathname, search } = new URL(url);
-    const method = init.method ?? 'GET';
-    requests.push({ method, path: pathname + search });
-    if (pathname.endsWith('/demo-persona/sign-in'))
-      return json(
-        { user: { ...alex, email: 'person0@example.test', image: null } },
-        200,
-        'better-auth.session_token=alex.signature; Max-Age=2592000',
-      );
-    if (pathname.endsWith('/get-session'))
-      return json({
-        user: { ...alex, email: 'person0@example.test', image: null },
-        session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' },
-      });
-    if (pathname === '/api/groups') return json({ data: groups, status: 200 });
-    if (pathname === '/api/user/balances') return json({ data: { buckets: [] }, status: 200 });
-    const target = groups.find((row) => pathname.startsWith(`/api/groups/${row._id}`));
-    if (!target) return json({ status: 404 }, 404);
-    if (pathname === `/api/groups/${target._id}`) return json({ data: target, status: 200 });
-    if (pathname.endsWith('/balances')) return json({ data: { byCurrency: [] }, status: 200 });
-    const rows = expenses.get(target._id) ?? [];
-    if (pathname.endsWith('/expenses') && method === 'POST') {
-      const body = JSON.parse(String(init.body));
-      const id = `b${String(nextId++).padStart(23, '0')}`;
-      const person = (user: string) => [alex, sam, priya].find((row) => row.id === user)!;
-      const minor = (amount: number) => Math.round(amount * 100);
-      rows.unshift(
-        stored(
-          id,
-          target._id,
-          body.description,
-          body.paidBy.map((row: { user: string; amount: number }) => [
-            person(row.user),
-            minor(row.amount),
-          ]),
-          body.splitBetween.map((row: { user: string; amount: number }) => [
-            person(row.user),
-            minor(row.amount),
-          ]),
-        ),
-      );
-      expenses.set(target._id, rows);
-      if (loseNextCreate) {
-        loseNextCreate = false;
-        throw new Error('The response was lost after the server committed the Expense');
+  // The test’s local Expense world changes only in these explicit write replies.
+  for (const target of groups) {
+    backend.world.balances[target._id] = { byCurrency: [] };
+    backend.reply('*', `/api/groups/${target._id}/expenses`, ({ method, init }) => {
+      const rows = expenses.get(target._id) ?? [];
+      if (method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        const id = `b${String(nextId++).padStart(23, '0')}`;
+        const person = (user: string) => [alex, sam, priya].find((row) => row.id === user)!;
+        const minor = (amount: number) => Math.round(amount * 100);
+        rows.unshift(
+          stored(
+            id,
+            target._id,
+            body.description,
+            body.paidBy.map((row: { user: string; amount: number }) => [
+              person(row.user),
+              minor(row.amount),
+            ]),
+            body.splitBetween.map((row: { user: string; amount: number }) => [
+              person(row.user),
+              minor(row.amount),
+            ]),
+          ),
+        );
+        expenses.set(target._id, rows);
+        if (loseNextCreate) {
+          loseNextCreate = false;
+          throw new Error('The response was lost after the server committed the Expense');
+        }
+        return json({ status: 201, data: { _id: id, group: target._id } }, 201);
       }
-      return json({ status: 201, data: { _id: id, group: target._id } }, 201);
-    }
-    if (pathname.endsWith('/expenses'))
-      return json({
-        status: 200,
-        data: {
-          expenses: rows,
-          pagination: { page: 1, limit: 20, total: rows.length, totalPages: 1 },
-          summary: {
-            count: rows.length,
-            totalsByCurrency: [],
-            userOwes: 0,
-            userGetsBack: 0,
-            byMember: [alex, sam, priya].map((person) => ({
-              user: ref(person),
-              paid: 0,
-              share: 0,
-              net: 0,
-            })),
+      if (method === 'GET')
+        return json({
+          status: 200,
+          data: {
+            expenses: rows,
+            pagination: { page: 1, limit: 20, total: rows.length, totalPages: 1 },
+            summary: {
+              count: rows.length,
+              totalsByCurrency: [],
+              userOwes: 0,
+              userGetsBack: 0,
+              byMember: [alex, sam, priya].map((person) => ({
+                user: ref(person),
+                paid: 0,
+                share: 0,
+                net: 0,
+              })),
+            },
           },
-        },
-      });
-    return json({ status: 404 }, 404);
-  };
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
-    },
-    {
-      fetch,
-      now: () => new Date(2026, 8, 28, 12).getTime(),
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      expenseDrafts: {
-        load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
-        save: async (accountId, id, value) => {
-          drafts.set(`${accountId}:${id}`, structuredClone(value));
-        },
-        remove: async (accountId, id) => {
-          drafts.delete(`${accountId}:${id}`);
-        },
-        clear: async () => drafts.clear(),
-      },
+        });
+
+      return undefined;
+    });
+  }
+  const phone = testPhone(backend, {
+    now: new Date(2026, 8, 28, 12).getTime(),
+    recordSeparator: ':',
+    newSubmissionKey: () => `native-expenses-${backend.requests.length}-0001`,
+    purge: ['expenseDrafts'],
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
       accountLocal: {
-        owner: {
-          load: async () => account,
-          save: async (value) => {
-            account = value;
-          },
-          clear: async () => {
-            account = null;
-          },
-        },
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
         cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [{ clear: async () => drafts.clear() }],
       },
-      newSubmissionKey: () => `native-expenses-${requests.length}-0001`,
     },
-  );
+  });
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
+  const controller = phone.open(),
+    drafts = phone.stores.expenseDrafts.records;
+  const requests = () => backend.requests.map(({ method, path }) => ({ method, path }));
   return {
     controller,
-    requests,
+    get requests() {
+      return requests();
+    },
     expenses,
     drafts,
     keptKey: `${alex.id}:${householdId}`,
     writes: () =>
-      requests.filter((row) => row.method !== 'GET' && row.path.startsWith('/api/groups/')),
+      requests().filter((row) => row.method !== 'GET' && row.path.startsWith('/api/groups/')),
     loseNextCreate: () => {
       loseNextCreate = true;
     },
