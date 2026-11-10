@@ -23,11 +23,13 @@ import {
 } from '../test-utils/layout';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { onlineManager } from '@tanstack/query-core';
-import { createMobileController, type MobileController } from '../data/mobile-controller';
-import type { FetchResponse, MobileFetch } from '../data/types';
+import type { MobileController } from '../data/mobile-controller';
+import type { AccountGroupRecordStore } from '../data/account-record-storage';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
+import type { FetchResponse } from '../data/types';
 import { draftFromExpense, expenseDraftSchema } from '../data/expense-draft';
 import { expenseRecordSchema } from '../data/expense-record';
 import { ExpenseEditor } from './expense-editor';
@@ -120,30 +122,24 @@ function backend({
   const submissions: { key: string | null; body: string }[] = [];
   const edits: string[] = [];
   let saved = record;
-  const records = new Map<string, unknown>();
-  const drafts = {
-    load: async (accountId: string, id: string) =>
-      structuredClone(records.get(`${accountId}:${id}`) ?? null),
-    save: async (accountId: string, id: string, value: unknown) => {
-      records.set(`${accountId}:${id}`, structuredClone(value));
-    },
-    remove: async (accountId: string, id: string) => {
-      records.delete(`${accountId}:${id}`);
-    },
-    clear: async () => records.clear(),
-  };
-  const fetch: MobileFetch = async (url, init) => {
-    const path = new URL(url).pathname;
-    if (path === '/api/notifications/device') return json({ data: notificationPreferences });
+  const server = fakeSplitbook();
+  server.world.people.alex = alex;
+  server.auth.cookie = () => 'better-auth.session_token=alex.signature';
+  server.world.groups = [group];
+  server.world.expenses[groupId] = expensePage();
+  server.world.notifications = notificationPreferences;
+  server.world.balances[groupId] = { currency: 'INR', balances: [], debts: [], byCurrency: [] };
+  server.world.expenseRecords[groupId] = {};
+  Object.defineProperty(server.world.expenseRecords[groupId], expenseId, {
+    enumerable: true,
+    get: () => saved,
+  });
+  server.reply('*', '*', async ({ url, init }) => {
+    const path = url.pathname;
     // Ledger writes only; signing in is not part of the journeys under test.
     if (init.method && init.method !== 'GET' && path.startsWith('/api/groups'))
       writes.push(`${init.method} ${path}`);
-    if (path.endsWith('/demo-persona/sign-in'))
-      return json({ user: alex }, 200, 'better-auth.session_token=alex.signature; Max-Age=2592000');
-    if (path.endsWith('/get-session'))
-      return json({ user: alex, session: { userId: memberId, expiresAt: '2030-01-01T00:00:00Z' } });
-    if (path === `/api/groups/${groupId}`)
-      return readGroup ? readGroup() : json({ data: group, status: 200 });
+    if (path === `/api/groups/${groupId}` && readGroup) return readGroup();
     if (path === `/api/groups/${groupId}/currencies` && init.method === 'POST' && addCurrency)
       return addCurrency(JSON.parse(String(init.body)));
     if (path === `/api/groups/${groupId}/expenses/${expenseId}`) {
@@ -156,7 +152,7 @@ function backend({
         }
         return json({ data: { ...saved, revision: Number(saved.revision) + 1 }, status: 200 });
       }
-      return json({ data: saved, status: 200 });
+      return undefined;
     }
     if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST') {
       submissions.push({
@@ -170,59 +166,36 @@ function backend({
         return json({ error: 'Validation error', code: 'VALIDATION_ERROR', status: 422 }, 422);
       return json({ status: 201, data: { _id: expenseId, group: groupId } }, 201);
     }
-    if (path.endsWith('/expenses'))
-      return json({
-        data: {
-          expenses: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
-        },
-        status: 200,
-      });
-    if (path.endsWith('/balances'))
-      return json({ data: { currency: 'INR', balances: [], debts: [], byCurrency: [] } });
-    if (path === '/api/groups') return json({ data: [group], status: 200 });
-    return json({ error: 'Unavailable', status: 404 }, 404);
-  };
-  let cookie: string | null = null;
-  let account: string | null = null;
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
-    },
-    {
-      fetch,
+    // The old fixture did not answer Home; retain its explicit 404 rather than gaining a read.
+    if (path === '/api/user/balances') return json({ error: 'Unavailable', status: 404 }, 404);
+    return undefined;
+  });
+  const phone = testPhone(server, {
+    recordSeparator: ':',
+    newSubmissionKey: () => 'native-expense-test-0001',
+    purge: ['expenseDrafts'],
+    parts: {
       notifications: notificationDevice,
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      expenseDrafts: drafts,
-      savedQueries: savedQueriesIn(new Map()),
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
       accountLocal: {
-        owner: {
-          load: async () => account,
-          save: async (value) => {
-            account = value;
-          },
-          clear: async () => {
-            account = null;
-          },
-        },
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
         cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [drafts],
       },
-      now,
-      newSubmissionKey: () => 'native-expense-test-0001',
     },
-  );
+  });
+  delete phone.stores.savedQueries.retainGroups;
+  const drafts = phone.stores.expenseDrafts;
+  delete (drafts as AccountGroupRecordStore).keys;
+  delete (drafts as AccountGroupRecordStore).list;
+  const controller = phone.open({ parts: { now } });
   return { controller, drafts, writes, submissions, edits };
 }
 
