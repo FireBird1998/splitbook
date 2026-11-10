@@ -228,7 +228,7 @@ function internalServerError() {
  * once with the route, the code and the ids that find the record, never member data. Anything
  * else answers as `serverError` does, so a read's own bad input is still refused.
  */
-export function failedRead(err: unknown, req: Request) {
+export function failedRead(err: unknown, req: Request, caller?: RefusalCaller) {
   if (err instanceof StoredMoneyError) {
     console.error('Stored data fault:', {
       route: `${req.method} ${new URL(req.url).pathname}`,
@@ -237,7 +237,7 @@ export function failedRead(err: unknown, req: Request) {
     });
     return internalServerError();
   }
-  return serverError(err);
+  return serverError(err, caller);
 }
 
 /**

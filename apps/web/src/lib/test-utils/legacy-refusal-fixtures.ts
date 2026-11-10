@@ -94,6 +94,16 @@ class CurrencyIsMainError extends Error {
   }
 }
 
+export class ExportTooLargeError extends Error {
+  constructor(
+    readonly rows: number,
+    readonly limit: number,
+  ) {
+    super('EXPORT_TOO_LARGE');
+    this.name = 'ExportTooLargeError';
+  }
+}
+
 export class TagManagementError extends Error {
   constructor(
     readonly code: ConstructorParameters<typeof Refusal>[0],
@@ -137,8 +147,11 @@ export function currentCause(
     | 'tag-change'
     | 'payment'
     | 'settlement'
-    | 'tag',
+    | 'tag'
+    | 'export',
 ): Error {
+  if (caller === 'export' && cause instanceof ExportTooLargeError)
+    return new Refusal('EXPORT_TOO_LARGE', { rows: cause.rows, limit: cause.limit });
   if (caller === 'tag' && cause instanceof TagManagementError)
     return new Refusal(cause.code, {
       snapshot: cause.snapshot,

@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 /**
  * Integration tests for the export read (`GET /api/export`, #317) against a real, isolated
  * MongoDB database (`splitbook-test-export-route`). Only the session is a stand-in; membership,
@@ -14,7 +15,7 @@ import Activity from '@/lib/models/Activity';
 import Expense from '@/lib/models/Expense';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import Settlement from '@/lib/models/Settlement';
-import { ExportTooLargeError, exportService } from '@/lib/services/export.service';
+import { exportService } from '@/lib/services/export.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
@@ -602,12 +603,14 @@ describe('GET /api/export', () => {
       });
       await expect(
         exportService.csv(alice, request(['history', 'payments']), { maxRows: 2 }),
-      ).rejects.toEqual(new ExportTooLargeError(3, 2));
+      ).rejects.toMatchObject({ code: 'EXPORT_TOO_LARGE', data: { rows: 3, limit: 2 } });
     });
 
     it('is answered 413 with a message that says what to do', async () => {
       const ferry = await createGroup('Ferry Trip', alice);
-      vi.spyOn(exportService, 'csv').mockRejectedValueOnce(new ExportTooLargeError(61_250, 50_000));
+      vi.spyOn(exportService, 'csv').mockRejectedValueOnce(
+        new Refusal('EXPORT_TOO_LARGE', { rows: 61_250, limit: 50_000 }),
+      );
       const answer = await request(alice, exportOf([ferry]));
       expect(answer.status).toBe(413);
       expect(json(answer)).toEqual({
@@ -734,7 +737,7 @@ describe('JSON backup and statement (#318, #319)', () => {
         { groupIds: [id], format: 'json', include: [], timeZone: 'UTC' },
         { maxRows: 0 },
       ),
-    ).rejects.toEqual(new ExportTooLargeError(1, 0));
+    ).rejects.toMatchObject({ code: 'EXPORT_TOO_LARGE', data: { rows: 1, limit: 0 } });
   });
   it('statement contributions and current positions match Balances in each currency', async () => {
     const id = await createGroup('Ferry Trip', alice, [bob]);

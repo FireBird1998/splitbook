@@ -9,8 +9,8 @@ import { auth } from '@/lib/auth';
 import * as response from '@/lib/utils/api-response';
 import { draftError } from '@/lib/draft-response';
 import { tagError, invalidTagId } from '@/lib/tag-management-http';
-import { ExportTooLargeError } from '@/lib/services/export.service';
 import {
+  ExportTooLargeError,
   TagManagementError,
   LeaveBlockedError,
   RemovalBlockedError,
@@ -187,6 +187,7 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
     string,
     Partial<Record<string, Parameters<typeof currentCause>[1]>>
   > = {
+    '../app/api/export/route.ts': { GET: 'export' },
     '../app/api/groups/[id]/leave/route.ts': { POST: 'leave' },
     '../app/api/groups/[id]/members/[userId]/route.ts': { PATCH: 'demotion', DELETE: 'removal' },
     '../app/api/groups/[id]/settlements/batch/route.ts': { POST: 'payment' },

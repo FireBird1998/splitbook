@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { buildBackup, type BackupGroupInput } from '@splitbook/shared/export-backup';
 import { buildStatement } from '@splitbook/shared/statement';
 import { Types } from 'mongoose';
@@ -38,17 +39,6 @@ import {
   type ExportPreview,
 } from '@splitbook/shared/export-preview';
 import { displayTagReference } from '@splitbook/shared/tag-identity';
-
-/** An export over `EXPORT_MAX_ROWS`: refused before any file is built. */
-export class ExportTooLargeError extends Error {
-  constructor(
-    readonly rows: number,
-    readonly limit: number,
-  ) {
-    super('EXPORT_TOO_LARGE');
-    this.name = 'ExportTooLargeError';
-  }
-}
 
 /** The finished download: one CSV, or a zip of several. */
 export interface ExportDownload {
@@ -117,7 +107,7 @@ export class ExportService {
    * - **The window** holds the Expenses dated from its first to its last day (an Expense's date
    *   is a calendar day, stored at midnight UTC), and the payments recorded on those days in the
    *   viewer's time zone. Without a window, everything.
-   * - **Size.** More than `maxRows` rows across every file is refused (`ExportTooLargeError`)
+   * - **Size.** More than `maxRows` rows across every file is refused (`EXPORT_TOO_LARGE`)
    *   before anything is built; the files are made in memory, not streamed.
    * - **People** are named from their accounts, never by email; an account that no longer
    *   exists reads "Former member".
@@ -291,7 +281,7 @@ export class ExportService {
       .select('name category defaultCurrency alternateCurrencies startDate endDate members tags')
       .lean();
     const groups = request.groupIds.map((id) => found.find((group) => String(group._id) === id));
-    if (groups.some((group) => !group)) throw new Error('FORBIDDEN');
+    if (groups.some((group) => !group)) throw new Refusal('FORBIDDEN');
     const ordered = groups as NonNullable<(typeof groups)[number]>[];
     const groupIds = ordered.map((group) => group._id);
 
@@ -330,7 +320,7 @@ export class ExportService {
       include.has('payments') ? Settlement.countDocuments(paymentFilter) : 0,
     ]);
     const rows = expenseCount + editCount + paymentCount;
-    if (rows > maxRows) throw new ExportTooLargeError(rows, maxRows);
+    if (rows > maxRows) throw new Refusal('EXPORT_TOO_LARGE', { rows, limit: maxRows });
 
     const [expenses, settlements] = await Promise.all([
       Expense.find(expenseFilter)
@@ -372,7 +362,8 @@ export class ExportService {
       expenses.length +
       payments.length +
       expenses.reduce((count, row) => count + (row.editHistory?.length ?? 0), 0);
-    if (loadedRows > maxRows) throw new ExportTooLargeError(loadedRows, maxRows);
+    if (loadedRows > maxRows)
+      throw new Refusal('EXPORT_TOO_LARGE', { rows: loadedRows, limit: maxRows });
     return { ordered, expenses, payments, names };
   }
 
@@ -457,7 +448,7 @@ export class ExportService {
   }
 
   async statement(userId: string, request: ExportRequest, { wholeTrip = false } = {}) {
-    if (request.groupIds.length !== 1) throw new Error('FORBIDDEN');
+    if (request.groupIds.length !== 1) throw new Refusal('FORBIDDEN');
     const data = await this.load(
       userId,
       { ...request, from: undefined, to: undefined, include: ['payments'] },

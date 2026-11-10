@@ -1,13 +1,6 @@
 import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
-import {
-  error,
-  forbidden,
-  getAuthUser,
-  failedRead,
-  unauthorized,
-  validationError,
-} from '@/lib/utils/api-response';
-import { ExportTooLargeError, exportService } from '@/lib/services/export.service';
+import { getAuthUser, failedRead, unauthorized, validationError } from '@/lib/utils/api-response';
+import { exportService } from '@/lib/services/export.service';
 import { parseExportQuery } from '@splitbook/shared/export-request';
 
 /**
@@ -43,16 +36,6 @@ export async function GET(req: Request) {
       },
     });
   } catch (err) {
-    // The Group reads' own refusal, whichever Group of the request it was.
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    if (err instanceof ExportTooLargeError)
-      return error(
-        `This export would have ${err.rows.toLocaleString('en-US')} rows, more than the ` +
-          `${err.limit.toLocaleString('en-US')} one download can hold. ` +
-          'Pick fewer Groups or a shorter period.',
-        413,
-        'EXPORT_TOO_LARGE',
-      );
-    return failedRead(err, req);
+    return failedRead(err, req, 'membership');
   }
 }
