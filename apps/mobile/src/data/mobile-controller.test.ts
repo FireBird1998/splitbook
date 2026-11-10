@@ -223,12 +223,27 @@ function setup(
   });
   const fetch = vi.fn<MobileFetch>((url, init) => send(url, init));
   backend.fetch = fetch;
+  const suppliedAccount = options.accountLocal ?? device?.accountLocal;
+  // Fault cases replace the public owner/marker/clear seam; supplied native journals still purge.
+  const accountLocal = suppliedAccount && {
+    signOutRecord: native.stores.signOutRecord,
+    financialCleanup: native.stores.financialCleanup,
+    untrustedCopies: native.stores.untrustedCopies,
+    ...suppliedAccount,
+    stores: [
+      ...new Set([
+        ...suppliedAccount.stores,
+        native.stores.financialCleanup,
+        native.stores.untrustedCopies,
+      ]),
+    ],
+  };
   const controller = (options.concurrent ? native.openConcurrent : native.open)({
     config: { developmentPersonaEnabled: options.enabled ?? true },
     parts: {
       credentials: store.credentials,
       pendingInvitation: options.pending,
-      accountLocal: options.accountLocal ?? device?.accountLocal,
+      accountLocal,
       groupCreations: device?.groupCreations,
       expenseDrafts: options.expenseDrafts,
       newSubmissionKey:
