@@ -1,6 +1,5 @@
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import { describe, expect, it } from 'vitest';
 import { buildExpenseBody, type ExpenseDraft } from './expense-draft';
 import type { MobileGroup } from './types';
@@ -103,8 +102,6 @@ function fixture(memberCount = 2) {
   const phone = testPhone(backend, {
     origin: 'http://localhost:4147',
     now,
-    recordSeparator: ':',
-    settlementSeparator: ':',
     parts: {
       pendingInvitation: undefined,
       draftRequests: undefined,
@@ -112,27 +109,10 @@ function fixture(memberCount = 2) {
       groupCreations: undefined,
       netInfo: undefined,
       newSubmissionKey: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        stores: [
-          {
-            clear: async (): Promise<void> => {
-              phone.stores.savedQueries.records.clear();
-              phone.stores.offlineIdentity.value = null;
-              phone.stores.expenseDrafts.records.clear();
-              phone.stores.settlementAttempts.records.clear();
-            },
-          },
-        ],
-      },
     },
   });
   phone.stores.owner.value = accountId;
   delete phone.stores.savedQueries.retainGroups;
-  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts])
-    delete (store as AccountGroupRecordStore).keys;
   const cache = phone.stores.savedQueries.records,
     drafts = phone.stores.expenseDrafts.records,
     payments = phone.stores.settlementAttempts.records;
@@ -175,7 +155,7 @@ function fixture(memberCount = 2) {
     },
     /** Stores this Group's draft record, as the Expense form would. */
     keep: (record: object) =>
-      drafts.set(`${accountId}:${groupId}`, { version: 1, accountId, groupId, ...record }),
+      drafts.set(`${accountId}${groupId}`, { version: 1, accountId, groupId, ...record }),
   };
 }
 
@@ -527,7 +507,7 @@ describe('Leave Group and what this device keeps', () => {
 
   it('blocks leaving while a payment may already be recorded, and offers Balances', async () => {
     const f = await onMembers();
-    f.payments.set(`${accountId}:${groupId}`, {
+    f.payments.set(`${accountId}${groupId}`, {
       version: 1,
       accountId,
       groupId,
@@ -548,7 +528,7 @@ describe('Leave Group and what this device keeps', () => {
 
   it('counts a draft it can’t read as one that may hold a save', async () => {
     const f = await onMembers();
-    f.drafts.set(`${accountId}:${groupId}`, { version: 1, draft: 'unreadable' });
+    f.drafts.set(`${accountId}${groupId}`, { version: 1, draft: 'unreadable' });
     await f.controller.reviewLeaveGroup();
     expect(f.controller.getSnapshot().leave).toMatchObject({ status: 'blocked', draft: true });
   });
