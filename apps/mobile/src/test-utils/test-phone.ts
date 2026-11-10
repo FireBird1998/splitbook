@@ -1,7 +1,7 @@
 import { onTestFinished } from 'vitest';
 import { createCheckedMobileController } from './flow-monitor';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
-import type { AccountLocalStorage, MobileDependencies } from '../data/types';
+import type { AccountLocalStorage, MobileConfig, MobileDependencies } from '../data/types';
 import { savedQueriesIn } from './saved-queries';
 import type { SavedQueryRecords } from '../data/saved-copy-budget';
 
@@ -180,6 +180,7 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
   options: {
     now?: number;
     origin?: string;
+    config?: Partial<MobileConfig>;
     recordSeparator?: string;
     newSubmissionKey?: () => string;
     parts?: Omit<PhoneParts, 'savedQueries'> & { savedQueries?: Queries };
@@ -321,6 +322,7 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
           apiBaseUrl: options.origin ?? 'http://localhost:4138',
           authOrigin: options.origin ?? 'http://localhost:4138',
           developmentPersonaEnabled: true,
+          ...options.config,
         },
         {
           ...parts,
