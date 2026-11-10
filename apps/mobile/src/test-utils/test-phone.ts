@@ -23,6 +23,11 @@ type PhoneParts = Omit<Partial<Omit<MobileDependencies, 'fetch'>>, 'accountLocal
 /** Faults stop at the native storage boundary, before its atomic read or write. */
 function faultable<T extends object>(store: T) {
   const next = new Map<string, { path?: string; action: () => Promise<void> }[]>();
+  const persistent = new Set<{ operation: StoreOperation; path?: string; when: () => boolean; action: () => Promise<void> }>();
+  const persist = (operation: StoreOperation, action: () => Promise<void>, when: () => boolean, path?: string) => {
+    const rule = { operation, action, when, path }; persistent.add(rule);
+    return () => { persistent.delete(rule); };
+  };
   const enqueue = (operation: StoreOperation, action: () => Promise<void>, path?: string) => {
     const queue = next.get(operation) ?? [];
     queue.push({ path, action });
@@ -35,6 +40,9 @@ function faultable<T extends object>(store: T) {
       enumerable: true,
       configurable: true,
       value: async (...args: unknown[]) => {
+        for (const rule of persistent)
+          if (rule.operation === operation && (rule.path === undefined || rule.path === args[1]) && rule.when())
+            await rule.action();
         const queue = next.get(operation);
         const index = queue?.findIndex(step => step.path === undefined || step.path === args[1]) ?? -1;
         await (index < 0 ? undefined : queue!.splice(index,1)[0].action());
@@ -45,6 +53,9 @@ function faultable<T extends object>(store: T) {
   const controls = (path?: string) => ({
     failNext(operation: StoreOperation, error = new Error('Fictional device storage failure')) {
       enqueue(operation, () => Promise.reject(error), path);
+    },
+    failPersistently(operation: StoreOperation, error = new Error('Fictional device storage failure'), when = () => true) {
+      return persist(operation, () => Promise.reject(error), when, path);
     },
     stallNext(operation: StoreOperation, until: Promise<void>) {
       enqueue(operation, () => until, path);
