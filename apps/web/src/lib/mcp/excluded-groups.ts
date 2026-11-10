@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { createHash } from 'node:crypto';
 import type { AuthContext } from 'better-auth';
 import { z } from 'zod';
@@ -139,6 +140,6 @@ export async function connectionExcludedGroups(
           ],
         })
       : null;
-  if (!connection) throw new Error('FORBIDDEN');
+  if (!connection) throw new Refusal('FORBIDDEN');
   return connection.excludedGroupIds ?? [];
 }

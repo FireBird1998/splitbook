@@ -29,3 +29,25 @@ it.each([
   expect(log).not.toHaveBeenCalled();
   log.mockRestore();
 });
+
+import { mongo } from 'mongoose';
+import { MoneyValidationError } from '@splitbook/shared/exact-money';
+import { Refusal } from '@splitbook/shared/refusals';
+
+it.each([
+  Object.assign(new Error('revision race'), { name: 'VersionError' }),
+  new MoneyValidationError('INVALID_MONEY', 'Private amount problem', ['amount']),
+  new mongo.MongoOperationTimeoutError('operation timed out'),
+  new Refusal('INVALID_TAG'),
+])('keeps an unclassified Draft save failure uncertain (%s)', async (cause) => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  log.mockClear();
+  vi.mocked(auth.api.getSession).mockRejectedValue(cause);
+  const answer = await save(new Request('http://localhost/api/drafts/save', { method: 'POST' }), {
+    params: Promise.resolve({ id: 'a00000000000000000000001' }),
+  });
+  expect(answer.status).toBe(503);
+  expect(await answer.text()).toBe(savedAnswers[0].body);
+  expect(log).not.toHaveBeenCalled();
+  log.mockRestore();
+});

@@ -1,3 +1,4 @@
+import type { RefusalCode } from '@splitbook/shared/refusals';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 import { calendarDate } from '@splitbook/shared/validators/calendar-date';
@@ -22,9 +23,7 @@ const REFUSALS = {
   REVISION_REQUIRED: 'REVISION_REQUIRED',
   IDEMPOTENCY_CONFLICT: 'IDEMPOTENCY_CONFLICT',
   DRAFT_GROUP_LIMIT: DRAFT_GROUP_LIMIT_MESSAGE,
-  // A Group out of reach answers as one that doesn't exist (#617).
-  GROUP_NOT_FOUND: 'Group not found',
-} as const;
+} as const satisfies Partial<Record<RefusalCode, string>>;
 
 /** Tools are request-scoped. Identity and authorization never come from tool arguments. */
 export function registerSplitbookTools(
@@ -40,12 +39,15 @@ export function registerSplitbookTools(
       const value = await work();
       return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
     } catch (error) {
+      // A Group out of reach is a tool-protocol result, including a nonexistent Group.
       const message =
         error instanceof z.ZodError
           ? error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')
-          : error instanceof Error && Object.hasOwn(REFUSALS, error.message)
-            ? REFUSALS[error.message as keyof typeof REFUSALS]
-            : 'Request could not be completed. Fetch the current state before retrying; reuse the original creation key.';
+          : error instanceof Error && error.message === 'GROUP_NOT_FOUND'
+            ? 'Group not found'
+            : error instanceof Error && Object.hasOwn(REFUSALS, error.message)
+              ? REFUSALS[error.message as keyof typeof REFUSALS]
+              : 'Request could not be completed. Fetch the current state before retrying; reuse the original creation key.';
       return { isError: true, content: [{ type: 'text' as const, text: message }] };
     }
   }

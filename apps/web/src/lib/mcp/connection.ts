@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { requireMcpAuth } from '@better-auth/mcp';
@@ -87,7 +88,7 @@ export function createMcpConnectionHandler(
                   typeof claims.scope === 'string' ? claims.scope.split(' ') : [],
                 ))
               )
-                throw new Error('FORBIDDEN');
+                throw new Refusal('FORBIDDEN');
             },
             String(claims.client_id),
             claims.splitbook_generation,

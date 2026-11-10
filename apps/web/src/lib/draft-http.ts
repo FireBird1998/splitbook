@@ -1,7 +1,8 @@
+import { Refusal } from '@splitbook/shared/refusals';
 export function assertDraftOrigin(request: Request) {
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(process.env.NEXT_PUBLIC_APP_URL || request.url).origin)
-    throw new Error('FORBIDDEN');
+    throw new Refusal('FORBIDDEN');
 }
 /** Bound JSON bytes even when a client omits Content-Length or streams its request. */
 export async function boundedBody(request: Request, maxBytes = 128 * 1024): Promise<string> {
@@ -15,7 +16,7 @@ export async function boundedBody(request: Request, maxBytes = 128 * 1024): Prom
     length += value.byteLength;
     if (length > maxBytes) {
       await reader.cancel();
-      throw new Error('REQUEST_TOO_LARGE');
+      throw new Refusal('REQUEST_TOO_LARGE');
     }
     chunks.push(value);
   }

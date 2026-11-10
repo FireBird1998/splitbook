@@ -327,7 +327,7 @@ it('records the Connected assistant tools’ own words for every table entry', a
   const handler = registered.mock.calls.find(([name]) => name === 'list_groups')![2];
   const census = [];
   const text = readFileSync(resolve('src/lib/mcp/tools.ts'), 'utf8');
-  const codes = new Set<string>();
+  const codes = new Set<string>(['GROUP_NOT_FOUND']);
   visit(ts.createSourceFile('tools.ts', text, ts.ScriptTarget.Latest, true), (node) => {
     if (
       ts.isPropertyAssignment(node) &&
