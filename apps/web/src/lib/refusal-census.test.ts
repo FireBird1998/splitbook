@@ -424,3 +424,21 @@ it('records Group currency fields and an already-listed currency’s separate wo
   }
   expect(census).toMatchSnapshot();
 });
+
+it('records a non-Trip Group’s direct summary refusal', async () => {
+  const { groupService } = await import('@/lib/services/group.service');
+  const summary = await import('@/lib/services/trip-summary.service');
+  const member = vi.spyOn(groupService, 'isMember').mockResolvedValue(true);
+  const read = vi.spyOn(summary, 'getTripSummary').mockResolvedValue({ kind: 'not-a-trip' });
+  vi.mocked(auth.api.getSession).mockResolvedValue({
+    user: { id: 'a00000000000000000000001', name: 'Alex', email: 'alex@example.test' },
+  } as never);
+  const { GET } = await import('@/app/api/groups/[id]/trip-summary/route');
+  const answer = await GET(
+    new Request('http://localhost/api/groups/a00000000000000000000001/trip-summary?tz=UTC'),
+    { params: Promise.resolve({ id: 'a00000000000000000000001' }) },
+  );
+  expect(await recorded(answer)).toMatchSnapshot();
+  read.mockRestore();
+  member.mockRestore();
+});

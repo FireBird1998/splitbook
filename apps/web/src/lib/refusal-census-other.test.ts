@@ -4,7 +4,13 @@ import { auth } from '@/lib/auth';
 import { connectMongo, getAuthDb } from '@/lib/mongodb-client';
 
 vi.mock('next/headers', () => ({ headers: () => new Headers() }));
-vi.mock('@/lib/auth', () => ({ auth: { api: { getSession: vi.fn() }, handler: vi.fn() } }));
+vi.mock('@/lib/auth', () => ({
+  auth: {
+    api: { getSession: vi.fn() },
+    handler: vi.fn(),
+    $context: Promise.resolve({ adapter: {} }),
+  },
+}));
 vi.mock('@/lib/mongodb-client', async (load) => ({
   ...(await load<typeof import('@/lib/mongodb-client')>()),
   connectMongo: vi.fn(),
@@ -12,6 +18,21 @@ vi.mock('@/lib/mongodb-client', async (load) => ({
 }));
 vi.mock('@/lib/notifications/dispatch', () => ({ dispatchExpenseAlerts: vi.fn() }));
 vi.mock('@/lib/rates/service', () => ({ refreshRates: vi.fn() }));
+vi.mock('@better-auth/mcp', () => ({
+  requireMcpAuth:
+    (
+      _auth: unknown,
+      next: (request: Request, claims: Record<string, unknown>) => Promise<Response>,
+    ) =>
+    (request: Request) =>
+      next(request, {
+        sub: 'a00000000000000000000001',
+        client_id: 'census-client',
+        scope: 'ledger:read',
+      }),
+}));
+vi.mock('@/lib/mcp/grants', () => ({ currentMcpGrant: vi.fn().mockResolvedValue(true) }));
+vi.mock('@/lib/mcp/request-limit', () => ({ allowMcpRequest: vi.fn().mockResolvedValue(false) }));
 vi.spyOn(console, 'error').mockImplementation(() => {});
 afterEach(() => vi.unstubAllEnvs());
 async function recorded(answer: Response) {
@@ -153,6 +174,56 @@ it('records MCP’s empty and outage refusals through its exported handlers', as
   vi.stubEnv('MCP_IDLE_TIMEOUT_SECONDS', 'invalid');
   census.push(
     await recorded(await POST(new Request('http://localhost/api/mcp', { method: 'POST' }))),
+  );
+  expect(census).toMatchSnapshot();
+});
+
+it('records MCP’s oversized request body, including its absent status and code fields', async () => {
+  vi.stubEnv('MCP_ENABLED', 'true');
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', 'http://localhost:3000');
+  vi.stubEnv('MCP_IDLE_TIMEOUT_SECONDS', '120');
+  vi.stubEnv('MCP_DEPLOYMENT', 'staging');
+  const { POST } = await import('@/app/api/mcp/route');
+  const answer = await POST(
+    new Request('http://localhost:3000/api/mcp', {
+      method: 'POST',
+      body: 'x'.repeat(128 * 1024 + 1),
+    }),
+  );
+  expect(await recorded(answer)).toMatchSnapshot();
+});
+
+it('records the repository’s MCP authorization and request-limit answers at HTTP', async () => {
+  const { createMcpConnectionHandler } = await import('@/lib/mcp/connection');
+  // Token verification is the network boundary. These are the repository's own answers after it.
+  const handler = createMcpConnectionHandler(
+    auth,
+    'http://localhost:3000/api/mcp',
+    async () => false,
+  );
+  const census = [];
+  census.push(
+    await recorded(
+      await handler(
+        new Request('http://localhost:3000/api/mcp', {
+          method: 'POST',
+          headers: { origin: 'http://another.example' },
+        }),
+      ),
+    ),
+  );
+  census.push(
+    await recorded(await handler(new Request('http://localhost:3000/api/mcp', { method: 'POST' }))),
+  );
+  vi.stubEnv('MCP_ENABLED', 'true');
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', 'http://localhost:3000');
+  vi.stubEnv('MCP_DEPLOYMENT', 'staging');
+  vi.stubEnv('MCP_IDLE_TIMEOUT_SECONDS', '120');
+  const { POST } = await import('@/app/api/mcp/route');
+  census.push(
+    await recorded(
+      await POST(new Request('http://localhost:3000/api/mcp', { method: 'POST', body: '{}' })),
+    ),
   );
   expect(census).toMatchSnapshot();
 });

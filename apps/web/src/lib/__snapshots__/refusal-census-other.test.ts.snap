@@ -20,6 +20,14 @@ exports[`records MCP’s empty and outage refusals through its exported handlers
 ]
 `;
 
+exports[`records MCP’s oversized request body, including its absent status and code fields 1`] = `
+{
+  "body": "{"error":"Request too large"}",
+  "hasCode": false,
+  "status": 413,
+}
+`;
+
 exports[`records dispatch authorization, invalid requests and a failed pass at HTTP 1`] = `
 [
   {
@@ -129,6 +137,26 @@ exports[`records the rates cron’s authorization and failure answers through it
     "body": "{"error":"Rate refresh failed","status":500}",
     "hasCode": false,
     "status": 500,
+  },
+]
+`;
+
+exports[`records the repository’s MCP authorization and request-limit answers at HTTP 1`] = `
+[
+  {
+    "body": "{"error":"Origin not allowed"}",
+    "hasCode": false,
+    "status": 403,
+  },
+  {
+    "body": "{"error":"Connection is no longer authorized"}",
+    "hasCode": false,
+    "status": 403,
+  },
+  {
+    "body": "{"error":"Too many requests. Try again in a minute."}",
+    "hasCode": false,
+    "status": 429,
   },
 ]
 `;

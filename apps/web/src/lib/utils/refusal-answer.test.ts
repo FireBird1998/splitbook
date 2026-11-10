@@ -66,10 +66,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import inputs from '../refusal-census-inputs.json';
 it('uses only answers and codes recorded by the unchanged-main census', () => {
-  const baseline = readFileSync(
-    resolve('src/lib/__snapshots__/refusal-census.test.ts.snap'),
-    'utf8',
-  );
+  const baseline = ['refusal-census.test.ts.snap', 'refusal-census-other.test.ts.snap']
+    .map((file) => readFileSync(resolve('src/lib/__snapshots__', file), 'utf8'))
+    .join('\n');
   for (const { body } of cases) expect(baseline).toContain(`"body": "${body}",`);
   const recordedCodes = new Set([
     ...inputs.plainCodes,

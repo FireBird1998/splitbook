@@ -40,6 +40,7 @@ interface RefusalContext {
 }
 interface Answer {
   delivery?: 'expenseTagChange';
+  includeStatus?: boolean;
   status: number;
   words: string | ((data: RefusalContext) => string);
   includeCode: boolean;
@@ -640,7 +641,14 @@ export const refusalVocabulary = {
     includeCode: true,
     variants: {},
   },
-  REQUEST_TOO_LARGE: { status: 413, words: 'Request too large', includeCode: true, variants: {} },
+  REQUEST_TOO_LARGE: {
+    status: 413,
+    words: 'Request too large',
+    includeCode: true,
+    variants: {
+      mcp: { status: 413, words: 'Request too large', includeCode: false, includeStatus: false },
+    },
+  },
   REVISION_REQUIRED: {
     status: 428,
     words: 'Reload this record before changing it.',
@@ -825,7 +833,7 @@ export class Refusal<C extends RefusalCode = RefusalCode> extends Error {
   }
 }
 
-/** Framework-free answer body, serialized by the web's serverError. */
+/** Framework-free body and HTTP status, serialized by the web's serverError. */
 export function refusalAnswer(refusal: Refusal) {
   const entry = refusalVocabulary[refusal.code];
   const variants: Readonly<Record<string, Answer>> = entry.variants;
@@ -834,36 +842,42 @@ export function refusalAnswer(refusal: Refusal) {
   const words = typeof answer.words === 'function' ? answer.words(data) : answer.words;
   if (answer.delivery === 'expenseTagChange')
     return {
-      data: {
-        tagId: data.tagId,
-        results: [{ expenseId: data.expenseId, outcome: 'refused', code, reason: words }],
+      body: {
+        data: {
+          tagId: data.tagId,
+          results: [{ expenseId: data.expenseId, outcome: 'refused', code, reason: words }],
+        },
+        status: answer.status,
       },
       status: answer.status,
     };
   return {
-    error: words,
     status: answer.status,
-    ...(answer.includeCode ? { code } : {}),
-    ...(data.field ? { field: data.field } : {}),
-    ...(data.use ? { use: data.use } : {}),
-    ...(data.snapshot ? { snapshot: data.snapshot } : {}),
-    ...(data.existingTagId ? { existingTagId: data.existingTagId } : {}),
-    ...(data.balances
-      ? {
-          balances: data.balances.map(({ currency, amountMinor }) => ({
-            currency,
-            amount: toMajorAmount(amountMinor, currency),
-          })),
-        }
-      : {}),
-    ...(data.recurringExpenses
-      ? {
-          recurringExpenses: data.recurringExpenses.map(({ id, description }) => ({
-            id,
-            description,
-          })),
-        }
-      : {}),
+    body: {
+      error: words,
+      ...(answer.includeStatus === false ? {} : { status: answer.status }),
+      ...(answer.includeCode ? { code } : {}),
+      ...(data.field ? { field: data.field } : {}),
+      ...(data.use ? { use: data.use } : {}),
+      ...(data.snapshot ? { snapshot: data.snapshot } : {}),
+      ...(data.existingTagId ? { existingTagId: data.existingTagId } : {}),
+      ...(data.balances
+        ? {
+            balances: data.balances.map(({ currency, amountMinor }) => ({
+              currency,
+              amount: toMajorAmount(amountMinor, currency),
+            })),
+          }
+        : {}),
+      ...(data.recurringExpenses
+        ? {
+            recurringExpenses: data.recurringExpenses.map(({ id, description }) => ({
+              id,
+              description,
+            })),
+          }
+        : {}),
+    },
   };
 }
 

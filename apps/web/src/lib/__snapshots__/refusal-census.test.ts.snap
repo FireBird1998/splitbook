@@ -35,6 +35,14 @@ exports[`records Group currency fields and an already-listed currency’s separa
 ]
 `;
 
+exports[`records a non-Trip Group’s direct summary refusal 1`] = `
+{
+  "body": "{"error":"Only a Trip has a Trip summary.","status":409,"code":"NOT_A_TRIP"}",
+  "hasCode": true,
+  "status": 409,
+}
+`;
+
 exports[`records each per-Expense Tag refusal through the bulk HTTP response 1`] = `
 [
   {

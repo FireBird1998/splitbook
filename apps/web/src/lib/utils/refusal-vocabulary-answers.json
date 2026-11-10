@@ -1166,5 +1166,14 @@
     },
     "status": 422,
     "body": "{\"error\":\"EUR is already one of this Group’s currencies.\",\"status\":422,\"code\":\"INVALID_GROUP_CURRENCIES\",\"field\":[\"currency\"]}"
+  },
+  {
+    "code": "REQUEST_TOO_LARGE",
+    "variant": "mcp",
+    "data": {
+      "variant": "mcp"
+    },
+    "status": 413,
+    "body": "{\"error\":\"Request too large\"}"
   }
 ]
