@@ -280,10 +280,11 @@ describe('ledger recording', () => {
   });
   it('takes retry identity from the description, never from the document being built', async () => {
     const [saved] = await record(randomUUID(), { retry: undefined }, 'always', {
-      creationRequest: createRequestMetadata('document-key-0001', { description: 'Unexpected identity' }),
+      creationRequest: createRequestMetadata('document-key-0001', {
+        description: 'Unexpected identity',
+      }),
     });
     const stored = await Expense.findById(saved._id).select('+creationRequest');
     expect(stored!.creationRequest).toBeUndefined();
   });
-
 });

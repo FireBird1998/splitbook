@@ -136,9 +136,8 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
               ...record.document,
               group: groupId,
               createdBy: actorId,
-              ...(index === 0 && retry
-                ? { creationRequest: createRequestMetadata(retry.key, retry.command) }
-                : {}),
+              creationRequest:
+                index === 0 && retry ? createRequestMetadata(retry.key, retry.command) : undefined,
               pendingActivity: [event],
             }),
           );
