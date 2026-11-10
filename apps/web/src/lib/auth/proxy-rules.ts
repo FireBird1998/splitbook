@@ -1,3 +1,4 @@
+import { Refusal, refusalAnswer } from '@splitbook/shared/refusals';
 /**
  * Route-protection rules applied by `src/proxy.ts`. Edge-safe and pure so the
  * decision table can be unit tested without a request pipeline.
@@ -19,7 +20,7 @@ export interface ProxyDecisionInput {
   hasSessionCookie: boolean;
 }
 
-export const UNAUTHORIZED_BODY = { error: 'Unauthorized', status: 401 } as const;
+export const UNAUTHORIZED_BODY = refusalAnswer(new Refusal('UNAUTHORIZED'));
 
 export function resolveProxyResponse({
   url,

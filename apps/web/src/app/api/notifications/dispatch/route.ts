@@ -1,3 +1,4 @@
+import { unauthorized } from '@/lib/utils/api-response';
 import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
     Buffer.byteLength(provided) !== Buffer.byteLength(configured) ||
     !timingSafeEqual(Buffer.from(provided), Buffer.from(configured))
   )
-    return NextResponse.json({ error: 'Unauthorized', status: 401 }, { status: 401 });
+    return unauthorized();
   if (new URL(request.url).search || (await request.text()).length)
     return NextResponse.json({ error: 'Invalid request', status: 400 }, { status: 400 });
   try {
