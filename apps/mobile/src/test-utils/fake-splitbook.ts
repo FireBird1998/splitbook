@@ -303,9 +303,21 @@ export function fakeSplitbook() {
         fault ? lose(new TypeError('Network request failed')) : release(),
     };
   };
-  const sessions = new Map<string, PersonaId>();
-  let issued = 0,
-    online = true;
+  let issued = 0, online = true;
+  const auth = {
+    sessions: new Map<string, SessionUser>(),
+    issuedTo: new Map<string, SessionUser>(),
+    expired: false,
+    rotate: false,
+    cookie: (persona: PersonaId, sequence: number) => `better-auth.session_token=${persona}-${sequence}.signature`,
+    issue(persona: PersonaId, cookie?: string): string {
+      const user = world.people[persona];
+      const value = cookie ?? auth.cookie(persona, ++issued);
+      auth.sessions.set(value, user);
+      auth.issuedTo.set(value, user);
+      return value;
+    },
+  };
   const fetch: MobileFetch = async (address, init) => {
     const url = new URL(address),
       method = init.method ?? 'GET';
@@ -379,22 +391,20 @@ export function fakeSplitbook() {
       if (url.pathname === '/api/auth/demo-persona/sign-in' && method === 'POST') {
         const persona = JSON.parse(String(init.body)).personaId as PersonaId;
         const user = world.people[persona];
-        const cookie = `better-auth.session_token=${persona}-${++issued}.signature`;
-        sessions.set(cookie, persona);
+        const cookie = auth.issue(persona);
         return Response.json(
           { user },
           { headers: { 'Set-Cookie': `${cookie}; Max-Age=2592000; Path=/; HttpOnly` } },
         );
       }
       const cookie = new Headers(init.headers).get('Cookie') ?? '';
-      const persona = sessions.get(cookie);
+      const user = auth.sessions.get(cookie);
       if (url.pathname === '/api/auth/sign-out' && method === 'POST') {
-        sessions.delete(cookie);
+        auth.sessions.delete(cookie);
         return Response.json({ success: true });
       }
-      if (!persona)
+      if (!user || auth.expired)
         return Response.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 });
-      const user = world.people[persona];
       if (url.pathname === '/api/auth/get-session')
         return Response.json({
           user,
@@ -492,7 +502,18 @@ export function fakeSplitbook() {
       unanswered.push(`${method} ${url.pathname}${url.search}`);
       return Response.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
     };
+    // Refresh keeps the old token valid for reads already in flight, as Better Auth does.
+    const previous = request.headers.get('Cookie');
+    const holder = previous ? auth.sessions.get(previous) : undefined;
+    let rotated: string | undefined;
+    if (auth.rotate && holder) {
+      auth.rotate = false;
+      const persona = (Object.keys(world.people) as PersonaId[]).find(p => world.people[p] === holder)!;
+      rotated = auth.issue(persona);
+    }
     const response = await respond();
+    if (rotated && response.headers instanceof Headers)
+      response.headers.set('Set-Cookie', rotated + '; Max-Age=2592000; Path=/; HttpOnly');
     if (held?.at === 'reply') {
       held.arrive();
       await held.wait;
@@ -501,6 +522,7 @@ export function fakeSplitbook() {
   };
   return {
     world,
+    auth,
     get online() {
       return online;
     },
