@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { testPhone } from '../test-utils/test-phone';
-import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import { fakeSplitbook, expenseFixture } from '../test-utils/fake-splitbook';
 import type { FetchResponse } from './types';
 
 const user = {
@@ -32,24 +32,7 @@ const group = {
 };
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const person = { _id: user.id, name: user.name, image: null };
-const expense = {
-  _id: 'b00000000000000000000001',
-  group: groupId,
-  description: 'Groceries',
-  currency: 'INR',
-  amount: 10,
-  amountMinor: 1000,
-  moneyVersion: 1,
-  category: 'food',
-  tag: 'Shared',
-  tagId: 'c00000000000000000000001',
-  date: iso,
-  createdAt: iso,
-  updatedAt: iso,
-  paidBy: [{ user: person, amount: 10, amountMinor: 1000 }],
-  splitBetween: [{ user: person, amount: 10, amountMinor: 1000 }],
-  splitMethod: 'equal',
-};
+const expense = expenseFixture(group);
 const expensePage = (rows = [expense], page = 1, total = rows.length) => ({
   data: {
     expenses: rows,

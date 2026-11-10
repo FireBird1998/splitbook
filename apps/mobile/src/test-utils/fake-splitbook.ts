@@ -52,6 +52,34 @@ export function groupFixture(overrides: Partial<WireGroup> = {}): WireGroup {
     ...overrides,
   };
 }
+/** The common single-member INR Expense used by financial-view fixtures. */
+export function expenseFixture(
+  group: WireGroup,
+  id = 'b00000000000000000000001',
+  description = 'Groceries',
+) {
+  const member = group.members[0]!.user;
+  const person = { _id: member._id, name: member.name, image: member.image ?? null };
+  return {
+    _id: id,
+    group: group._id,
+    description,
+    currency: 'INR',
+    amount: 10,
+    amountMinor: 1000,
+    moneyVersion: 1,
+    category: 'food',
+    tag: 'Shared',
+    tagId: 'c00000000000000000000001',
+    date: group.updatedAt,
+    createdAt: group.updatedAt,
+    updatedAt: group.updatedAt,
+    paidBy: [{ user: person, amount: 10, amountMinor: 1000 }],
+    splitBetween: [{ user: person, amount: 10, amountMinor: 1000 }],
+    splitMethod: 'equal',
+  };
+}
+
 export function expensePage(expenses: unknown[] = [], page = 1) {
   return {
     expenses,

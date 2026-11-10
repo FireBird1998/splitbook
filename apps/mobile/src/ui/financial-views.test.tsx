@@ -3,7 +3,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MobileController } from '../data/mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
-import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import { fakeSplitbook, expenseFixture } from '../test-utils/fake-splitbook';
 import type { FetchResponse } from '../data/types';
 import { DetailsNotice, ReadTime, RefreshStatus } from './financial-views';
 import { flatten } from '../test-utils/layout';
@@ -30,24 +30,7 @@ const group = {
   createdAt: iso,
   updatedAt: iso,
 };
-const expense = (id: string, description: string) => ({
-  _id: id,
-  group: groupId,
-  description,
-  currency: 'INR',
-  amount: 10,
-  amountMinor: 1000,
-  moneyVersion: 1,
-  category: 'food',
-  tag: 'Shared',
-  tagId: 'c00000000000000000000001',
-  date: iso,
-  createdAt: iso,
-  updatedAt: iso,
-  paidBy: [{ user: person, amount: 10, amountMinor: 1000 }],
-  splitBetween: [{ user: person, amount: 10, amountMinor: 1000 }],
-  splitMethod: 'equal',
-});
+const expense = (id: string, description: string) => expenseFixture(group, id, description);
 const page = (rows: unknown[], pageNumber = 1, total = rows.length) => ({
   data: {
     expenses: rows,
