@@ -205,6 +205,7 @@ function setup(
     await remove(account, group);
   };
   return {
+    expectUnanswered: server.expectUnanswered,
     controller: phone.open(),
     create: phone.open,
     store,
@@ -367,7 +368,7 @@ describe('native payment recording', () => {
     const dispatched = new Promise<void>((resolve) => {
       entered = resolve;
     });
-    const { controller, records, create } = setup((path, init) =>
+    const { expectUnanswered, controller, records, create } = setup((path, init) =>
       path.endsWith('/settlements') && init.method === 'POST'
         ? new Promise((resolve) => {
             release = resolve;
@@ -380,6 +381,7 @@ describe('native payment recording', () => {
     controller.selectSettlement(actor, recipient, 'INR');
     const saving = controller.recordSettlement();
     await dispatched;
+    expectUnanswered('GET', '/api/join/1234abcd');
     await controller.openInvitation('http://localhost:4138/join/1234abcd');
     release(json({ status: 422, code: 'VALIDATION_ERROR', error: 'Invalid payment' }, 422));
     await saving;
@@ -400,7 +402,7 @@ describe('native payment recording', () => {
     let hold = false,
       release!: (value: FetchResponse) => void;
     // Record's check before sending, the live Balances read (#333), is held.
-    const { controller, writes } = setup((path) =>
+    const { expectUnanswered, controller, writes } = setup((path) =>
       hold && path === `/api/groups/${groupId}/balances`
         ? new Promise((resolve) => {
             release = resolve;
@@ -412,6 +414,7 @@ describe('native payment recording', () => {
     controller.selectSettlement(actor, recipient, 'INR');
     hold = true;
     const pending = controller.recordSettlement();
+    expectUnanswered('GET', '/api/join/1234abcd');
     await controller.openInvitation('http://localhost:4138/join/1234abcd');
     release(json(balances()));
     await pending;
@@ -876,7 +879,7 @@ describe('native payment recording', () => {
     const posted = new Promise<void>((resolve) => {
       entered = resolve;
     });
-    const { controller, records } = setup((path, init) => {
+    const { expectUnanswered, controller, records } = setup((path, init) => {
       if (path.endsWith('/settlements') && init.method === 'POST') {
         if (lose) {
           lose = false;
@@ -899,6 +902,7 @@ describe('native payment recording', () => {
     hold = true;
     const retry = controller.recordSettlement();
     await posted;
+    expectUnanswered('GET', '/api/join/1234abcd');
     await controller.openInvitation('http://localhost:4138/join/1234abcd');
     release(
       json({ status: 201, data: { ...record, amount: 30, amountMinor: 3000, note: '' } }, 201),
@@ -1380,7 +1384,7 @@ describe('native payment recording', () => {
       hold = false;
     let release!: (value: FetchResponse | Promise<never>) => void, entered!: () => void;
     const sent: string[] = [];
-    const { controller } = setup((path, init) => {
+    const { expectUnanswered, controller } = setup((path, init) => {
       sent.push(`${init.method ?? 'GET'} ${path}`);
       if (down && path.startsWith('/api/groups/'))
         return Promise.reject(new TypeError('Network request failed'));
@@ -1416,6 +1420,7 @@ describe('native payment recording', () => {
     await controller.openRecordPayment(actor, recipient, 'INR');
     expect(controller.getSnapshot().settlement.status).toBe('error');
     down = false;
+    expectUnanswered('GET', '/api/join/1234abcd');
     await controller.openInvitation('http://localhost:4138/join/1234abcd');
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'invite',

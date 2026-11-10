@@ -108,6 +108,7 @@ function setup(
     return phone.open();
   };
   return {
+    expectUnanswered: server.expectUnanswered,
     phone,
     create,
     controller: create(),
@@ -1048,7 +1049,7 @@ describe('native Expense creation and editing', () => {
   it('settles edit preflight interrupted by a warm link without stranding the draft in saving', async () => {
     let block = false;
     let release!: (response: FetchResponse) => void;
-    const { controller } = setup((path) => {
+    const { expectUnanswered, controller } = setup((path) => {
       if (path === `/api/groups/${groupId}` && block)
         return new Promise((resolve) => {
           release = resolve;
@@ -1063,6 +1064,7 @@ describe('native Expense creation and editing', () => {
     block = true;
     const save = controller.saveExpense();
     await new Promise((resolve) => setTimeout(resolve, 0));
+    expectUnanswered('GET', '/api/join/abcdef12');
     await controller.openInvitation('http://localhost:4138/join/abcdef12');
     release(json({ data: group, status: 200 }));
     await save;
@@ -2000,7 +2002,7 @@ describe('native Expense creation and editing', () => {
       entered = resolve;
     });
     let hold = false;
-    const { controller } = setup((path) => {
+    const { expectUnanswered, controller } = setup((path) => {
       if (hold && path === `/api/groups/${groupId}`)
         return (async () => {
           entered();
@@ -2014,6 +2016,7 @@ describe('native Expense creation and editing', () => {
     hold = true;
     const saving = controller.saveExpense();
     await enteredPreflight;
+    expectUnanswered('GET', '/api/join/abcdef12');
     await controller.openInvitation('http://localhost:4138/join/abcdef12');
     release();
     await saving;
@@ -2034,7 +2037,7 @@ describe('native Expense creation and editing', () => {
         entered = resolve;
       });
       let posts = 0;
-      const { controller, create } = setup((path, init) => {
+      const { expectUnanswered, controller, create } = setup((path, init) => {
         if (path.endsWith('/expenses') && init.method === 'POST') {
           posts++;
           if (posts === 1)
@@ -2058,6 +2061,7 @@ describe('native Expense creation and editing', () => {
       await controller.updateExpenseDraft({ description: 'First dinner', amount: '10', tagId });
       const first = controller.saveExpense();
       await submitted;
+      expectUnanswered('GET', '/api/join/abcdef12');
       await controller.openInvitation('http://localhost:4138/join/abcdef12');
       await controller.openExpense(groupId);
       controller.resumeExpenseDraft();
@@ -2084,7 +2088,7 @@ describe('native Expense creation and editing', () => {
       entered = resolve;
     });
     let reads = 0;
-    const { controller } = setup((path, init) => {
+    const { expectUnanswered, controller } = setup((path, init) => {
       if (path === `/api/groups/${groupId}`) reads++;
       if (path.endsWith('/expenses') && init.method === 'POST')
         return (async () => {
@@ -2101,6 +2105,7 @@ describe('native Expense creation and editing', () => {
     await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
     const saving = controller.saveExpense();
     await submitted;
+    expectUnanswered('GET', '/api/join/abcdef12');
     await controller.openInvitation('http://localhost:4138/join/abcdef12');
     await controller.openGroup(groupId);
     const before = reads;

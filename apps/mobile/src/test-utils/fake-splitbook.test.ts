@@ -78,6 +78,7 @@ describe('fake Splitbook', () => {
   );
   it('replaces the next or every matching answer and records requests including unanswered ones', async () => {
     const server = fakeSplitbook();
+    server.expectUnanswered('GET', '/probe');
     server.reply(
       'GET',
       '/probe',
@@ -204,6 +205,7 @@ describe('fake Splitbook', () => {
   );
   it('can hold a request before deferring to its normal answer, and lists unknown API requests', async () => {
     const server = fakeSplitbook();
+    server.expectUnanswered('GET', '/api/not-a-route');
     let release!: () => void;
     const wait = new Promise<void>((done) => {
       release = done;
@@ -247,6 +249,8 @@ describe('fake Splitbook', () => {
     const server = fakeSplitbook(),
       sent = server.sent(),
       paths = server.sent({ query: false });
+    server.expectUnanswered('GET', '/probe?page=1');
+    server.expectUnanswered('POST', '/probe?page=2');
     await server.fetch('http://local/probe?page=1', {});
     expect(sent).toEqual(['GET /probe?page=1']);
     expect(paths).toEqual(['GET /probe']);
@@ -476,6 +480,7 @@ describe('fake Splitbook', () => {
   });
   it('logs the time a request was sent, including an offline attempt', async () => {
     const server = fakeSplitbook();
+    server.expectUnanswered('GET', '/first');
     const now = vi.spyOn(Date, 'now').mockReturnValue(100);
     try {
       await server.fetch('http://local/first', {});
@@ -580,6 +585,7 @@ describe('fake Splitbook', () => {
   });
   it('distinguishes offline attempts from requests sent while connected', async () => {
     const server = fakeSplitbook();
+    server.expectUnanswered('GET', '/probe');
     server.online = false;
     await expect(server.fetch('http://local/probe', {})).rejects.toThrow('Network request failed');
     server.online = true;
@@ -634,6 +640,8 @@ describe('fake Splitbook', () => {
   it('keeps a mutable pathname-only view without clearing the complete request log', async () => {
     const server = fakeSplitbook(),
       paths = server.sent({ query: false, method: false });
+    server.expectUnanswered('GET', '/first?page=1');
+    server.expectUnanswered('POST', '/second?page=2');
     await server.fetch('http://local/first?page=1', {});
     expect(paths).toEqual(['/first']);
     paths.length = 0;

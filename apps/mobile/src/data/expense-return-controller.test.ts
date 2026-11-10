@@ -322,6 +322,7 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
     return phone.open();
   };
   return {
+    expectUnanswered: backend.expectUnanswered,
     create,
     get requests() {
       return requests();
@@ -2137,6 +2138,7 @@ describe('Late completion', () => {
     const saving = controller.saveExpense();
     await posted.reached;
     // A warm invitation link replaces the screen while the save is in flight.
+    server.expectUnanswered('GET', '/api/join/abcdef12');
     await controller.openInvitation('http://localhost:4138/join/abcdef12');
     await controller.cancelInvitation();
     posted.release();
@@ -2159,6 +2161,7 @@ describe('Late completion', () => {
     const posted = server.hold('POST', /\/expenses$/);
     const saving = controller.saveExpense();
     await posted.reached;
+    server.expectUnanswered('GET', '/api/join/abcdef12');
     await controller.openInvitation('http://localhost:4138/join/abcdef12');
     await controller.openGroup(tripId);
     posted.release();

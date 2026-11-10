@@ -51,19 +51,16 @@ function server() {
   backend.reply('POST', '/api/groups', async ({ body }) => {
     await holdGroupCreate;
     created.push(body!);
-    return json(
-      {
-        status: 201,
-        data: {
-          ...group,
-          _id: createdId,
-          name: body!.name,
-          category: body!.category,
-          members: [member('alex')],
-        },
-      },
-      201,
-    );
+    const createdGroup = {
+      ...group,
+      _id: createdId,
+      name: String(body!.name),
+      category: String(body!.category),
+      members: [member('alex')],
+    };
+    backend.world.groups.push(createdGroup);
+    backend.world.expenses[createdId] = expensePage();
+    return json({ status: 201, data: createdGroup }, 201);
   });
   backend.reply('GET', `/api/groups/${groupId}/balances`, () =>
     json({

@@ -231,6 +231,8 @@ function fixture() {
   const create = () => phone.open();
 
   return {
+    expectUnanswered: backend.expectUnanswered,
+    world: backend.world,
     clock,
     state,
     requests,
@@ -1588,6 +1590,8 @@ describe('a new Group opens ready (#189)', () => {
 
   it('stays where the member went when they left New Group before the Group was confirmed', async () => {
     const f = fixture();
+    f.world.connections = null;
+    f.expectUnanswered('GET', '/api/auth/mcp/connections');
     const controller = f.create();
     await controller.signIn('alex');
     controller.startCreate();

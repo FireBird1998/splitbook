@@ -493,6 +493,8 @@ it('reopens the same phone with the caller’s current runtime parts and build c
   await app.restore();
   app.startCreate();
   app.updateCreation({ name: 'Reopened Group' });
+  server.expectUnanswered('GET', '/api/groups/b00000000000000000000009');
+  server.expectUnanswered('GET', '/api/groups/b00000000000000000000009/expenses');
   await app.createGroup();
   const request = server.requests.find((r) => r.method === 'POST' && r.path === '/api/groups')!;
   expect(request.url.origin).toBe('http://api.test');

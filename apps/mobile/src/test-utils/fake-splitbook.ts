@@ -141,7 +141,7 @@ export const rateSuggestion = (from: string, to: string, rate: string) => ({
   components: [],
 });
 
-function emptyTripSummary(currency: string): TripSummaryRead {
+export function emptyTripSummary(currency: string): TripSummaryRead {
   return {
     timeZone: 'UTC',
     currency,

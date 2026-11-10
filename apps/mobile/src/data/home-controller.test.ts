@@ -118,6 +118,7 @@ function fixture() {
   const drafts = phone.stores.expenseDrafts.records;
   const create = () => phone.open();
   return {
+    expectUnanswered: backend.expectUnanswered,
     create,
     drafts,
     /** Stores a draft record for an account and Group, as the Expense form would. */
@@ -267,6 +268,7 @@ describe('Home Expense drafts', () => {
     f.keep(maple, { draft: newDraft('Weekly groceries', '1249.5') });
     f.keep(goa, unconfirmedSave(goa, newDraft('Airport taxi', '1150')));
     f.keep(football, { draft: { description: 'Unreadable' } });
+    f.expectUnanswered('GET', `/api/groups/${unlisted}`);
     f.keep(unlisted, { draft: newDraft('Left Group', '10') });
     f.keep(maple, { draft: newDraft('Someone else’s', '5') }, otherAccount);
     await controller.signIn('alex');
