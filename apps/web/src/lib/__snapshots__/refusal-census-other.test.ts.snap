@@ -69,8 +69,8 @@ exports[`records notification registration’s code-less refusals at HTTP 1`] = 
   },
   {
     "answer": {
-      "body": "{"error":"Notifications are not available yet.","status":503}",
-      "hasCode": false,
+      "body": "{"error":"Notifications are not available yet.","status":503,"code":"NOTIFICATIONS_UNAVAILABLE"}",
+      "hasCode": true,
       "status": 503,
     },
     "state": "feature disabled",

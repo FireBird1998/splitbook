@@ -50,6 +50,11 @@ it.each([
 );
 it.each([
   [
+    'NOTIFICATIONS_UNAVAILABLE',
+    503,
+    '{"error":"Notifications are not available yet.","status":503,"code":"NOTIFICATIONS_UNAVAILABLE"}',
+  ],
+  [
     'NOTIFICATION_SETTINGS_CHANGED',
     409,
     '{"error":"Notification settings changed. Retry.","status":409,"code":"NOTIFICATION_SETTINGS_CHANGED"}',

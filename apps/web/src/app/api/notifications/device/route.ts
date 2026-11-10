@@ -171,11 +171,7 @@ export async function POST(req: Request) {
     if (!input.success) return privateResult(validationError(input.error));
     const body: z.infer<typeof update> = input.data;
     if (body.enabled && !maintaining && !available())
-      // #1086 pauses this code addition because Android changes its visible failure state.
-      return NextResponse.json(
-        { error: 'Notifications are not available yet.', status: 503 },
-        { status: 503, headers: privateHeaders },
-      );
+      return refusal(new Refusal('NOTIFICATIONS_UNAVAILABLE'));
     const { client, registrations, sessions } = await collections();
     // Consent belongs to this installation's own opt-in, never to another registration holding the token.
     const releaseToken = (row: Registration, options: { session: ClientSession }) =>

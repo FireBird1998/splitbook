@@ -306,6 +306,11 @@ export const refusalVocabulary = {
     words: 'Only a Trip has a Trip summary.',
     variants: {},
   },
+  NOTIFICATIONS_UNAVAILABLE: {
+    status: 503,
+    words: 'Notifications are not available yet.',
+    variants: {},
+  },
   NOTIFICATION_SETTINGS_CHANGED: {
     status: 409,
     words: 'Notification settings changed. Retry.',

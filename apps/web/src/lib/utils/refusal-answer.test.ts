@@ -111,6 +111,7 @@ it('uses only answers and codes recorded by the corrected census', () => {
     'NOT_FOUND',
     'NOTIFICATION_SETTINGS_CHANGED',
     'NOTIFICATION_TOKEN_REQUIRED',
+    'NOTIFICATIONS_UNAVAILABLE',
     'INVALID_MONTH',
     'INVALID_COMPARE',
     'INVALID_MONTHS',
