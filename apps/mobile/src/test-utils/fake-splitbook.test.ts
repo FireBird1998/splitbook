@@ -864,9 +864,15 @@ it('answers empty ancillary reads from the default world through the app readers
   const cookie = server.auth.issue('alex');
   const read = async (path: string) =>
     (await server.fetch('http://localhost:4138' + path, { headers: { Cookie: cookie } })).json();
-  expect(parseToReviewResponse(await read('/api/user/to-review'))).toEqual({ total: 0, groups: [] });
+  expect(parseToReviewResponse(await read('/api/user/to-review'))).toEqual({
+    total: 0,
+    groups: [],
+  });
   expect(parseNotificationPreferences(await read('/api/notifications/device'))).toMatchObject({
-    available: true, enabled: false, revision: 0, activation: null,
+    available: true,
+    enabled: false,
+    revision: 0,
+    activation: null,
   });
   const phone = testPhone(server);
   const app = phone.open();
@@ -876,4 +882,16 @@ it('answers empty ancillary reads from the default world through the app readers
   app.openAssistants();
   await vi.waitFor(() => expect(app.getSnapshot().assistants.status).toBe('ready'));
   expect(app.getSnapshot().assistants.assistants).toEqual([]);
+});
+
+it('answers an explicitly stated page without requiring a separate Group read', async () => {
+  const server = fakeSplitbook();
+  const groupId = 'b00000000000000000000009';
+  server.world.groups = [];
+  server.world.pages[`/api/groups/${groupId}/expenses`] = expensePage();
+  const cookie = server.auth.issue('alex');
+  const response = await server.fetch(`http://local/api/groups/${groupId}/expenses?page=1`, {
+    headers: { Cookie: cookie },
+  });
+  expect(parseExpensePage(await response.json(), groupId, 'INR').expenses).toEqual([]);
 });
