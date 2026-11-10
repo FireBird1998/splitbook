@@ -1,4 +1,9 @@
-import { Refusal, refusalAnswer, type RefusalCaller } from '@splitbook/shared/refusals';
+import {
+  Refusal,
+  refusalAnswer,
+  directRefusalAnswer,
+  type RefusalCaller,
+} from '@splitbook/shared/refusals';
 import { headers } from 'next/headers';
 import {
   DATABASE_UNAVAILABLE,
@@ -98,21 +103,24 @@ export function error(message: string, status: number = 400, code?: string) {
  * 401 Unauthorized response
  */
 export function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized', status: 401 }, { status: 401 });
+  const answer = directRefusalAnswer('unauthorized');
+  return NextResponse.json(answer, { status: answer.status });
 }
 
 /**
  * 403 Forbidden response
  */
 export function forbidden() {
-  return NextResponse.json({ error: 'Forbidden', status: 403 }, { status: 403 });
+  const answer = directRefusalAnswer('forbidden');
+  return NextResponse.json(answer, { status: answer.status });
 }
 
 /**
  * 404 Not Found response
  */
 export function notFound(resource: string = 'Resource') {
-  return NextResponse.json({ error: `${resource} not found`, status: 404 }, { status: 404 });
+  const answer = directRefusalAnswer('notFound', resource);
+  return NextResponse.json(answer, { status: answer.status });
 }
 
 /**

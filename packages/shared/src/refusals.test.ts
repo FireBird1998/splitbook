@@ -1,3 +1,4 @@
+import { directRefusalAnswer, directRefusalVocabulary } from './refusals';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { Refusal, refusalVocabulary, type RefusalCode } from './refusals';
 
@@ -77,4 +78,17 @@ it('catalogs request refusals and delegates money words to their rules', () => {
   expect(refusalVocabulary).not.toHaveProperty('BACKUP_ALL_TIME');
   expect(refusalVocabulary).not.toHaveProperty('GROUP_NOT_FOUND');
   expect(refusalVocabulary.INVALID_CURRENCY.status).toBe(400);
+});
+
+it('records code-less helper templates without extending RefusalCode', () => {
+  expect(directRefusalAnswer('unauthorized')).toEqual({ error: 'Unauthorized', status: 401 });
+  expect(directRefusalAnswer('forbidden')).toEqual({ error: 'Forbidden', status: 403 });
+  expect(directRefusalAnswer('notFound', 'Expense')).toEqual({
+    error: 'Expense not found',
+    status: 404,
+  });
+  expect(directRefusalAnswer('notFound')).toEqual({ error: 'Resource not found', status: 404 });
+  for (const entry of Object.values(directRefusalVocabulary)) expect(entry.includeCode).toBe(false);
+  expect(refusalVocabulary).not.toHaveProperty('UNAUTHORIZED');
+  expect(refusalVocabulary).not.toHaveProperty('NOT_FOUND');
 });
