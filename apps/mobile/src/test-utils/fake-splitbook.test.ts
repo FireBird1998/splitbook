@@ -711,3 +711,9 @@ it('reports a missing session without returning protected session data', async()
   const response=await server.fetch('http://local/api/auth/get-session',{headers:{Cookie:cookie}});
   expect(response.status).toBe(200);expect(parseSession(await response.json())).toBeNull();
 });
+
+it('keeps the server reason on a refused Google identity exchange',async()=>{
+ const server=fakeSplitbook();server.auth.signInStatus=403;server.auth.signInCode='email_not_allowed';
+ const response=await server.fetch('https://staging.splitbook.test/api/auth/sign-in/social',{method:'POST',body:'{"idToken":{"token":"alex-id"}}'});
+ expect(response.status).toBe(403);expect(await response.json()).toEqual({code:'email_not_allowed'});
+});
