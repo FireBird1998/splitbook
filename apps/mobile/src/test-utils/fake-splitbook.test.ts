@@ -1,3 +1,10 @@
+import {
+  parseRecordedBatch,
+  parseRecordedSettlement,
+  parseSettlementHistory,
+} from '../data/settlement';
+import { parseCreatedGroup } from '../data/dto';
+import { parseRateSuggestionResponse } from '@splitbook/shared/cross-currency-payment';
 import { describe, expect, it } from 'vitest';
 import { parseGroup, parseGroups, parseSession, parseSignIn } from '../data/dto';
 import { parseExpensePage, parseGroupBalances, parseHomeBalances } from '../data/financial-dto';
@@ -56,5 +63,67 @@ describe('fake Splitbook', () => {
       { method: 'GET', path: '/probe', body: undefined },
     ]);
     expect(server.unanswered).toEqual(['GET /probe']);
+  });
+  it('answers default payment reads and writes through their readers without applying writes to the world', async () => {
+    const server = fakeSplitbook();
+    const signed = await server.fetch('http://local/api/auth/demo-persona/sign-in', {
+      method: 'POST',
+      body: JSON.stringify({ personaId: 'alex' }),
+    });
+    const headers = { Cookie: signed.headers.get('Set-Cookie')!.split(';')[0] };
+    const call = async (path: string, body?: unknown) =>
+      (
+        await server.fetch('http://local' + path, {
+          headers,
+          ...(body === undefined ? {} : { method: 'POST', body: JSON.stringify(body) }),
+        })
+      ).json();
+    const id = server.world.groups[0]!._id,
+      base = `/api/groups/${id}`;
+    expect(parseSettlementHistory(await call(base + '/settlements'), id)).toEqual([]);
+    expect(
+      parseRateSuggestionResponse(await call(base + '/rates?from=EUR&to=INR'), {
+        from: 'EUR',
+        to: 'INR',
+      }),
+    ).toMatchObject({ suggestion: null });
+    const before = structuredClone(server.world);
+    expect(
+      parseCreatedGroup(
+        await call('/api/groups', { name: 'New home', category: 'home', defaultCurrency: 'INR' }),
+      ).name,
+    ).toBe('New home');
+    const plain = {
+      paidBy: server.world.people.alex.id,
+      paidTo: server.world.people.sam.id,
+      amount: 10,
+      currency: 'INR',
+      note: 'Cash',
+    };
+    expect(
+      parseRecordedSettlement(await call(base + '/settlements', plain), id, JSON.stringify(plain))
+        .amountMinor,
+    ).toBe(1000);
+    const batch = {
+      paidBy: plain.paidBy,
+      paidTo: plain.paidTo,
+      paidCurrency: 'INR',
+      settlements: [
+        { amount: 10, currency: 'INR' },
+        {
+          amount: 2,
+          currency: 'EUR',
+          amountPaidMinor: 18000,
+          appliedRate: '90',
+          rateKind: 'entered',
+        },
+      ],
+    };
+    expect(
+      parseRecordedBatch(await call(base + '/settlements/batch', batch), id, JSON.stringify(batch))
+        .totalPaidMinor,
+    ).toBe(19000);
+    expect(server.world).toEqual(before);
+    expect(server.unanswered).toEqual([]);
   });
 });
