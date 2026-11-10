@@ -3,9 +3,10 @@ import type {
   DraftReview,
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
-import { createMobileController, type MobileController } from './mobile-controller';
-import type { MobileFetch } from './types';
-import { savedQueriesIn } from '../test-utils/saved-queries';
+import type { MobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 
 const user = {
   id: 'a00000000000000000000001',
@@ -59,24 +60,6 @@ const item = (index: number, complete = false): DraftReview => {
   } as PersistedExpenseDraft;
   return { draft, review: 'a'.repeat(64), problems: [], duplicates: [] };
 };
-function memory() {
-  const values = new Map<string, unknown>();
-  return {
-    load: async (account: string, id: string) =>
-      structuredClone(values.get(`${account}:${id}`) ?? null),
-    save: async (account: string, id: string, value: unknown) =>
-      void values.set(`${account}:${id}`, structuredClone(value)),
-    remove: async (account: string, id: string) => void values.delete(`${account}:${id}`),
-    clear: async () => values.clear(),
-    list: async (account: string) =>
-      [...values]
-        .filter(([key]) => key.startsWith(`${account}:`))
-        .map(([key, value]) => ({
-          groupId: key.slice(account.length + 1),
-          value: structuredClone(value),
-        })),
-  };
-}
 const controllers: MobileController[] = [];
 afterEach(() => {
   for (const controller of controllers.splice(0)) controller.dispose();
@@ -85,8 +68,6 @@ afterEach(() => {
 function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
   let held: Promise<void> | undefined;
   let operation = 0;
-  let creation: unknown = null;
-  let owner: string | null = null;
   let denied = false;
   let failing = false;
   let draftsOff = false;
@@ -111,46 +92,49 @@ function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
   };
   const currentGroup = () => ({ ...group, alternateCurrencies: extras });
   let groups = options.groups === false ? [] : [group];
-  let cookie: string | null = null;
-  const fetch: MobileFetch = async (url, init) => {
-    const path = new URL(url).pathname;
-    if (path.endsWith('/demo-persona/sign-in'))
-      return json({ user }, 200, 'better-auth.session_token=alex.signature; Max-Age=2592000');
-    if (path.endsWith('/get-session'))
-      return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
+  const backend = fakeSplitbook();
+  backend.world.people.alex = user;
+  Object.defineProperty(backend.world, 'groups', { get: () => [currentGroup()] });
+  Object.defineProperty(backend.world.groupsByAccount, user.id, { get: () => groups });
+  Object.defineProperty(backend.world, 'home', {
+    get: () => ({ buckets: [], groups: groups.map(() => ({ groupId, balances: [] })) }),
+  });
+  Object.defineProperty(backend.world, 'toReview', {
+    get: () => ({
+      total: items.length,
+      groups: items.length
+        ? [
+            {
+              groupId,
+              groupName: group.name,
+              currency: group.defaultCurrency,
+              alternateCurrencies: extras,
+              count: items.length,
+              items: items.map(reviewed),
+            },
+          ]
+        : [],
+    }),
+  });
+  backend.reply('*', '*', async ({ url, init }) => {
+    const path = url.pathname;
+    if (
+      ['/api/auth/demo-persona/sign-in', '/api/auth/get-session', '/api/auth/sign-out'].includes(
+        path,
+      )
+    )
+      return undefined;
     if (path === '/api/user/to-review') {
-      const reply = {
-        status: 200,
-        data: {
-          total: items.length,
-          groups: items.length
-            ? [
-                {
-                  groupId,
-                  groupName: group.name,
-                  currency: group.defaultCurrency,
-                  alternateCurrencies: extras,
-                  count: items.length,
-                  items: items.map(reviewed),
-                },
-              ]
-            : [],
-        },
-      };
+      const reply = { status: 200, data: backend.world.toReview };
       await held;
       if (failing) return json({ error: 'Unavailable', status: 500 }, 500);
       return json(reply);
     }
-    if (path === '/api/user/balances')
-      return json({
-        status: 200,
-        data: { buckets: [], groups: groups.map(() => ({ groupId, balances: [] })) },
-      });
     if (path === '/api/groups' && init.method === 'POST') {
       groups = [group];
       return json({ status: 201, data: group }, 201);
     }
-    if (path === '/api/groups') return json({ status: 200, data: groups });
+    if (path === '/api/groups' || path === '/api/user/balances') return undefined;
     if (path === `/api/groups/${groupId}`) {
       if (groupReadsFail) throw new TypeError('Network request failed');
       return denied
@@ -238,52 +222,37 @@ function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
       });
     if (path.endsWith('/balances')) return json({ status: 200, data: { byCurrency: [] } });
     return json({ error: 'Unavailable', status: 404 }, 404);
-  };
-  const drafts = memory(),
-    requests = memory();
+  });
   let deviceHeld: Promise<void> | undefined;
-  const list = drafts.list;
-  drafts.list = async (account: string) => {
-    await deviceHeld;
-    return list(account);
-  };
-  const saved = new Map<string, unknown>();
+  const native = testPhone(backend, {
+    origin: 'http://localhost:4433',
+    now: Date.parse(iso),
+    recordSeparator: ':',
+    draftRequestSeparator: ':',
+    newSubmissionKey: () => `fictional-433-${++operation}`,
+    purge: ['expenseDrafts', 'draftRequests'],
+    parts: {
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      tagRequests: undefined,
+      netInfo: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
+      },
+    },
+  });
+  delete native.stores.savedQueries.retainGroups;
+  const drafts = native.stores.expenseDrafts,
+    requests = native.stores.draftRequests;
+  for (const store of [drafts, requests]) delete (store as AccountGroupRecordStore).keys;
+  drafts.stallPersistently('list', () => deviceHeld ?? Promise.resolve());
+  native.stores.groupCreations.clear = async () => {};
   const makeController = () => {
-    const controller = createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4433',
-        authOrigin: 'http://localhost:4433',
-        developmentPersonaEnabled: true,
-      },
-      {
-        fetch,
-        now: () => Date.parse(iso),
-        newSubmissionKey: () => `fictional-433-${++operation}`,
-        credentials: {
-          load: async () => cookie,
-          save: async (next) => void (cookie = next),
-          clear: async () => void (cookie = null),
-        },
-        expenseDrafts: drafts,
-        draftRequests: requests,
-        groupCreations: {
-          load: async () => structuredClone(creation),
-          save: async (_account, value) => void (creation = structuredClone(value)),
-          remove: async () => void (creation = null),
-          clear: async () => undefined,
-        },
-        savedQueries: savedQueriesIn(saved),
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (next) => void (owner = next),
-            clear: async () => void (owner = null),
-          },
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [drafts, requests],
-        },
-      },
-    );
+    const controller = native.open();
     controllers.push(controller);
     return controller;
   };

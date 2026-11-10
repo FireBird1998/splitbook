@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { createMobileController, type MobileController } from './mobile-controller';
+import { describe, expect, it } from 'vitest';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { TagCommand, TagSnapshot } from '@splitbook/shared/tag-management';
 import type { AccountGroupRecordStore } from './account-record-storage';
 
@@ -18,13 +19,8 @@ const json = (data: unknown, status = 200, cookie?: string) =>
     status,
     headers: cookie ? { 'Set-Cookie': cookie } : {},
   });
-const controllers: MobileController[] = [];
-afterEach(() => controllers.splice(0).forEach((controller) => controller.dispose()));
 
 function phone() {
-  let cookie: string | null = null;
-  let account: string | null = null;
-  const records = new Map<string, unknown>();
   const networkListeners = new Set<
     (state: { isConnected: boolean; isInternetReachable?: boolean }) => void
   >();
@@ -44,23 +40,6 @@ function phone() {
     result: null as unknown,
     holdPost: null as null | Promise<void>,
   };
-  const tagRequests: AccountGroupRecordStore = {
-    load: async (accountId, id) => structuredClone(records.get(accountId + id) ?? null),
-    save: async (accountId, id, value) => {
-      if (server.failStorage) throw new Error('disk full');
-      records.set(accountId + id, structuredClone(value));
-    },
-    remove: async (accountId, id) => {
-      records.delete(accountId + id);
-    },
-    clear: async () => {
-      records.clear();
-    },
-    keys: async (accountId) =>
-      [...records.keys()]
-        .filter((key) => key.startsWith(accountId))
-        .map((key) => key.slice(accountId.length)),
-  };
   const group = () => ({
     _id: groupId,
     name: 'Harbour Flat',
@@ -71,111 +50,110 @@ function phone() {
     createdAt: iso,
     updatedAt: iso,
   });
-  const boot = () => {
-    const controller = createMobileController(
-      {
-        apiBaseUrl: 'http://tags.example.test',
-        authOrigin: 'http://tags.example.test',
-        developmentPersonaEnabled: true,
-      },
-      {
-        tagRequests,
-        netInfo: {
-          addEventListener: (listener) => {
-            networkListeners.add(listener);
-            return () => {
-              networkListeners.delete(listener);
-            };
-          },
-        },
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        accountLocal: {
-          owner: {
-            load: async () => account,
-            save: async (value) => {
-              account = value;
-            },
-            clear: async () => {
-              account = null;
-            },
-          },
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [tagRequests],
-        },
-        newSubmissionKey: () => requestId,
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname;
-          if (path.endsWith('/sign-in'))
-            return json({ user }, 200, 'better-auth.session_token=test.signature');
-          if (path.endsWith('/get-session'))
-            return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
-          if (path.endsWith('/sign-out')) return json({});
-          if (path.includes('/tag-actions')) {
-            if (server.denial)
-              return server.denial === 'unreadable'
-                ? {
-                    ok: false,
-                    status: 403,
-                    headers: new Headers(),
-                    json: async () => {
-                      throw new SyntaxError('body unavailable');
-                    },
-                  }
-                : json({ code: server.denial, error: 'Permission changed' }, 403);
-            if (init.method === 'POST') {
-              const command = JSON.parse(String(init.body)) as TagCommand;
-              server.submitted.push(command);
-              if (server.holdPost) await server.holdPost;
-              if (server.failure)
-                return json(
-                  {
-                    code: server.failure.code,
-                    error: 'Tag action unavailable',
-                    snapshot: server.snapshot,
-                  },
-                  server.failure.status,
-                );
-              if (server.apply)
-                server.result ??= {
-                  state: 'applied',
-                  requestId: command.requestId,
-                  receipt: { intent: command.intent, tagId, appliedAt: iso },
-                  snapshot: server.snapshot,
-                };
-              if (server.lostReply) throw new TypeError('reply lost');
-              return json({ data: { ...Object(server.result), snapshot: server.snapshot } });
+  const backend = fakeSplitbook();
+  backend.world.people.alex = user;
+  Object.defineProperty(backend.world, 'groups', { get: () => [group()] });
+  Object.defineProperty(backend.world.groupsByAccount, user.id, {
+    get: () => (server.groupDenied ? [] : [group()]),
+  });
+  Object.defineProperty(backend.world.tags, groupId, { get: () => server.snapshot });
+  backend.reply('*', '*', async ({ url, init }) => {
+    const path = url.pathname;
+    if (
+      ['/api/auth/demo-persona/sign-in', '/api/auth/get-session', '/api/auth/sign-out'].includes(
+        path,
+      )
+    )
+      return undefined;
+    if (path.includes('/tag-actions')) {
+      if (server.denial)
+        return server.denial === 'unreadable'
+          ? {
+              ok: false,
+              status: 403,
+              headers: new Headers(),
+              json: async () => {
+                throw new SyntaxError('body unavailable');
+              },
             }
-            if (path.endsWith('/tag-actions')) {
-              server.tagReads++;
-              return json({ data: server.snapshot });
-            }
-            return json({
-              data: server.result
-                ? { ...Object(server.result), snapshot: server.snapshot }
-                : { state: 'not-applied', requestId, snapshot: server.snapshot },
-            });
-          }
-          if (path === '/api/groups') return json({ data: server.groupDenied ? [] : [group()] });
-          if (path === `/api/groups/${groupId}`)
-            return server.groupDenied
-              ? json({ error: 'Not a member' }, 403)
-              : json({ data: group() });
-          if (path === '/api/user/balances') return json({ data: { buckets: [] } });
-          return json({ data: {} });
+          : json({ code: server.denial, error: 'Permission changed' }, 403);
+      if (init.method === 'POST') {
+        const command = JSON.parse(String(init.body)) as TagCommand;
+        server.submitted.push(command);
+        if (server.holdPost) await server.holdPost;
+        if (server.failure)
+          return json(
+            {
+              code: server.failure.code,
+              error: 'Tag action unavailable',
+              snapshot: server.snapshot,
+            },
+            server.failure.status,
+          );
+        if (server.apply)
+          server.result ??= {
+            state: 'applied',
+            requestId: command.requestId,
+            receipt: { intent: command.intent, tagId, appliedAt: iso },
+            snapshot: server.snapshot,
+          };
+        if (server.lostReply) throw new TypeError('reply lost');
+        return json({ data: { ...Object(server.result), snapshot: server.snapshot } });
+      }
+      if (path.endsWith('/tag-actions')) {
+        server.tagReads++;
+        return undefined;
+      }
+      return json({
+        data: server.result
+          ? { ...Object(server.result), snapshot: server.snapshot }
+          : { state: 'not-applied', requestId, snapshot: server.snapshot },
+      });
+    }
+    if (path === `/api/groups/${groupId}` && server.groupDenied)
+      return json({ error: 'Not a member' }, 403);
+    if (
+      path === '/api/groups' ||
+      path === '/api/user/balances' ||
+      path === `/api/groups/${groupId}`
+    )
+      return undefined;
+    // The original fixture’s unsupported reads returned malformed empty data, not real pages.
+    return json({ data: {} });
+  });
+  const native = testPhone(backend, {
+    origin: 'http://tags.example.test',
+    purge: ['tagRequests'],
+    newSubmissionKey: () => requestId,
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      groupCreations: undefined,
+      netInfo: {
+        addEventListener(listener) {
+          networkListeners.add(listener);
+          return () => {
+            networkListeners.delete(listener);
+          };
         },
       },
-    );
-    controllers.push(controller);
-    return controller;
-  };
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
+      },
+    },
+  });
+  const tagRequests = native.stores.tagRequests;
+  delete (tagRequests as AccountGroupRecordStore).list;
+  tagRequests.failPersistently('save', new Error('disk full'), () => server.failStorage);
+  const boot = () => native.open();
+
   return {
     boot,
     server,

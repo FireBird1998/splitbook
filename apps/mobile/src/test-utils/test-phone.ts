@@ -1,4 +1,5 @@
-import { onTestFinished } from 'vitest';
+import { onTestFinished, vi } from 'vitest';
+import { notificationDevice } from './notification';
 import { createCheckedMobileController } from './flow-monitor';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { AccountLocalStorage, MobileConfig, MobileDependencies } from '../data/types';
@@ -188,6 +189,7 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
     config?: Partial<MobileConfig>;
     recordSeparator?: string;
     settlementSeparator?: string;
+    draftRequestSeparator?: string;
     newSubmissionKey?: () => string;
     parts?: Omit<PhoneParts, 'savedQueries'> & { savedQueries?: Queries };
     purge?: readonly PurgeStore[];
@@ -219,7 +221,7 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
     savedQueries: queries,
     expenseDrafts: records(false, options.recordSeparator),
     settlementAttempts: records(false, options.settlementSeparator),
-    draftRequests: records(),
+    draftRequests: records(false, options.draftRequestSeparator),
     tagRequests: records(),
     groupCreations: (() => {
       const rows = new Map<string, unknown>();
@@ -376,4 +378,25 @@ export function until(
       resolve();
     });
   });
+}
+
+/** Native notification boundary shared by controller suites; each instance keeps its own spies. */
+export function notificationNative(
+  options: { installation?: { id: string; key: string }; token?: string } = {},
+) {
+  type Permission = Awaited<
+    ReturnType<NonNullable<MobileDependencies['notifications']>['permission']>
+  >;
+  return {
+    installation: options.installation
+      ? async () => ({ ...options.installation! })
+      : notificationDevice.installation,
+    permission: vi.fn<() => Promise<Permission>>(notificationDevice.permission),
+    requestPermission: vi.fn<() => Promise<Permission>>(notificationDevice.requestPermission),
+    token: vi.fn(
+      options.token === undefined ? notificationDevice.token : async () => options.token!,
+    ),
+    clear: vi.fn(notificationDevice.clear),
+    openSettings: vi.fn(notificationDevice.openSettings),
+  };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
-import { savedQueriesIn } from '../test-utils/saved-queries';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 
 // #622: Account → Connected assistants on Android. It reads the same connection list and
 // Disconnect as the web, counts each assistant's Groups from the member's Groups, keeps a Saved
@@ -52,63 +52,26 @@ function fixture() {
     holdNextSave: null as Promise<void> | null,
     connections: [helper, reader],
   };
-  let cookie: string | null = null,
-    owner: string | null = null,
-    identity: unknown = null,
-    cleanup = false;
-  const cache = new Map<string, unknown>();
-  const rows = savedQueriesIn(cache);
-  const savedQueries = {
-    ...rows,
-    save: async (account: string, path: string, value: unknown) => {
-      if (path === connectionsPath) {
-        const hold = server.holdNextSave;
-        server.holdNextSave = null;
-        await hold;
-      }
-      await rows.save(account, path, value);
-    },
-    remove: async (account: string, path: string) => {
-      if (server.failRemoval) throw new Error('The device storage is full');
-      await rows.remove(account, path);
-    },
-  };
-  type ConnectionState = { isConnected: boolean | null; isInternetReachable?: boolean | null };
-  /** What NetInfo last reported, once a test has reported something. */
-  let connectionState: ConnectionState | null = null;
-  const connection = new Set<(state: ConnectionState) => void>();
-  const untrusted = { current: null as unknown };
-  const record = (value: { current: unknown }) => ({
-    load: async () => structuredClone(value.current),
-    save: async (next: unknown) => {
-      value.current = structuredClone(next);
-    },
-    clear: async () => {
-      value.current = null;
-    },
-  });
   const json = (body: unknown, status = 200) => Response.json(body, { status });
   /** Every request sent so far, as `METHOD /path`, with each POST's body. */
   const requests: string[] = [];
   const bodies: unknown[] = [];
   const respond = async (path: string, init: RequestInit) => {
     const method = init.method ?? 'GET';
-    if (path.endsWith('/sign-in'))
-      return new Response(JSON.stringify({ user: { ...alex, image: null } }), {
-        headers: { 'Set-Cookie': 'better-auth.session_token=Alex.signature; Path=/' },
-      });
-    if (path.endsWith('/get-session'))
-      return json({
-        user: { ...alex, image: null },
-        session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00.000Z' },
-      });
-    if (path.endsWith('/sign-out')) return json({ success: true });
-    if (path === '/api/groups') return json({ status: 200, data: [] });
-    if (path === '/api/user/balances')
-      return json({ status: 200, data: { buckets: [], groups: [] } });
+    if (
+      [
+        '/api/auth/demo-persona/sign-in',
+        '/api/auth/get-session',
+        '/api/auth/sign-out',
+        '/api/groups',
+        '/api/user/balances',
+      ].includes(path)
+    )
+      return undefined;
     if (path === connectionsPath || path.startsWith(`${connectionsPath}?`)) {
       if (server.assistantsOff) return json({ message: 'Not found' }, 404);
-      const connections = server.connections,
+      const connections = (backend.world.connections as { connections: typeof server.connections })
+          .connections,
         hold = server.holdNextRead;
       server.holdNextRead = null;
       await hold;
@@ -126,10 +89,7 @@ function fixture() {
       return json({
         status: 200,
         data: {
-          groups: [
-            { id: maple, name: 'Maple House', rule: 'allowed' },
-            { id: lunch, name: 'Studio Lunch Club', rule: 'allowed' },
-          ],
+          ...(backend.world.assistantGroups as { groups: unknown[] }),
         },
       });
     }
@@ -143,73 +103,73 @@ function fixture() {
     }
     throw new Error(`Unexpected fixture request ${method} ${path}`);
   };
-  const create = (now?: () => number) =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4157',
-        authOrigin: 'http://localhost:4157',
-        developmentPersonaEnabled: true,
+  const backend = fakeSplitbook();
+  backend.world.people.alex = { ...alex, image: null };
+  backend.world.groups = [];
+  backend.world.home = { buckets: [], groups: [] };
+  Object.defineProperty(backend.world, 'connections', {
+    get: () => ({
+      resource: 'http://localhost:4157/api/mcp',
+      connections: server.connections,
+      nextOffset: null,
+    }),
+  });
+  backend.world.assistantGroups = {
+    groups: [
+      { id: maple, name: 'Maple House', rule: 'allowed' },
+      { id: lunch, name: 'Studio Lunch Club', rule: 'allowed' },
+    ],
+  };
+  Object.defineProperty(server, 'offline', {
+    get: () => !backend.online,
+    set: (value: boolean) => {
+      backend.online = !value;
+    },
+  });
+  backend.reply('*', '*', ({ path, init }) => respond(path, init));
+  const fetch: typeof backend.fetch = (url, init) => {
+    requests.push(`${init.method ?? 'GET'} ${new URL(url).pathname}${new URL(url).search}`);
+    return backend.fetch(url, init);
+  };
+  const native = testPhone(
+    {
+      fetch,
+      get online() {
+        return backend.online;
       },
-      {
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity),
-          save: async (value) => {
-            identity = structuredClone(value);
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
-        savedQueries,
-        now,
-        netInfo: {
-          // As NetInfo does, a new listener hears the connection as it is now.
-          addEventListener: (listener) => {
-            connection.add(listener);
-            listener(connectionState ?? { isConnected: !server.offline });
-            return () => connection.delete(listener);
-          },
-        },
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          untrustedCopies: record(untrusted),
-          stores: [savedQueries, record(untrusted)],
-        },
-        fetch: async (url, init) => {
-          const address = new URL(url);
-          const path = address.pathname + address.search;
-          requests.push(`${init.method ?? 'GET'} ${path}`);
-          if (server.offline) throw new TypeError('Network request failed');
-          return respond(path, init);
-        },
+      set online(v: boolean) {
+        backend.online = v;
       },
-    );
+    },
+    {
+      origin: 'http://localhost:4157',
+      purge: ['savedQueries', 'untrustedCopies'],
+      parts: {
+        pendingInvitation: undefined,
+        expenseDrafts: undefined,
+        settlementAttempts: undefined,
+        draftRequests: undefined,
+        tagRequests: undefined,
+        groupCreations: undefined,
+        newSubmissionKey: undefined,
+        accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
+      },
+    },
+  );
+  const rows = native.stores.savedQueries,
+    cache = rows.records;
+  delete rows.retainGroups;
+  rows.at(connectionsPath).stallPersistently('save', () => {
+    const held = server.holdNextSave;
+    server.holdNextSave = null;
+    return held ?? Promise.resolve();
+  });
+  rows.failPersistently(
+    'remove',
+    new Error('The device storage is full'),
+    () => server.failRemoval,
+  );
+  const create = (now?: () => number) => native.open({ parts: { now } });
   /** The assistants this phone keeps for Alex, by name, or null when it keeps none. */
   const savedAssistants = () => {
     const row = cache.get(alex.id + connectionsPath) as
@@ -218,12 +178,9 @@ function fixture() {
     return row ? row.value.connections.connections.map((connection) => connection.name) : null;
   };
   /** NetInfo reports the device's connection, and whether it reaches the internet. */
-  const connect = (isConnected: boolean, isInternetReachable?: boolean | null) => {
-    const state = { isConnected, isInternetReachable };
-    server.offline = !isConnected || isInternetReachable === false;
-    connectionState = state;
-    connection.forEach((listener) => listener(state));
-  };
+  const connect = (isConnected: boolean, isInternetReachable?: boolean | null) =>
+    native.connect(isConnected, isInternetReachable);
+
   return {
     create,
     server,

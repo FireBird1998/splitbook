@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createMobileController } from './mobile-controller';
-import { savedQueriesIn } from '../test-utils/saved-queries';
+import type { MobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import { notificationTaskProtected } from './notification-alerts';
 import type { WidgetCopy } from '@splitbook/shared/balances-widget';
 import { groupWidget } from '@splitbook/shared/group-widget';
@@ -10,14 +12,10 @@ const alex = { id: 'a00000000000000000000001', name: 'Alex Rivera', email: 'alex
 const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
 const tagId = 'e00000000000000000000001';
 const groupId = 'b00000000000000000000001';
-const controllers: ReturnType<typeof createMobileController>[] = [];
+const controllers: MobileController[] = [];
 const verified = Date.parse('2026-11-08T04:11:00Z');
 function fixture(extraMembers: (typeof alex)[] = []) {
   let user = alex,
-    cookie: string | null = null,
-    owner: string | null = alex.id,
-    cleanup = false;
-  let offline = false,
     expired = false,
     owed = 2400;
   let groupBalances: unknown = { byCurrency: [] };
@@ -25,10 +23,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
   let offlineAfterSave = false;
   let noGroups = false;
   let archived = false;
-  let identity: unknown = null;
-  const rows = new Map<string, unknown>();
   let hold: Promise<void> | undefined;
-  const drafts = new Map<string, unknown>();
   const requests: { path: string; method: string }[] = [];
   const copies: WidgetCopy[] = [];
   const events: string[] = [];
@@ -58,208 +53,136 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     createdAt: '2026-11-01T00:00:00Z',
     updatedAt: '2026-11-01T00:00:00Z',
   });
+  const backend = fakeSplitbook();
+  backend.world.people.alex = { ...alex, image: null };
+  backend.world.people.sam = { ...sam, image: null };
+  backend.auth.cookie = () => 'better-auth.session_token=fictional.signature';
+  Object.defineProperty(backend.world, 'groups', { get: () => [group()] });
+  for (const id of [alex.id, sam.id])
+    Object.defineProperty(backend.world.groupsByAccount, id, {
+      get: () => (noGroups || archived ? [] : [group()]),
+    });
+  Object.defineProperty(backend.world.balances, groupId, { get: () => groupBalances });
+  Object.defineProperty(backend.world, 'home', {
+    get: () => ({
+      buckets: [
+        { currency: 'INR', youOwe: 1480, youAreOwed: owed, net: owed - 1480 },
+        { currency: 'EUR', youOwe: 0, youAreOwed: 40, net: 40 },
+      ],
+      groups: [
+        { groupId, name: 'Maple House', balances: [{ currency: 'INR', balance: owed - 1480 }] },
+      ],
+    }),
+  });
+  backend.world.toReview = { total: 0, groups: [] };
+  backend.reply('*', '*', ({ url, init }) => {
+    const path = url.pathname;
+    requests.push({ path, method: init.method ?? 'GET' });
+    if (path === '/api/auth/demo-persona/sign-in') {
+      user = JSON.parse(String(init.body)).personaId === 'sam' ? sam : alex;
+      return undefined;
+    }
+    if (['/api/auth/get-session', '/api/auth/sign-out'].includes(path)) return undefined;
+    if (expired) return Response.json({ error: 'Session expired' }, { status: 401 });
+    if (path === `/api/groups/${groupId}` && refused)
+      return Response.json({ error: 'Not a member' }, { status: refused });
+    if (path === `/api/groups/${groupId}`) return Response.json({ status: 200, data: group() });
+    if (path.endsWith('/expenses') && init.method === 'POST') {
+      owed = 2500;
+      if (offlineAfterSave) backend.online = false;
+      return Response.json({
+        status: 201,
+        data: {
+          _id: 'c00000000000000000000001',
+          group: groupId,
+          ...JSON.parse(String(init.body)),
+          revision: 1,
+          isDeleted: false,
+          createdAt: '2026-11-08T00:00:00Z',
+          updatedAt: '2026-11-08T00:00:00Z',
+        },
+      });
+    }
+    if (path === `/api/groups/${groupId}/expenses/c00000000000000000000001`)
+      return Response.json({
+        status: 200,
+        data: {
+          _id: 'c00000000000000000000001',
+          group: groupId,
+          createdBy: alex.id,
+          description: 'Saved groceries',
+          amount: 100,
+          amountMinor: 10000,
+          moneyVersion: 1,
+          currency: 'INR',
+          category: 'food',
+          tag: 'Groceries',
+          tagId,
+          date: '2026-11-08T00:00:00Z',
+          paidBy: [{ user: { ...alex, _id: alex.id }, amount: 100, amountMinor: 10000 }],
+          splitBetween: [{ user: { ...alex, _id: alex.id }, amount: 100, amountMinor: 10000 }],
+          splitMethod: 'equal',
+          revision: 1,
+          isDeleted: false,
+          createdAt: '2026-11-08T00:00:00Z',
+          updatedAt: '2026-11-08T00:00:00Z',
+        },
+      });
+    if (path === `/api/groups/${groupId}/balances` || path.endsWith('/expenses')) return undefined;
+    return undefined;
+  });
+  const native = testPhone(backend, {
+    origin: 'http://localhost:4986',
+    newSubmissionKey: () => 'widget-expense-fictional-986',
+    parts: {
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      settlementAttempts: {
+        load: async () => null,
+        save: async () => {},
+        remove: async () => {},
+        clear: async () => {},
+      },
+      widgets: {
+        write: async (copy) => {
+          await hold;
+          copies.push(structuredClone(copy));
+          events.push('write:' + copy.accountId);
+        },
+        clear: async () => {
+          events.push('clear');
+        },
+        setSession: async (state) => {
+          events.push(state.status);
+        },
+        redraw: async () => {
+          events.push('redraw');
+        },
+      },
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        stores: [
+          {
+            clear: async (): Promise<void> => {
+              native.stores.savedQueries.records.clear();
+              events.push('account-purged');
+            },
+          },
+        ],
+      },
+    },
+  });
+  native.stores.owner.value = alex.id;
+  delete native.stores.savedQueries.retainGroups;
+  delete (native.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  native.stores.expenseDrafts.list = async () => [];
   const make = () => {
-    const controller = createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4986',
-        authOrigin: 'http://localhost:4986',
-        developmentPersonaEnabled: true,
-      },
-      {
-        widgets: {
-          write: async (copy) => {
-            await hold;
-            copies.push(structuredClone(copy));
-            events.push('write:' + copy.accountId);
-          },
-          clear: async () => {
-            events.push('clear');
-          },
-          setSession: async (state) => {
-            events.push(state.status);
-          },
-          redraw: async () => {
-            events.push('redraw');
-          },
-        },
-        settlementAttempts: {
-          load: async () => null,
-          save: async () => {},
-          remove: async () => {},
-          clear: async () => {},
-        },
-        newSubmissionKey: () => 'widget-expense-fictional-986',
-        expenseDrafts: {
-          load: async (account, id) => drafts.get(account + id) ?? null,
-          save: async (account, id, value) => {
-            drafts.set(account + id, structuredClone(value));
-          },
-          remove: async (account, id) => {
-            drafts.delete(account + id);
-          },
-          clear: async () => {
-            drafts.clear();
-          },
-          list: async () => [],
-        },
-        savedQueries: savedQueriesIn(rows),
-        offlineIdentity: {
-          load: async () => identity,
-          save: async (value) => {
-            identity = structuredClone(value);
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          stores: [
-            {
-              clear: async () => {
-                rows.clear();
-                events.push('account-purged');
-              },
-            },
-          ],
-        },
-        fetch: async (url, init) => {
-          if (offline) throw new Error('Offline');
-          const path = new URL(url).pathname;
-          requests.push({ path, method: init.method ?? 'GET' });
-          if (path.endsWith('/sign-in')) {
-            user = JSON.parse(String(init.body)).personaId === 'sam' ? sam : alex;
-            return Response.json(
-              { user },
-              {
-                headers: {
-                  'Set-Cookie': 'better-auth.session_token=fictional.signature; Max-Age=2592000',
-                },
-              },
-            );
-          }
-          if (path.endsWith('/get-session'))
-            return Response.json({
-              user,
-              session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' },
-            });
-          if (path.endsWith('/sign-out')) return Response.json({ success: true });
-          if (expired) return Response.json({ error: 'Session expired' }, { status: 401 });
-          if (path === `/api/groups/${groupId}` && refused)
-            return Response.json({ error: 'Not a member' }, { status: refused });
-          if (path === `/api/groups/${groupId}`)
-            return Response.json({ status: 200, data: group() });
-          if (path.endsWith('/expenses') && init.method === 'POST') {
-            owed = 2500;
-            if (offlineAfterSave) offline = true;
-            return Response.json({
-              status: 201,
-              data: {
-                _id: 'c00000000000000000000001',
-                group: groupId,
-                ...JSON.parse(String(init.body)),
-                revision: 1,
-                isDeleted: false,
-                createdAt: '2026-11-08T00:00:00Z',
-                updatedAt: '2026-11-08T00:00:00Z',
-              },
-            });
-          }
-          if (path === `/api/groups/${groupId}/expenses/c00000000000000000000001`)
-            return Response.json({
-              status: 200,
-              data: {
-                _id: 'c00000000000000000000001',
-                group: groupId,
-                createdBy: alex.id,
-                description: 'Saved groceries',
-                amount: 100,
-                amountMinor: 10000,
-                moneyVersion: 1,
-                currency: 'INR',
-                category: 'food',
-                tag: 'Groceries',
-                tagId,
-                date: '2026-11-08T00:00:00Z',
-                paidBy: [{ user: { ...alex, _id: alex.id }, amount: 100, amountMinor: 10000 }],
-                splitBetween: [
-                  { user: { ...alex, _id: alex.id }, amount: 100, amountMinor: 10000 },
-                ],
-                splitMethod: 'equal',
-                revision: 1,
-                isDeleted: false,
-                createdAt: '2026-11-08T00:00:00Z',
-                updatedAt: '2026-11-08T00:00:00Z',
-              },
-            });
-          if (path.endsWith('/expenses'))
-            return Response.json({
-              status: 200,
-              data: {
-                expenses: [],
-                pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-                summary: {
-                  count: 0,
-                  totalsByCurrency: [],
-                  userOwes: 0,
-                  userGetsBack: 0,
-                  byMember: [],
-                },
-              },
-            });
-          if (path === `/api/groups/${groupId}/balances`)
-            return Response.json({ status: 200, data: groupBalances });
-          if (path === '/api/groups')
-            return Response.json({ status: 200, data: noGroups || archived ? [] : [group()] });
-          if (path === '/api/user/balances')
-            return Response.json({
-              status: 200,
-              data: {
-                buckets: [
-                  { currency: 'INR', youOwe: 1480, youAreOwed: owed, net: owed - 1480 },
-                  { currency: 'EUR', youOwe: 0, youAreOwed: 40, net: 40 },
-                ],
-                groups: [
-                  {
-                    groupId,
-                    name: 'Maple House',
-                    balances: [{ currency: 'INR', balance: owed - 1480 }],
-                  },
-                ],
-              },
-            });
-          if (path === '/api/user/to-review')
-            return Response.json({ status: 200, data: { total: 0, groups: [] } });
-          throw new Error(`Unexpected ${path}`);
-        },
-      },
-    );
+    const controller = native.open();
     controllers.push(controller);
     return controller;
   };
@@ -291,7 +214,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     requests,
     events,
     offline: () => {
-      offline = true;
+      backend.online = false;
     },
     expire: () => {
       expired = true;
