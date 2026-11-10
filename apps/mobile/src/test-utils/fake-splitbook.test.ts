@@ -1,3 +1,4 @@
+import { parseTripSummaryResponse } from '@splitbook/shared/trip-summary-read';
 import { createTransport } from '../data/transport';
 import { manualTimer, within, gatewayFailures } from './transport-faults';
 import {
@@ -311,5 +312,40 @@ describe('fake Splitbook', () => {
     expect(
       parseRateSuggestionResponse(await read(`/api/groups/${id}/rates?from=EUR&to=INR`)),
     ).toMatchObject({ suggestion: { rate: '92.1', source: 'frankfurter' } });
+  });
+  it('answers a default Trip summary and a chosen currency through the Trip reader', async () => {
+    const server = fakeSplitbook(),
+      id = server.world.groups[0]!._id;
+    const signed = await server.fetch('http://local/api/auth/demo-persona/sign-in', {
+      method: 'POST',
+      body: '{"personaId":"alex"}',
+    });
+    const Cookie = signed.headers.get('Set-Cookie')!.split(';')[0];
+    const read = async (query: string) =>
+      parseTripSummaryResponse(
+        await (
+          await server.fetch(
+            `http://local/api/groups/${id}/trip-summary?tz=Asia%2FKolkata${query}`,
+            { headers: { Cookie } },
+          )
+        ).json(),
+      );
+    const empty = await read('');
+    expect(empty).toMatchObject({
+      timeZone: 'Asia/Kolkata',
+      currency: 'INR',
+      spentMinor: 0,
+      expenseCount: 0,
+      hasExpenses: false,
+    });
+    server.world.tripSummaries[id] = {
+      EUR: { ...empty, currency: 'EUR', spentMinor: 2000, expenseCount: 1, hasExpenses: true },
+    };
+    expect(await read('&currency=EUR')).toMatchObject({
+      currency: 'EUR',
+      spentMinor: 2000,
+      expenseCount: 1,
+    });
+    expect(server.unanswered).toEqual([]);
   });
 });
