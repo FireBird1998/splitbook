@@ -91,8 +91,9 @@ Successful writes return a reply built from the request and leave the world alon
 `server.requests` keeps method, path (with query), headers and body in order;
 `server.unanswered` lists requests answered with the fallback 404.
 
-`phone.open()` again restarts on the same stores. Inspect `phone.stores`, change
-`phone.clock.now`, or use `phone.connect(false)` and `phone.connect(true)`. Each store offers
+`phone.open()` again restarts on the same stores. Inspect `phone.stores`, or use
+`phone.connect(false)` and `phone.connect(true)`. A phone runs on the platform clock unless the
+test gives it one (`testPhone(server, { now })`); then `phone.clock.now` moves it. Each store offers
 `failNext('save')`, `stallNext('save', promise)` and `holdNext('save')` (wait for `arrived`, then
 `release()`). Use `server.fault` for the shared transport faults. Controllers are flow-monitored
 by default. The existing ceilings command and gate also check `directControllerTestFiles` in

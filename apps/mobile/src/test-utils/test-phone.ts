@@ -141,7 +141,19 @@ export function testPhone(
       });
     })(),
   };
-  const clock = { now: options.now ?? Date.now() };
+  // A suite that never set `now` ran on the platform clock, and vitest's fake timers; one that set
+  // it moves this clock, and TanStack Query's with it (`./query-clock.ts`).
+  const injected = options.now !== undefined;
+  let moment = options.now ?? 0;
+  const clock = {
+    get now() {
+      return injected ? moment : Date.now();
+    },
+    set now(next: number) {
+      if (!injected) throw new Error('Give the phone a `now` to move its clock.');
+      moment = next;
+    },
+  };
   let online = server.online,
     key = 0,
     active: MobileController | undefined;
@@ -165,7 +177,7 @@ export function testPhone(
         };
       },
     },
-    now: () => clock.now,
+    ...(injected ? { now: () => clock.now } : {}),
     newSubmissionKey: options.newSubmissionKey ?? (() => `test-phone-key-${++key}`),
     ...options.parts,
   };
@@ -175,6 +187,7 @@ export function testPhone(
     signOutRecord: stores.signOutRecord,
     financialCleanup: stores.financialCleanup,
     untrustedCopies: stores.untrustedCopies,
+    // A part a test took away (`parts: { savedQueries: undefined }`) is not a store to purge.
     stores: [
       parts.savedQueries,
       parts.offlineIdentity,
@@ -185,7 +198,7 @@ export function testPhone(
       parts.groupCreations,
       stores.financialCleanup,
       stores.untrustedCopies,
-    ],
+    ].filter((store) => store !== undefined),
   };
   const phone = {
     stores,

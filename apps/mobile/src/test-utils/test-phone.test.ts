@@ -203,11 +203,9 @@ describe('test phone', () => {
       phone = testPhone(server, { parts: { savedQueries: undefined, tagRequests: undefined } });
     const app = phone.open();
     await app.signIn('alex');
-    await phone.stores.expenseDrafts.save(
-      'a00000000000000000000001',
-      'b00000000000000000000001',
-      { kept: 'until sign-out' },
-    );
+    await phone.stores.expenseDrafts.save('a00000000000000000000001', 'b00000000000000000000001', {
+      kept: 'until sign-out',
+    });
     await app.signOut();
     expect(app.getSnapshot().auth).toMatchObject({ status: 'signed-out', message: null });
     expect(phone.stores.expenseDrafts.records.size).toBe(0);
