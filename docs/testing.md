@@ -66,8 +66,8 @@ Each package's `src/test-time-zone.test.ts` names the zone the run resolved to.
 ## Android test phone and fake Splitbook
 
 `src/test-utils/test-phone.ts` owns the in-memory phone; `fake-splitbook.ts` answers HTTP.
-The Settle up controller and form-correction suites use them. A test can start on the default
-world, then state only what differs:
+The Settle up, payment, Balances, financial-view, Trip-summary and form-correction suites use
+them. A test can start on the default world, then state only what differs:
 
 ```ts
 import { testPhone } from './test-utils/test-phone';
@@ -89,13 +89,23 @@ Change `server.world` for subsequent reads. `server.reply(method, path, request 
 can return `undefined` to use the normal answer, including after awaiting a held reply.
 Successful writes return a reply built from the request and leave the world alone.
 `server.requests` keeps method, path (with query), headers and body in order;
-`server.unanswered` lists requests answered with the fallback 404.
+`server.unanswered` lists requests answered with the fallback 404. `server.sent()` is a live
+method/path view; `{ query: false }` omits queries without changing the full log. `until(app,
+ready)` from the phone module waits for a public snapshot condition. The payment fixtures can
+use `rateSuggestion` and `expenseFixture`; `world.tripSummaries[groupId]` holds the default
+(`''`) and chosen-currency reads in wire shape.
+
+Keep the parts a suite originally supplied. `parts: { savedQueries: undefined }` takes one away;
+`accountLocal: undefined` takes away account storage entirely. Optional account fields can be
+omitted independently, and `purge` can name the original fixture's purge list. These preserve
+a test's starting conditions instead of adding storage or cleanup during its move.
 
 `phone.open()` again restarts on the same stores. Inspect `phone.stores`, or use
 `phone.connect(false)` and `phone.connect(true)`. A phone runs on the platform clock unless the
 test gives it one (`testPhone(server, { now })`); then `phone.clock.now` moves it. Each store offers
 `failNext('save')`, `stallNext('save', promise)` and `holdNext('save')` (wait for `arrived`, then
-`release()`). Use `server.fault` for the shared transport faults. Controllers are flow-monitored
+`release()`). Use `server.fault` for the shared transport faults: `lost-reply` rejects fetch
+after the request is taken, while `body-fails` supplies headers then rejects reading the body. Controllers are flow-monitored
 by default. The existing ceilings command and gate also check `directControllerTestFiles` in
 `src/test-utils/test-phone.ceilings.json`; new tests must use the phone instead of increasing it.
 
