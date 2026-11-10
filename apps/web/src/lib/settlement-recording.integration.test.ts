@@ -78,7 +78,7 @@ it('preserves a standalone payment when an archive commits after its fence check
   let archived = false;
   vi.spyOn(Group.collection, 'updateOne').mockImplementation(async (...args) => {
     const result = await update.apply(Group.collection, args);
-    if (!archived && args[1].$set?.currencyLocked === true) {
+    if (!archived && !Array.isArray(args[1]) && args[1].$set?.currencyLocked === true) {
       archived = true;
       // A real independent archive, after the standalone fence admitted this payment.
       await groupService.archive(fixture.groupId, DEMO_PERSONA_IDS.alex);
