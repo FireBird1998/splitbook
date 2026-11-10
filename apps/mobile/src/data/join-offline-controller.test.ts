@@ -106,7 +106,6 @@ function phone() {
     { ...backend, fetch },
     {
       now: Date.parse(iso),
-      purge: ['savedQueries'],
       parts: {
         newSubmissionKey: undefined,
         expenseDrafts: undefined,
@@ -115,12 +114,6 @@ function phone() {
         tagRequests: undefined,
         groupCreations: undefined,
         netInfo: undefined,
-        accountLocal: {
-          financialCleanup: undefined,
-          untrustedCopies: undefined,
-          signOutRecord: undefined,
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        },
       },
     },
   );
