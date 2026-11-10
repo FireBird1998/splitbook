@@ -1,3 +1,4 @@
+import { Refusal } from './refusals';
 import { describe, expect, it } from 'vitest';
 import { displayTagReference, resolveTagReference } from './tag-identity';
 
@@ -51,4 +52,8 @@ describe('Tag identity', () => {
       tag: 'Meals',
     });
   });
+});
+
+it('refuses an unknown Tag with the shared request refusal type', () => {
+  expect(() => resolveTagReference([], { tag: 'Unknown' })).toThrow(Refusal);
 });

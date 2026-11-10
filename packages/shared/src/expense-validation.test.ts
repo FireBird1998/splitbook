@@ -129,3 +129,14 @@ describe('expense validation', () => {
     });
   });
 });
+
+it.each([
+  ['INVALID_TAG', () => assertActiveTag(new Set(), 'Food')],
+  ['INVALID_MEMBERS', () => assertSettlementMembers(new Set(), 'payer', 'payee')],
+  ['SAME_PARTY', () => assertSettlementMembers(new Set(['payer']), 'payer', 'payer')],
+  ['FORBIDDEN_SETTLEMENT', () => assertSettlementAuthorization('other', 'payer', 'payee')],
+  ['CURRENCY_MISMATCH', () => assertGroupCurrency({ defaultCurrency: 'INR' }, 'EUR')],
+] as const)('keeps %s as the Error message of a typed shared refusal', (code, refuse) => {
+  expect(refuse).toThrow(Refusal);
+  expect(refuse).toThrow(code);
+});
