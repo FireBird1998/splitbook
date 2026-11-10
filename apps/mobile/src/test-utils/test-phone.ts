@@ -130,7 +130,9 @@ function faultable<T extends object>(store: T) {
 /** Native cells clone at the boundary, as the persisted adapters do. */
 function cell<T>(initial: T) {
   let value = structuredClone(initial);
+  const writes:T[]=[];
   return faultable({
+    get writes(){return structuredClone(writes)},
     get value() {
       return structuredClone(value);
     },
@@ -140,6 +142,7 @@ function cell<T>(initial: T) {
     load: async () => structuredClone(value),
     save: async (next: T) => {
       value = structuredClone(next);
+      writes.push(structuredClone(next));
     },
     clear: async () => {
       value = structuredClone(initial);
