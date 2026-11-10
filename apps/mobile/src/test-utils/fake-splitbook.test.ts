@@ -30,4 +30,31 @@ describe('fake Splitbook', () => {
     ).toEqual([]);
     expect(server.unanswered).toEqual([]);
   });
+  it('replaces the next or every matching answer and records requests including unanswered ones', async () => {
+    const server = fakeSplitbook();
+    server.reply(
+      'GET',
+      '/probe',
+      ({ headers }) => Response.json({ marker: headers.get('X-Probe') }),
+      { once: true },
+    );
+    server.reply('POST', '/probe', ({ body }) => Response.json(body));
+    const read = await server.fetch('http://local/probe?a=1', { headers: { 'X-Probe': 'next' } });
+    expect(await read.json()).toEqual({ marker: 'next' });
+    for (const value of [1, 2]) {
+      const reply = await server.fetch('http://local/probe', {
+        method: 'POST',
+        body: JSON.stringify({ value }),
+      });
+      expect(await reply.json()).toEqual({ value });
+    }
+    expect((await server.fetch('http://local/probe', {})).status).toBe(404);
+    expect(server.requests.map(({ method, path, body }) => ({ method, path, body }))).toEqual([
+      { method: 'GET', path: '/probe?a=1', body: undefined },
+      { method: 'POST', path: '/probe', body: { value: 1 } },
+      { method: 'POST', path: '/probe', body: { value: 2 } },
+      { method: 'GET', path: '/probe', body: undefined },
+    ]);
+    expect(server.unanswered).toEqual(['GET /probe']);
+  });
 });
