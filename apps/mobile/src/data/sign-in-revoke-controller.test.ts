@@ -63,7 +63,6 @@ function phone({ google = false } = {}) {
           authOrigin: 'http://localhost:4127',
           developmentPersonaEnabled: true,
         },
-    purge: [],
     parts: {
       savedQueries: undefined,
       offlineIdentity: undefined,
@@ -75,7 +74,6 @@ function phone({ google = false } = {}) {
       groupCreations: undefined,
       netInfo: undefined,
       newSubmissionKey: undefined,
-      accountLocal: { financialCleanup: undefined, untrustedCopies: undefined },
       googleSignIn: async () => ({
         status: 'success',
         idToken: `google-token-${chooser}`,
