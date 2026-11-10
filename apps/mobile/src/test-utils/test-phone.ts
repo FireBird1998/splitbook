@@ -3,7 +3,7 @@ import { createMobileController, type MobileController } from '../data/mobile-co
 import type { MobileDependencies } from '../data/types';
 import { savedQueriesIn } from './saved-queries';
 
-type StoreOperation = 'load' | 'save' | 'remove' | 'clear' | 'list' | 'keys' | 'mark';
+type StoreOperation = 'load' | 'save' | 'remove' | 'clear' | 'list' | 'keys';
 
 /** Faults stop at the native storage boundary, before its atomic read or write. */
 function faultable<T extends object>(store: T) {
@@ -83,18 +83,16 @@ export function testPhone(
   const stores = {
     credentials: cell<string | null>(null),
     owner: cell<string | null>(null),
-    cleanupMarker: {
-      ...cell(false),
-      async mark() {
-        await this.save(true);
-      },
-    },
-    signOutRecord: {
-      ...cell<{ invitationCleared: boolean } | null>(null),
-      async mark(value: { invitationCleared: boolean }) {
-        await this.save(value);
-      },
-    },
+    cleanupMarker: (() => {
+      const marker = cell(false);
+      return Object.assign(marker, { mark: () => marker.save(true) });
+    })(),
+    signOutRecord: (() => {
+      const record = cell<{ invitationCleared: boolean } | null>(null);
+      return Object.assign(record, {
+        mark: (value: { invitationCleared: boolean }) => record.save(value),
+      });
+    })(),
     financialCleanup: cell<unknown>(null),
     untrustedCopies: cell<unknown>(null),
     offlineIdentity: cell<unknown>(null),

@@ -134,7 +134,9 @@ export interface FakeRequest {
   body: Record<string, unknown> | undefined;
   init: RequestInit;
 }
-type Answer = (request: FakeRequest) => FetchResponse | Promise<FetchResponse> | undefined;
+type Answer = (
+  request: FakeRequest,
+) => FetchResponse | Promise<FetchResponse | undefined> | undefined;
 
 export function fakeSplitbook() {
   const group = groupFixture();
@@ -173,10 +175,31 @@ export function fakeSplitbook() {
       if (entry.path !== '*' && entry.path !== url.pathname && entry.path !== request.path)
         continue;
       if (entry.once) replies.splice(replies.indexOf(entry), 1);
-      const answer = entry.answer(request);
+      const answer = await entry.answer(request);
       if (answer !== undefined) return answer;
     }
-    if (!url.pathname.startsWith('/api/')) {
+    const readPaths = [
+      '/api/auth/get-session',
+      '/api/groups',
+      '/api/user/balances',
+      ...world.groups.flatMap((g) =>
+        ['', '/balances', '/expenses', '/settlements', '/rates'].map(
+          (suffix) => `/api/groups/${g._id}${suffix}`,
+        ),
+      ),
+    ];
+    const writePaths = [
+      '/api/auth/demo-persona/sign-in',
+      '/api/auth/sign-out',
+      '/api/groups',
+      ...world.groups.flatMap((g) =>
+        ['/settlements', '/settlements/batch'].map((suffix) => `/api/groups/${g._id}${suffix}`),
+      ),
+    ];
+    if (
+      !(method === 'GET' && readPaths.includes(url.pathname)) &&
+      !(method === 'POST' && writePaths.includes(url.pathname))
+    ) {
       unanswered.push(`${method} ${request.path}`);
       return Response.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
     }
