@@ -1,7 +1,8 @@
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import type { AccountGroupRecordStore } from './account-record-storage';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import { describe, expect, it } from 'vitest';
 import { giveRest, payerRemainder } from '@splitbook/shared/payer-remainder';
-import type { MobileFetch } from './types';
 
 // #122: the Who paid sheet's arithmetic and "Give the rest" through the controller's draft.
 const memberIds = [
@@ -43,87 +44,43 @@ const json = (data: unknown, status = 200, cookie?: string) =>
 
 async function setup() {
   const posts: unknown[] = [];
-  const records = new Map<string, unknown>();
-  const drafts = {
-    load: async (accountId: string, id: string) =>
-      structuredClone(records.get(`${accountId}:${id}`) ?? null),
-    save: async (accountId: string, id: string, value: unknown) => {
-      records.set(`${accountId}:${id}`, structuredClone(value));
-    },
-    remove: async (accountId: string, id: string) => {
-      records.delete(`${accountId}:${id}`);
-    },
-    clear: async () => records.clear(),
-  };
-  const fetch: MobileFetch = async (url, init) => {
-    const path = new URL(url).pathname;
-    if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST') {
-      posts.push(JSON.parse(String(init.body)));
-      return json({ status: 201, data: { _id: tagId, group: groupId } }, 201);
-    }
-    if (path.endsWith('/demo-persona/sign-in'))
-      return json(
-        { user: people[0] },
-        200,
-        'better-auth.session_token=alex.signature; Max-Age=2592000',
-      );
-    if (path.endsWith('/get-session'))
-      return json({
-        user: people[0],
-        session: { userId: people[0].id, expiresAt: '2030-01-01T00:00:00Z' },
-      });
-    if (path === '/api/groups') return json({ data: [group], status: 200 });
-    if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
-    if (path.endsWith('/expenses'))
-      return json({
-        data: {
-          expenses: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
-        },
-        status: 200,
-      });
-    if (path.endsWith('/balances'))
-      return json({ data: { currency: 'INR', balances: [], debts: [], byCurrency: [] } });
-    return json({ error: 'Unavailable', status: 404 }, 404);
-  };
-  let cookie: string | null = null;
-  let account: string | null = null;
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
-    },
-    {
-      fetch,
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      expenseDrafts: drafts,
+  const server = fakeSplitbook();
+  server.world.people = { alex: people[0], sam: people[1], priya: people[2] };
+  server.world.groups = [group];
+  server.world.expenses[groupId] = expensePage();
+  server.world.balances[groupId] = { currency: 'INR', balances: [], debts: [], byCurrency: [] };
+  // Keep the original minimal create acknowledgement and its captured request bodies.
+  server.reply('POST', `/api/groups/${groupId}/expenses`, ({ body }) => {
+    posts.push(body);
+    return json({ status: 201, data: { _id: tagId, group: groupId } }, 201);
+  });
+  const phone = testPhone(server, {
+    now: Date.parse(iso),
+    recordSeparator: ':',
+    newSubmissionKey: () => 'native-expense-test-0001',
+    purge: ['expenseDrafts'],
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
       accountLocal: {
-        owner: {
-          load: async () => account,
-          save: async (value) => {
-            account = value;
-          },
-          clear: async () => {
-            account = null;
-          },
-        },
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
         cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [drafts],
       },
-      now: () => Date.parse(iso),
-      newSubmissionKey: () => 'native-expense-test-0001',
     },
-  );
+  });
+  // The original Draft adapter did not enumerate values for Home.
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  const controller = phone.open(),
+    records = phone.stores.expenseDrafts.records;
   await controller.signIn('alex');
   await controller.openExpense(groupId);
   await controller.updateExpenseDraft({ description: 'Weekly groceries', tagId });

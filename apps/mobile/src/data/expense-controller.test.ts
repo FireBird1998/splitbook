@@ -1,4 +1,6 @@
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import type { AccountGroupRecordStore } from './account-record-storage';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { inTimeZone } from '../test-utils/time-zone';
 import { toDateParam } from '@splitbook/shared/date';
@@ -13,7 +15,6 @@ import {
 import { type MobileController } from './mobile-controller';
 import type {
   FetchResponse,
-  MobileFetch,
   MobileSnapshot,
   MobileTimer,
   CredentialStore,
@@ -64,115 +65,55 @@ function setup(
     timer?: MobileTimer;
     pendingInvitation?: CredentialStore;
     savedQueries?: MobileDependencies['savedQueries'];
-    draftRequests?: MobileDependencies['draftRequests'];
+    draftRequests?: boolean;
   } = {},
 ) {
-  let cookie: string | null = null;
-  let account: string | null = null;
-  let cleanup = false;
-  const records = new Map<string, unknown>();
-  const drafts = {
-    keys: async (accountId: string) =>
-      [...records.keys()]
-        .filter((key) => key.startsWith(accountId + ':'))
-        .map((key) => key.slice(accountId.length + 1)),
-    load: async (accountId: string, id: string) =>
-      structuredClone(records.get(`${accountId}:${id}`) ?? null),
-    save: async (accountId: string, id: string, value: unknown) => {
-      records.set(`${accountId}:${id}`, structuredClone(value));
+  const server = fakeSplitbook();
+  server.world.people = { alex: people[0], sam: people[1], priya: people[2] };
+  server.world.groups = [group];
+  server.world.expenses[groupId] = expensePage();
+  server.world.balances[groupId] = { currency: 'INR', balances: [], debts: [], byCurrency: [] };
+  // This suite’s old server answered an unhandled create with an empty read page, not a receipt.
+  server.reply('POST', `/api/groups/${groupId}/expenses`, () =>
+    json({ status: 200, data: expensePage() }),
+  );
+  server.reply('*', '*', ({ url, init }) => intercept?.(url.pathname, init));
+  const phone = testPhone(server, {
+    now: localNoon,
+    recordSeparator: ':',
+    newSubmissionKey: options.newSubmissionKey ?? (() => 'native-expense-test-0001'),
+    purge: ['expenseDrafts', ...(options.draftRequests ? ['draftRequests' as const] : [])],
+    parts: {
+      savedQueries: options.savedQueries,
+      ...(options.draftRequests ? {} : { draftRequests: undefined }),
+      pendingInvitation: options.pendingInvitation,
+      timer: options.timer,
+      offlineIdentity: undefined,
+      settlementAttempts: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+      },
     },
-    remove: async (accountId: string, id: string) => {
-      records.delete(`${accountId}:${id}`);
-    },
-    clear: async () => {
-      records.clear();
-    },
-  };
-  const fetch: MobileFetch = async (url, init) => {
-    const path = new URL(url).pathname;
-    const intercepted = intercept?.(path, init);
-    if (intercepted) return intercepted;
-    if (path.endsWith('/demo-persona/sign-in'))
-      return json(
-        { user: people[0] },
-        200,
-        'better-auth.session_token=alex.signature; Max-Age=2592000',
-      );
-    if (path.endsWith('/get-session'))
-      return json({
-        user: people[0],
-        session: { userId: people[0].id, expiresAt: '2030-01-01T00:00:00Z' },
-      });
-    if (path === '/api/groups') return json({ data: [group], status: 200 });
-    if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
-    if (path.endsWith('/expenses'))
-      return json({
-        data: {
-          expenses: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
-        },
-        status: 200,
-      });
-    if (path === `/api/groups/${groupId}/balances`)
-      return json({
-        data: { currency: 'INR', balances: [], debts: [], byCurrency: [] },
-        status: 200,
-      });
-    if (path.endsWith('/user/balances')) return json({ data: { buckets: [] }, status: 200 });
-    if (path.endsWith('/sign-out')) return json({ success: true });
-    return json({ error: 'Unavailable', status: 404 }, 404);
-  };
+  });
+  // The original Draft adapter did not enumerate values for Home.
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
   /** `now` lets a restarted app open on a later day. */
-  const create = (now = localNoon) =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
-      },
-      {
-        fetch,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        expenseDrafts: drafts,
-        draftRequests: options.draftRequests,
-        pendingInvitation: options.pendingInvitation,
-        accountLocal: {
-          owner: {
-            load: async () => account,
-            save: async (value) => {
-              account = value;
-            },
-            clear: async () => {
-              account = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          stores: [drafts, ...(options.draftRequests ? [options.draftRequests] : [])],
-        },
-        now: () => now,
-        newSubmissionKey: options.newSubmissionKey ?? (() => 'native-expense-test-0001'),
-        timer: options.timer,
-        savedQueries: options.savedQueries,
-      },
-    );
-  return { create, controller: create(), drafts, records };
+  const create = (now = localNoon) => {
+    phone.clock.now = now;
+    return phone.open();
+  };
+  return {
+    phone,
+    create,
+    controller: create(),
+    drafts: phone.stores.expenseDrafts,
+    records: phone.stores.expenseDrafts.records,
+  };
 }
 
 const expenseId = 'a00000000000000000000030';
@@ -2577,7 +2518,7 @@ describe('keeping only drafts that change something', () => {
 
   describe('on a later day', () => {
     const nextDay = new Date(2026, 8, 29, 12).getTime();
-    const restart = async (create: (now?: number) => ReturnType<typeof createMobileController>) => {
+    const restart = async (create: (now?: number) => MobileController) => {
       const restarted = create(nextDay);
       await restarted.restore();
       return restarted;
@@ -4156,19 +4097,6 @@ describe('acknowledging an interrupted shared Draft upload', () => {
   beforeEach(() => vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true'));
   afterEach(() => vi.unstubAllEnvs());
   function uploadFixture() {
-    const receipts = new Map<string, unknown>();
-    const requests = {
-      load: async (account: string, id: string) => receipts.get(`${account}:${id}`) ?? null,
-      save: async (account: string, id: string, value: unknown) => {
-        receipts.set(`${account}:${id}`, value);
-      },
-      remove: async (account: string, id: string) => {
-        receipts.delete(`${account}:${id}`);
-      },
-      clear: async () => {
-        receipts.clear();
-      },
-    };
     const submitted: Array<{ body: string; key: string | null }> = [];
     const rows: Array<{
       id: string;
@@ -4182,27 +4110,9 @@ describe('acknowledging an interrupted shared Draft upload', () => {
     }> = [];
     let loseReply = true;
     let delayedReply: (() => Promise<void>) | undefined;
-    let signedIn = people[0];
     let denyGroup = false;
     const fixture = setup(
       (path, init) => {
-        if (path.endsWith('/demo-persona/sign-in')) {
-          signedIn = JSON.parse(String(init.body)).personaId === 'sam' ? people[1] : people[0];
-          return Promise.resolve(
-            json(
-              { user: signedIn },
-              200,
-              'better-auth.session_token=fixture.signature; Max-Age=2592000',
-            ),
-          );
-        }
-        if (path.endsWith('/get-session'))
-          return Promise.resolve(
-            json({
-              user: signedIn,
-              session: { userId: signedIn.id, expiresAt: '2030-01-01T00:00:00Z' },
-            }),
-          );
         if (denyGroup && path.startsWith(`/api/groups/${groupId}`))
           return Promise.resolve(json({ error: 'Group access denied', status: 403 }, 403));
         if (path !== `/api/groups/${groupId}/drafts`) return;
@@ -4231,12 +4141,12 @@ describe('acknowledging an interrupted shared Draft upload', () => {
           ? delayedReply().then(() => json({ data: rows }))
           : Promise.resolve(json({ data: rows }));
       },
-      { draftRequests: requests },
+      { draftRequests: true },
     );
     return {
       ...fixture,
       submitted,
-      requests,
+      requests: fixture.phone.stores.draftRequests,
       rows,
       denyAccess: () => {
         denyGroup = true;
@@ -4954,30 +4864,12 @@ describe('an Expense in one of the Group’s currencies (#720)', () => {
 describe('Add expense through account and membership changes (#373)', () => {
   /** Sign-in answers for the persona asked for; `hold` holds the Group's own read. */
   const journey = () => {
-    let signedIn = people[0];
     let hold = false;
     let reply: () => Promise<FetchResponse> = async () => json({ status: 200, data: group });
     let release: () => void = () => undefined;
     let held = false;
     const posts: string[] = [];
     const fixture = setup((path, init) => {
-      if (path.endsWith('/demo-persona/sign-in')) {
-        signedIn = JSON.parse(String(init.body)).personaId === 'sam' ? people[1] : people[0];
-        return Promise.resolve(
-          json(
-            { user: signedIn },
-            200,
-            'better-auth.session_token=fixture.signature; Max-Age=2592000',
-          ),
-        );
-      }
-      if (path.endsWith('/get-session'))
-        return Promise.resolve(
-          json({
-            user: signedIn,
-            session: { userId: signedIn.id, expiresAt: '2030-01-01T00:00:00Z' },
-          }),
-        );
       if (path.endsWith('/expenses') && init.method === 'POST') {
         posts.push(String(init.body));
         return Promise.resolve(

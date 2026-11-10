@@ -1,9 +1,9 @@
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import { describe, expect, it, vi } from 'vitest';
 import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { visibleFieldErrors } from './field-feedback';
 import { groupFields } from './group-draft';
-import type { FetchResponse } from './types';
 
 // #105: Group creation and Settlement entry explain corrections at their fields.
 const people = {
@@ -40,115 +40,88 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 function server() {
   const recorded: { key: string; record: unknown }[] = [];
   const created: unknown[] = [];
-  const calls: string[] = [];
+  const backend = fakeSplitbook();
+  backend.world.people.alex = people.alex;
+  backend.world.people.sam = people.sam;
+  backend.world.groups = [group];
+  backend.world.expenses[groupId] = expensePage();
+  const calls = backend.sent({ query: false });
   let loseNextResponse = false;
   let holdGroupCreate: Promise<void> | null = null;
-  const personaOf = (init: RequestInit) =>
-    String((init.headers as Record<string, string>).Cookie ?? '').includes('sam.') ? 'sam' : 'alex';
-  const fetch = async (url: string, init: RequestInit): Promise<FetchResponse> => {
-    const path = new URL(url).pathname;
-    const method = init.method ?? 'GET';
-    calls.push(`${method} ${path}`);
-    const persona = personaOf(init);
-    if (path.endsWith('/sign-in')) {
-      const who: Persona = String(init.body).includes('sam') ? 'sam' : 'alex';
-      return new Response(JSON.stringify({ user: people[who] }), {
-        headers: { 'Set-Cookie': `better-auth.session_token=${who}.signature; Max-Age=2592000` },
-      });
-    }
-    if (path.endsWith('/get-session'))
-      return json({
-        user: people[persona],
-        session: { userId: people[persona].id, expiresAt: '2030-01-01T00:00:00Z' },
-      });
-    if (path.endsWith('/sign-out')) return json({ success: true });
-    if (path === '/api/groups' && method === 'POST') {
-      await holdGroupCreate;
-      const body = JSON.parse(String(init.body));
-      created.push(body);
-      return json(
-        {
-          status: 201,
-          data: {
-            ...group,
-            _id: createdId,
-            name: body.name,
-            category: body.category,
-            members: [member('alex')],
-          },
-        },
-        201,
-      );
-    }
-    if (path === '/api/groups') return json({ status: 200, data: [group] });
-    if (path === `/api/groups/${groupId}`) return json({ status: 200, data: group });
-    if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
-    if (path.endsWith('/balances'))
-      return json({
-        status: 200,
+  backend.reply('POST', '/api/groups', async ({ body }) => {
+    await holdGroupCreate;
+    created.push(body!);
+    return json(
+      {
+        status: 201,
         data: {
-          byCurrency: [
-            {
-              currency: 'INR',
-              balances: [],
-              debts: recorded.length
-                ? []
-                : [
-                    {
-                      from: { _id: people.sam.id, name: 'Sam' },
-                      to: { _id: people.alex.id, name: 'Alex' },
-                      amount: 30,
-                    },
-                  ],
-            },
-          ],
+          ...group,
+          _id: createdId,
+          name: body!.name,
+          category: body!.category,
+          members: [member('alex')],
         },
-      });
-    if (path.endsWith('/settlements') && method === 'POST') {
-      const key = (init.headers as Record<string, string>)['Idempotency-Key'];
-      let entry = recorded.find((item) => item.key === key);
-      if (!entry) {
-        const body = JSON.parse(String(init.body));
-        entry = {
-          key,
-          record: {
-            _id: `c0000000000000000000000${recorded.length + 1}`,
-            group: groupId,
-            paidBy: { _id: body.paidBy, name: body.paidBy === people.sam.id ? 'Sam' : 'Alex' },
-            paidTo: { _id: body.paidTo, name: body.paidTo === people.sam.id ? 'Sam' : 'Alex' },
-            createdBy: { _id: people[persona].id, name: people[persona].name },
-            amount: body.amount,
-            amountMinor: Math.round(body.amount * 100),
-            moneyVersion: 1,
-            currency: body.currency,
-            note: body.note ?? '',
-            createdAt: iso,
-            updatedAt: iso,
+      },
+      201,
+    );
+  });
+  backend.reply('GET', `/api/groups/${groupId}/balances`, () =>
+    json({
+      status: 200,
+      data: {
+        byCurrency: [
+          {
+            currency: 'INR',
+            balances: [],
+            debts: recorded.length
+              ? []
+              : [
+                  {
+                    from: { _id: people.sam.id, name: 'Sam' },
+                    to: { _id: people.alex.id, name: 'Alex' },
+                    amount: 30,
+                  },
+                ],
           },
-        };
-        recorded.push(entry);
-      }
-      if (loseNextResponse) {
-        loseNextResponse = false;
-        throw new Error('Response lost after the server recorded the payment');
-      }
-      return json({ status: 201, data: entry.record }, 201);
-    }
-    if (path.endsWith('/settlements'))
-      return json({ status: 200, data: recorded.map((item) => item.record) });
-    if (path.includes('/expenses'))
-      return json({
-        status: 200,
-        data: {
-          expenses: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
+        ],
+      },
+    }),
+  );
+  backend.reply('POST', `/api/groups/${groupId}/settlements`, async ({ body, headers }) => {
+    const persona = headers.get('Cookie')?.includes('sam-') ? 'sam' : 'alex';
+    const key = headers.get('Idempotency-Key')!;
+    let entry = recorded.find((item) => item.key === key);
+    if (!entry) {
+      entry = {
+        key,
+        record: {
+          _id: `c0000000000000000000000${recorded.length + 1}`,
+          group: groupId,
+          paidBy: { _id: body!.paidBy, name: body!.paidBy === people.sam.id ? 'Sam' : 'Alex' },
+          paidTo: { _id: body!.paidTo, name: body!.paidTo === people.sam.id ? 'Sam' : 'Alex' },
+          createdBy: { _id: people[persona].id, name: people[persona].name },
+          amount: body!.amount,
+          amountMinor: Math.round(Number(body!.amount) * 100),
+          moneyVersion: 1,
+          currency: body!.currency,
+          note: body!.note ?? '',
+          createdAt: iso,
+          updatedAt: iso,
         },
-      });
-    return json({}, 404);
-  };
+      };
+      recorded.push(entry);
+    }
+    if (loseNextResponse) {
+      loseNextResponse = false;
+      throw new Error('Response lost after the server recorded the payment');
+    }
+    return json({ status: 201, data: entry.record }, 201);
+  });
+  backend.reply('GET', `/api/groups/${groupId}/settlements`, () =>
+    json({ status: 200, data: recorded.map((item) => item.record) }),
+  );
   return {
-    fetch,
+    ...backend,
     calls,
     recorded,
     created,
@@ -166,73 +139,45 @@ function device(
   backend: ReturnType<typeof server>,
   options: { failAttemptSave?: boolean; failAttemptLoad?: boolean; noAttemptStore?: boolean } = {},
 ) {
-  let cookie: string | null = null,
-    owner: string | null = null,
-    keys = 0;
-  const attempts = new Map<string, unknown>();
-  const store = {
-    load: async (account: string, id: string) => {
-      if (options.failAttemptLoad) throw new Error('SQLITE_CANTOPEN: unable to open database file');
-      return structuredClone(attempts.get(account + id) ?? null);
-    },
-    save: async (account: string, id: string, value: unknown) => {
-      if (options.failAttemptSave) throw new Error('SQLITE_FULL: database or disk is full');
-      attempts.set(account + id, structuredClone(value));
-    },
-    remove: async (account: string, id: string) => {
-      attempts.delete(account + id);
-    },
-    clear: async () => attempts.clear(),
-  };
-  const creations = new Map<string, unknown>();
-  const groupCreations = {
-    load: async (account: string) => structuredClone(creations.get(account) ?? null),
-    save: async (account: string, value: unknown) => {
-      creations.set(account, structuredClone(value));
-    },
-    remove: async (account: string) => {
-      creations.delete(account);
-    },
-    clear: async () => creations.clear(),
-  };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
+  let keys = 0;
+  const purge: { clear(): Promise<void> }[] = [];
+  const phone = testPhone(backend, {
+    now: localNoon,
+    newSubmissionKey: () => `payment-attempt-${String(++keys).padStart(4, '0')}`,
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      expenseDrafts: undefined,
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      ...(options.noAttemptStore ? { settlementAttempts: undefined } : {}),
+      netInfo: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
+        stores: purge,
       },
-      {
-        fetch: backend.fetch,
-        now: () => localNoon,
-        newSubmissionKey: () => `payment-attempt-${String(++keys).padStart(4, '0')}`,
-        settlementAttempts: options.noAttemptStore ? undefined : store,
-        groupCreations,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [store, groupCreations],
-        },
-      },
-    );
-  return { create, attempts };
+    },
+  });
+  const attempts = phone.stores.settlementAttempts;
+  purge.push(attempts, phone.stores.groupCreations);
+  // These original flags last until the test changes them, including across restarts.
+  const { load, save } = attempts;
+  attempts.load = (...args) => {
+    if (options.failAttemptLoad)
+      attempts.failNext('load', new Error('SQLITE_CANTOPEN: unable to open database file'));
+    return load(...args);
+  };
+  attempts.save = (...args) => {
+    if (options.failAttemptSave)
+      attempts.failNext('save', new Error('SQLITE_FULL: database or disk is full'));
+    return save(...args);
+  };
+  const create = () => phone.open();
+  return { create, attempts: phone.stores.settlementAttempts.records };
 }
 
 describe('Group creation corrections (#105)', () => {
