@@ -639,3 +639,21 @@ describe('fake Splitbook', () => {
     expect(server.requests).toHaveLength(2);
   });
 });
+
+it('owns seeded and rotated sessions and refuses one after it expires or is revoked', async () => {
+  const server = fakeSplitbook();
+  const cookie = server.auth.issue('alex', 'better-auth.session_token=stored.signature');
+  const call = () => server.fetch('http://local/api/auth/get-session', {headers:{Cookie:cookie}});
+  expect(parseSession(await (await call()).json())?.user.id).toBe('a00000000000000000000001');
+  server.auth.rotate = true;
+  const rotated = await call();
+  const next = rotated.headers.get('Set-Cookie')!.split(';')[0];
+  expect(server.auth.sessions.has(cookie)).toBe(true);
+  expect(server.auth.sessions.has(next)).toBe(true);
+  server.auth.expired = true;
+  expect((await call()).status).toBe(401);
+  server.auth.expired = false;
+  server.auth.sessions.delete(cookie);
+  expect((await call()).status).toBe(401);
+  expect(server.auth.issuedTo.get(cookie)?.name).toBe('Alex Rivera');
+});
