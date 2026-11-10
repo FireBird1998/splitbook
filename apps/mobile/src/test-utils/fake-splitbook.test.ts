@@ -692,3 +692,15 @@ it('checks the native Google backend and exchanges either persona’s identity f
   const restored=await server.fetch('https://staging.splitbook.test/api/auth/get-session',{headers:{Cookie:cookie}});
   expect(parseSession(await restored.json())?.expiresAt.getTime()).toBe(Date.parse('2020-01-01T00:00:00Z'));
 });
+
+it('aborts a held reply after the server took the sign-in without undoing its session', async () => {
+  const server=fakeSplitbook();
+  const held=server.hold('POST','/api/auth/demo-persona/sign-in',{abortable:true});
+  const abort=new AbortController();
+  const pending=server.fetch('http://local/api/auth/demo-persona/sign-in',{method:'POST',body:'{"personaId":"alex"}',signal:abort.signal});
+  await held.arrived;
+  const rejected=expect(pending).rejects.toThrow('Network request failed');
+  abort.abort();await rejected;
+  expect(server.auth.sessions.size).toBe(1);
+  held.release();
+});
