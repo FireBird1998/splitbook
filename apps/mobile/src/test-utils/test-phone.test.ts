@@ -439,3 +439,14 @@ describe('test phone', () => {
     ]);
   });
 });
+
+it('opens the phone with its build configuration and distinct API and auth origins', async () => {
+  const server = fakeSplitbook();
+  const phone = testPhone(server, { config: {
+    apiBaseUrl: 'http://10.0.2.2:4127', authOrigin: 'http://localhost:4127',
+    developmentPersonaEnabled: true,
+  } });
+  await phone.open().signIn('alex');
+  expect(server.requests[0].url.origin).toBe('http://10.0.2.2:4127');
+  expect(server.requests[0].headers.get('Origin')).toBe('http://localhost:4127');
+});
