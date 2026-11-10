@@ -1,3 +1,5 @@
+import Activity from '@/lib/models/Activity';
+import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
 import { it, expect, vi } from 'vitest';
 import type { Recording, Answer } from './fixture';
 import mongoose from 'mongoose';
@@ -9,6 +11,8 @@ import { promisify } from 'node:util';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+
+const { alex, sam } = DEMO_PERSONA_IDS;
 
 export function recordCreationPaths(recording: Recording) {
   if (recording.writer === 'single-settlement' || recording.writer === 'settlement-batch')
@@ -307,6 +311,44 @@ export function recordCreationPaths(recording: Recording) {
         await recording.send({}, { 'Idempotency-Key': '' }),
         await recording.send({}, { 'Idempotency-Key': '' }),
       ]);
+    });
+  if (['manual-expense', 'single-settlement', 'settlement-batch'].includes(recording.writer))
+    it('a historical currency removed before commit follows the writer’s currency rule', async () => {
+      if (recording.writer !== 'settlement-batch') {
+        const historical = await recording.http(
+          recording.routes.expenses.POST,
+          'POST',
+          'expenses',
+          recording.expenseBody({
+            description: 'Historical Debt',
+            currency: 'EUR',
+            paidBy: [{ user: sam, amount: 120 }],
+            splitBetween: [{ user: alex }],
+          }),
+        );
+        expect(historical.status).toBe(201);
+        await Activity.deleteMany({});
+      }
+      const recorded = await recording.interleave(
+        () =>
+          Group.updateOne({ _id: recording.groupId }, { $pull: { alternateCurrencies: 'EUR' } }),
+        recording.writer === 'settlement-batch'
+          ? {
+              settlements: [
+                {
+                  currency: 'EUR',
+                  amount: 30,
+                  amountPaidMinor: 3000,
+                  appliedRate: '1',
+                  rateKind: 'entered',
+                },
+              ],
+            }
+          : { currency: 'EUR' },
+      );
+      expect((recorded.answers as Answer).status).toBe(
+        recording.writer === 'manual-expense' ? 422 : 201,
+      );
     });
   if (recording.writer === 'manual-expense' || recording.writer === 'recurring-expense')
     it('a failed first insertion leaves the currency lock the writer committed', async () => {

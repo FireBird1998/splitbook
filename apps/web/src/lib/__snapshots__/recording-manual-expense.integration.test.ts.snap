@@ -795,6 +795,146 @@ exports[`manual-expense record of recordings > a failed first insertion leaves t
 }
 `;
 
+exports[`manual-expense record of recordings > a historical currency removed before commit follows the writer’s currency rule 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "currency": "EUR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Historical Debt",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-b>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "code": "CURRENCY_MISMATCH",
+      "error": "Currency is not one of this Group’s currencies",
+      "status": 422,
+    },
+    "status": 422,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "currency": "EUR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Historical Debt",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-b>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
 exports[`manual-expense record of recordings > a reused old Tag name conflicts in the duplicate race but replays ordinarily 1`] = `
 {
   "after": {
