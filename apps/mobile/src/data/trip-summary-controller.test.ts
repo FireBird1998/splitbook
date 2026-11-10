@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { focusManager, onlineManager } from '@tanstack/query-core';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage as emptyPage } from '../test-utils/fake-splitbook';
-import type { FetchResponse } from './types';
 
 /** The phone's zone as the app reads it, so these paths hold in every zone CI runs (#730). */
 const PHONE_ZONE = encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
