@@ -386,6 +386,18 @@ it('records each per-Expense Tag refusal through the bulk HTTP response', async 
     );
     census.push({ thrown: thrown(cause), answer: await recorded(answer) });
   }
+  // Keep the legacy lookup for unknown faults as well as the named item outcomes.
+  update.mockRejectedValue(new Error('constructor'));
+  const inherited = await POST(
+    new Request('http://localhost/api/tag-change', {
+      method: 'POST',
+      body: JSON.stringify({ tagId, expenses: [{ id: expenseId, revision: 0 }] }),
+    }),
+    { params: Promise.resolve({ id: 'a00000000000000000000001' }) },
+  );
+  expect(await inherited.text()).toBe(
+    '{"data":{"tagId":"a00000000000000000000002","results":[{"expenseId":"a00000000000000000000003","outcome":"refused","code":"constructor"}]},"status":200}',
+  );
   update.mockRestore();
   expense.mockRestore();
   group.mockRestore();

@@ -65,12 +65,12 @@ import type {
 } from '@splitbook/shared/expense-tag-change';
 
 /** Why one Expense of a Tag change couldn't change, in member words, by the error that said so. */
-const tagChangeRefusals = {
+const tagChangeRefusals: Partial<Record<RefusalCode, string>> = {
   FORBIDDEN: 'You’re no longer a member of this Group.',
   GROUP_ARCHIVED: GROUP_ARCHIVED_MESSAGE,
   INVALID_TAG: 'The Tag isn’t active any more.',
   ACTIVITY_BACKLOG_FULL: 'Splitbook couldn’t record this change just now. Try it again later.',
-} satisfies Partial<Record<RefusalCode, string>>;
+};
 
 /**
  * The stored-amount bounds for an Expense list's amount range (#310), or null without one.
@@ -701,9 +701,9 @@ export class ExpenseService {
             : error.message
           : '';
       if (code === 'STALE_REVISION') return { expenseId, outcome: 'changed-elsewhere' };
-      const reason = Object.hasOwn(tagChangeRefusals, code)
-        ? tagChangeRefusals[code as keyof typeof tagChangeRefusals]
-        : undefined;
+      // The lookup also receives fault messages outside RefusalCode.
+      const words: Readonly<Record<string, string | undefined>> = tagChangeRefusals;
+      const reason = words[code];
       if (!reason) console.error('Expense Tag change failed:', { expenseId, error });
       return {
         expenseId,
