@@ -227,6 +227,8 @@ export function fakeSplitbook() {
   const world = {
     people: structuredClone(demoPeople) as Record<PersonaId, SessionUser>,
     groups: [group],
+    groupsByAccount: {} as Record<string, WireGroup[]>,
+    homeByAccount: {} as Record<string, unknown>,
     home: { buckets: [] } as { buckets: unknown[]; groups?: unknown[] },
     balances: { [group._id]: { byCurrency: [] } } as Record<string, unknown>,
     expenses: { [group._id]: expensePage() } as Record<string, unknown>,
@@ -399,8 +401,12 @@ export function fakeSplitbook() {
         );
       }
       if (url.pathname === '/api/groups')
-        return answer(world.groups.filter((g) => g.members.some((m) => m.user._id === user.id)));
-      if (url.pathname === '/api/user/balances') return answer(world.home);
+        return answer(
+          world.groupsByAccount[user.id] ??
+            world.groups.filter((g) => g.members.some((m) => m.user._id === user.id)),
+        );
+      if (url.pathname === '/api/user/balances')
+        return answer(world.homeByAccount[user.id] ?? world.home);
       const found = world.groups.find((g) => url.pathname.startsWith(`/api/groups/${g._id}`));
       if (found) {
         const base = `/api/groups/${found._id}`;

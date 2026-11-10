@@ -482,18 +482,32 @@ describe('fake Splitbook', () => {
     }
   });
   it('reads each account’s Groups and Home figures from its world data', async () => {
-    const server=fakeSplitbook(), group=server.world.groups[0]!;
-    server.world.groupsByAccount[server.world.people.alex.id]=[group];
-    server.world.groupsByAccount[server.world.people.sam.id]=[];
-    server.world.homeByAccount[server.world.people.alex.id]={buckets:[{currency:'INR',youOwe:30,youAreOwed:0}],groups:[{groupId:group._id,balances:[{currency:'INR',balance:-30}]}]};
-    server.world.homeByAccount[server.world.people.sam.id]={buckets:[{currency:'INR',youOwe:50,youAreOwed:0}]};
-    for(const [persona,count,owe] of [['alex',1,30],['sam',0,50]] as const){
-      const signed=await server.fetch('http://local/api/auth/demo-persona/sign-in',{method:'POST',body:JSON.stringify({personaId:persona})});
-      const Cookie=signed.headers.get('Set-Cookie')!.split(';')[0];
-      const read=async(path:string)=>(await server.fetch('http://local'+path,{headers:{Cookie}})).json();
+    const server = fakeSplitbook(),
+      group = server.world.groups[0]!;
+    server.world.groupsByAccount[server.world.people.alex.id] = [group];
+    server.world.groupsByAccount[server.world.people.sam.id] = [];
+    server.world.homeByAccount[server.world.people.alex.id] = {
+      buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+      groups: [{ groupId: group._id, balances: [{ currency: 'INR', balance: -30 }] }],
+    };
+    server.world.homeByAccount[server.world.people.sam.id] = {
+      buckets: [{ currency: 'INR', youOwe: 50, youAreOwed: 0 }],
+    };
+    for (const [persona, count, owe] of [
+      ['alex', 1, 30],
+      ['sam', 0, 50],
+    ] as const) {
+      const signed = await server.fetch('http://local/api/auth/demo-persona/sign-in', {
+        method: 'POST',
+        body: JSON.stringify({ personaId: persona }),
+      });
+      const Cookie = signed.headers.get('Set-Cookie')!.split(';')[0];
+      const read = async (path: string) =>
+        (await server.fetch('http://local' + path, { headers: { Cookie } })).json();
       expect(parseGroups(await read('/api/groups'))).toHaveLength(count);
-      expect(parseHomeBalances(await read('/api/user/balances')).buckets).toEqual([{currency:'INR',youOwe:owe,youAreOwed:0}]);
+      expect(parseHomeBalances(await read('/api/user/balances')).buckets).toEqual([
+        { currency: 'INR', youOwe: owe, youAreOwed: 0 },
+      ]);
     }
   });
-
 });
