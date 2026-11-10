@@ -301,6 +301,16 @@ export const refusalVocabulary = {
     words: 'Only a Trip has a Trip summary.',
     variants: {},
   },
+  NOTIFICATION_SETTINGS_CHANGED: {
+    status: 409,
+    words: 'Notification settings changed. Retry.',
+    variants: {},
+  },
+  NOTIFICATION_TOKEN_REQUIRED: {
+    status: 400,
+    words: 'Notification registration needs a device token.',
+    variants: {},
+  },
   NOT_FOUND: {
     status: 404,
     words: (data: RefusalContext) => `${data.resource} not found`,

@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { createHash, randomUUID } from 'node:crypto';
 import { headers } from 'next/headers';
@@ -41,12 +42,11 @@ const privateHeaders = {
 };
 const answer = (data: unknown, status = 200) =>
   NextResponse.json({ data, status }, { status, headers: privateHeaders });
-const refusal = (error: string, status: number) =>
-  NextResponse.json({ error, status }, { status, headers: privateHeaders });
 const privateResult = (response: Response) => {
   Object.entries(privateHeaders).forEach(([key, value]) => response.headers.set(key, value));
   return response;
 };
+const refusal = (cause: Refusal) => privateResult(serverError(cause));
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const available = () => process.env.ANDROID_NOTIFICATIONS_ENABLED === 'true';
 const environment = () =>
@@ -132,7 +132,7 @@ async function collections() {
 export async function GET(req: Request) {
   try {
     const member = await identity();
-    if (!member) return refusal('Unauthorized', 401);
+    if (!member) return refusal(new Refusal('UNAUTHORIZED'));
     const installationId = id.safeParse(new URL(req.url).searchParams.get('installationId'));
     const installationKey = proof.safeParse(req.headers.get('X-Installation-Key'));
     if (!installationId.success) return privateResult(validationError(installationId.error));
@@ -143,7 +143,7 @@ export async function GET(req: Request) {
       installationId: installationId.data,
     });
     if (!row) return answer(off());
-    if (row.keyHash !== hash(installationKey.data)) return refusal('Forbidden', 403);
+    if (row.keyHash !== hash(installationKey.data)) return refusal(new Refusal('FORBIDDEN'));
     if (
       row.accountId !== member.user.id ||
       row.sessionId !== member.session.id ||
@@ -158,7 +158,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const member = await identity();
-    if (!member) return refusal('Unauthorized', 401);
+    if (!member) return refusal(new Refusal('UNAUTHORIZED'));
 
     const json = await readJson(req);
     const maintaining =
@@ -171,7 +171,11 @@ export async function POST(req: Request) {
     if (!input.success) return privateResult(validationError(input.error));
     const body: z.infer<typeof update> = input.data;
     if (body.enabled && !maintaining && !available())
-      return refusal('Notifications are not available yet.', 503);
+      // #1086 pauses this code addition because Android changes its visible failure state.
+      return NextResponse.json(
+        { error: 'Notifications are not available yet.', status: 503 },
+        { status: 503, headers: privateHeaders },
+      );
     const { client, registrations, sessions } = await collections();
     // Consent belongs to this installation's own opt-in, never to another registration holding the token.
     const releaseToken = (row: Registration, options: { session: ClientSession }) =>
@@ -202,23 +206,23 @@ export async function POST(req: Request) {
           { $set: { notificationCheckedAt: new Date() } },
           options,
         );
-        if (!live.matchedCount) return refusal('Unauthorized', 401);
+        if (!live.matchedCount) return refusal(new Refusal('UNAUTHORIZED'));
         const filter = { environment: environment(), installationId: body.installationId };
         const previous = await registrations.findOne(filter, options);
         if (previous && previous.keyHash !== hash(body.installationKey))
-          return refusal('Forbidden', 403);
+          return refusal(new Refusal('FORBIDDEN'));
         const same =
           previous?.accountId === member.user.id &&
           previous.sessionId === member.session.id &&
           previous.expiresAt > new Date();
         const prior = same ? previous : null;
         if (body.revision !== (previous?.revision ?? 0))
-          return refusal('Notification settings changed. Retry.', 409);
+          return refusal(new Refusal('NOTIFICATION_SETTINGS_CHANGED'));
         if (maintaining) {
           // Only this account's live session, still opted in, keeps its binding with a new token:
           // never a phone that opted out, another account or a new session (#844).
           if (!prior?.enabled || !body.token)
-            return refusal('Notification settings changed. Retry.', 409);
+            return refusal(new Refusal('NOTIFICATION_SETTINGS_CHANGED'));
           if (prior.tokenHash === hash(body.token)) {
             // No control changes, so no new revision: only the capability is recorded.
             if (!prior.maintains)
@@ -245,7 +249,7 @@ export async function POST(req: Request) {
           body.enabled && (enabling ? true : (body.payments ?? prior?.payments ?? true));
         const token = body.token ?? prior?.token;
         if (body.enabled && !token)
-          return refusal('Notification registration needs a device token.', 400);
+          return refusal(new Refusal('NOTIFICATION_TOKEN_REQUIRED'));
         const now = new Date();
         const activate =
           enabling || (expenseUpdates && !prior?.expenseUpdates) || (payments && !prior?.payments);
