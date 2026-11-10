@@ -47,7 +47,7 @@ export async function getAuthUser(): Promise<AuthUser | null> {
   if (!session?.user?.id) return null;
   const expectedAccount = requestHeaders.get(EXPECTED_ACCOUNT_HEADER);
   if (expectedAccount !== null && expectedAccount !== session.user.id) {
-    throw new Error(ACCOUNT_CHANGED);
+    throw new Refusal(ACCOUNT_CHANGED);
   }
   const { id, name, email, image } = session.user;
   return { id, name, email, image: image ?? null };
@@ -61,7 +61,7 @@ export async function readJson(req: Request): Promise<unknown> {
   try {
     return await req.json();
   } catch (cause) {
-    if (cause instanceof SyntaxError) throw new Error('INVALID_JSON');
+    if (cause instanceof SyntaxError) throw new Refusal('INVALID_JSON');
     throw cause;
   }
 }
@@ -77,7 +77,7 @@ export async function routeIds<Params extends Record<string, string>>(
   params: Promise<Params>,
 ): Promise<Params> {
   const ids = await params;
-  if (!Object.values(ids).every((id) => OBJECT_ID.test(id))) throw new Error('INVALID_ID');
+  if (!Object.values(ids).every((id) => OBJECT_ID.test(id))) throw new Refusal('INVALID_ID');
   return ids;
 }
 

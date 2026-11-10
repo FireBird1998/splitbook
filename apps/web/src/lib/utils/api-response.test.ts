@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import mongoose from 'mongoose';
 import { headers } from 'next/headers';
@@ -123,6 +124,7 @@ describe('routeIds (#539)', () => {
     for (const id of ['not-an-id', 'a0000000000000000000001', 'a00000000000000000000010x']) {
       const refused = routeIds(Promise.resolve({ id: GROUP, expenseId: id }));
       await expect(refused, id).rejects.toThrow('INVALID_ID');
+      await expect(refused, id).rejects.toBeInstanceOf(Refusal);
     }
     const response = serverError(new Error('INVALID_ID'));
     expect(await response.json()).toEqual({ error: 'Invalid id', status: 400, code: 'INVALID_ID' });
@@ -138,7 +140,9 @@ describe('readJson (#539)', () => {
   });
 
   it('refuses a body that is not JSON as INVALID_JSON', async () => {
-    await expect(readJson(request('{"name":'))).rejects.toThrow('INVALID_JSON');
+    const refused = readJson(request('{"name":'));
+    await expect(refused).rejects.toThrow('INVALID_JSON');
+    await expect(refused).rejects.toBeInstanceOf(Refusal);
   });
 
   it('leaves any other failure to read the body as the server’s fault', async () => {
@@ -180,7 +184,9 @@ describe('getAuthUser and the page’s expected account', () => {
 
   it('answers 419 ACCOUNT_CHANGED with no data, before any read, when the session is another account', async () => {
     request(ALEX);
-    await expect(getAuthUser()).rejects.toThrow('ACCOUNT_CHANGED');
+    const refused = getAuthUser();
+    await expect(refused).rejects.toThrow('ACCOUNT_CHANGED');
+    await expect(refused).rejects.toBeInstanceOf(Refusal);
 
     const read = await readBalances();
     expect(read.status).toBe(419);
