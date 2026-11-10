@@ -1,47 +1,8 @@
 import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
-import { ZodError } from 'zod';
-import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
-import { isDatabaseUnreachable } from '@/lib/mongodb-client';
-import { databaseUnavailable, error, serverError, validationError } from '@/lib/utils/api-response';
+import { serverError } from '@/lib/utils/api-response';
 
-/**
- * A Draft request the server couldn't confirm, in its own words (#861): a creation is retried with
- * its original Idempotency-Key, and a save (`DRAFT_SAVE_UNCONFIRMED_MESSAGE`) with the same
- * reviewed command, which records it once (ADR 0008). Either keeps the Drafts.
- */
-export const DRAFT_CREATION_UNCONFIRMED =
-  'Draft request not confirmed. Reload before retrying; reuse the original creation request.';
-
-export function draftError(cause: unknown, unconfirmed = DRAFT_CREATION_UNCONFIRMED) {
-  if (cause instanceof ZodError) return validationError(cause);
-  if (cause instanceof SyntaxError) return error('Invalid JSON body', 400, 'INVALID_JSON');
-  if (cause instanceof Error) {
-    if (cause.message === 'DRAFTS_DISABLED')
-      return error('Drafts are not enabled', 404, cause.message);
-    if (cause.message === 'REQUEST_TOO_LARGE')
-      return error('Request too large', 413, cause.message);
-    if (cause.message === 'DRAFT_GROUP_LIMIT')
-      return error(DRAFT_GROUP_LIMIT_MESSAGE, 409, cause.message);
-    if (cause.message === 'DRAFT_NOT_FOUND') return error('Draft not found', 404, cause.message);
-    if (cause.message === 'DRAFT_TRANSACTIONS_REQUIRED')
-      return error('Draft changes are temporarily unavailable.', 503, cause.message);
-  }
-  if (
-    cause instanceof Error &&
-    [
-      'FORBIDDEN',
-      'GROUP_ARCHIVED',
-      'IDEMPOTENCY_CONFLICT',
-      'STALE_REVISION',
-      'REVISION_REQUIRED',
-      'ACCOUNT_CHANGED',
-    ].includes(cause.message)
-  )
-    return serverError(cause);
-  // An unreachable database's errors carry no submitted values, so they are logged as such.
-  if (isDatabaseUnreachable(cause)) return databaseUnavailable(cause);
-  // Other database errors may embed submitted values. Never log them at this private boundary.
-  return error(unconfirmed, 503, 'DRAFT_UNCONFIRMED');
+export function draftError(cause: unknown, caller: 'draft' | 'draft-save' = 'draft') {
+  return serverError(cause, caller);
 }
 
 export function privateDraftResponse<T extends Response>(response: T): T {

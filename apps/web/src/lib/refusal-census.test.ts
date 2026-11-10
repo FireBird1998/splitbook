@@ -1,4 +1,5 @@
 import inputs from './refusal-census-inputs.json';
+import draftAnswers from './refusal-census-draft-answers.json';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
@@ -238,6 +239,7 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
 // must already have a recorded input. Removing an old comparison or table needs no re-record.
 it('covers every literal producer, route table entry and message comparison', () => {
   const covered = new Set([
+    ...draftAnswers.map(({ code }) => code),
     ...plainCodes,
     ...moneyCases.map(({ code }) => code),
     ...tagCodes,
