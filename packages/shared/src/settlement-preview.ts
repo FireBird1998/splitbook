@@ -153,11 +153,19 @@ export function settlementLedgerFromRead(
  * is the payer's overall position, not a debt between these two).
  */
 export function overpaymentMessage(
-  preview: SettlementPreview,
+  preview: Pick<SettlementPreview, 'suggestedMinor' | 'overpaidMinor'> & {
+    paidBy: SettlementPosition | null;
+  },
   currency: string,
   payer: { isViewer: boolean; name: string },
   payeeName: string,
 ): string {
+  const lead =
+    preview.suggestedMinor === 0
+      ? `No payment from ${payer.isViewer ? 'you' : firstName(payer.name)} to ${payeeName} is suggested.`
+      : `That’s ${amountMoney(preview.overpaidMinor, currency)} more than suggested.`;
+  // An unreadable balance can still have a known suggestion and extra amount, never a position.
+  if (!preview.paidBy) return lead;
   const who = payer.isViewer ? 'you’d' : `${firstName(payer.name)} would`;
   const after = preview.paidBy.afterMinor;
   const position =
@@ -166,9 +174,5 @@ export function overpaymentMessage(
       : after < 0
         ? `${who} still owe ${amountMoney(after, currency)}`
         : `${who} be settled up`;
-  const lead =
-    preview.suggestedMinor === 0
-      ? `No payment from ${payer.isViewer ? 'you' : firstName(payer.name)} to ${payeeName} is suggested.`
-      : `That’s ${amountMoney(preview.overpaidMinor, currency)} more than suggested.`;
   return `${lead} Afterwards ${position} in this Group.`;
 }

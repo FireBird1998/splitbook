@@ -1,5 +1,6 @@
 import type { GroupCurrencyBalance } from './types';
 import { previewSettlement, settlementLedgerFromRead } from '@splitbook/shared/settlement-preview';
+import { MoneyValidationError } from '@splitbook/shared/exact-money';
 
 /**
  * Android's Balances as the shared payment readings take them: people by `_id`, without rows
@@ -30,10 +31,27 @@ export function paymentPreview(
   suggestedMinor?: number,
 ) {
   const [read] = paymentBalances(balances.filter(({ currency }) => currency === payment.currency));
-  const ledger = settlementLedgerFromRead(read ?? {}, payment.currency);
+  let positionsKnown = read?.balances.some(({ user }) => user._id === payment.paidBy) ?? false;
+  let ledger;
+  try {
+    ledger = settlementLedgerFromRead(read ?? {}, payment.currency);
+  } catch (error) {
+    if (!(error instanceof MoneyValidationError)) throw error;
+    // Debts still decide the extra amount and tick. No caller may state a position made from
+    // an unreadable balance as if it were zero; invalid Debts still fail this second read.
+    ledger = settlementLedgerFromRead({ ...read, balances: [] }, payment.currency);
+    positionsKnown = false;
+  }
   if (suggestedMinor !== undefined)
     ledger.suggestions = [
       { from: payment.paidBy, to: payment.paidTo, amountMinor: suggestedMinor },
     ];
-  return previewSettlement(ledger, payment);
+  const preview = previewSettlement(ledger, payment);
+  return (
+    preview && {
+      ...preview,
+      paidBy: positionsKnown ? preview.paidBy : null,
+      paidTo: positionsKnown ? preview.paidTo : null,
+    }
+  );
 }
