@@ -1,9 +1,4 @@
-import {
-  Refusal,
-  refusalAnswer,
-  directRefusalAnswer,
-  type RefusalCaller,
-} from '@splitbook/shared/refusals';
+import { Refusal, refusalAnswer } from '@splitbook/shared/refusals';
 import { headers } from 'next/headers';
 import {
   DATABASE_UNAVAILABLE,
@@ -103,32 +98,29 @@ export function error(message: string, status: number = 400, code?: string) {
  * 401 Unauthorized response
  */
 export function unauthorized() {
-  const answer = directRefusalAnswer('unauthorized');
-  return NextResponse.json(answer, { status: answer.status });
+  return serverError(new Refusal('UNAUTHORIZED'));
 }
 
 /**
  * 403 Forbidden response
  */
 export function forbidden() {
-  const answer = directRefusalAnswer('forbidden');
-  return NextResponse.json(answer, { status: answer.status });
+  return serverError(new Refusal('FORBIDDEN'));
 }
 
 /**
  * 404 Not Found response
  */
 export function notFound(resource: string = 'Resource') {
-  const answer = directRefusalAnswer('notFound', resource);
-  return NextResponse.json(answer, { status: answer.status });
+  return serverError(new Refusal('NOT_FOUND', { resource }));
 }
 
 /**
  * Answer a thrown value through the refusal vocabulary or the fault policy.
  */
-export function serverError(err?: unknown, caller?: RefusalCaller): NextResponse {
+export function serverError(err?: unknown): NextResponse {
   if (err instanceof Refusal) {
-    const answer = refusalAnswer(err, caller);
+    const answer = refusalAnswer(err);
     return NextResponse.json(answer, { status: answer.status });
   }
   if (err instanceof MoneyValidationError) {
@@ -140,7 +132,7 @@ export function serverError(err?: unknown, caller?: RefusalCaller): NextResponse
     );
   }
   if (err instanceof Error && err.name === 'VersionError')
-    return serverError(new Refusal('STALE_REVISION'), caller);
+    return serverError(new Refusal('STALE_REVISION'));
 
   // An operation that ran out of its time got no answer either: a save's transaction whose
   // connection kept dropping can end that way rather than on the dropped connection. Its retry
@@ -181,7 +173,7 @@ function internalServerError() {
  * once with the route, the code and the ids that find the record, never member data. Anything
  * else answers as `serverError` does, so a read's own bad input is still refused.
  */
-export function failedRead(err: unknown, req: Request, caller?: RefusalCaller) {
+export function failedRead(err: unknown, req: Request) {
   if (err instanceof StoredMoneyError) {
     console.error('Stored data fault:', {
       route: `${req.method} ${new URL(req.url).pathname}`,
@@ -190,7 +182,7 @@ export function failedRead(err: unknown, req: Request, caller?: RefusalCaller) {
     });
     return internalServerError();
   }
-  return serverError(err, caller);
+  return serverError(err);
 }
 
 /**

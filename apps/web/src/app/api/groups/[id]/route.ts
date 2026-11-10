@@ -64,7 +64,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     return success(group);
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }
 
@@ -80,6 +80,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
     return success({ message: 'Group archived' });
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }

@@ -22,6 +22,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     return success(await groupService.setAssistantRule(id, parsed.data.rule, user.id!));
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }

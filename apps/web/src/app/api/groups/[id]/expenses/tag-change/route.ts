@@ -29,6 +29,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const results = await expenseService.changeTags(id, user.id!, parsed.data);
     return success({ tagId: parsed.data.tagId, results });
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }

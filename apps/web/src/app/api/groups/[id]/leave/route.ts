@@ -40,6 +40,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         : {}),
     });
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }

@@ -18,7 +18,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const { id } = await routeIds(params);
     return success(await groupCurrencyService.settings(id, user.id!));
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }
 
@@ -32,6 +32,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!parsed.success) return validationError(parsed.error);
     return success(await groupCurrencyService.add(id, parsed.data.currency, user.id!), 201);
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }

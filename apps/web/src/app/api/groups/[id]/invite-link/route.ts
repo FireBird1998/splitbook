@@ -25,7 +25,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     return success(result, 201);
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }
 
