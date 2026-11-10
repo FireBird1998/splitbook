@@ -381,6 +381,26 @@ describe('Group creation corrections, rendered', () => {
 });
 
 describe('Record payment corrections, rendered', () => {
+  it('ends a payment with no suggestion before the sheet can show a no-suggestion overpayment lead (#1052)', async () => {
+    const { controller, writes } = backend();
+    await controller.signIn('sam');
+    await controller.openGroup(groupId, true, 'balances');
+    // The only suggestion is Sam paying Alex, never Alex paying Sam.
+    await controller.openRecordPayment(alexId, sam.id, 'INR');
+    act(() => {
+      screen = create(<PaymentSheet controller={controller} />);
+    });
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'ready',
+      draft: null,
+      message: 'This suggested payment has changed. Close this to see the latest balances.',
+    });
+    expect(text(screen!.root)).not.toContain('No payment from');
+    expect(text(screen!.root)).not.toContain('more than suggested');
+    expect(writes).toEqual([]);
+    controller.dispose();
+  });
+
   it('attaches the Amount correction to its field, keeps every entry, and records once the overpayment is ticked', async () => {
     const view = await render('payments');
     const amount = () => view.input('Amount paid, required');

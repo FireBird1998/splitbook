@@ -607,6 +607,40 @@ describe('Record payment sheet states', () => {
     expect(record.props.disabled).toBe(true);
     expect(record.props.accessibilityHint).toBe('Tick “Sam Chen paid more than suggested” first.');
   });
+
+  it('names another payer by first name in the overpayment position (#1052)', () => {
+    const { root } = sheet(
+      base({ draft: { paidBy: sam, paidTo: you, currency: 'INR', amount: '1200', note: '' } }),
+    );
+    expect(text(root)).toContain(
+      'That’s ₹140.00 more than suggested. Afterwards Sam would be owed ₹2,260.00 in this Group.',
+    );
+  });
+
+  it.each([NaN, -1480.001])(
+    'keeps the extra amount and tick without inventing a position from balance %s (#1052)',
+    (balance) => {
+      const { root } = sheet(
+        base({
+          draft: { paidBy: you, paidTo: sam, currency: 'INR', amount: '1110', note: '' },
+          balances: [
+            {
+              ...inr,
+              balances: inr.balances.map((row) =>
+                row.user.id === you ? { ...row, balance } : row,
+              ),
+            },
+          ],
+        }),
+      );
+      expect(text(root)).toContain('That’s ₹50.00 more than suggested.');
+      expect(text(root)).not.toContain('Afterwards');
+      expect(
+        labelled(root, 'I meant to pay more than suggested')[0].props.accessibilityState,
+      ).toEqual({ checked: false });
+      expect(labelled(root, 'Record payment ₹1,110.00')[0].props.disabled).toBe(true);
+    },
+  );
 });
 
 // #639: at 200% on a 360dp phone, the balance card's title broke mid-word beside its time ("ALL-T

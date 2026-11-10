@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { settleAllDebtsBetween } from '@splitbook/shared/settle-all';
-import { paymentBalances } from './payment-balances';
+import { paymentBalances, paymentPreview } from './payment-balances';
 import type { GroupCurrencyBalance } from './types';
 
 const alex = { id: 'alex', name: 'Alex Rivera', image: null };
@@ -99,5 +99,69 @@ describe('Balances for the shared payment readings', () => {
     expect(
       settleAllDebtsBetween(read, 'sam', 'alex', ['INR', 'EUR', 'JPY'], ['alex', 'sam']),
     ).toEqual([{ currency: 'JPY', amountMinor: 2500 }]);
+  });
+});
+
+describe('A single payment’s preview', () => {
+  const priya = { id: 'priya', name: 'Priya Shah', image: null };
+  // ₹10.005 is not an amount in rupees: a row holding it can't be read.
+  const balances = (rows: Partial<GroupCurrencyBalance> = {}): GroupCurrencyBalance[] => [
+    {
+      currency: 'INR',
+      balances: [
+        { user: alex, balance: -30 },
+        { user: sam, balance: 30 },
+      ],
+      debts: [{ from: alex, to: sam, amount: 30 }],
+      ...rows,
+    },
+  ];
+  const payment = { paidBy: 'alex', paidTo: 'sam', currency: 'INR', amountMinor: 4000 };
+
+  it('reads only this pair’s rows: another person’s unreadable row never decides the payment', () => {
+    const others = balances({
+      balances: [
+        { user: alex, balance: -30 },
+        { user: sam, balance: 30 },
+        { user: priya, balance: 10.005 },
+      ],
+      debts: [
+        { from: alex, to: sam, amount: 30 },
+        { from: priya, to: sam, amount: 10.005 },
+      ],
+    });
+    // The sheet, with the suggestion it opened with; and Record, from the Balances just read.
+    for (const preview of [paymentPreview(others, payment, 3000), paymentPreview(others, payment)])
+      expect(preview).toMatchObject({
+        suggestedMinor: 3000,
+        overpays: true,
+        overpaidMinor: 1000,
+        paidBy: { userId: 'alex', beforeMinor: -3000, afterMinor: 1000 },
+      });
+  });
+
+  it('never throws for the sheet when this pair’s own Debt can’t be read', () => {
+    const unreadable = balances({ debts: [{ from: alex, to: sam, amount: 10.005 }] });
+    expect(paymentPreview(unreadable, payment, 3000)).toMatchObject({
+      suggestedMinor: 3000,
+      overpays: true,
+      paidBy: { afterMinor: 1000 },
+    });
+    // Record has no suggestion to check against, so it must not go on.
+    expect(() => paymentPreview(unreadable, payment)).toThrow();
+  });
+
+  it('states no position when the payer’s own balance can’t be read', () => {
+    const unreadable = balances({
+      balances: [
+        { user: alex, balance: -30.005 },
+        { user: sam, balance: 30 },
+      ],
+    });
+    expect(paymentPreview(unreadable, payment, 3000)).toMatchObject({
+      overpays: true,
+      overpaidMinor: 1000,
+      paidBy: null,
+    });
   });
 });

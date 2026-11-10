@@ -302,14 +302,6 @@ export function parseSettlementAttempt(value: unknown, accountId: string, groupI
     },
   };
 }
-export function settlementSuggestion(balances: GroupCurrencyBalance[], draft: SettlementDraft) {
-  return (
-    balances
-      .find((b) => b.currency === draft.currency)
-      ?.debts.find((d) => d.from.id === draft.paidBy && d.to.id === draft.paidTo)?.amount ?? 0
-  );
-}
-
 export function parseRecordedSettlement(value: unknown, groupId: string, body: string) {
   const saved = z.object({ status: z.literal(201), data: record }).parse(value).data;
   const expected = createSettlementSchema.safeExtend({ paidBy: objectId }).parse(JSON.parse(body));

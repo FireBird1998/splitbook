@@ -75,7 +75,6 @@ import {
   settlementBody,
   settlementCorrectionSummary,
   settlementFields,
-  settlementSuggestion,
   recordNeedsConnection,
   recordWhileOffline,
   recordWaitsForRate,
@@ -91,7 +90,7 @@ import {
   settleAllDebtsBetween,
   settleAllPayCurrencies,
 } from '@splitbook/shared/settle-all';
-import { paymentBalances } from './payment-balances';
+import { paymentBalances, paymentPreview } from './payment-balances';
 import {
   assertSettlementMembers,
   assertSettlementAuthorization,
@@ -5617,9 +5616,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         attempt = await storeAttempt(lease, storage, groupId, body, owner);
       }
       if (!attempt) {
-        const suggested = settlementSuggestion(context.balances, draft);
+        const preview = paymentPreview(context.balances, {
+          ...draft,
+          amountMinor: parseAmountMinor(draft.amount, draft.currency),
+        })!; // Field validation above already requires a positive payment.
+        const suggested = toMajorAmount(preview.suggestedMinor, draft.currency);
         // The suggestion is gone: recording it anyway would be a payment nobody suggested.
-        if (suggested === 0) {
+        if (preview.suggestedMinor === 0) {
           publish({
             ...snapshot,
             settlement: {
@@ -5635,7 +5638,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           });
           return;
         }
-        if (suggested !== state.suggested) {
+        if (
+          preview.suggestedMinor !==
+          (state.suggested === null ? null : parseAmountMinor(state.suggested, draft.currency))
+        ) {
           publish({
             ...snapshot,
             settlement: {
@@ -5649,11 +5655,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           });
           return;
         }
-        if (
-          parseAmountMinor(draft.amount, draft.currency) >
-            parseAmountMinor(suggested, draft.currency) &&
-          !state.acknowledged
-        ) {
+        if (preview.overpays && !state.acknowledged) {
           publish({
             ...snapshot,
             settlement: {
