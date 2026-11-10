@@ -3,7 +3,7 @@ import { Refusal } from '@splitbook/shared/refusals';
 import type { ActivityType } from '@splitbook/shared/types';
 import type { Model, Types } from 'mongoose';
 import connectDB from './db';
-import { withGroupMutation } from './group-mutation';
+import { afterGroupCommit, withGroupMutation } from './group-mutation';
 import { ensureLedgerWriteIndexes } from './ledger-indexes';
 import { lockLedgerCurrency } from './ledger-currency';
 import {
@@ -74,10 +74,8 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
       .select('+creationRequest +pendingActivity');
     if (existing) {
       assertCreateReplay(existing.creationRequest!, retry.command);
-      await activityService.publishPending(
-        description.source,
-        existing._id,
-        existing.pendingActivity,
+      await afterGroupCommit(() =>
+        activityService.publishPending(description.source, existing._id, existing.pendingActivity),
       );
       return [existing];
     }
@@ -127,6 +125,8 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
     { ledger: true },
   );
   for (const row of saved)
-    await activityService.publishPending(description.source, row._id, row.pendingActivity);
+    await afterGroupCommit(() =>
+      activityService.publishPending(description.source, row._id, row.pendingActivity),
+    );
   return saved;
 }
