@@ -188,6 +188,7 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
   > = {
     '../app/api/groups/[id]/leave/route.ts': { POST: 'leave' },
     '../app/api/groups/[id]/members/[userId]/route.ts': { PATCH: 'demotion', DELETE: 'removal' },
+    '../app/api/groups/[id]/settlements/batch/route.ts': { POST: 'payment' },
     '../app/api/groups/[id]/expenses/route.ts': { POST: 'expense' },
     '../app/api/groups/[id]/expenses/[expenseId]/route.ts': { PATCH: 'expense' },
     '../app/api/groups/[id]/expenses/tag-change/route.ts': { POST: 'tag-change' },

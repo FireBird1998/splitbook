@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
 import {
@@ -52,7 +53,7 @@ export async function settlementDebtSnapshot(
     if (
       !suggested.some((debt) => debt.from === paidBy && debt.to === paidTo && debt.amountMinor > 0)
     )
-      throw new Error('NO_SETTLEMENT_DEBT');
+      throw new Refusal('NO_SETTLEMENT_DEBT');
   }
   const next = {
     currency,
