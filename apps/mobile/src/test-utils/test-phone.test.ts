@@ -358,4 +358,23 @@ describe('test phone', () => {
     stop();
     await expect(store.retainGroups!('alex', ['maple'])).resolves.toBeUndefined();
   });
+  it('stalls native operations while a device gate is active and can remove the stall', async () => {
+    const store=testPhone(fakeSplitbook()).stores.expenseDrafts;
+    let release!:()=>void;
+    let wait:Promise<void>|null=new Promise(done=>{release=done;});
+    const stop=store.stallPersistently('save',()=>wait);
+    let written=false;
+    const writing=store.save('alex','maple',{draft:'Dinner'}).then(()=>{written=true;});
+    await Promise.resolve();
+    expect(written).toBe(false);
+    expect(store.records.size).toBe(0);
+    release();await writing;
+    wait=null;
+    await store.save('alex','maple',{draft:'Tea'});
+    expect(await store.load('alex','maple')).toEqual({draft:'Tea'});
+    wait=new Promise(()=>{});stop();
+    await store.save('alex','maple',{draft:'Taxi'});
+    expect(await store.load('alex','maple')).toEqual({draft:'Taxi'});
+  });
+
 });
