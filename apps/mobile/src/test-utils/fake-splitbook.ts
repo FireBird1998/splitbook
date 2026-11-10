@@ -156,7 +156,8 @@ export function fakeSplitbook() {
     replies.unshift({ method, path, answer, once });
   };
   const sessions = new Map<string, PersonaId>();
-  let issued = 0;
+  let issued = 0,
+    online = true;
   const fetch: MobileFetch = async (address, init) => {
     const url = new URL(address),
       method = init.method ?? 'GET';
@@ -169,6 +170,7 @@ export function fakeSplitbook() {
       init,
     };
     requests.push(request);
+    if (!online) throw new TypeError('Network request failed');
     // Replacements can observe a request and defer to its normal answer with undefined.
     for (const entry of [...replies]) {
       if (entry.method !== '*' && entry.method !== method) continue;
@@ -293,6 +295,12 @@ export function fakeSplitbook() {
   };
   return {
     world,
+    get online() {
+      return online;
+    },
+    set online(value: boolean) {
+      online = value;
+    },
     fetch,
     requests,
     unanswered,

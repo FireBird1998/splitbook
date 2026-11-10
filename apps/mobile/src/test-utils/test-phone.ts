@@ -72,7 +72,7 @@ function records() {
 
 /** A phone owns its stores; reopening replaces only the app, never the phone's contents. */
 export function testPhone(
-  server: Pick<MobileDependencies, 'fetch'>,
+  server: Pick<MobileDependencies, 'fetch'> & { online: boolean },
   options: {
     now?: number;
     newSubmissionKey?: () => string;
@@ -120,7 +120,7 @@ export function testPhone(
     })(),
   };
   const clock = { now: options.now ?? Date.now() };
-  let online = true,
+  let online = server.online,
     key = 0,
     active: MobileController | undefined;
   const listeners = new Set<(state: { isConnected: boolean }) => void>();
@@ -170,6 +170,7 @@ export function testPhone(
     clock,
     connect(value: boolean) {
       online = value;
+      server.online = value;
       listeners.forEach((listener) => listener({ isConnected: online }));
     },
     open() {
