@@ -65,49 +65,45 @@ Each package's `src/test-time-zone.test.ts` names the zone the run resolved to.
 
 ## Android test phone and fake Splitbook
 
-`src/test-utils/test-phone.ts` owns the in-memory phone; `fake-splitbook.ts` answers HTTP.
-The Settle up, payment, Balances, financial-view, Trip-summary and form-correction suites use
-them. A test can start on the default world, then state only what differs:
+Under `apps/mobile/src/test-utils/`, `test-phone.ts` supplies native stores, connection signals,
+an optional clock and flow-monitored controllers; `fake-splitbook.ts` answers HTTP from a
+mutable wire-shaped world. Screen tests keep their rendering helpers separate.
 
 ```ts
-import { testPhone } from './test-utils/test-phone';
-import { fakeSplitbook } from './test-utils/fake-splitbook';
-
-it('opens the default Group', async () => {
-  const server = fakeSplitbook();
-  const phone = testPhone(server);
-  const app = phone.open();
-  await app.signIn('alex');
-  await app.openGroup(server.world.groups[0]!._id);
-  expect(app.getSnapshot().detail.data?.name).toBe('Maple House');
-  phone.dispose();
-});
+const server = fakeSplitbook();
+const phone = testPhone(server);
+const app = phone.open();
+await app.signIn('alex');
+await app.openGroup(server.world.groups[0]!._id);
+expect(app.getSnapshot().detail.data?.name).toBe('Maple House');
 ```
 
-Change `server.world` for subsequent reads. `server.reply(method, path, request => response,
-{ once: true })` replaces the next answer; omit `once` for every matching request. The callback
-can return `undefined` to use the normal answer, including after awaiting a held reply.
-Successful writes return a reply built from the request and leave the world alone.
-`server.requests` keeps method, path (with query), headers and body in order;
-`server.unanswered` lists requests answered with the fallback 404. `server.sent()` is a live
-method/path view; `{ query: false }` omits queries without changing the full log. `until(app,
-ready)` from the phone module waits for a public snapshot condition. The payment fixtures can
-use `rateSuggestion` and `expenseFixture`; `world.tripSummaries[groupId]` holds the default
-(`''`) and chosen-currency reads in wire shape.
+Change `server.world` to state subsequent reads. Writes return request-built receipts and do
+not change the world. `server.reply(method, path, request => response, { once: true })` replaces
+one answer; omit `once` to replace all. `server.requests` records method, path, headers and body;
+`server.sent()` gives a live method/path view. `until(app, ready)` waits for a snapshot condition.
 
-Keep the parts a suite originally supplied. `parts: { savedQueries: undefined }` takes one away;
-`accountLocal: undefined` takes away account storage entirely. Optional account fields can be
-omitted independently, and `purge` can name the original fixture's purge list. These preserve
-a test's starting conditions instead of adding storage or cleanup during its move.
+For a network fault, use `server.fault('POST', path, 'lost-reply', { once: true })`; `body-fails`
+instead fails while reading the response body. `server.hold('GET', path)` returns `arrived` and
+`release()`; start the action, await `arrived`, then release the reply. `{ at: 'request' }` holds
+before answering instead. Store faults live on `phone.stores`: `failNext('save')`,
+`holdNext('save')`, or `failPersistently('save')` (returns a function that ends the fault).
+`phone.stores.savedQueries.at(path)` limits a fault to one saved row.
 
-`phone.open()` again restarts on the same stores. Inspect `phone.stores`, or use
-`phone.connect(false)` and `phone.connect(true)`. A phone runs on the platform clock unless the
-test gives it one (`testPhone(server, { now })`); then `phone.clock.now` moves it. Each store offers
-`failNext('save')`, `stallNext('save', promise)` and `holdNext('save')` (wait for `arrived`, then
-`release()`). Use `server.fault` for the shared transport faults: `lost-reply` rejects fetch
-after the request is taken, while `body-fails` supplies headers then rejects reading the body. Controllers are flow-monitored
-by default. The existing ceilings command and gate also check `directControllerTestFiles` in
-`src/test-utils/test-phone.ceilings.json`; new tests must use the phone instead of increasing it.
+Every unanswered request fails its test with its method and path. Declare an intended 404 with
+`server.expectUnanswered('GET', '/api/join/abcdef12')`. Declarations must name an exact method
+and pathname; include a query to match it exactly. Wildcards and unused declarations fail.
+
+`phone.open()` again disposes the old controller and restarts on the same stores; teardown is
+automatic. `phone.connect(false)` drops the connection. The platform clock stays in use unless
+`testPhone(server, { now })` supplies one; only then can `phone.clock.now` move it. Preserve a
+suite's original parts and purge list: `parts: { savedQueries: undefined }` omits that store.
+
+New tests use the phone. Only `runtime.test.ts`, `runtime-notifications.test.ts` and
+`runtime-http-store-failure.test.ts` construct controllers directly to test runtime wiring.
+Their scanner exclusion is defined in `apps/mobile/scripts/test-phone-ceiling.ts`;
+`src/test-utils/test-phone.ceilings.json` fixes `directControllerTestFiles` at zero, enforced by
+`ceilings:compare` and the gate.
 
 ## Shared domain tests and the coverage gate
 
