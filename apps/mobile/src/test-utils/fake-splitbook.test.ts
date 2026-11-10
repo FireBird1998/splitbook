@@ -832,3 +832,9 @@ it('can fail a session check without revoking its still-valid cookie', async () 
   expect(recovered.status).toBe(200);
   expect(await recovered.json()).toMatchObject({ user: { id: 'a00000000000000000000001' } });
 });
+
+it.fails('fails the sending test when a request has no answer', async () => {
+  const server = fakeSplitbook();
+  const response = await server.fetch('http://local/api/not-a-read', {});
+  expect(response.status).toBe(404);
+});
