@@ -501,3 +501,31 @@ it('records a non-Trip Group’s direct summary refusal', async () => {
   read.mockRestore();
   member.mockRestore();
 });
+
+it('records invitation schema refusals before persistence', async () => {
+  const { POST: answerInvitation } = await import('@/app/api/invitations/[id]/route');
+  const { POST: sendInvitation } = await import('@/app/api/groups/[id]/invite/route');
+  const { default: Group } = await import('@/lib/models/Group');
+  const membership = vi.spyOn(Group, 'findOne').mockReturnValue({
+    lean: async () => ({ _id: 'a00000000000000000000001' }),
+  } as never);
+  vi.mocked(auth.api.getSession).mockResolvedValue({
+    user: { id: 'a00000000000000000000001', name: 'Alex', email: 'alex@example.test' },
+  } as never);
+  const census = [];
+  try {
+    for (const { state, handler, body } of [
+      { state: 'invalid invitation action', handler: answerInvitation, body: { action: 'wait' } },
+      { state: 'invalid invite email', handler: sendInvitation, body: { email: 'not-an-email' } },
+    ]) {
+      const answer = await handler(
+        new Request('http://localhost/api/census', { method: 'POST', body: JSON.stringify(body) }),
+        { params: Promise.resolve({ id: 'a00000000000000000000001' }) },
+      );
+      census.push({ state, answer: await recorded(answer) });
+    }
+    expect(census).toMatchSnapshot();
+  } finally {
+    membership.mockRestore();
+  }
+});

@@ -103,6 +103,27 @@ exports[`records each per-Expense Tag refusal through the bulk HTTP response 1`]
 ]
 `;
 
+exports[`records invitation schema refusals before persistence 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Invalid action","status":422}",
+      "hasCode": false,
+      "status": 422,
+    },
+    "state": "invalid invitation action",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Invalid email address","status":422}",
+      "hasCode": false,
+      "status": 422,
+    },
+    "state": "invalid invite email",
+  },
+]
+`;
+
 exports[`records optional Tag payloads and ignores their internal count message 1`] = `
 [
   {
