@@ -1,4 +1,4 @@
-import type { MobileFetch, PersonaId, SessionUser } from '../data/types';
+import type { FetchResponse, MobileFetch, PersonaId, SessionUser } from '../data/types';
 
 /** The personas and ids most controller suites use. Each fake gets its own mutable world. */
 export const demoPeople = {
@@ -68,6 +68,16 @@ export function expensePage(expenses: unknown[] = [], page = 1) {
   };
 }
 
+export interface FakeRequest {
+  url: URL;
+  method: string;
+  path: string;
+  headers: Headers;
+  body: Record<string, unknown> | undefined;
+  init: RequestInit;
+}
+type Answer = (request: FakeRequest) => FetchResponse | Promise<FetchResponse> | undefined;
+
 export function fakeSplitbook() {
   const group = groupFixture();
   const world = {
@@ -78,11 +88,38 @@ export function fakeSplitbook() {
     expenses: { [group._id]: expensePage() },
   };
   const unanswered: string[] = [];
+  const requests: FakeRequest[] = [];
+  const replies: { method: string; path: string; answer: Answer; once: boolean }[] = [];
+  const reply = (method: string, path: string, answer: Answer, { once = false } = {}) => {
+    replies.unshift({ method, path, answer, once });
+  };
   const sessions = new Map<string, PersonaId>();
   let issued = 0;
   const fetch: MobileFetch = async (address, init) => {
     const url = new URL(address),
       method = init.method ?? 'GET';
+    const request: FakeRequest = {
+      url,
+      method,
+      path: url.pathname + url.search,
+      headers: new Headers(init.headers),
+      body: init.body ? JSON.parse(String(init.body)) : undefined,
+      init,
+    };
+    requests.push(request);
+    // Replacements can observe a request and defer to its normal answer with undefined.
+    for (const entry of [...replies]) {
+      if (entry.method !== '*' && entry.method !== method) continue;
+      if (entry.path !== '*' && entry.path !== url.pathname && entry.path !== request.path)
+        continue;
+      if (entry.once) replies.splice(replies.indexOf(entry), 1);
+      const answer = entry.answer(request);
+      if (answer !== undefined) return answer;
+    }
+    if (!url.pathname.startsWith('/api/')) {
+      unanswered.push(`${method} ${request.path}`);
+      return Response.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
+    }
     if (url.pathname === '/api/auth/demo-persona/sign-in' && method === 'POST') {
       const persona = JSON.parse(String(init.body)).personaId as PersonaId;
       const user = world.people[persona];
@@ -121,5 +158,5 @@ export function fakeSplitbook() {
     unanswered.push(`${method} ${url.pathname}${url.search}`);
     return Response.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
   };
-  return { world, fetch, unanswered };
+  return { world, fetch, requests, unanswered, reply };
 }
