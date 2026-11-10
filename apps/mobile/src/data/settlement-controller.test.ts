@@ -1,7 +1,7 @@
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gatewayReply } from '../test-utils/transport-faults';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 import type { FetchResponse } from './types';
 import { settlementBody } from './settlement';
 const actor = 'a00000000000000000000001',
@@ -137,173 +137,83 @@ function setup(
   /** Opted in to notifications (#842), as notification-alerts-controller.test.ts is. */
   withNotifications = false,
 ) {
-  let cookie: string | null = null,
-    account: string | null = null,
-    cleanup = false,
-    key = 0;
-  const records = new Map<string, unknown>();
-  let cleanupRecord: unknown = null;
-  const device = { failRemoval: false };
-  const financialCleanup = {
-    load: async () => structuredClone(cleanupRecord),
-    save: async (value: unknown) => {
-      cleanupRecord = structuredClone(value);
-    },
-    clear: async () => {
-      cleanupRecord = null;
-    },
-  };
-  const savedRows = new Map<string, unknown>();
-  const store = {
-    list: async (account: string) =>
-      [...records]
-        .filter(([key]) => key.startsWith(account))
-        .map(([key, value]) => ({
-          groupId: key.slice(account.length),
-          value: structuredClone(value),
-        })),
-    load: async (a: string, g: string) => structuredClone(records.get(a + g) ?? null),
-    save: async (a: string, g: string, v: unknown) => {
-      records.set(a + g, structuredClone(v));
-    },
-    remove: async (a: string, g: string) => {
-      if (device.failRemoval) throw new Error('Device storage failed');
-      records.delete(a + g);
-    },
-    clear: async () => {
-      records.clear();
-    },
-  };
+  const server = fakeSplitbook();
+  server.world.people.alex = user;
+  server.world.groups = [group];
+  server.world.balances[groupId] = balances().data;
+  // Preserve this file's fixed receipt: even a different request receives 10 INR / Paid already.
+  // Tests that need a matching or rejected receipt state that reply through intercept.
+  server.reply('POST', `/api/groups/${groupId}/settlements`, () =>
+    json({ status: 201, data: record }, 201),
+  );
+  server.reply('*', '/api/notifications/device', () =>
+    json({
+      data: {
+        available: true,
+        enabled: true,
+        expenseUpdates: true,
+        payments: true,
+        revision: 1,
+        activation: alertActivation,
+        binding: alertBinding,
+        expenseCutoff: new Date(0).toISOString(),
+        paymentCutoff: new Date(0).toISOString(),
+      },
+    }),
+  );
   const writes: RequestInit[] = [];
-  /** Every request sent, as `METHOD /path`, in the order sent. */
-  const sent: string[] = [];
-  /** NetInfo's listeners: the device's connection, which `connect` reports. */
-  const connection = new Set<(state: { isConnected: boolean | null }) => void>();
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
-      },
-      {
-        credentials: {
-          load: async () => cookie,
-          save: async (v) => {
-            cookie = v;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        settlementAttempts: store,
-        savedQueries: withSavedQueries ? savedQueriesIn(savedRows) : undefined,
-        netInfo: {
-          // As NetInfo does, a new listener hears the connection as it is now.
-          addEventListener: (listener) => {
-            connection.add(listener);
-            listener({ isConnected: true });
-            return () => connection.delete(listener);
-          },
-        },
-        newSubmissionKey: () => `settlement-key-${++key}`,
-        ...(withNotifications
-          ? {
-              notifications: {
-                installation: async () => ({
-                  id: '00000000-0000-4000-8000-000000000842',
-                  key: 'private-installation-proof-842842842',
-                }),
-                permission: async () => 'granted' as const,
-                requestPermission: async () => 'granted' as const,
-                token: async () => 'private-token',
-                clear: async () => {},
-                openSettings: async () => {},
-              },
-            }
-          : {}),
-        accountLocal: {
-          financialCleanup,
-          owner: {
-            load: async () => account,
-            save: async (v) => {
-              account = v;
-            },
-            clear: async () => {
-              account = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          stores: [store, financialCleanup],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname;
-          sent.push(`${init.method ?? 'GET'} ${path}`);
-          if (path.endsWith('/settlements') && init.method === 'POST') writes.push(init);
-          const override = intercept(path, init);
-          if (override) return override;
-          if (path.endsWith('/sign-in'))
-            return new Response(JSON.stringify({ user }), {
-              headers: {
-                'Set-Cookie': 'better-auth.session_token=alex.signature; Max-Age=2592000',
-              },
-            });
-          if (path.endsWith('/get-session'))
-            return json({ user, session: { userId: actor, expiresAt: '2030-01-01T00:00:00Z' } });
-          if (path.endsWith('/sign-out')) return json({ success: true });
-          if (path === '/api/notifications/device')
-            return json({
-              data: {
-                available: true,
-                enabled: true,
-                expenseUpdates: true,
-                payments: true,
-                revision: 1,
-                activation: alertActivation,
-                binding: alertBinding,
-                expenseCutoff: new Date(0).toISOString(),
-                paymentCutoff: new Date(0).toISOString(),
-              },
-            });
-          if (path === '/api/groups') return json({ status: 200, data: [group] });
-          if (path === `/api/groups/${groupId}`) return json({ status: 200, data: group });
-          if (path.endsWith('/user/balances')) return json({ status: 200, data: { buckets: [] } });
-          if (path.endsWith('/balances')) return json(balances());
-          if (path.endsWith('/settlements'))
-            return init.method === 'POST'
-              ? json({ status: 201, data: record }, 201)
-              : json({ status: 200, data: [] });
-          if (path.endsWith('/expenses'))
-            return json({
-              status: 200,
-              data: {
-                expenses: [],
-                pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-                summary: {
-                  count: 0,
-                  totalsByCurrency: [],
-                  userOwes: 0,
-                  userGetsBack: 0,
-                  byMember: [],
-                },
-              },
-            });
-          return json({}, 404);
-        },
-      },
-    );
-  /** NetInfo reports the device's connection: false when it drops, true when it's back. */
-  const connect = (isConnected: boolean) =>
-    connection.forEach((listener) => listener({ isConnected }));
-  return { controller: create(), create, store, records, writes, sent, connect, device };
+  server.reply('*', '*', ({ url, init, method }) => {
+    if (method === 'POST' && url.pathname.endsWith('/settlements')) writes.push(init);
+    return intercept(url.pathname, init);
+  });
+  let key = 0;
+  const phone = testPhone(server, {
+    newSubmissionKey: () => `settlement-key-${++key}`,
+    parts: {
+      ...(!withSavedQueries ? { savedQueries: undefined } : {}),
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      accountLocal: { signOutRecord: undefined, untrustedCopies: undefined },
+      notifications: withNotifications
+        ? {
+            installation: async () => ({
+              id: '00000000-0000-4000-8000-000000000842',
+              key: 'private-installation-proof-842842842',
+            }),
+            permission: async () => 'granted',
+            requestPermission: async () => 'granted',
+            token: async () => 'private-token',
+            clear: async () => {},
+            openSettings: async () => {},
+          }
+        : undefined,
+    },
+    // Saved queries were deliberately not in this file's original native purge registry.
+    purge: ['settlementAttempts', 'financialCleanup'],
+  });
+  const store = phone.stores.settlementAttempts;
+  const device = { failRemoval: false };
+  const remove = store.remove;
+  // This one file has a persistent removal fault, not just a failed next write. Keep its
+  // original switch explicit rather than changing the fault's lifetime during this move.
+  store.remove = async (account, group) => {
+    if (device.failRemoval) throw new Error('Device storage failed');
+    await remove(account, group);
+  };
+  return {
+    controller: phone.open(),
+    create: phone.open,
+    store,
+    records: store.records,
+    writes,
+    sent: server.sent({ query: false }),
+    connect: phone.connect,
+    device,
+  };
 }
 describe('native payment recording', () => {
   it('finishes confirmed receipt cleanup without reopening a Group denied while device removal is pending', async () => {
