@@ -25,4 +25,33 @@ describe('test phone', () => {
     ).toEqual({ untouched: 'fictional payment' });
     phone.dispose();
   });
+  it('fails, stalls and holds a store write without changing what was stored until release', async () => {
+    const phone = testPhone(fakeSplitbook());
+    const store = phone.stores.settlementAttempts;
+    store.failNext('save', new Error('Fictional disk failure'));
+    await expect(store.save('alex', 'maple', { value: 1 })).rejects.toThrow(
+      'Fictional disk failure',
+    );
+    expect(store.records.size).toBe(0);
+    const hold = store.holdNext('save');
+    const writing = store.save('alex', 'maple', { value: 2 });
+    await hold.arrived;
+    expect(store.records.size).toBe(0);
+    hold.release();
+    await writing;
+    expect(await store.load('alex', 'maple')).toEqual({ value: 2 });
+    let release!: () => void;
+    store.stallNext(
+      'save',
+      new Promise<void>((done) => {
+        release = done;
+      }),
+    );
+    const stalled = store.save('alex', 'maple', { value: 3 });
+    await Promise.resolve();
+    expect(await store.load('alex', 'maple')).toEqual({ value: 2 });
+    release();
+    await stalled;
+    expect(await store.load('alex', 'maple')).toEqual({ value: 3 });
+  });
 });
