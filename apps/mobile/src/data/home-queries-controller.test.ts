@@ -208,9 +208,9 @@ function fixture() {
       draftRequests: undefined,
       tagRequests: undefined,
       groupCreations: {
-        load: (account) => phone.stores.settlementAttempts.load('creation:', account),
-        save: (account, value) => phone.stores.settlementAttempts.save('creation:', account, value),
-        remove: (account) => phone.stores.settlementAttempts.remove('creation:', account),
+        load: (account): Promise<unknown> => phone.stores.settlementAttempts.load('creation:', account),
+        save: (account, value): Promise<void> => phone.stores.settlementAttempts.save('creation:', account, value),
+        remove: (account): Promise<void> => phone.stores.settlementAttempts.remove('creation:', account),
         clear: async () => {},
       },
       accountLocal: { financialCleanup: undefined, signOutRecord: undefined },

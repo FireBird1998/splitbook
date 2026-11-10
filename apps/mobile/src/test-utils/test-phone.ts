@@ -163,17 +163,20 @@ function records(savedQueries = false, separator = '') {
 }
 
 /** A phone owns its stores; reopening replaces only the app, never the phone's contents. */
-export function testPhone(
+export function testPhone<Queries extends SavedQueryRecords | undefined = undefined>(
   server: Pick<MobileDependencies, 'fetch'> & { online: boolean },
   options: {
     now?: number;
     recordSeparator?: string;
     newSubmissionKey?: () => string;
-    parts?: PhoneParts;
+    parts?: Omit<PhoneParts, 'savedQueries'> & { savedQueries?: Queries };
     purge?: readonly PurgeStore[];
     monitor?: boolean;
   } = {},
 ) {
+  type QueryStorage = Queries extends SavedQueryRecords ? Queries : ReturnType<typeof records>;
+  // A supplied adapter stays native (including SQLite); only the default adapter has memory rows.
+  const queries = (options.parts?.savedQueries ? faultable(options.parts.savedQueries) : records(true)) as ReturnType<typeof faultable<QueryStorage>>;
   const stores = {
     credentials: cell<string | null>(null),
     owner: cell<string | null>(null),
@@ -191,7 +194,7 @@ export function testPhone(
     untrustedCopies: cell<unknown>(null),
     offlineIdentity: cell<unknown>(null),
     pendingInvitation: cell<string | null>(null),
-    savedQueries: records(true),
+    savedQueries: queries,
     expenseDrafts: records(false, options.recordSeparator),
     settlementAttempts: records(),
     draftRequests: records(),
@@ -253,6 +256,7 @@ export function testPhone(
     ...(injected ? { now: () => clock.now } : {}),
     newSubmissionKey: options.newSubmissionKey ?? (() => `test-phone-key-${++key}`),
     ...options.parts,
+    ...(options.parts?.savedQueries ? { savedQueries: stores.savedQueries } : {}),
   };
   const accountParts = options.parts?.accountLocal;
   const accountLocal: AccountLocalStorage = {
