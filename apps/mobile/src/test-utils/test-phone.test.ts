@@ -439,3 +439,83 @@ describe('test phone', () => {
     ]);
   });
 });
+
+it('opens the phone with its build configuration and distinct API and auth origins', async () => {
+  const server = fakeSplitbook();
+  const phone = testPhone(server, {
+    config: {
+      apiBaseUrl: 'http://10.0.2.2:4127',
+      authOrigin: 'http://localhost:4127',
+      developmentPersonaEnabled: true,
+    },
+  });
+  await phone.open().signIn('alex');
+  expect(server.requests[0].url.origin).toBe('http://10.0.2.2:4127');
+  expect(server.requests[0].headers.get('Origin')).toBe('http://localhost:4127');
+});
+
+it('keeps a payment store’s separated native keys independently of Draft keys', async () => {
+  const phone = testPhone(fakeSplitbook(), { settlementSeparator: ':' });
+  await phone.stores.settlementAttempts.save('alex', 'maple', { payment: 1 });
+  expect([...phone.stores.settlementAttempts.records.keys()]).toEqual(['alex:maple']);
+  expect(await phone.stores.settlementAttempts.load('alex', 'maple')).toEqual({ payment: 1 });
+  expect(await phone.stores.settlementAttempts.list('alex')).toEqual([
+    { groupId: 'maple', value: { payment: 1 } },
+  ]);
+  await phone.stores.expenseDrafts.save('alex', 'maple', { draft: 1 });
+  expect([...phone.stores.expenseDrafts.records.keys()]).toEqual(['alexmaple']);
+});
+
+it('observes completed credential writes separately from a held or failed write', async () => {
+  const phone = testPhone(fakeSplitbook());
+  const store = phone.stores.credentials;
+  store.value = 'seeded';
+  expect(store.writes).toEqual([]);
+  store.failNext('save');
+  await expect(store.save('failed')).rejects.toThrow();
+  const held = store.holdNext('save');
+  const saving = store.save('confirmed');
+  await held.arrived;
+  expect(store.writes).toEqual([]);
+  held.release();
+  await saving;
+  expect(store.writes).toEqual(['confirmed']);
+});
+
+it('reopens the same phone with the caller’s current runtime parts and build config', async () => {
+  const server = fakeSplitbook(),
+    phone = testPhone(server);
+  await phone.open().signIn('alex');
+  const app = phone.open({
+    config: { apiBaseUrl: 'http://api.test', authOrigin: 'http://auth.test' },
+    parts: { newSubmissionKey: () => 'reopened-key' },
+  });
+  await app.restore();
+  app.startCreate();
+  app.updateCreation({ name: 'Reopened Group' });
+  await app.createGroup();
+  const request = server.requests.find((r) => r.method === 'POST' && r.path === '/api/groups')!;
+  expect(request.url.origin).toBe('http://api.test');
+  expect(request.headers.get('Origin')).toBe('http://auth.test');
+  expect(request.headers.get('Idempotency-Key')).toBe('reopened-key');
+  expect(phone.stores.credentials.value).not.toBeNull();
+});
+
+it('can explicitly keep two runtimes on one phone until a normal restart disposes both', async () => {
+  const server = fakeSplitbook(),
+    phone = testPhone(server);
+  const first = phone.open();
+  await first.signIn('alex');
+  const second = phone.openConcurrent();
+  await second.restore();
+  expect(first.getSnapshot().auth.status).toBe('authenticated');
+  expect(second.getSnapshot().auth.status).toBe('authenticated');
+  await first.openGroup('b00000000000000000000001');
+  expect(first.getSnapshot().screen).toBe('group');
+  const restarted = phone.open();
+  expect(first.getSnapshot().auth.status).toBe('signed-out');
+  expect(second.getSnapshot().auth.status).toBe('signed-out');
+  expect(first.getSnapshot().detail.data).toBeNull();
+  await restarted.restore();
+  expect(restarted.getSnapshot().auth.user?.id).toBe('a00000000000000000000001');
+});

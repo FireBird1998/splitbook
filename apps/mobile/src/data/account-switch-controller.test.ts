@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { decodeStoredSession } from './cookies';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { MobileController } from './mobile-controller';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse, MobileSnapshot } from './types';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #200: the app dies partway through an account switch and restarts over the same storage.
 // Fictional people and Groups only.
@@ -34,7 +36,7 @@ const json = (body: unknown, status = 200, setCookie?: string): FetchResponse =>
       ...(setCookie ? { 'Set-Cookie': `${setCookie}; HttpOnly; Path=/; Max-Age=2592000` } : {}),
     },
   });
-const member = (person: Person, role: 'admin' | 'member') => ({
+const member = (person: import('./types').SessionUser, role: 'admin' | 'member') => ({
   user: { ...person, _id: person.id },
   role,
   joinedAt: iso,
@@ -88,66 +90,43 @@ const expense = (isDeleted: boolean) => ({
 
 /** One phone and its server. The phone's storage outlives each controller, as across a restart. */
 function phone() {
-  const stored = {
-    cookie: null as string | null,
-    owner: null as string | null,
-    identity: null as unknown,
-    cleanup: false,
-    cache: new Map<string, unknown>(),
-    drafts: new Map<string, unknown>(),
-    creations: new Map<string, unknown>(),
-  };
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.people.sam = sam;
+  backend.world.groups = [group, alexGroup];
   const server = {
-    offline: false,
-    /**
-     * The next answer refreshes the session's cookie, as a server may. The cookie it was sent
-     * with still works, as with Better Auth, which keeps a session's token when it refreshes it:
-     * the phone may have other reads on their way with it, such as Home's list and figures, read
-     * together (#333).
-     */
-    rotate: false,
+    sessions: backend.auth.sessions,
+    issuedTo: backend.auth.issuedTo,
     deleted: false,
-    sessions: new Map<string, Person>(),
-    issuedTo: new Map<string, Person>(),
+    get offline() {
+      return !backend.online;
+    },
+    set offline(value: boolean) {
+      backend.online = !value;
+    },
+    get rotate() {
+      return backend.auth.rotate;
+    },
+    set rotate(value: boolean) {
+      backend.auth.rotate = value;
+    },
   };
   /** Every request the phone sent, with its cookie and the user on screen as it went out. */
   const requests: { method: string; path: string; cookie: string | null; shown: string | null }[] =
     [];
   /** Each time the cookie was recorded for an account: who owned the device then, and what else it held. */
   const verifiedWrites: { accountId: string; owner: string | null; foreign: number }[] = [];
-  const holds: {
-    prefix: string;
-    arrive: () => void;
-    response: Promise<Error | null>;
-  }[] = [];
-  let active: ReturnType<typeof createMobileController> | null = null;
-
-  const issue = (user: Person) => {
-    const cookie = `better-auth.session_token=${user === sam ? 'sam' : 'alex'}-${server.issuedTo.size + 1}.signature`;
-    server.sessions.set(cookie, user);
-    server.issuedTo.set(cookie, user);
-    return cookie;
-  };
-  const respond = (path: string, init: RequestInit, cookie: string | null): FetchResponse => {
+  let active: MobileController | null = null;
+  const respond = (
+    path: string,
+    init: RequestInit,
+    cookie: string | null,
+  ): FetchResponse | undefined => {
     const method = init.method ?? 'GET';
-    if (path === '/api/auth/demo-persona/sign-in') {
-      const user = String(init.body).includes('sam') ? sam : alex;
-      return json({ user }, 200, issue(user));
-    }
+    if (path.startsWith('/api/auth/')) return undefined;
     const user = cookie ? server.sessions.get(cookie) : undefined;
-    if (!user) return json({ error: 'Unauthorized' }, 401);
-    let refreshed: string | undefined;
-    if (server.rotate) {
-      server.rotate = false;
-      refreshed = issue(user);
-    }
-    const answer = (body: unknown, status = 200) => json(body, status, refreshed);
-    if (path === '/api/auth/get-session')
-      return answer({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00.000Z' } });
-    if (path === '/api/auth/sign-out') {
-      server.sessions.delete(cookie!);
-      return answer({ success: true });
-    }
+    if (!user) return undefined;
+    const answer = (body: unknown, status = 200) => json(body, status);
     if (path === '/api/groups' && method === 'POST') {
       const { name } = JSON.parse(String(init.body)) as { name: string };
       return answer(
@@ -207,127 +186,96 @@ function phone() {
     throw new Error(`Unexpected request ${method} ${path}`);
   };
 
-  const create = () => {
-    active = createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4146',
-        authOrigin: 'http://localhost:4146',
-        developmentPersonaEnabled: true,
-      },
-      {
-        now: () => Date.parse(iso),
-        newSubmissionKey: () => 'account-switch-test-0001',
-        credentials: {
-          load: async () => stored.cookie,
-          save: async (value) => {
-            stored.cookie = value;
-            const accountId = decodeStoredSession(value, false)?.accountId;
-            if (accountId)
-              verifiedWrites.push({
-                accountId,
-                owner: stored.owner,
-                foreign: [...stored.cache.keys(), ...stored.drafts.keys()].filter(
-                  (key) => !key.startsWith(accountId),
-                ).length,
-              });
-          },
-          clear: async () => {
-            stored.cookie = null;
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(stored.identity),
-          save: async (value) => {
-            stored.identity = structuredClone(value);
-          },
-          clear: async () => {
-            stored.identity = null;
-          },
-        },
-        savedQueries: savedQueriesIn(stored.cache),
-        expenseDrafts: {
-          load: async (account, id) =>
-            structuredClone(stored.drafts.get(`${account}:${id}`) ?? null),
-          save: async (account, id, value) => {
-            stored.drafts.set(`${account}:${id}`, structuredClone(value));
-          },
-          remove: async (account, id) => {
-            stored.drafts.delete(`${account}:${id}`);
-          },
-          clear: async () => {
-            stored.drafts.clear();
-          },
-          list: async (account) =>
-            [...stored.drafts]
-              .filter(([key]) => key.startsWith(`${account}:`))
-              .map(([key, value]) => ({
-                groupId: key.split(':')[1],
-                value: structuredClone(value),
-              })),
-        },
-        groupCreations: {
-          load: async (account) => structuredClone(stored.creations.get(account) ?? null),
-          save: async (account, value) => {
-            stored.creations.set(account, structuredClone(value));
-          },
-          remove: async (account) => {
-            stored.creations.delete(account);
-          },
-          clear: async () => {
-            stored.creations.clear();
-          },
-        },
+  backend.reply('*', '*', ({ url, init, headers }) =>
+    respond(url.pathname, init, headers.get('Cookie')),
+  );
+  const fetch: typeof backend.fetch = (url, init) => {
+    requests.push({
+      method: init.method ?? 'GET',
+      path: new URL(url).pathname,
+      cookie: new Headers(init.headers).get('Cookie'),
+      shown: active?.getSnapshot().auth.user?.id ?? null,
+    });
+    return backend.fetch(url, init);
+  };
+  const native = testPhone(
+    { ...backend, fetch },
+    {
+      origin: 'http://localhost:4146',
+      now: Date.parse(iso),
+      recordSeparator: ':',
+      newSubmissionKey: () => 'account-switch-test-0001',
+      parts: {
+        pendingInvitation: undefined,
+        settlementAttempts: undefined,
+        draftRequests: undefined,
+        tagRequests: undefined,
+        netInfo: undefined,
         accountLocal: {
-          owner: {
-            load: async () => stored.owner,
-            save: async (value) => {
-              stored.owner = value;
-            },
-            clear: async () => {
-              stored.owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => stored.cleanup,
-            mark: async () => {
-              stored.cleanup = true;
-            },
-            clear: async () => {
-              stored.cleanup = false;
-            },
-          },
+          financialCleanup: undefined,
+          untrustedCopies: undefined,
+          signOutRecord: undefined,
           stores: [
             {
-              clear: async () => {
-                stored.cache.clear();
-                stored.drafts.clear();
-                stored.creations.clear();
-                stored.identity = null;
+              clear: async (): Promise<void> => {
+                native.stores.savedQueries.records.clear();
+                native.stores.expenseDrafts.records.clear();
+                native.stores.groupCreations.records.clear();
+                native.stores.offlineIdentity.value = null;
               },
             },
           ],
         },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname;
-          const cookie = new Headers(init.headers).get('Cookie');
-          requests.push({
-            method: init.method ?? 'GET',
-            path,
-            cookie,
-            shown: active?.getSnapshot().auth.user?.id ?? null,
-          });
-          if (server.offline) throw new Error('Offline');
-          const index = holds.findIndex((item) => path.startsWith(item.prefix));
-          if (index >= 0) {
-            const [item] = holds.splice(index, 1);
-            item.arrive();
-            const outcome = await item.response;
-            if (outcome) throw outcome;
-          }
-          return respond(path, init, cookie);
-        },
       },
-    );
+    },
+  );
+  delete native.stores.savedQueries.retainGroups;
+  delete (native.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  const stored = {
+    get cookie() {
+      return native.stores.credentials.value;
+    },
+    set cookie(v: string | null) {
+      native.stores.credentials.value = v;
+    },
+    get owner() {
+      return native.stores.owner.value;
+    },
+    set owner(v: string | null) {
+      native.stores.owner.value = v;
+    },
+    get identity() {
+      return native.stores.offlineIdentity.value;
+    },
+    set identity(v: unknown) {
+      native.stores.offlineIdentity.value = v;
+    },
+    get cleanup() {
+      return native.stores.cleanupMarker.value;
+    },
+    set cleanup(v: boolean) {
+      native.stores.cleanupMarker.value = v;
+    },
+    cache: native.stores.savedQueries.records,
+    drafts: native.stores.expenseDrafts.records,
+    creations: native.stores.groupCreations.records,
+  };
+  const save = native.stores.credentials.save;
+  native.stores.credentials.save = (value) => {
+    const writing = save(value);
+    const accountId = decodeStoredSession(value!, false)?.accountId;
+    if (accountId)
+      verifiedWrites.push({
+        accountId,
+        owner: stored.owner,
+        foreign: [...stored.cache.keys(), ...stored.drafts.keys()].filter(
+          (key) => !key.startsWith(accountId),
+        ).length,
+      });
+    return writing;
+  };
+  const create = () => {
+    active = native.open();
     return active;
   };
 
@@ -349,16 +297,11 @@ function phone() {
     },
     /** The next request whose path starts with `prefix` waits until released, or fails. */
     hold: (prefix: string) => {
-      let arrive!: () => void;
-      let release!: (outcome?: Error) => void;
-      const reached = new Promise<void>((resolve) => {
-        arrive = resolve;
-      });
-      const response = new Promise<Error | null>((resolve) => {
-        release = (outcome) => resolve(outcome ?? null);
-      });
-      holds.push({ prefix, arrive, response });
-      return { reached, release };
+      const held = backend.hold('*', new RegExp('^' + prefix), { at: 'request' });
+      return {
+        reached: held.arrived,
+        release: (outcome?: Error) => held.release(outcome ? 'lost-reply' : undefined),
+      };
     },
   };
 }

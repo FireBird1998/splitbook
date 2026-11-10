@@ -639,3 +639,115 @@ describe('fake Splitbook', () => {
     expect(server.requests).toHaveLength(2);
   });
 });
+
+it('owns seeded and rotated sessions and refuses one after it expires or is revoked', async () => {
+  const server = fakeSplitbook();
+  const cookie = server.auth.issue('alex', 'better-auth.session_token=stored.signature');
+  const call = () =>
+    server.fetch('http://local/api/auth/get-session', { headers: { Cookie: cookie } });
+  expect(parseSession(await (await call()).json())?.user.id).toBe('a00000000000000000000001');
+  server.auth.rotate = true;
+  const rotated = await call();
+  const next = rotated.headers.get('Set-Cookie')!.split(';')[0];
+  expect(server.auth.sessions.has(cookie)).toBe(true);
+  expect(server.auth.sessions.has(next)).toBe(true);
+  server.auth.expired = true;
+  expect((await call()).status).toBe(401);
+  server.auth.expired = false;
+  server.auth.sessions.delete(cookie);
+  expect((await call()).status).toBe(401);
+  expect(server.auth.issuedTo.get(cookie)?.name).toBe('Alex Rivera');
+});
+
+it('refuses sign-in and revoke without silently changing the server session', async () => {
+  const server = fakeSplitbook();
+  const signIn = () =>
+    server.fetch('http://local/api/auth/demo-persona/sign-in', {
+      method: 'POST',
+      body: '{"personaId":"alex"}',
+    });
+  server.auth.signInStatus = 403;
+  expect((await signIn()).status).toBe(403);
+  expect(server.auth.sessions.size).toBe(0);
+  server.auth.signInStatus = 200;
+  const signed = await signIn();
+  const cookie = signed.headers.get('Set-Cookie')!.split(';')[0];
+  server.auth.signOutStatus = 503;
+  const revoke = () =>
+    server.fetch('http://local/api/auth/sign-out', { method: 'POST', headers: { Cookie: cookie } });
+  expect((await revoke()).status).toBe(503);
+  expect(server.auth.sessions.has(cookie)).toBe(true);
+  server.auth.signOutStatus = 200;
+  expect((await revoke()).status).toBe(200);
+  expect(server.auth.sessions.has(cookie)).toBe(false);
+});
+
+it('checks the native Google backend and exchanges either persona’s identity for a secure session', async () => {
+  const server = fakeSplitbook();
+  server.auth.bootstrap = { environment: 'staging', googleWebClientId: 'test-client' };
+  server.auth.secureCookies = true;
+  const marker = await server.fetch(
+    'https://staging.splitbook.test/.well-known/splitbook-mobile.json',
+    {},
+  );
+  expect(await marker.json()).toEqual({ environment: 'staging', googleWebClientId: 'test-client' });
+  const signed = await server.fetch('https://staging.splitbook.test/api/auth/sign-in/social', {
+    method: 'POST',
+    body: JSON.stringify({
+      provider: 'google',
+      idToken: { token: 'google-token-sam', nonce: 'n' },
+    }),
+  });
+  expect(parseSignIn(await signed.json()).name).toBe('Sam Chen');
+  expect(signed.headers.get('Set-Cookie')).toContain(
+    '__Secure-better-auth.session_token=sam-1.signature',
+  );
+  const cookie = signed.headers.get('Set-Cookie')!.split(';')[0];
+  server.auth.expiresAt = '2020-01-01T00:00:00Z';
+  const restored = await server.fetch('https://staging.splitbook.test/api/auth/get-session', {
+    headers: { Cookie: cookie },
+  });
+  expect(parseSession(await restored.json())?.expiresAt.getTime()).toBe(
+    Date.parse('2020-01-01T00:00:00Z'),
+  );
+});
+
+it('aborts a held reply after the server took the sign-in without undoing its session', async () => {
+  const server = fakeSplitbook();
+  const held = server.hold('POST', '/api/auth/demo-persona/sign-in', { abortable: true });
+  const abort = new AbortController();
+  const pending = server.fetch('http://local/api/auth/demo-persona/sign-in', {
+    method: 'POST',
+    body: '{"personaId":"alex"}',
+    signal: abort.signal,
+  });
+  await held.arrived;
+  const rejected = expect(pending).rejects.toThrow('Network request failed');
+  abort.abort();
+  await rejected;
+  expect(server.auth.sessions.size).toBe(1);
+  held.release();
+});
+
+it('reports a missing session without returning protected session data', async () => {
+  const server = fakeSplitbook();
+  const cookie = server.auth.issue('alex');
+  server.auth.sessionPresent = false;
+  const response = await server.fetch('http://local/api/auth/get-session', {
+    headers: { Cookie: cookie },
+  });
+  expect(response.status).toBe(200);
+  expect(parseSession(await response.json())).toBeNull();
+});
+
+it('keeps the server reason on a refused Google identity exchange', async () => {
+  const server = fakeSplitbook();
+  server.auth.signInStatus = 403;
+  server.auth.signInCode = 'email_not_allowed';
+  const response = await server.fetch('https://staging.splitbook.test/api/auth/sign-in/social', {
+    method: 'POST',
+    body: '{"idToken":{"token":"alex-id"}}',
+  });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ code: 'email_not_allowed' });
+});

@@ -1,7 +1,7 @@
 import { onTestFinished } from 'vitest';
 import { createCheckedMobileController } from './flow-monitor';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
-import type { AccountLocalStorage, MobileDependencies } from '../data/types';
+import type { AccountLocalStorage, MobileConfig, MobileDependencies } from '../data/types';
 import { savedQueriesIn } from './saved-queries';
 import type { SavedQueryRecords } from '../data/saved-copy-budget';
 
@@ -130,7 +130,11 @@ function faultable<T extends object>(store: T) {
 /** Native cells clone at the boundary, as the persisted adapters do. */
 function cell<T>(initial: T) {
   let value = structuredClone(initial);
+  const writes: T[] = [];
   return faultable({
+    get writes() {
+      return structuredClone(writes);
+    },
     get value() {
       return structuredClone(value);
     },
@@ -140,6 +144,7 @@ function cell<T>(initial: T) {
     load: async () => structuredClone(value),
     save: async (next: T) => {
       value = structuredClone(next);
+      writes.push(structuredClone(next));
     },
     clear: async () => {
       value = structuredClone(initial);
@@ -180,7 +185,9 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
   options: {
     now?: number;
     origin?: string;
+    config?: Partial<MobileConfig>;
     recordSeparator?: string;
+    settlementSeparator?: string;
     newSubmissionKey?: () => string;
     parts?: Omit<PhoneParts, 'savedQueries'> & { savedQueries?: Queries };
     purge?: readonly PurgeStore[];
@@ -211,7 +218,7 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
     pendingInvitation: cell<string | null>(null),
     savedQueries: queries,
     expenseDrafts: records(false, options.recordSeparator),
-    settlementAttempts: records(),
+    settlementAttempts: records(false, options.settlementSeparator),
     draftRequests: records(),
     tagRequests: records(),
     groupCreations: (() => {
@@ -244,8 +251,8 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
       moment = next;
     },
   };
-  let key = 0,
-    active: MobileController | undefined;
+  let key = 0;
+  const runtimes = new Set<MobileController>();
   type Connection = { isConnected: boolean; isInternetReachable?: boolean | null };
   let connection: Connection | undefined;
   const listeners = new Set<(state: Connection) => void>();
@@ -303,6 +310,35 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
       .filter((store) => store !== undefined);
   const omitAccount =
     options.parts && 'accountLocal' in options.parts && accountParts === undefined;
+  type OpenOptions = {
+    config?: Partial<MobileConfig>;
+    parts?: Omit<Partial<MobileDependencies>, 'fetch'>;
+  };
+  const start = (overrides: OpenOptions = {}) => {
+    const controller = (
+      options.monitor === false ? createMobileController : createCheckedMobileController
+    )(
+      {
+        apiBaseUrl: options.origin ?? 'http://localhost:4138',
+        authOrigin: options.origin ?? 'http://localhost:4138',
+        developmentPersonaEnabled: true,
+        ...options.config,
+        ...overrides.config,
+      },
+      {
+        ...parts,
+        accountLocal: omitAccount ? undefined : accountLocal,
+        ...overrides.parts,
+        fetch: server.fetch,
+      },
+    );
+    runtimes.add(controller);
+    return controller;
+  };
+  const dispose = () => {
+    for (const controller of runtimes) controller.dispose();
+    runtimes.clear();
+  };
   const phone = {
     stores,
     clock,
@@ -314,26 +350,14 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
       server.online = value && isInternetReachable !== false;
       listeners.forEach((listener) => listener(connection!));
     },
-    open() {
-      active?.dispose();
-      active = (options.monitor === false ? createMobileController : createCheckedMobileController)(
-        {
-          apiBaseUrl: options.origin ?? 'http://localhost:4138',
-          authOrigin: options.origin ?? 'http://localhost:4138',
-          developmentPersonaEnabled: true,
-        },
-        {
-          ...parts,
-          accountLocal: omitAccount ? undefined : accountLocal,
-          fetch: server.fetch,
-        },
-      );
-      return active;
+    open(overrides: OpenOptions = {}) {
+      dispose();
+      return start(overrides);
     },
-    dispose() {
-      active?.dispose();
-      active = undefined;
-    },
+    // Only tests that deliberately keep old I/O and its runtime alive opt into concurrency.
+    // An ordinary open is still a restart and disposes every prior runtime.
+    openConcurrent: start,
+    dispose,
   };
   onTestFinished(phone.dispose);
   return phone;

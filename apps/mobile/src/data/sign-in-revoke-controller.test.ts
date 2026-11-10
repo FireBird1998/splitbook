@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { decodeStoredSession } from './cookies';
-import { createMobileController } from './mobile-controller';
-import type { AccountLocalStorage, FetchResponse, MobileSnapshot } from './types';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { MobileController } from './mobile-controller';
+import type { MobileSnapshot } from './types';
 
 // #284: a session the server started for a sign-in is revoked before this device gives it up,
 // when the sign-in ends on a device storage failure, and when another sign-in or a sign-out
@@ -18,7 +20,6 @@ const sam = {
   email: 'sam@example.test',
   image: null,
 };
-type Person = typeof alex;
 const now = Date.parse('2026-10-06T09:00:00.000Z');
 const staging = 'https://staging.splitbook.test';
 const googleClient = '123-test.apps.googleusercontent.com';
@@ -28,31 +29,6 @@ const cleanupFailed = 'Could not remove this account from the device. Try signin
 const issued = (name: 'alex' | 'sam', n: number, google = false) =>
   `${google ? '__Secure-' : ''}better-auth.session_token=${name}-${n}.signature`;
 
-const json = (body: unknown, status = 200, setCookie?: string): FetchResponse =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(setCookie ? { 'Set-Cookie': setCookie } : {}),
-    },
-  });
-
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
-
-/** A held step: `arrived` once it is reached, and it goes on only after `release()`. */
-type Hold = { arrived: ReturnType<typeof deferred>; released: ReturnType<typeof deferred> };
-const holdOn = (queue: Hold[]) => {
-  const hold = { arrived: deferred(), released: deferred() };
-  queue.push(hold);
-  return { arrived: hold.arrived.promise, release: hold.released.resolve };
-};
-
 /**
  * One phone and its server. The server starts a session, with a cookie of its own, for each
  * sign-in as soon as the request arrives. `hold(path)` keeps the reply to the next request on
@@ -60,166 +36,116 @@ const holdOn = (queue: Hold[]) => {
  * error as a lost connection. `google` makes it a staging build that signs in with Google.
  */
 function phone({ google = false } = {}) {
-  const device = {
-    /** The saved session, as stored. */
-    session: null as string | null,
-    owner: null as string | null,
-    marked: false,
-    recorded: null as { invitationCleared: boolean } | null,
-  };
-  /** Every session cookie written to the saved session, in order. */
-  const saved: string[] = [];
-  const fail = { ownerLoad: false, ownerSave: false, markerClear: false };
-  const server = {
-    issued: 0,
-    /** What sign-out answers with. */
-    signOutStatus: 200,
-    bootstrap: { environment: 'staging', googleWebClientId: googleClient } as unknown,
-  };
-  const sessions = new Map<string, Person>();
-  /** Every request the phone sent, with the session cookie it carried. */
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.people.sam = sam;
+  backend.world.groups = [];
+  backend.auth.secureCookies = google;
+  const server = backend.auth;
   const sent: { method: string; path: string; cookie: string | null }[] = [];
-  const replies = new Map<string, Hold[]>();
-  const saves: Hold[] = [];
-
-  const respond = (path: string, init: RequestInit, cookie: string | null): FetchResponse => {
-    if (path === '/.well-known/splitbook-mobile.json') return json(server.bootstrap);
-    if (path === '/api/auth/demo-persona/sign-in' || path === '/api/auth/sign-in/social') {
-      const user = String(init.body).includes('sam') ? sam : alex;
-      const session = issued(user === sam ? 'sam' : 'alex', ++server.issued, google);
-      sessions.set(session, user);
-      return json(
-        { user, token: 'raw-token-not-a-cookie' },
-        200,
-        `${session}; HttpOnly; Path=/; Max-Age=2592000${google ? '; Secure' : ''}`,
-      );
-    }
-    if (path === '/api/auth/sign-out') {
-      if (server.signOutStatus !== 200) return json({}, server.signOutStatus);
-      if (cookie) sessions.delete(cookie);
-      return json({ success: true });
-    }
-    const user = cookie ? sessions.get(cookie) : undefined;
-    if (!user) return json({ error: 'Unauthorized' }, 401);
-    if (path === '/api/auth/get-session')
-      return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00.000Z' } });
-    if (path === '/api/groups') return json({ data: [], status: 200 });
-    if (path === '/api/user/balances') return json({ data: { buckets: [] }, status: 200 });
-    return json({ error: 'Not found' }, 404);
+  backend.reply('*', '*', ({ method, url, headers }) => {
+    sent.push({ method, path: url.pathname, cookie: headers.get('Cookie') });
+    return undefined;
+  });
+  const fail = { ownerLoad: false, ownerSave: false, markerClear: false };
+  let chooser: 'alex' | 'sam' = 'alex';
+  const native = testPhone(backend, {
+    now,
+    config: google
+      ? {
+          apiBaseUrl: staging,
+          authOrigin: staging,
+          developmentPersonaEnabled: false,
+          googleWebClientId: googleClient,
+        }
+      : {
+          apiBaseUrl: 'http://10.0.2.2:4127',
+          authOrigin: 'http://localhost:4127',
+          developmentPersonaEnabled: true,
+        },
+    purge: [],
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
+      accountLocal: { financialCleanup: undefined, untrustedCopies: undefined },
+      googleSignIn: async () => ({
+        status: 'success',
+        idToken: `google-token-${chooser}`,
+        nonce: 'fresh-nonce',
+      }),
+    },
+  });
+  native.stores.owner.failPersistently(
+    'load',
+    new Error('SQLITE_IOERR: disk I/O error'),
+    () => fail.ownerLoad,
+  );
+  native.stores.owner.failPersistently(
+    'save',
+    new Error('SQLITE_FULL: database or disk is full'),
+    () => fail.ownerSave,
+  );
+  native.stores.cleanupMarker.failPersistently(
+    'clear',
+    new Error('SecureStore unavailable'),
+    () => fail.markerClear,
+  );
+  const device = {
+    get session() {
+      return native.stores.credentials.value;
+    },
+    set session(v: string | null) {
+      native.stores.credentials.value = v;
+    },
+    get owner() {
+      return native.stores.owner.value;
+    },
+    set owner(v: string | null) {
+      native.stores.owner.value = v;
+    },
+    get marked() {
+      return native.stores.cleanupMarker.value;
+    },
+    set marked(v: boolean) {
+      native.stores.cleanupMarker.value = v;
+    },
+    get recorded() {
+      return native.stores.signOutRecord.value;
+    },
+    set recorded(v: { invitationCleared: boolean } | null) {
+      native.stores.signOutRecord.value = v;
+    },
   };
-
-  const fetch = async (url: string, init: RequestInit): Promise<FetchResponse> => {
-    const path = new URL(url).pathname;
-    const cookie = new Headers(init.headers).get('Cookie');
-    sent.push({ method: init.method ?? 'GET', path, cookie });
-    // The server acts on a request when it arrives, even while its reply is held.
-    const answer = respond(path, init, cookie);
-    const hold = replies.get(path)?.shift();
-    if (!hold) return answer;
-    hold.arrived.resolve();
-    return new Promise((resolve, reject) => {
-      const abort = () => reject(new TypeError('Network request failed'));
-      if (init.signal?.aborted) return abort();
-      init.signal?.addEventListener('abort', abort);
-      void hold.released.promise.then(() => {
-        init.signal?.removeEventListener('abort', abort);
-        resolve(answer);
-      });
-    });
+  const start = (selected: 'alex' | 'sam' = 'alex') => {
+    chooser = selected;
+    return native.open();
   };
-
-  const credentials = {
-    load: async () => device.session,
-    save: async (value: string) => {
-      const hold = saves.shift();
-      if (hold) {
-        hold.arrived.resolve();
-        await hold.released.promise;
-      }
-      device.session = value;
-      saved.push(decodeStoredSession(value, google)?.cookie ?? value);
-    },
-    clear: async () => {
-      device.session = null;
-    },
-  };
-  const accountLocal: AccountLocalStorage = {
-    owner: {
-      load: async () => {
-        if (fail.ownerLoad) throw new Error('SQLITE_IOERR: disk I/O error');
-        return device.owner;
-      },
-      save: async (accountId) => {
-        if (fail.ownerSave) throw new Error('SQLITE_FULL: database or disk is full');
-        device.owner = accountId;
-      },
-      clear: async () => {
-        device.owner = null;
-      },
-    },
-    cleanupMarker: {
-      load: async () => device.marked,
-      mark: async () => {
-        device.marked = true;
-      },
-      clear: async () => {
-        if (fail.markerClear) throw new Error('SecureStore unavailable');
-        device.marked = false;
-      },
-    },
-    signOutRecord: {
-      load: async () => structuredClone(device.recorded),
-      mark: async (record) => {
-        device.recorded = structuredClone(record);
-      },
-      clear: async () => {
-        device.recorded = null;
-      },
-    },
-    stores: [{ clear: async () => undefined }],
-  };
-
-  const start = (chooser: 'alex' | 'sam' = 'alex') =>
-    createMobileController(
-      google
-        ? {
-            apiBaseUrl: staging,
-            authOrigin: staging,
-            developmentPersonaEnabled: false,
-            googleWebClientId: googleClient,
-          }
-        : {
-            apiBaseUrl: 'http://10.0.2.2:4127',
-            authOrigin: 'http://localhost:4127',
-            developmentPersonaEnabled: true,
-          },
-      {
-        fetch,
-        credentials,
-        accountLocal,
-        now: () => now,
-        googleSignIn: async () => ({
-          status: 'success',
-          idToken: `google-token-${chooser}`,
-          nonce: 'fresh-nonce',
-        }),
-      },
-    );
 
   return {
     device,
-    saved,
+    get saved() {
+      return native.stores.credentials.writes.map((value) =>
+        value === null ? '' : (decodeStoredSession(value, google)?.cookie ?? value),
+      );
+    },
     fail,
     server,
     sent,
     start,
     /** Holds the reply to the next request on `path`. */
     hold: (path: string) => {
-      if (!replies.has(path)) replies.set(path, []);
-      return holdOn(replies.get(path)!);
+      const held = backend.hold('*', path, { abortable: true });
+      return { arrived: held.arrived, release: held.release };
     },
-    /** Holds the next write to the saved session. */
-    holdSave: () => holdOn(saves),
+    holdSave: () => native.stores.credentials.holdNext('save'),
     /** The session cookie in the saved session now. */
     savedCookie: () =>
       device.session === null
@@ -237,7 +163,7 @@ function phone({ google = false } = {}) {
   };
 }
 
-type Controller = ReturnType<typeof createMobileController>;
+type Controller = MobileController;
 /** Every snapshot the controller publishes from now on. */
 function published(controller: Controller) {
   const seen: MobileSnapshot[] = [];

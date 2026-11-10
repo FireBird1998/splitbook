@@ -1,4 +1,6 @@
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { MobileController } from './mobile-controller';
 import { describe, expect, it, vi } from 'vitest';
 import { decodeStoredSession } from './cookies';
 import type {
@@ -67,84 +69,121 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function memoryCredentials(initial: string | null = null) {
-  let value = initial;
-  const credentials: CredentialStore = {
-    load: vi.fn(async () => value),
-    save: vi.fn(async (cookie) => {
-      value = cookie;
-    }),
-    clear: vi.fn(async () => {
-      value = null;
-    }),
+/** The fixture’s default world; the phone owns every native cell and recovery row. */
+function nativeDevice() {
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.people.sam = sam;
+  backend.world.groups = [group()];
+  backend.world.groupsByAccount[alex.id] = [group(alex)];
+  backend.world.groupsByAccount[sam.id] = [group(sam)];
+  backend.world.home = { buckets: [], groups: [{ groupId, balances: [] }] };
+  backend.world.expenses[groupId] = {
+    expenses: [],
+    pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+    summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0 },
   };
-  return { credentials, read: () => value };
-}
-
-function memoryAccountOwner(initial: string | null = null): AccountLocalStorage['owner'] {
-  let accountId = initial;
+  backend.world.balances[groupId] = { byCurrency: [] };
+  backend.auth.cookie = (persona) => (persona === 'sam' ? samCookie : alexCookie);
+  backend.auth.issue('alex', alexCookie);
+  backend.auth.issue('sam', samCookie);
+  backend.reply('GET', `/api/groups/${groupId}`, ({ headers }) =>
+    json({ data: group(headers.get('Cookie')?.includes('signed-sam') ? sam : alex), status: 200 }),
+  );
+  // The old fixture had no default create answer: its POST fell through to the list. Tests
+  // that create a Group supply their own request-built receipt, so keep that malformed fallback.
+  backend.reply('POST', '/api/groups', ({ headers }) =>
+    json({
+      data: [group(headers.get('Cookie')?.includes('signed-sam') ? sam : alex)],
+      status: 200,
+    }),
+  );
+  const native = testPhone(backend, {
+    now,
+    config: { apiBaseUrl: 'http://10.0.2.2:4127', authOrigin: 'http://localhost:4127' },
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
+      accountLocal: undefined,
+    },
+  });
+  let reply:
+    | ((path: string, init: RequestInit) => FetchResponse | Promise<FetchResponse> | undefined)
+    | undefined;
+  backend.reply('*', '*', ({ url, init }) => reply?.(url.pathname, init));
   return {
-    load: async () => accountId,
-    save: async (value) => {
-      accountId = value;
-    },
-    clear: async () => {
-      accountId = null;
+    native,
+    backend,
+    send: backend.fetch,
+    setReply: (next: typeof reply) => {
+      reply = next;
     },
   };
 }
-
-/**
- * One device's account-local storage: the account owner, the cleanup marker, and the store for
- * a Group being created. `store: false` is a device without that store.
- */
-function memoryDevice({ store = true } = {}) {
-  let marked = false;
+function memoryCredentials(initial: string | null = null, kit = nativeDevice()) {
+  const cell = kit.native.stores.credentials;
+  cell.value = initial;
+  const credentials: CredentialStore = Object.assign(cell, {
+    load: vi.fn(cell.load),
+    save: vi.fn<(value: string) => Promise<void>>(cell.save),
+    clear: vi.fn(cell.clear),
+  });
+  return { credentials, read: () => cell.value, kit };
+}
+function memoryAccountOwner(initial: string | null = null): AccountLocalStorage['owner'] {
+  const cell = nativeDevice().native.stores.owner;
+  cell.value = initial;
+  return cell;
+}
+/** A default Group-creation store, or the original deliberate no-store variant. */
+function memoryDevice({ store = true, kit = nativeDevice() } = {}) {
+  const native = kit.native,
+    groupCreations = native.stores.groupCreations;
   let failing: 'load' | 'save' | 'remove' | null = null;
-  const records = new Map<string, unknown>();
-  const groupCreations = {
-    load: async (accountId: string) => {
-      if (failing === 'load') throw new Error('SQLITE_IOERR: disk I/O error');
-      return structuredClone(records.get(accountId) ?? null);
-    },
-    save: async (accountId: string, value: unknown) => {
-      if (failing === 'save') throw new Error('SQLITE_FULL: database or disk is full');
-      records.set(accountId, structuredClone(value));
-    },
-    remove: async (accountId: string) => {
-      if (failing === 'remove') throw new Error('SQLITE_BUSY: database is locked');
-      records.delete(accountId);
-    },
-    clear: async () => {
-      records.clear();
-    },
-  };
+  for (const operation of ['load', 'save', 'remove'] as const)
+    groupCreations.failPersistently(
+      operation,
+      new Error(
+        operation === 'load'
+          ? 'SQLITE_IOERR: disk I/O error'
+          : operation === 'save'
+            ? 'SQLITE_FULL: database or disk is full'
+            : 'SQLITE_BUSY: database is locked',
+      ),
+      () => failing === operation,
+    );
   const accountLocal: AccountLocalStorage = {
-    owner: memoryAccountOwner(),
-    cleanupMarker: {
-      load: async () => marked,
-      mark: async () => {
-        marked = true;
-      },
-      clear: async () => {
-        marked = false;
-      },
-    },
+    owner: native.stores.owner,
+    cleanupMarker: native.stores.cleanupMarker,
     stores: store ? [groupCreations] : [],
   };
   return {
     accountLocal,
     groupCreations: store ? groupCreations : undefined,
-    records,
-    fail: (operation: 'load' | 'save' | 'remove' | null) => {
+    records: groupCreations.records,
+    fail: (operation: typeof failing) => {
       failing = operation;
     },
+    kit,
   };
 }
 
 function setup(
   options: {
     saved?: string;
+    concurrent?: boolean;
+    noSession?: boolean | (() => boolean);
+    expiresAt?: string;
+    signInStatus?: number;
+    signOutStatus?: number;
     pending?: CredentialStore;
     enabled?: boolean;
     store?: ReturnType<typeof memoryCredentials>;
@@ -161,54 +200,23 @@ function setup(
   } = {},
 ) {
   let keys = 0;
-  const store = options.store ?? memoryCredentials(options.saved);
-  const device = options.device ?? (options.accountLocal ? undefined : memoryDevice());
-  const fetch = vi.fn<MobileFetch>(async (url, init) => {
-    const path = new URL(url).pathname;
-    const intercepted = options.intercept?.(path, init);
-    if (intercepted) return intercepted;
-    const headers = new Headers(init.headers);
-    if (init.method === 'POST' && headers.get('Origin') !== 'http://localhost:4127')
-      return json({}, 403);
-    if (path === '/api/auth/demo-persona/sign-in') {
-      const selected = JSON.parse(String(init.body)).personaId === 'sam' ? sam : alex;
-      return json(
-        { token: 'raw-token-not-a-cookie', user: selected },
-        200,
-        `${selected === sam ? samCookie : alexCookie}; HttpOnly; Path=/; Max-Age=2592000`,
-      );
-    }
-    if (!headers.get('Cookie')) return json({ error: 'Unauthorized', status: 401 }, 401);
-    const selected = headers.get('Cookie')?.includes('signed-sam') ? sam : alex;
-    if (path === '/api/auth/get-session') return json(session(selected));
-    if (path === '/api/auth/sign-out')
-      return json({ success: true }, 200, 'better-auth.session_token=; Max-Age=0');
-    // Like Splitbook's, Home's figures name the Groups they were worked out over (#333).
-    if (path === '/api/user/balances')
-      return json({ data: { buckets: [], groups: [{ groupId, balances: [] }] }, status: 200 });
-    if (/^\/api\/groups\/[a-f0-9]{24}\/balances$/.test(path))
-      return json({ data: { byCurrency: [] }, status: 200 });
-    if (/^\/api\/groups\/[a-f0-9]{24}\/expenses$/.test(path))
-      return json({
-        data: {
-          expenses: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0 },
-        },
-        status: 200,
-      });
-    if (path === '/api/groups') return json({ data: [group(selected)], status: 200 });
-    if (path === `/api/groups/${groupId}`) return json({ data: group(selected), status: 200 });
-    return json({ error: 'Not found', status: 404 }, 404);
+  const store = options.store ?? memoryCredentials(options.saved, options.device?.kit);
+  const device =
+    options.device ?? (options.accountLocal ? undefined : memoryDevice({ kit: store.kit }));
+  const { native, backend, send } = store.kit;
+  store.kit.setReply(options.intercept);
+  backend.auth.signInStatus = options.signInStatus ?? 200;
+  backend.auth.signOutStatus = options.signOutStatus ?? 200;
+  backend.auth.expiresAt = options.expiresAt ?? '2030-01-01T00:00:00.000Z';
+  Object.defineProperty(backend.auth, 'sessionPresent', {
+    configurable: true,
+    get: () => !(typeof options.noSession === 'function' ? options.noSession() : options.noSession),
   });
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://10.0.2.2:4127',
-      authOrigin: 'http://localhost:4127',
-      developmentPersonaEnabled: options.enabled ?? true,
-    },
-    {
-      fetch,
+  const fetch = vi.fn<MobileFetch>((url, init) => send(url, init));
+  backend.fetch = fetch;
+  const controller = (options.concurrent ? native.openConcurrent : native.open)({
+    config: { developmentPersonaEnabled: options.enabled ?? true },
+    parts: {
       credentials: store.credentials,
       pendingInvitation: options.pending,
       accountLocal: options.accountLocal ?? device?.accountLocal,
@@ -218,9 +226,8 @@ function setup(
         options.newSubmissionKey === null
           ? undefined
           : (options.newSubmissionKey ?? (() => `native-group-key-${++keys}`)),
-      now: () => now,
     },
-  );
+  });
   return { controller, fetch, store };
 }
 
@@ -264,7 +271,7 @@ describe('native session and Group boundary', () => {
     const loggingOut = first.signOut();
     try {
       await vi.waitFor(() => expect(cleanupPending).toBe(true), { timeout: 50, interval: 5 });
-      const restarted = setup({ store, accountLocal }).controller;
+      const restarted = setup({ store, accountLocal, concurrent: true }).controller;
       await restarted.restore();
       expect(restarted.getSnapshot().auth).toMatchObject({ status: 'signed-out', user: null });
       expect(store.read()).toBeNull();
@@ -677,7 +684,7 @@ describe('native session and Group boundary', () => {
   it('restores an unfinished Group form only to the same account after session expiry', async () => {
     let expired = false;
     const { controller } = setup({
-      intercept: (path) => (path === '/api/auth/get-session' && expired ? json(null) : undefined),
+      noSession: () => expired,
     });
     await controller.signIn('alex');
     controller.startCreate();
@@ -1656,7 +1663,7 @@ describe('native session and Group boundary', () => {
   it('expires a saved session when the server returns null, without fetching Groups', async () => {
     const { controller, fetch, store } = setup({
       saved: alexCookie,
-      intercept: (path) => (path === '/api/auth/get-session' ? json(null) : undefined),
+      noSession: true,
     });
     await controller.restore();
     expect(controller.getSnapshot().auth).toMatchObject({
@@ -1670,13 +1677,9 @@ describe('native session and Group boundary', () => {
   });
 
   it('does not authenticate a session whose server expiry is already past', async () => {
-    const expired = {
-      ...session(),
-      session: { userId: alex.id, expiresAt: '2026-01-01T00:00:00.000Z' },
-    };
     const { controller, store } = setup({
       saved: alexCookie,
-      intercept: (path) => (path === '/api/auth/get-session' ? json(expired) : undefined),
+      expiresAt: '2026-01-01T00:00:00.000Z',
     });
     await controller.restore();
     expect(controller.getSnapshot().auth.status).toBe('signed-out');
@@ -1869,14 +1872,9 @@ describe('native session and Group boundary', () => {
 
   it('serializes a credential save already in flight before logout clears storage', async () => {
     const store = memoryCredentials();
-    const originalSave = store.credentials.save;
-    const entered = deferred<void>();
-    const release = deferred<void>();
-    store.credentials.save = async (cookie) => {
-      entered.resolve();
-      await release.promise;
-      await originalSave(cookie);
-    };
+    const held = store.kit.native.stores.credentials.holdNext('save');
+    const entered = { promise: held.arrived };
+    const release = { resolve: held.release };
     const { controller } = setup({ store });
     const signIn = controller.signIn('alex');
     await entered.promise;
@@ -1890,9 +1888,10 @@ describe('native session and Group boundary', () => {
 
   it('fails closed and clears the old saved session when a rotated cookie cannot be persisted', async () => {
     const store = memoryCredentials(alexCookie);
-    store.credentials.save = async () => {
-      throw new Error('SecureStore unavailable');
-    };
+    store.kit.native.stores.credentials.failPersistently(
+      'save',
+      new Error('SecureStore unavailable'),
+    );
     const { controller, fetch } = setup({
       store,
       intercept: (path) =>
@@ -1970,7 +1969,7 @@ describe('native session and Group boundary', () => {
 
   it('keeps persona retry available after the server denies development sign-in', async () => {
     const { controller } = setup({
-      intercept: (path) => (path === '/api/auth/demo-persona/sign-in' ? json({}, 403) : undefined),
+      signInStatus: 403,
     });
     await controller.signIn('alex');
     expect(controller.getSnapshot().auth).toMatchObject({
@@ -2007,7 +2006,7 @@ describe('native session and Group boundary', () => {
 
   it('keeps the saved cookie for the next restore when the server does not confirm sign-out', async () => {
     const { controller, store } = setup({
-      intercept: (path) => (path === '/api/auth/sign-out' ? json({}, 503) : undefined),
+      signOutStatus: 503,
     });
     await controller.signIn('alex');
     await controller.signOut();
@@ -2020,9 +2019,10 @@ describe('native session and Group boundary', () => {
 
   it('cannot restore a signed-out account when clearing its saved invitation fails', async () => {
     const pending = memoryCredentials('deadbeef');
-    pending.credentials.clear = async () => {
-      throw new Error('Invitation storage unavailable');
-    };
+    pending.kit.native.stores.credentials.failPersistently(
+      'clear',
+      new Error('Invitation storage unavailable'),
+    );
     const { controller, store } = setup({ pending: pending.credentials });
     await controller.signIn('alex');
     await controller.signOut();
@@ -2046,49 +2046,52 @@ describe('sign-out revokes the session on the server (#202)', () => {
   function phone() {
     const store = memoryCredentials();
     const invitation = memoryCredentials();
-    const clearSaved = store.credentials.clear;
+    const native = store.kit.native;
     const state = {
-      marked: false,
-      recorded: null as { invitationCleared: boolean } | null,
-      data: null as string | null,
+      get marked() {
+        return native.stores.cleanupMarker.value;
+      },
+      set marked(v: boolean) {
+        native.stores.cleanupMarker.value = v;
+      },
+      get recorded() {
+        return native.stores.signOutRecord.value;
+      },
+      set recorded(v: { invitationCleared: boolean } | null) {
+        native.stores.signOutRecord.value = v;
+      },
+      get data() {
+        return native.stores.untrustedCopies.value as string | null;
+      },
+      set data(v: string | null) {
+        native.stores.untrustedCopies.value = v;
+      },
     };
     const fail = { mark: false, clear: false, storeClears: 0 };
-    store.credentials.clear = async () => {
-      if (fail.clear) throw new Error('SecureStore unavailable');
-      await clearSaved();
-    };
+    native.stores.credentials.failPersistently(
+      'clear',
+      new Error('SecureStore unavailable'),
+      () => fail.clear,
+    );
+    native.stores.cleanupMarker.failPersistently(
+      'save',
+      new Error('SecureStore unavailable'),
+      () => fail.mark,
+    );
+    native.stores.untrustedCopies.failPersistently(
+      'clear',
+      new Error('SQLITE_BUSY: database is locked'),
+      () => {
+        if (fail.storeClears <= 0) return false;
+        fail.storeClears--;
+        return true;
+      },
+    );
     const accountLocal: AccountLocalStorage = {
-      owner: memoryAccountOwner(),
-      cleanupMarker: {
-        load: async () => state.marked,
-        mark: async () => {
-          if (fail.mark) throw new Error('SecureStore unavailable');
-          state.marked = true;
-        },
-        clear: async () => {
-          state.marked = false;
-        },
-      },
-      signOutRecord: {
-        load: async () => structuredClone(state.recorded),
-        mark: async (record) => {
-          state.recorded = structuredClone(record);
-        },
-        clear: async () => {
-          state.recorded = null;
-        },
-      },
-      stores: [
-        {
-          clear: async () => {
-            if (fail.storeClears > 0) {
-              fail.storeClears -= 1;
-              throw new Error('SQLITE_BUSY: database is locked');
-            }
-            state.data = null;
-          },
-        },
-      ],
+      owner: native.stores.owner,
+      cleanupMarker: native.stores.cleanupMarker,
+      signOutRecord: native.stores.signOutRecord,
+      stores: [native.stores.untrustedCopies],
     };
     const sent: { path: string; method: string; cookie: string | null }[] = [];
     /** Starts the app on this phone; `respond` may answer a request before the fake server. */
@@ -2126,7 +2129,7 @@ describe('sign-out revokes the session on the server (#202)', () => {
     };
   }
 
-  type Controller = ReturnType<typeof createMobileController>;
+  type Controller = MobileController;
   /** Every snapshot the controller publishes from now on, the current one first. */
   function published(controller: Controller) {
     const seen = [controller.getSnapshot()];
@@ -2288,9 +2291,10 @@ describe('sign-out revokes the session on the server (#202)', () => {
 
   it('revokes a session whose cookie from the sign-in reply could not be saved', async () => {
     const device = phone();
-    device.store.credentials.save = async () => {
-      throw new Error('SecureStore unavailable');
-    };
+    device.store.kit.native.stores.credentials.failNext(
+      'save',
+      new Error('SecureStore unavailable'),
+    );
     const controller = device.start();
     await controller.signIn('alex');
     expect(device.revokes()).toEqual([alexCookie]);
@@ -2324,13 +2328,13 @@ describe('sign-out revokes the session on the server (#202)', () => {
 
   it('revokes the new session when recording its account fails', async () => {
     const device = phone();
-    const save = device.store.credentials.save;
     let saves = 0;
     // The first save is the cookie from the sign-in reply; the second records its account.
-    device.store.credentials.save = async (value) => {
-      if (++saves === 2) throw new Error('SecureStore unavailable');
-      await save(value);
-    };
+    device.store.kit.native.stores.credentials.failPersistently(
+      'save',
+      new Error('SecureStore unavailable'),
+      () => ++saves === 2,
+    );
     const controller = device.start();
     await controller.signIn('alex');
     expect(device.revokes()).toEqual([alexCookie]);
@@ -2560,11 +2564,7 @@ it('does not clear invitation storage when Back closes an invalid link with no s
 it('keeps a newer invalid-link screen when an older valid invitation finishes saving', async () => {
   const pending = memoryCredentials();
   const held = deferred<void>();
-  const save = pending.credentials.save;
-  pending.credentials.save = async (value) => {
-    await held.promise;
-    await save(value);
-  };
+  pending.kit.native.stores.credentials.stallNext('save', held.promise);
   const controller = setup({ pending: pending.credentials }).controller;
   await controller.restore();
   const opening = controller.openInvitation('http://localhost:4127/join/deadbeef');

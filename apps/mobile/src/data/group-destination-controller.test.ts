@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, pagesFor } from '../test-utils/fake-splitbook';
 import type { GroupDestination } from './types';
 
 const user = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
@@ -58,48 +59,38 @@ const activityPage = {
     pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
   },
 };
-const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 function setup(hold?: (path: string) => Promise<void> | undefined) {
-  let cookie: string | null = null;
-  const calls: string[] = [];
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
+  const backend = fakeSplitbook();
+  backend.world.people.sam = { ...user, image: null };
+  backend.world.groups = [group];
+  backend.world.balances[groupId] = balances.data;
+  backend.world.pages = {
+    ...pagesFor(`/api/groups/${groupId}/expenses`, [[{}, expensePage.data]]),
+    ...pagesFor(`/api/groups/${groupId}/activity`, [[{}, activityPage.data]]),
+  };
+  const calls = backend.sent({ method: false });
+  backend.reply('*', '*', async ({ path }) => {
+    await hold?.(path);
+    return undefined;
+  });
+  const phone = testPhone(backend, {
+    now: new Date(2026, 8, 27, 12).getTime(),
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
+      accountLocal: undefined,
     },
-    {
-      now: () => new Date(2026, 8, 27, 12).getTime(),
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      fetch: async (url) => {
-        const path = new URL(url).pathname + new URL(url).search;
-        calls.push(path);
-        await hold?.(path);
-        if (path.endsWith('/sign-in'))
-          return new Response(JSON.stringify({ user }), {
-            headers: { 'Set-Cookie': 'better-auth.session_token=test.signature; Path=/; HttpOnly' },
-          });
-        if (path.endsWith('/get-session'))
-          return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
-        if (path === '/api/groups') return json({ status: 200, data: [group] });
-        if (path === `/api/groups/${groupId}`) return json({ status: 200, data: group });
-        if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
-        if (path.startsWith(`/api/groups/${groupId}/expenses?`)) return json(expensePage);
-        if (path === `/api/groups/${groupId}/balances`) return json(balances);
-        if (path.startsWith(`/api/groups/${groupId}/activity?`)) return json(activityPage);
-        return json({}, 404);
-      },
-    },
-  );
+  });
+  const controller = phone.open();
   /** The Group-scoped reads made since the last call. */
   const reads = () =>
     calls
