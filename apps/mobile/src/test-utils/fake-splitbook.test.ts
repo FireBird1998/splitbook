@@ -13,7 +13,14 @@ import { parseRateSuggestionResponse } from '@splitbook/shared/cross-currency-pa
 import { describe, expect, it, vi } from 'vitest';
 import { parseGroup, parseGroups, parseSession, parseSignIn } from '../data/dto';
 import { parseExpensePage, parseGroupBalances, parseHomeBalances } from '../data/financial-dto';
-import { fakeSplitbook, rateSuggestion, expenseFixture, pagesFor } from './fake-splitbook';
+import {
+  fakeSplitbook,
+  rateSuggestion,
+  expenseFixture,
+  pagesFor,
+  expensePage,
+  activityPage,
+} from './fake-splitbook';
 
 function faultTransport(server: ReturnType<typeof fakeSplitbook>) {
   const timers = manualTimer();
@@ -511,25 +518,60 @@ describe('fake Splitbook', () => {
     }
   });
   it('answers fixed Month and Activity pages by query regardless of parameter order', async () => {
-    const server=fakeSplitbook(), group=server.world.groups[0]!, base=`/api/groups/${group._id}`;
-    const august={...expenseFixture(group),description:'August groceries'};
-    const september={...expenseFixture(group),description:'September groceries'};
-    const events=Array.from({length:21},(_,i)=>({_id:`d${String(i+1).padStart(23,'0')}`,group:group._id,actor:group.members[0]!.user,createdAt:group.updatedAt,type:'expense_added',metadata:{description:'Groceries'}}));
-    Object.assign(server.world.pages,
-      pagesFor(base+'/expenses',[
-        [{dateFrom:'2026-08-01',dateTo:'2026-08-31',page:1,limit:20},expensePage([august])],
-        [{dateFrom:'2026-09-01',dateTo:'2026-09-30',page:1,limit:20},expensePage([september])],
+    const server = fakeSplitbook(),
+      group = server.world.groups[0]!,
+      base = `/api/groups/${group._id}`;
+    const august = { ...expenseFixture(group), description: 'August groceries' };
+    const september = { ...expenseFixture(group), description: 'September groceries' };
+    const events = Array.from({ length: 21 }, (_, i) => ({
+      _id: `d${String(i + 1).padStart(23, '0')}`,
+      group: group._id,
+      actor: group.members[0]!.user,
+      createdAt: group.updatedAt,
+      type: 'expense_added',
+      metadata: { description: 'Groceries' },
+    }));
+    Object.assign(
+      server.world.pages,
+      pagesFor(base + '/expenses', [
+        [
+          { dateFrom: '2026-08-01', dateTo: '2026-08-31', page: 1, limit: 20 },
+          expensePage([august]),
+        ],
+        [
+          { dateFrom: '2026-09-01', dateTo: '2026-09-30', page: 1, limit: 20 },
+          expensePage([september]),
+        ],
       ]),
-      pagesFor(base+'/activity',[[{page:2,limit:20},activityPage(events,2)]]));
-    const signed=await server.fetch('http://local/api/auth/demo-persona/sign-in',{method:'POST',body:'{"personaId":"alex"}'});
-    const Cookie=signed.headers.get('Set-Cookie')!.split(';')[0];
-    const read=async(path:string)=>(await server.fetch('http://local'+path,{headers:{Cookie}})).json();
-    for(const [month,description] of [['08','August groceries'],['09','September groceries']]){
-      const last=month==='08'?'31':'30';
-      expect(parseExpensePage(await read(`${base}/expenses?limit=20&page=1&dateTo=2026-${month}-${last}&dateFrom=2026-${month}-01`),group._id,'INR').expenses[0]?.description).toBe(description);
+      pagesFor(base + '/activity', [[{ page: 2, limit: 20 }, activityPage(events, 2)]]),
+    );
+    const signed = await server.fetch('http://local/api/auth/demo-persona/sign-in', {
+      method: 'POST',
+      body: '{"personaId":"alex"}',
+    });
+    const Cookie = signed.headers.get('Set-Cookie')!.split(';')[0];
+    const read = async (path: string) =>
+      (await server.fetch('http://local' + path, { headers: { Cookie } })).json();
+    for (const [month, description] of [
+      ['08', 'August groceries'],
+      ['09', 'September groceries'],
+    ]) {
+      const last = month === '08' ? '31' : '30';
+      expect(
+        parseExpensePage(
+          await read(
+            `${base}/expenses?limit=20&page=1&dateTo=2026-${month}-${last}&dateFrom=2026-${month}-01`,
+          ),
+          group._id,
+          'INR',
+        ).expenses[0]?.description,
+      ).toBe(description);
     }
-    expect(parseActivityPage(await read(base+'/activity?limit=20&page=2'),group._id,2).events.map(e=>e._id)).toEqual(['d00000000000000000000021']);
+    expect(
+      parseActivityPage(await read(base + '/activity?limit=20&page=2'), group._id, 2).events.map(
+        (e) => e._id,
+      ),
+    ).toEqual(['d00000000000000000000021']);
     expect(server.unanswered).toEqual([]);
   });
-
 });

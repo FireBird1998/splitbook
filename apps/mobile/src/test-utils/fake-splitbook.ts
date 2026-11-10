@@ -112,6 +112,20 @@ export function activityPage(activities: unknown[] = [], page = 1) {
   };
 }
 
+function queryKey(path: string, query: Record<string, string | number> = {}) {
+  const url = new URL(path, 'http://local');
+  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, String(value));
+  url.searchParams.sort();
+  return url.pathname + url.search;
+}
+/** Fixed read pages keyed by their query; an empty query is the path’s fallback page. */
+export function pagesFor(
+  path: string,
+  pages: readonly (readonly [Record<string, string | number>, unknown])[],
+) {
+  return Object.fromEntries(pages.map(([query, data]) => [queryKey(path, query), data]));
+}
+
 /** A stable suggestion used by the payment fixtures, in the rate endpoint's wire shape. */
 export const rateSuggestion = (from: string, to: string, rate: string) => ({
   from,
@@ -227,6 +241,7 @@ export function fakeSplitbook() {
   const world = {
     people: structuredClone(demoPeople) as Record<PersonaId, SessionUser>,
     groups: [group],
+    pages: {} as Record<string, unknown>,
     groupsByAccount: {} as Record<string, WireGroup[]>,
     homeByAccount: {} as Record<string, unknown>,
     home: { buckets: [] } as { buckets: unknown[]; groups?: unknown[] },
@@ -379,6 +394,10 @@ export function fakeSplitbook() {
           session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' },
         });
       const answer = (data: unknown) => Response.json({ status: 200, data });
+      if (method === 'GET') {
+        const page = world.pages[queryKey(request.path)] ?? world.pages[url.pathname];
+        if (page !== undefined) return answer(page);
+      }
       if (url.pathname === '/api/groups' && method === 'POST') {
         const body = request.body!;
         return Response.json(
