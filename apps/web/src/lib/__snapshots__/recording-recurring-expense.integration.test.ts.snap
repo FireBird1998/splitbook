@@ -2060,7 +2060,7 @@ exports[`recurring-expense record of recordings > an unrelated duplicate stops t
         "__v": 0,
         "_id": "<event-2>",
         "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "group": "<group-1>",
         "metadata": {
           "amount": 120,
@@ -2075,7 +2075,7 @@ exports[`recurring-expense record of recordings > an unrelated duplicate stops t
           "eventId": "<event-2>",
           "groupId": "<group-1>",
           "kind": "expense_added",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "occurredAt": "2026-11-11T12:00:01.000Z",
           "recipientIds": [
             "<member-b>",
             "<member-c>",
@@ -2089,7 +2089,7 @@ exports[`recurring-expense record of recordings > an unrelated duplicate stops t
         "__v": 0,
         "_id": "<event-3>",
         "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "group": "<group-1>",
         "metadata": {
           "amount": 120,
@@ -2104,7 +2104,7 @@ exports[`recurring-expense record of recordings > an unrelated duplicate stops t
           "eventId": "<event-3>",
           "groupId": "<group-1>",
           "kind": "expense_added",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "occurredAt": "2026-11-11T12:00:01.000Z",
           "recipientIds": [
             "<member-b>",
             "<member-c>",
@@ -2168,7 +2168,7 @@ exports[`recurring-expense record of recordings > an unrelated duplicate stops t
         "amount": 120,
         "amountMinor": 12000,
         "category": "food",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "createdBy": "<member-a>",
         "currency": "INR",
         "date": "2026-10-01T00:00:00.000Z",
@@ -2207,14 +2207,14 @@ exports[`recurring-expense record of recordings > an unrelated duplicate stops t
         "splitMethod": "equal",
         "tag": "Groceries",
         "tagId": "<tag-groceries-1>",
-        "updatedAt": "2026-11-11T12:00:00.000Z",
+        "updatedAt": "2026-11-11T12:00:01.000Z",
       },
       {
         "_id": "<expense-3>",
         "amount": 120,
         "amountMinor": 12000,
         "category": "food",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "createdBy": "<member-a>",
         "currency": "INR",
         "date": "2026-11-01T00:00:00.000Z",
@@ -2253,7 +2253,7 @@ exports[`recurring-expense record of recordings > an unrelated duplicate stops t
         "splitMethod": "equal",
         "tag": "Groceries",
         "tagId": "<tag-groceries-1>",
-        "updatedAt": "2026-11-11T12:00:00.000Z",
+        "updatedAt": "2026-11-11T12:00:01.000Z",
       },
     ],
     "group": {
@@ -2517,7 +2517,7 @@ exports[`recurring-expense record of recordings > an unrelated duplicate stops t
             "amount": 120,
             "amountMinor": 12000,
             "category": "food",
-            "createdAt": "2026-11-11T12:00:00.000Z",
+            "createdAt": "2026-11-11T12:00:01.000Z",
             "createdBy": {
               "_id": "<member-a>",
               "name": "Alex Rivera",
@@ -2566,14 +2566,14 @@ exports[`recurring-expense record of recordings > an unrelated duplicate stops t
             "splitMethod": "equal",
             "tag": "Groceries",
             "tagId": "<tag-groceries-1>",
-            "updatedAt": "2026-11-11T12:00:00.000Z",
+            "updatedAt": "2026-11-11T12:00:01.000Z",
           },
           {
             "_id": "<expense-3>",
             "amount": 120,
             "amountMinor": 12000,
             "category": "food",
-            "createdAt": "2026-11-11T12:00:00.000Z",
+            "createdAt": "2026-11-11T12:00:01.000Z",
             "createdBy": {
               "_id": "<member-a>",
               "name": "Alex Rivera",
@@ -2622,7 +2622,7 @@ exports[`recurring-expense record of recordings > an unrelated duplicate stops t
             "splitMethod": "equal",
             "tag": "Groceries",
             "tagId": "<tag-groceries-1>",
-            "updatedAt": "2026-11-11T12:00:00.000Z",
+            "updatedAt": "2026-11-11T12:00:01.000Z",
           },
         ],
         "pagination": {
@@ -6208,7 +6208,7 @@ exports[`recurring-expense record of recordings > two requests race with the sam
         "__v": 0,
         "_id": "<event-1>",
         "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "group": "<group-1>",
         "metadata": {
           "amount": 120,
@@ -6223,7 +6223,7 @@ exports[`recurring-expense record of recordings > two requests race with the sam
           "eventId": "<event-1>",
           "groupId": "<group-1>",
           "kind": "expense_added",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "occurredAt": "2026-11-11T12:00:01.000Z",
           "recipientIds": [
             "<member-b>",
             "<member-c>",
@@ -6241,7 +6241,7 @@ exports[`recurring-expense record of recordings > two requests race with the sam
         "amount": 120,
         "amountMinor": 12000,
         "category": "food",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "createdBy": "<member-a>",
         "currency": "INR",
         "date": "2026-11-01T00:00:00.000Z",
@@ -6280,7 +6280,7 @@ exports[`recurring-expense record of recordings > two requests race with the sam
         "splitMethod": "equal",
         "tag": "Groceries",
         "tagId": "<tag-groceries-1>",
-        "updatedAt": "2026-11-11T12:00:00.000Z",
+        "updatedAt": "2026-11-11T12:00:01.000Z",
       },
     ],
     "group": {
@@ -6347,7 +6347,7 @@ exports[`recurring-expense record of recordings > two requests race with the sam
               "amount": 120,
               "amountMinor": 12000,
               "category": "food",
-              "createdAt": "2026-11-11T12:00:00.000Z",
+              "createdAt": "2026-11-11T12:00:01.000Z",
               "createdBy": {
                 "_id": "<member-a>",
                 "name": "Alex Rivera",
@@ -6396,7 +6396,7 @@ exports[`recurring-expense record of recordings > two requests race with the sam
               "splitMethod": "equal",
               "tag": "Groceries",
               "tagId": "<tag-groceries-1>",
-              "updatedAt": "2026-11-11T12:00:00.000Z",
+              "updatedAt": "2026-11-11T12:00:01.000Z",
             },
           ],
           "pagination": {
@@ -6431,7 +6431,7 @@ exports[`recurring-expense record of recordings > two requests race with the sam
               "amount": 120,
               "amountMinor": 12000,
               "category": "food",
-              "createdAt": "2026-11-11T12:00:00.000Z",
+              "createdAt": "2026-11-11T12:00:01.000Z",
               "createdBy": {
                 "_id": "<member-a>",
                 "name": "Alex Rivera",
@@ -6480,7 +6480,7 @@ exports[`recurring-expense record of recordings > two requests race with the sam
               "splitMethod": "equal",
               "tag": "Groceries",
               "tagId": "<tag-groceries-1>",
-              "updatedAt": "2026-11-11T12:00:00.000Z",
+              "updatedAt": "2026-11-11T12:00:01.000Z",
             },
           ],
           "pagination": {

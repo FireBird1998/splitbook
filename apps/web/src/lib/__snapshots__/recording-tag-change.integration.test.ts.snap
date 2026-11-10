@@ -3136,7 +3136,7 @@ exports[`tag-change record of recordings > a stale Expense does not stop the nex
         "__v": 0,
         "_id": "<event-1>",
         "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "group": "<group-1>",
         "metadata": {
           "changes": {
@@ -3156,7 +3156,7 @@ exports[`tag-change record of recordings > a stale Expense does not stop the nex
           "eventId": "<event-1>",
           "groupId": "<group-1>",
           "kind": "expense_updated",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "occurredAt": "2026-11-11T12:00:01.000Z",
           "recipientIds": [
             "<member-b>",
             "<member-c>",
@@ -3247,7 +3247,7 @@ exports[`tag-change record of recordings > a stale Expense does not stop the nex
                 "old": "<tag-food-1>",
               },
             },
-            "editedAt": "2026-11-11T12:00:00.000Z",
+            "editedAt": "2026-11-11T12:00:01.000Z",
             "editedBy": "<member-a>",
           },
         ],
@@ -3283,7 +3283,7 @@ exports[`tag-change record of recordings > a stale Expense does not stop the nex
         "splitMethod": "equal",
         "tag": "General",
         "tagId": "<tag-general-1>",
-        "updatedAt": "2026-11-11T12:00:00.000Z",
+        "updatedAt": "2026-11-11T12:00:01.000Z",
       },
     ],
     "group": {
@@ -6204,7 +6204,7 @@ exports[`tag-change record of recordings > two requests race with the same retry
         "__v": 0,
         "_id": "<event-1>",
         "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "group": "<group-1>",
         "metadata": {
           "changes": {
@@ -6224,7 +6224,7 @@ exports[`tag-change record of recordings > two requests race with the same retry
           "eventId": "<event-1>",
           "groupId": "<group-1>",
           "kind": "expense_updated",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "occurredAt": "2026-11-11T12:00:01.000Z",
           "recipientIds": [
             "<member-b>",
             "<member-c>",
@@ -6268,7 +6268,7 @@ exports[`tag-change record of recordings > two requests race with the same retry
                 "old": "<tag-food-1>",
               },
             },
-            "editedAt": "2026-11-11T12:00:00.000Z",
+            "editedAt": "2026-11-11T12:00:01.000Z",
             "editedBy": "<member-a>",
           },
         ],
@@ -6304,7 +6304,7 @@ exports[`tag-change record of recordings > two requests race with the same retry
         "splitMethod": "equal",
         "tag": "General",
         "tagId": "<tag-general-1>",
-        "updatedAt": "2026-11-11T12:00:00.000Z",
+        "updatedAt": "2026-11-11T12:00:01.000Z",
       },
     ],
     "group": {

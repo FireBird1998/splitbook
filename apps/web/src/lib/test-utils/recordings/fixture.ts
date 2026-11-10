@@ -65,6 +65,8 @@ export function recordingFixture(writer: Writer) {
   let templateId: string;
   let draftCommand: { drafts: Array<{ id: string; revision: number; review: string }> };
   let names: ReturnType<typeof recordingNames>;
+  let recordingStarted = false;
+  let requestNumber = 0;
   const isChange = ['edit', 'delete', 'restore', 'tag-change'].includes(writer);
   const fenceNumber = isChange || writer === 'recurring-expense' ? 2 : 1;
 
@@ -102,8 +104,10 @@ export function recordingFixture(writer: Writer) {
     body?: unknown,
     headers: Record<string, string> = {},
     asReader = false,
-  ) =>
-    callRoute(handler, {
+  ) => {
+    // A retry happens later. Freezing a whole case at one instant would hide timestamp rewrites.
+    if (recordingStarted) vi.setSystemTime(new Date(clock.getTime() + requestNumber++ * 1_000));
+    return callRoute(handler, {
       method,
       path: `/api/groups/${groupId}/${suffix}`,
       params: { id: groupId, expenseId },
@@ -111,6 +115,7 @@ export function recordingFixture(writer: Writer) {
       ...(body === undefined ? {} : { body }),
       headers,
     });
+  };
   const revision = () => (writer === 'restore' ? '1' : '0');
   const send = (changes: object = {}, headers: Record<string, string> = {}): Promise<Answer> => {
     const keyed = { 'Idempotency-Key': 'recording-submission-0001', ...headers };
@@ -234,25 +239,39 @@ export function recordingFixture(writer: Writer) {
   /** Pause at the real transaction boundary, outside it, while another committed DB change wins. */
   const holdFence = (number: number) => {
     let arrived!: () => void;
+    let missed!: (reason: Error) => void;
     let release!: () => void;
-    const reached = new Promise<void>((resolve) => {
+    const reached = new Promise<void>((resolve, reject) => {
       arrived = resolve;
+      missed = reject;
     });
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+    const timeout = setTimeout(() => {
+      release();
+      missed(new Error('Recording did not reach its expected fence'));
+    }, 2_000);
     const transaction = mongoose.connection.transaction.bind(mongoose.connection);
     let count = 0;
     const spy = vi
       .spyOn(mongoose.connection, 'transaction')
       .mockImplementation(async (callback, options) => {
         if (++count === number) {
+          clearTimeout(timeout);
           arrived();
           await gate;
         }
         return transaction(callback, options);
       });
-    return { reached, release, restore: () => spy.mockRestore() };
+    return {
+      reached,
+      release,
+      restore: () => {
+        clearTimeout(timeout);
+        spy.mockRestore();
+      },
+    };
   };
   const interleave = async (
     change: () => Promise<unknown>,
@@ -287,6 +306,8 @@ export function recordingFixture(writer: Writer) {
     routes = await handlers();
   });
   const prepare = async () => {
+    recordingStarted = false;
+    requestNumber = 0;
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(clock.getTime() - 60_000));
     vi.stubEnv('ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED', 'true');
@@ -409,6 +430,7 @@ export function recordingFixture(writer: Writer) {
     }
     await Activity.deleteMany({});
     vi.setSystemTime(clock);
+    recordingStarted = true;
   };
   beforeEach(prepare);
   afterEach(() => {

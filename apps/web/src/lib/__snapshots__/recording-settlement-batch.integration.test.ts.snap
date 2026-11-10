@@ -5979,7 +5979,7 @@ exports[`settlement-batch record of recordings > two requests race with the same
         "__v": 0,
         "_id": "<event-1>",
         "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "group": "<group-1>",
         "metadata": {
           "amount": 30,
@@ -5999,7 +5999,7 @@ exports[`settlement-batch record of recordings > two requests race with the same
           "eventId": "<event-1>",
           "groupId": "<group-1>",
           "kind": "settlement_recorded",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "occurredAt": "2026-11-11T12:00:01.000Z",
           "recipientIds": [
             "<member-b>",
           ],
@@ -6119,7 +6119,7 @@ exports[`settlement-batch record of recordings > two requests race with the same
         "batchSettlementIds": [
           "<settlement-1>",
         ],
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "createdBy": "<member-a>",
         "creationRequest": {
           "fingerprint": "<digest-1>",
@@ -6135,7 +6135,7 @@ exports[`settlement-batch record of recordings > two requests race with the same
         "pairDebtAfterMinor": -9000,
         "pairDebtBeforeMinor": -12000,
         "pendingActivity": [],
-        "updatedAt": "2026-11-11T12:00:00.000Z",
+        "updatedAt": "2026-11-11T12:00:01.000Z",
       },
     ],
     "templates": [],
@@ -6151,7 +6151,7 @@ exports[`settlement-batch record of recordings > two requests race with the same
               "_id": "<settlement-1>",
               "amount": 30,
               "amountMinor": 3000,
-              "createdAt": "2026-11-11T12:00:00.000Z",
+              "createdAt": "2026-11-11T12:00:01.000Z",
               "createdBy": {
                 "_id": "<member-a>",
                 "name": "Alex Rivera",
@@ -6170,7 +6170,7 @@ exports[`settlement-batch record of recordings > two requests race with the same
               },
               "pairDebtAfterMinor": -9000,
               "pairDebtBeforeMinor": -12000,
-              "updatedAt": "2026-11-11T12:00:00.000Z",
+              "updatedAt": "2026-11-11T12:00:01.000Z",
             },
           ],
           "totalPaidMinor": 3000,
@@ -6189,7 +6189,7 @@ exports[`settlement-batch record of recordings > two requests race with the same
               "_id": "<settlement-1>",
               "amount": 30,
               "amountMinor": 3000,
-              "createdAt": "2026-11-11T12:00:00.000Z",
+              "createdAt": "2026-11-11T12:00:01.000Z",
               "createdBy": {
                 "_id": "<member-a>",
                 "name": "Alex Rivera",
@@ -6208,7 +6208,7 @@ exports[`settlement-batch record of recordings > two requests race with the same
               },
               "pairDebtAfterMinor": -9000,
               "pairDebtBeforeMinor": -12000,
-              "updatedAt": "2026-11-11T12:00:00.000Z",
+              "updatedAt": "2026-11-11T12:00:01.000Z",
             },
           ],
           "totalPaidMinor": 3000,

@@ -3063,7 +3063,7 @@ exports[`draft-save record of recordings > two requests race with the same retry
         "__v": 0,
         "_id": "<event-1>",
         "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "group": "<group-1>",
         "metadata": {
           "amount": 120,
@@ -3075,7 +3075,7 @@ exports[`draft-save record of recordings > two requests race with the same retry
           "eventId": "<event-1>",
           "groupId": "<group-1>",
           "kind": "expense_added",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "occurredAt": "2026-11-11T12:00:01.000Z",
           "recipientIds": [
             "<member-b>",
             "<member-c>",
@@ -3105,7 +3105,7 @@ exports[`draft-save record of recordings > two requests race with the same retry
         "revision": 1,
         "savedReview": "<digest-3>",
         "state": "saved",
-        "updatedAt": "2026-11-11T12:00:00.000Z",
+        "updatedAt": "2026-11-11T12:00:01.000Z",
       },
     ],
     "expenses": [
@@ -3114,7 +3114,7 @@ exports[`draft-save record of recordings > two requests race with the same retry
         "amount": 120,
         "amountMinor": 12000,
         "category": "food",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "createdBy": "<member-a>",
         "creationRequest": {
           "fingerprint": "<digest-2>",
@@ -3161,7 +3161,7 @@ exports[`draft-save record of recordings > two requests race with the same retry
         "splitMethod": "equal",
         "tag": "Food",
         "tagId": "<tag-food-1>",
-        "updatedAt": "2026-11-11T12:00:00.000Z",
+        "updatedAt": "2026-11-11T12:00:01.000Z",
       },
     ],
     "group": {
