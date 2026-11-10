@@ -1,3 +1,4 @@
+import { parseToReviewResponse } from '@splitbook/shared/to-review-read';
 import { tagRead } from '../data/tag-management';
 import { parseExpenseRecord } from '../data/expense-record';
 import { parseActivityPage } from '../data/activity';
@@ -750,4 +751,10 @@ it('keeps the server reason on a refused Google identity exchange', async () => 
   });
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({ code: 'email_not_allowed' });
+});
+
+it('reads the world’s account-wide To review answer through the app reader',async()=>{
+ const server=fakeSplitbook();server.world.toReview={total:0,groups:[]};const cookie=server.auth.issue('alex');
+ const response=await server.fetch('http://local/api/user/to-review',{headers:{Cookie:cookie}});
+ expect(response.status).toBe(200);expect(parseToReviewResponse(await response.json())).toEqual({total:0,groups:[]});
 });
