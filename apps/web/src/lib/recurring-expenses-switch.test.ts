@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   assertRecurringExpensesOn,
@@ -12,6 +13,7 @@ describe('the recurring Expenses switch', () => {
     vi.stubEnv('RECURRING_EXPENSES_ENABLED', undefined);
     expect(recurringExpensesEnabled()).toBe(false);
     expect(() => assertRecurringExpensesOn()).toThrow(RECURRING_EXPENSES_OFF);
+    expect(() => assertRecurringExpensesOn()).toThrow(Refusal);
   });
 
   it('is on only for an explicit true', () => {

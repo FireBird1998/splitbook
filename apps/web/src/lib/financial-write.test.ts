@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { describe, expect, it } from 'vitest';
 import { Types } from 'mongoose';
 import {
@@ -63,6 +64,7 @@ describe('financial request identity', () => {
       { tagId, creationRequest },
     );
     expect(() => assertCreateReplay(creationRequest, changedId)).toThrow('IDEMPOTENCY_CONFLICT');
+    expect(() => assertCreateReplay(creationRequest, changedId)).toThrow(Refusal);
     expect(requestTagForReplay({ tag: 'Transport' }, { tagId, creationRequest })).toEqual({
       tag: 'Transport',
     });
@@ -96,6 +98,7 @@ describe('financial request identity', () => {
     expect(parseIdempotencyKey(key)).toBe(key);
     for (const value of ['', 'tiny', 'a'.repeat(129), 'request key with spaces', 'key\nheader']) {
       expect(() => parseIdempotencyKey(value)).toThrow('INVALID_IDEMPOTENCY_KEY');
+      expect(() => parseIdempotencyKey(value)).toThrow(Refusal);
     }
   });
 
@@ -130,5 +133,6 @@ describe('durable Activity intent', () => {
     expect(() => assertPendingActivityCapacity(Array(PENDING_ACTIVITY_LIMIT).fill(event))).toThrow(
       'ACTIVITY_BACKLOG_FULL',
     );
+    expect(() => assertPendingActivityCapacity(Array(PENDING_ACTIVITY_LIMIT).fill(event))).toThrow(Refusal);
   });
 });

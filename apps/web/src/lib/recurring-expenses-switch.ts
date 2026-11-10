@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import 'server-only';
 
 /**
@@ -25,5 +26,5 @@ export function recurringExpensesEnabled(env: RecurringExpensesSwitchEnv = proce
 
 /** Throws `RECURRING_EXPENSES_OFF`, which API routes answer as 409, unless the switch is on. */
 export function assertRecurringExpensesOn(env: RecurringExpensesSwitchEnv = process.env): void {
-  if (!recurringExpensesEnabled(env)) throw new Error(RECURRING_EXPENSES_OFF);
+  if (!recurringExpensesEnabled(env)) throw new Refusal(RECURRING_EXPENSES_OFF);
 }
