@@ -46,7 +46,8 @@ function record(
     actorId: alice,
     model: Expense,
     transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
-    retry: { key, command: { description: 'A record', amount: 10 } },
+    command: () => ({ description: 'A record', amount: 10 }),
+    retry: { key },
     currencies: [{ currency: 'INR', rule: 'listed' }],
     checkPeople(members) {
       if (!members.has(bob)) throw new Refusal('INVALID_MEMBERS');

@@ -93,9 +93,13 @@ it('preserves a standalone Expense when an archive commits after its fence check
 });
 
 it('refuses an archived Group before validating a missing Expense participant', async () => {
-  await Group.updateOne({ _id: fixture.groupId }, {
-    $set: { isArchived: true }, $pull: { members: { user: DEMO_PERSONA_IDS.sam } },
-  });
+  await Group.updateOne(
+    { _id: fixture.groupId },
+    {
+      $set: { isArchived: true },
+      $pull: { members: { user: DEMO_PERSONA_IDS.sam } },
+    },
+  );
   const answer = await fixture.send();
   expect(answer.status).toBe(409);
   expect(answer.body.code).toBe('GROUP_ARCHIVED');

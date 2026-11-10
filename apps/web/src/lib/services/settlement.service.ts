@@ -55,7 +55,8 @@ export class SettlementService {
         missingGroup: 'fault',
         standaloneArchive: 'fence-only',
       },
-      retry: requestKey ? { key: requestKey, command } : undefined,
+      command: () => command,
+      retry: requestKey ? { key: requestKey } : undefined,
       currencies: [
         { currency: data.currency, rule: 'held-by-ledger' },
         ...(data.paidCurrency ? [{ currency: data.paidCurrency, rule: 'listed' as const }] : []),

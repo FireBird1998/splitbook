@@ -43,7 +43,8 @@ export async function createSettlementBatch(
     model: Settlement,
     transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
     compatibility: { membership: 'before-retry-and-at-commit' },
-    retry: { key: requestKey, command, receipt: 'ordered-records', atCommit: true },
+    command: () => command,
+    retry: { key: requestKey, receipt: 'ordered-records', atCommit: true },
     currencies: [],
     prepareAt: 'commit',
     async prepareResponseRecord(row) {
