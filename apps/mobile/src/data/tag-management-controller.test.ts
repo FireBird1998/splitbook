@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { TagCommand, TagSnapshot } from '@splitbook/shared/tag-management';
-import type { AccountGroupRecordStore } from './account-record-storage';
 
 const user = {
   id: 'a00000000000000000000001',
@@ -123,7 +122,6 @@ function phone() {
   });
   const native = testPhone(backend, {
     origin: 'http://tags.example.test',
-    purge: ['tagRequests'],
     newSubmissionKey: () => requestId,
     parts: {
       savedQueries: undefined,
@@ -141,16 +139,9 @@ function phone() {
           };
         },
       },
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
   const tagRequests = native.stores.tagRequests;
-  delete (tagRequests as AccountGroupRecordStore).list;
   tagRequests.failPersistently('save', new Error('disk full'), () => server.failStorage);
   const boot = () => native.open();
 
