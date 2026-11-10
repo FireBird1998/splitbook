@@ -95,6 +95,16 @@ export function recordCommonPaths(recording: Recording) {
       ),
     );
   });
+  for (const person of ['actor', 'named person'] as const)
+    it(`retry after the ${person} leaves following the first recording`, async () => {
+      if (recording.writer === 'recurring-expense' && person === 'named person')
+        await recording.readAs('priya');
+      await recording.capture(async () => {
+        const first = await recording.send();
+        await recording.remove(person === 'actor' ? alex : sam);
+        return [first, await recording.send()];
+      });
+    });
   it('archive commits after the checks and before the recording fence', async () => {
     await recording.interleave(recording.archive);
   });

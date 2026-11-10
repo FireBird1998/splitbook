@@ -3,7 +3,6 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import mongoose from 'mongoose';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
 import Group from '@/lib/models/Group';
-import Expense from '@/lib/models/Expense';
 import Activity from '@/lib/models/Activity';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import { groupService } from '@/lib/services/group.service';
