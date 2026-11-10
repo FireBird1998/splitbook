@@ -25,6 +25,13 @@ vi.mock('expo-secure-store', () => ({
 }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => crypto.randomUUID(), getRandomBytes: vi.fn() }));
 vi.mock('expo/fetch', () => ({ fetch: vi.fn() }));
+vi.mock('expo-file-system', () => ({
+  Paths: { cache: 'file:///cache/' },
+  Directory: class {
+    exists = false;
+    delete() {}
+  },
+}));
 
 const { notificationAccess } = await import('./runtime');
 const SecureStore = await import('expo-secure-store');

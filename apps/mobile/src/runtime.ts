@@ -8,7 +8,8 @@ import { createExpenseDraftStore } from './data/expense-storage';
 import { createGroupCreationStore } from './data/group-creation-storage';
 import { createAccountGroupRecordStore, createSignOutRecord } from './data/account-record-storage';
 import NetInfo from '@react-native-community/netinfo';
-import { fetch } from 'expo/fetch';
+import { fetch as nativeFetch } from 'expo/fetch';
+import { httpResponseStore } from './http-response-store';
 import * as SecureStore from 'expo-secure-store';
 import { createMobileController } from './data';
 import { mobileConfig } from './config';
@@ -17,6 +18,19 @@ import { createAppearanceController } from './data/appearance';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import { decodeStoredSession } from './data/cookies';
 import type { NotificationAccess } from './data/notification-receipt';
+
+// No marker survives a restart. Both app and headless notification requests wait for the
+// clean-up, so the store is empty before the first one leaves. A clean-up that fails doesn't stop
+// them: every request asks for no-store, so the store stays unused, and the next start and the
+// next account purge try again.
+const httpStoreReady = httpResponseStore.clear().catch(() => undefined);
+const fetch: typeof nativeFetch = async (...args) => {
+  await httpStoreReady;
+  return nativeFetch(...args);
+};
+
+// Android normally uses native reachability; the library's HTTP fallback must not cache either.
+NetInfo.configure({ reachabilityHeaders: { 'Cache-Control': 'no-store' } });
 
 const config = mobileConfig(
   {
@@ -137,6 +151,7 @@ export const controller = createMobileController(controllerConfig, {
       clear: () => SecureStore.deleteItemAsync(ownerKey),
     },
     stores: [
+      httpResponseStore,
       tagRequests,
       draftRequests,
       expenseDrafts,
