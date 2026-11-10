@@ -70,6 +70,20 @@ export function expensePage(expenses: unknown[] = [], page = 1) {
   };
 }
 
+/** A stable suggestion used by the payment fixtures, in the rate endpoint's wire shape. */
+export const rateSuggestion = (from: string, to: string, rate: string) => ({
+  from,
+  to,
+  rate,
+  source: 'frankfurter',
+  asOf: '2026-10-20',
+  fetchedAt: '2026-10-21T00:30:00.000Z',
+  ageDays: 1,
+  attributionRequired: false,
+  attribution: null,
+  components: [],
+});
+
 /** Populate a recorded payment from its request, without applying anything to a ledger. */
 export function recordedSettlement(
   body: Record<string, unknown>,
@@ -143,9 +157,9 @@ export function fakeSplitbook() {
   const world = {
     people: structuredClone(demoPeople) as Record<PersonaId, SessionUser>,
     groups: [group],
-    home: { buckets: [] as unknown[] },
+    home: { buckets: [] } as { buckets: unknown[]; groups?: unknown[] },
     balances: { [group._id]: { byCurrency: [] } } as Record<string, unknown>,
-    expenses: { [group._id]: expensePage() },
+    expenses: { [group._id]: expensePage() } as Record<string, unknown>,
     settlements: { [group._id]: [] as unknown[] },
     rates: { [group._id]: {} } as Record<string, Record<string, unknown>>,
   };
