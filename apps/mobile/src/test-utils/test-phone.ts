@@ -53,21 +53,22 @@ function faultable<T extends object>(store: T) {
     Object.defineProperty(store, operation, {
       enumerable: true,
       configurable: true,
-      value: async (...args: unknown[]) => {
-        for (const rule of persistent)
-          if (
-            rule.operation === operation &&
-            (rule.path === undefined || rule.path === args[1]) &&
-            rule.when()
-          ) {
-            const waiting = rule.action();
-            if (waiting) await waiting;
+      value: (...args: unknown[]) => {
+        const rules=[...persistent].filter(rule=>rule.operation===operation && (rule.path===undefined || rule.path===args[1]));
+        const invoke=(index:number):unknown=>{
+          if(index<rules.length){
+            const rule=rules[index];
+            if(!rule.when()) return invoke(index+1);
+            const waiting=rule.action();
+            return waiting ? waiting.then(()=>invoke(index+1)) : invoke(index+1);
           }
-        const queue = next.get(operation);
-        const index =
-          queue?.findIndex((step) => step.path === undefined || step.path === args[1]) ?? -1;
-        await (index < 0 ? undefined : queue!.splice(index, 1)[0].action());
-        return call.apply(store, args);
+          const queue=next.get(operation);
+          const slot=queue?.findIndex(step=>step.path===undefined || step.path===args[1]) ?? -1;
+          if(slot>=0) return queue!.splice(slot,1)[0].action().then(()=>call.apply(store,args));
+          // Fast native reads must keep their turn: saved previews race immediate network answers.
+          return call.apply(store,args);
+        };
+        return invoke(0);
       },
     });
   }
@@ -176,7 +177,9 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
 ) {
   type QueryStorage = Queries extends SavedQueryRecords ? Queries : ReturnType<typeof records>;
   // A supplied adapter stays native (including SQLite); only the default adapter has memory rows.
-  const queries = (options.parts?.savedQueries ? faultable(options.parts.savedQueries) : records(true)) as ReturnType<typeof faultable<QueryStorage>>;
+  const queries = (
+    options.parts?.savedQueries ? faultable(options.parts.savedQueries) : records(true)
+  ) as ReturnType<typeof faultable<QueryStorage>>;
   const stores = {
     credentials: cell<string | null>(null),
     owner: cell<string | null>(null),
