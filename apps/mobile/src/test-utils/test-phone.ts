@@ -22,10 +22,10 @@ type PhoneParts = Omit<Partial<Omit<MobileDependencies, 'fetch'>>, 'accountLocal
 
 /** Faults stop at the native storage boundary, before its atomic read or write. */
 function faultable<T extends object>(store: T) {
-  const next = new Map<string, (() => Promise<void>)[]>();
-  const enqueue = (operation: StoreOperation, action: () => Promise<void>) => {
+  const next = new Map<string, { path?: string; action: () => Promise<void> }[]>();
+  const enqueue = (operation: StoreOperation, action: () => Promise<void>, path?: string) => {
     const queue = next.get(operation) ?? [];
-    queue.push(action);
+    queue.push({ path, action });
     next.set(operation, queue);
   };
   for (const [operation, value] of Object.entries(store)) {
@@ -35,17 +35,19 @@ function faultable<T extends object>(store: T) {
       enumerable: true,
       configurable: true,
       value: async (...args: unknown[]) => {
-        await next.get(operation)?.shift()?.();
+        const queue = next.get(operation);
+        const index = queue?.findIndex(step => step.path === undefined || step.path === args[1]) ?? -1;
+        await (index < 0 ? undefined : queue!.splice(index,1)[0].action());
         return call.apply(store, args);
       },
     });
   }
-  return Object.assign(store, {
+  const controls = (path?: string) => ({
     failNext(operation: StoreOperation, error = new Error('Fictional device storage failure')) {
-      enqueue(operation, () => Promise.reject(error));
+      enqueue(operation, () => Promise.reject(error), path);
     },
     stallNext(operation: StoreOperation, until: Promise<void>) {
-      enqueue(operation, () => until);
+      enqueue(operation, () => until, path);
     },
     holdNext(operation: StoreOperation) {
       let arrive!: () => void, release!: () => void;
@@ -58,10 +60,11 @@ function faultable<T extends object>(store: T) {
       enqueue(operation, () => {
         arrive();
         return released;
-      });
+      }, path);
       return { arrived, release };
     },
   });
+  return Object.assign(store, controls(), { at: (path: string) => controls(path) });
 }
 
 /** Native cells clone at the boundary, as the persisted adapters do. */
