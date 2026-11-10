@@ -675,3 +675,19 @@ it('refuses sign-in and revoke without silently changing the server session', as
   expect((await revoke()).status).toBe(200);
   expect(server.auth.sessions.has(cookie)).toBe(false);
 });
+
+it('checks the native Google backend and exchanges either persona’s identity for a secure session', async () => {
+  const server = fakeSplitbook();
+  server.auth.bootstrap = {environment:'staging',googleWebClientId:'test-client'};
+  const marker = await server.fetch('https://staging.splitbook.test/.well-known/splitbook-mobile.json', {});
+  expect(await marker.json()).toEqual({environment:'staging',googleWebClientId:'test-client'});
+  const signed = await server.fetch('https://staging.splitbook.test/api/auth/sign-in/social', {
+    method:'POST',body:JSON.stringify({provider:'google',idToken:{token:'google-token-sam',nonce:'n'}}),
+  });
+  expect(parseSignIn(await signed.json()).name).toBe('Sam Chen');
+  expect(signed.headers.get('Set-Cookie')).toContain('__Secure-better-auth.session_token=sam-1.signature');
+  const cookie=signed.headers.get('Set-Cookie')!.split(';')[0];
+  server.auth.expiresAt='2020-01-01T00:00:00Z';
+  const restored=await server.fetch('https://staging.splitbook.test/api/auth/get-session',{headers:{Cookie:cookie}});
+  expect(parseSession(await restored.json())?.expiresAt.getTime()).toBe(Date.parse('2020-01-01T00:00:00Z'));
+});
