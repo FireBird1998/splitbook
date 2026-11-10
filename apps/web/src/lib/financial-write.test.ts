@@ -133,6 +133,8 @@ describe('durable Activity intent', () => {
     expect(() => assertPendingActivityCapacity(Array(PENDING_ACTIVITY_LIMIT).fill(event))).toThrow(
       'ACTIVITY_BACKLOG_FULL',
     );
-    expect(() => assertPendingActivityCapacity(Array(PENDING_ACTIVITY_LIMIT).fill(event))).toThrow(Refusal);
+    expect(() => assertPendingActivityCapacity(Array(PENDING_ACTIVITY_LIMIT).fill(event))).toThrow(
+      Refusal,
+    );
   });
 });

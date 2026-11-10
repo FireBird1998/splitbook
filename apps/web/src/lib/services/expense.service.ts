@@ -1,4 +1,4 @@
-import type { RefusalCode } from '@splitbook/shared/refusals';
+import { Refusal, type RefusalCode } from '@splitbook/shared/refusals';
 import { inGroupCurrencyOrder } from '@splitbook/shared/group-currencies';
 import type { AssistantAttribution } from '@splitbook/shared/draft-attribution';
 import { afterGroupCommit, withGroupMutation } from '@/lib/group-mutation';
@@ -112,9 +112,9 @@ export class ExpenseService {
   private async requireAccessGroup({ actorId, groupId }: ExpenseAccess, writing = false) {
     await connectDB();
     const group = await Group.findOne({ _id: groupId, 'members.user': actorId });
-    if (!group) throw new Error('FORBIDDEN');
+    if (!group) throw new Refusal('FORBIDDEN');
     // An archived Group can still be read, but takes no more changes (#578).
-    if (writing && group.isArchived) throw new Error('GROUP_ARCHIVED');
+    if (writing && group.isArchived) throw new Refusal('GROUP_ARCHIVED');
     return group;
   }
 
@@ -162,7 +162,7 @@ export class ExpenseService {
     await connectDB();
     await ensureLedgerWriteIndexes();
     const group = await Group.findOne({ _id: groupId, 'members.user': userId });
-    if (!group) throw new Error('FORBIDDEN');
+    if (!group) throw new Refusal('FORBIDDEN');
     const existing = requestKey
       ? await Expense.findOne({
           group: groupId,
@@ -197,7 +197,7 @@ export class ExpenseService {
       ]);
     }
     // A retry of an Expense recorded before the archive is confirmed above; nothing new is (#578).
-    if (group.isArchived) throw new Error('GROUP_ARCHIVED');
+    if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
     const memberIds = new Set(group.members.map((member) => String(member.user)));
     assertExpenseParticipants(memberIds, data.paidBy, data.splitBetween);
     assertGroupCurrency(group, data.currency);
@@ -218,7 +218,7 @@ export class ExpenseService {
           await lockLedgerCurrency(groupId, data.currency);
           // Read the current fenced Group inside the same commit; never reconstruct an audience later.
           const committedGroup = await Group.findOne({ _id: groupId, 'members.user': userId });
-          if (!committedGroup) throw new Error('FORBIDDEN');
+          if (!committedGroup) throw new Refusal('FORBIDDEN');
           const membersAtCommit = new Set(
             committedGroup.members.map((member) => String(member.user)),
           );
@@ -666,7 +666,7 @@ export class ExpenseService {
   ): Promise<ExpenseTagChangeResult[]> {
     const group = await this.requireAccessGroup({ actorId, groupId, expenseId: '' }, true);
     const tag = group.tags.find((entry) => String(entry._id) === tagId);
-    if (!tag || tag.isArchived || tag.isDeleted) throw new Error('INVALID_TAG');
+    if (!tag || tag.isArchived || tag.isDeleted) throw new Refusal('INVALID_TAG');
     const results: ExpenseTagChangeResult[] = [];
     for (const { id, revision } of expenses)
       results.push(await this.changeTag({ actorId, groupId, expenseId: id }, tagId, revision));

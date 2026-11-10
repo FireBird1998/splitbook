@@ -180,6 +180,23 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
     '../app/api/groups/[id]/members/[userId]/route.ts': ['RemovalBlockedError'],
     '../app/api/export/route.ts': ['ExportTooLargeError'],
   };
+  // Only replace baseline inputs where the migrated producer supplied that refusal.
+  // Synthetic fallthroughs in the other methods still exercise their original plain Error.
+  const migratedCallers: Record<
+    string,
+    Partial<Record<string, Parameters<typeof currentCause>[1]>>
+  > = {
+    '../app/api/groups/[id]/leave/route.ts': { POST: 'leave' },
+    '../app/api/groups/[id]/members/[userId]/route.ts': { PATCH: 'demotion', DELETE: 'removal' },
+    '../app/api/groups/[id]/expenses/route.ts': { POST: 'expense' },
+    '../app/api/groups/[id]/expenses/[expenseId]/route.ts': { PATCH: 'expense' },
+    '../app/api/groups/[id]/expenses/tag-change/route.ts': { POST: 'tag-change' },
+    '../app/api/groups/[id]/recurring/route.ts': { POST: 'recurring-create' },
+    '../app/api/groups/[id]/recurring/[recurringId]/route.ts': {
+      PATCH: 'recurring',
+      DELETE: 'recurring',
+    },
+  };
   for (const [path, load] of Object.entries(routes).sort()) {
     const text = readFileSync(resolve('src/lib', path), 'utf8');
     if (!text.includes('getAuthUser')) continue;
@@ -202,13 +219,7 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
         )
           continue;
         for (const cause of causes) {
-          const caller = path.includes('/leave/')
-            ? 'leave'
-            : path.includes('/members/')
-              ? method === 'PATCH'
-                ? 'demotion'
-                : 'removal'
-              : undefined;
+          const caller = migratedCallers[path]?.[method];
           vi.mocked(auth.api.getSession).mockRejectedValue(currentCause(cause, caller));
           const answer = await handler(new Request('http://localhost/api/census', { method }), {
             params: Promise.resolve({ id: 'a00000000000000000000001' }),
