@@ -458,7 +458,6 @@ export function recordingFixture(writer: Writer) {
     archive,
     clock,
     requestOwner,
-    prepare,
     get groupId() {
       return groupId;
     },
@@ -467,9 +466,6 @@ export function recordingFixture(writer: Writer) {
     },
     get foodId() {
       return foodId;
-    },
-    get targetTag() {
-      return targetTag;
     },
     get templateId() {
       return templateId;
