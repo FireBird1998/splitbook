@@ -57,6 +57,9 @@ function faultable<T extends object>(store: T) {
     failPersistently(operation: StoreOperation, error = new Error('Fictional device storage failure'), when = () => true) {
       return persist(operation, () => Promise.reject(error), when, path);
     },
+    delayPersistently(operation: StoreOperation, milliseconds: () => number) {
+      return persist(operation, () => new Promise<void>(resolve => setTimeout(resolve, milliseconds())), () => milliseconds() > 0, path);
+    },
     stallNext(operation: StoreOperation, until: Promise<void>) {
       enqueue(operation, () => until, path);
     },
