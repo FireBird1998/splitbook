@@ -86,8 +86,6 @@ function setup(
   });
   const native = testPhone(backend, {
     origin: 'http://localhost:4141',
-    recordSeparator: ':',
-    purge: ['expenseDrafts'],
     parts: {
       savedQueries,
       notifications,
@@ -99,16 +97,8 @@ function setup(
       groupCreations: undefined,
       netInfo: undefined,
       newSubmissionKey: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-      },
     },
   });
-  native.stores.expenseDrafts.keys = async () => [];
-  delete (native.stores.expenseDrafts as import('./account-record-storage').AccountGroupRecordStore)
-    .list;
   return native.open();
 }
 
