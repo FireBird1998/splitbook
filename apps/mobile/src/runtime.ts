@@ -19,10 +19,11 @@ import { SEPARATOR } from '@splitbook/shared/separator';
 import { decodeStoredSession } from './data/cookies';
 import type { NotificationAccess } from './data/notification-receipt';
 
-// No marker survives a restart. Both app and headless notification requests wait for cleanup.
-const httpStoreReady = httpResponseStore.clear();
-// Startup may finish before any request is made; the request still observes a cleanup failure.
-void httpStoreReady.catch(() => undefined);
+// No marker survives a restart. Both app and headless notification requests wait for the
+// clean-up, so the store is empty before the first one leaves. A clean-up that fails doesn't stop
+// them: every request asks for no-store, so the store stays unused, and the next start and the
+// next account purge try again.
+const httpStoreReady = httpResponseStore.clear().catch(() => undefined);
 const fetch: typeof nativeFetch = async (...args) => {
   await httpStoreReady;
   return nativeFetch(...args);
