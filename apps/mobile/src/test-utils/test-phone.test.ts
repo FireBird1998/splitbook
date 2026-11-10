@@ -256,4 +256,19 @@ describe('test phone', () => {
     await until(app, (snapshot) => snapshot.auth.user?.name === 'Alex Rivera');
     expect(app.getSnapshot().auth.status).toBe('authenticated');
   });
+  it('keeps a fixture’s separated Draft keys across restart and sign-out', async () => {
+    const phone = testPhone(fakeSplitbook(), { recordSeparator: ':' });
+    const account = 'a00000000000000000000001';
+    await phone.stores.expenseDrafts.save(account, 'maple', { draft: 'kept' });
+    expect([...phone.stores.expenseDrafts.records.keys()]).toEqual([account + ':maple']);
+    expect(await phone.stores.expenseDrafts.keys(account)).toEqual(['maple']);
+    const app = phone.open();
+    await app.signIn('alex');
+    const restarted = phone.open();
+    await restarted.restore();
+    expect(await phone.stores.expenseDrafts.load(account, 'maple')).toEqual({ draft: 'kept' });
+    await restarted.signOut();
+    expect(phone.stores.expenseDrafts.records.size).toBe(0);
+  });
+
 });
