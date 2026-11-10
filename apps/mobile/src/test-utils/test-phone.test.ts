@@ -273,4 +273,19 @@ describe('test phone', () => {
     await restarted.signOut();
     expect(phone.stores.expenseDrafts.records.size).toBe(0);
   });
+  it('holds and fails only the requested saved-query path', async () => {
+    const phone = testPhone(fakeSplitbook()), store = phone.stores.savedQueries;
+    const held = store.at('/api/second').holdNext('save');
+    await store.save('alex', '/api/first', { saved: 1 });
+    const writing = store.save('alex', '/api/second', { saved: 2 });
+    await held.arrived;
+    expect(await store.load('alex', '/api/first')).toEqual({ saved: 1 });
+    expect(await store.load('alex', '/api/second')).toBeNull();
+    held.release(); await writing;
+    store.at('/api/second').failNext('load', new Error('Unreadable row'));
+    expect(await store.load('alex', '/api/first')).toEqual({ saved: 1 });
+    await expect(store.load('alex', '/api/second')).rejects.toThrow('Unreadable row');
+    expect(await store.load('alex', '/api/second')).toEqual({ saved: 2 });
+  });
+
 });
