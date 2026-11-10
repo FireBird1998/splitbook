@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import mongoose, { Types } from 'mongoose';
+import { createRequestMetadata } from './financial-write';
 import { withGroupMutation } from './group-mutation';
 import { Refusal } from '@splitbook/shared/refusals';
 import { recordLedger, type LedgerRecording } from './ledger-recording';
@@ -38,6 +39,7 @@ function record(
   key = randomUUID(),
   overrides: Partial<LedgerRecording<IExpenseDocument>> = {},
   alertSwitch: 'always' | 'payments' | 'expense-changes' = 'always',
+  documentOverrides: Partial<IExpenseDocument> = {},
 ) {
   return recordLedger({
     groupId,
@@ -66,6 +68,7 @@ function record(
               splitMethod: 'equal',
               paidBy: [{ user: new Types.ObjectId(alice), amount: 10 }],
               splitBetween: [{ user: new Types.ObjectId(bob), amount: 10 }],
+              ...documentOverrides,
             },
             activity: {
               type: 'expense_added',
@@ -275,4 +278,12 @@ describe('ledger recording', () => {
     expect(await Expense.countDocuments()).toBe(0);
     expect(await Activity.countDocuments()).toBe(0);
   });
+  it('takes retry identity from the description, never from the document being built', async () => {
+    const [saved] = await record(randomUUID(), { retry: undefined }, 'always', {
+      creationRequest: createRequestMetadata('document-key-0001', { description: 'Unexpected identity' }),
+    });
+    const stored = await Expense.findById(saved._id).select('+creationRequest');
+    expect(stored!.creationRequest).toBeUndefined();
+  });
+
 });
