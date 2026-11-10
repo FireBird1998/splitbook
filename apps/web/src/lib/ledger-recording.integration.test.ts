@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
 import { Refusal } from '@splitbook/shared/refusals';
-import { recordLedger } from './ledger-recording';
-import Expense from './models/Expense';
+import { recordLedger, type LedgerRecording } from './ledger-recording';
+import Expense, { type IExpenseDocument } from './models/Expense';
 import Group from './models/Group';
 import Activity from './models/Activity';
 import { integrationTestDb } from './test-utils/integration-db';
@@ -30,7 +30,7 @@ afterEach(() => vi.restoreAllMocks());
 afterAll(db.teardown);
 
 // A minimal Expense description, independent of either production creation service.
-function record(key = randomUUID()) {
+function record(key = randomUUID(), overrides: Partial<LedgerRecording<IExpenseDocument>> = {}) {
   return recordLedger({
     groupId,
     actorId: alice,
@@ -41,6 +41,7 @@ function record(key = randomUUID()) {
     checkPeople(members) {
       if (!members.has(bob)) throw new Refusal('INVALID_MEMBERS');
     },
+    ...overrides,
     async entries() {
       const id = new Types.ObjectId();
       return [
@@ -78,4 +79,22 @@ describe('ledger recording', () => {
     expect(await Expense.countDocuments()).toBe(1);
     expect(await Activity.countDocuments({ type: 'expense_added' })).toBe(1);
   });
+  it.each([['actor', alice, 'FORBIDDEN'], ['named person', bob, 'INVALID_MEMBERS']])(
+    'refuses at the commit when the %s is no longer a member', async (_, person, code) => {
+      await Group.updateOne({ _id: groupId }, { $pull: { members: { user: person } } });
+      await expect(record()).rejects.toMatchObject({ message: code });
+      expect(await Expense.countDocuments()).toBe(0);
+      expect(await Activity.countDocuments()).toBe(0);
+      expect((await Group.findById(groupId))!.currencyLocked).toBe(false);
+    },
+  );
+  it('can preserve pre-retry membership checks without checking again at the commit', async () => {
+    const key = randomUUID();
+    const compatibility = { membership: 'before-retry' as const, missingGroup: 'fault' as const };
+    const [saved] = await record(key, { compatibility });
+    await Group.updateOne({ _id: groupId }, { $pull: { members: { user: bob } } });
+    await expect(record(key, { compatibility })).rejects.toMatchObject({ message: 'INVALID_MEMBERS' });
+    expect(String((await record(key))[0]._id)).toBe(String(saved._id));
+  });
+
 });
