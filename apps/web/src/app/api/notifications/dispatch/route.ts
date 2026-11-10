@@ -1,3 +1,4 @@
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { dispatchExpenseAlerts } from '@/lib/notifications/dispatch';
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
   try {
     return NextResponse.json(
       { data: await dispatchExpenseAlerts(), status: 200 },
-      { headers: { 'Cache-Control': 'no-store' } },
+      { headers: { 'Cache-Control': API_CACHE_CONTROL } },
     );
   } catch {
     return NextResponse.json(

@@ -1,3 +1,4 @@
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { switchMcpAccount } from './switch-account';
 import { assistantForApproval, connectionName } from './assistant-name';
 import { randomUUID } from 'node:crypto';
@@ -104,7 +105,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
                 { error: 'ACCOUNT_CHANGED' },
                 {
                   status: 419,
-                  headers: { 'Cache-Control': 'no-store' },
+                  headers: { 'Cache-Control': API_CACHE_CONTROL },
                 },
               );
           }),
@@ -212,7 +213,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
             const consent = await liveMcpConsent(ctx.context.adapter, row, env);
             if (consent) connections.push(await connectionRead(ctx.context.adapter, row, consent));
           }
-          ctx.setHeader('Cache-Control', 'no-store');
+          ctx.setHeader('Cache-Control', API_CACHE_CONTROL);
           return ctx.json({
             resource,
             connections,
@@ -234,7 +235,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
             ctx.query.id,
           );
           if (!live) throw new APIError('NOT_FOUND');
-          ctx.setHeader('Cache-Control', 'no-store');
+          ctx.setHeader('Cache-Control', API_CACHE_CONTROL);
           return ctx.json(await connectionRead(ctx.context.adapter, live.row, live.consent));
         },
       ),
@@ -264,7 +265,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
               update: { excludedGroupIds: ctx.body.excludedGroupIds },
             }));
           if (!saved) throw new APIError('NOT_FOUND');
-          ctx.setHeader('Cache-Control', 'no-store');
+          ctx.setHeader('Cache-Control', API_CACHE_CONTROL);
           return ctx.json({ excludedGroupIds: ctx.body.excludedGroupIds });
         },
       ),
@@ -288,7 +289,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
             update: { generation: randomUUID(), lastUsedAt: null },
           });
           if (!revoked) throw new APIError('NOT_FOUND');
-          ctx.setHeader('Cache-Control', 'no-store');
+          ctx.setHeader('Cache-Control', API_CACHE_CONTROL);
           return ctx.json({ disconnected: true });
         },
       ),
@@ -314,7 +315,7 @@ export function mcpAuthPlugins(env: AuthEnv) {
             scopes.some((scope) => !MCP_SCOPES.includes(scope))
           )
             throw new APIError('BAD_REQUEST', { message: 'Unsupported connection permissions.' });
-          ctx.setHeader('Cache-Control', 'no-store');
+          ctx.setHeader('Cache-Control', API_CACHE_CONTROL);
           // The assistant by the name it publishes, never by its raw client identity (#614).
           return ctx.json({
             clientId,

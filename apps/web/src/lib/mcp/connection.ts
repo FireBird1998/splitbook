@@ -1,3 +1,4 @@
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { requireMcpAuth } from '@better-auth/mcp';
 import { z } from 'zod/v4';
@@ -96,7 +97,7 @@ export function createMcpConnectionHandler(
         { legacy: 'stateless' },
       );
       const response = await handler.fetch(request);
-      response.headers.set('Cache-Control', 'no-store');
+      response.headers.set('Cache-Control', API_CACHE_CONTROL);
       return response;
     },
     {
@@ -110,7 +111,7 @@ export function createMcpConnectionHandler(
   );
   return async (request: Request) => {
     const response = await protectedHandler(request);
-    response.headers.set('Cache-Control', 'no-store');
+    response.headers.set('Cache-Control', API_CACHE_CONTROL);
     return response;
   };
 }

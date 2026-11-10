@@ -165,6 +165,12 @@ async function connect(clientId: string, expectedName: string) {
   await client.connect(
     new StreamableHTTPClientTransport(new URL(`${origin}/api/mcp`), {
       requestInit: { headers: { Authorization: `Bearer ${issued.access_token}` } },
+      fetch: async (input, init) => {
+        const response = await fetch(input, init);
+        if (init?.method === 'POST')
+          expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+        return response;
+      },
     }),
   );
   return client;

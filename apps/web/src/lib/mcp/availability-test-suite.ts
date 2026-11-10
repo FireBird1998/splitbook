@@ -142,7 +142,7 @@ export function availabilityTests(mongo = false) {
               }),
             );
             expect(response.status, path).toBe(503);
-            expect(response.headers.get('Cache-Control')).toBe('no-store');
+            expect(response.headers.get('Cache-Control')).toBe('private, no-store');
           }
         }
         expect((await mcpGet(new Request(`${origin}/api/mcp`))).status).toBe(503);

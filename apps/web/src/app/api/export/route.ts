@@ -1,3 +1,4 @@
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import {
   error,
   forbidden,
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
 
     if (parsed.data.preview)
       return Response.json(await exportService.preview(user.id, parsed.data), {
-        headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
+        headers: { 'Cache-Control': API_CACHE_CONTROL, 'X-Content-Type-Options': 'nosniff' },
       });
 
     const download = await (parsed.data.format === 'json'
@@ -37,7 +38,7 @@ export async function GET(req: Request) {
         'Content-Type': download.contentType,
         // File names are lower-case ASCII (`exportSlug`), so they need no encoding.
         'Content-Disposition': `attachment; filename="${download.fileName}"`,
-        'Cache-Control': 'no-store',
+        'Cache-Control': API_CACHE_CONTROL,
         'X-Content-Type-Options': 'nosniff',
       },
     });

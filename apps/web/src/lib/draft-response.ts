@@ -1,3 +1,4 @@
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { ZodError } from 'zod';
 import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
 import { isDatabaseUnreachable } from '@/lib/mongodb-client';
@@ -44,6 +45,6 @@ export function draftError(cause: unknown, unconfirmed = DRAFT_CREATION_UNCONFIR
 }
 
 export function privateDraftResponse<T extends Response>(response: T): T {
-  response.headers.set('Cache-Control', 'private, no-store');
+  response.headers.set('Cache-Control', API_CACHE_CONTROL);
   return response;
 }

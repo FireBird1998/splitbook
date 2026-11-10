@@ -1,3 +1,4 @@
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { createHash, randomUUID } from 'node:crypto';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
@@ -35,7 +36,7 @@ const maintenance = z
   })
   .strict();
 const privateHeaders = {
-  'Cache-Control': 'private, no-store',
+  'Cache-Control': API_CACHE_CONTROL,
   Vary: 'Cookie, X-Expected-Account, X-Installation-Key',
 };
 const answer = (data: unknown, status = 200) =>

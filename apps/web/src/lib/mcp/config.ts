@@ -1,3 +1,4 @@
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import type { AuthEnv } from '@/lib/auth/create-auth';
 
 // Refresh rotation rolls this lifetime forward. The extra day covers use of an
@@ -52,7 +53,12 @@ export function mcpUnavailableResponse(request: Request): Response | null {
   return isMcp && mcpUnavailable()
     ? Response.json(
         { error: 'MCP_UNAVAILABLE' },
-        { status: 503, headers: { 'Cache-Control': 'no-store' } },
+        {
+          status: 503,
+          headers: {
+            'Cache-Control': path.startsWith('/api/') ? API_CACHE_CONTROL : 'no-store',
+          },
+        },
       )
     : null;
 }

@@ -84,7 +84,6 @@ test('a lost Quick add reply is an unconfirmed save; Enter retries the same requ
   await field.press('Enter');
   const created = await retried;
   expect(created.status()).toBe(201);
-  await created.finished();
   await expect(field).toHaveValue('');
   await expect(alert).toHaveCount(0);
   expect(keys).toHaveLength(2);
