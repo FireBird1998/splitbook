@@ -11,6 +11,7 @@ import {
   type CreateSettlementInput,
 } from '@splitbook/shared/validators/settlement';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
+import { settlementDebtSnapshot } from './settlement-debt';
 import User from '@/lib/models/User';
 import { Types } from 'mongoose';
 import { PERSON_FIELDS } from './person-fields';
@@ -48,7 +49,6 @@ export class SettlementService {
       groupId,
       actorId: userId,
       model: Settlement,
-      source: 'settlements',
       transactions: 'allow-standalone',
       compatibility: { membership: 'before-retry', missingGroup: 'fault' },
       retry: requestKey ? { key: requestKey, command } : undefined,
@@ -60,49 +60,54 @@ export class SettlementService {
         assertSettlementMembers(memberIds, paidBy, data.paidTo);
         assertSettlementAuthorization(userId, paidBy, data.paidTo);
       },
-      async entries(): ReturnType<LedgerRecording<ISettlementDocument>['entries']> {
+      async prepare(): ReturnType<LedgerRecording<ISettlementDocument>['prepare']> {
         const names = await User.find({ _id: { $in: [paidBy, data.paidTo] } })
           .select('name')
           .lean();
         return [
-          {
-            paymentDebt: {
-              sameCurrency: 'allow-without-debt',
-              currency: data.currency,
-              paidCurrency: data.paidCurrency,
-              paidBy,
-              paidTo: data.paidTo,
-              amountMinor,
-            },
-            document: {
-              _id: settlementId,
-              paidBy: new Types.ObjectId(paidBy),
-              paidTo: new Types.ObjectId(data.paidTo),
-              amount: command.amount,
-              amountMinor,
-              moneyVersion: 1,
-              currency: data.currency,
-              ...crossCurrency,
-              note: data.note,
-            },
-            activity: {
-              type: 'settlement_recorded',
-              metadata: {
-                settlementId: String(settlementId),
-                paidBy,
-                paidTo: data.paidTo,
+          async function singlePaymentCrossCurrencySnapshot() {
+            // Same-currency payments don't require or record a Debt snapshot.
+            const debtSnapshot = data.paidCurrency
+              ? await settlementDebtSnapshot(
+                  groupId,
+                  data.currency,
+                  paidBy,
+                  data.paidTo,
+                  amountMinor,
+                )
+              : {};
+            return {
+              document: {
+                _id: settlementId,
+                paidBy: new Types.ObjectId(paidBy),
+                paidTo: new Types.ObjectId(data.paidTo),
                 amount: command.amount,
+                amountMinor,
+                moneyVersion: 1,
                 currency: data.currency,
-                ...(data.paidCurrency ? { amountMinor, ...crossCurrency } : {}),
-                paidByName: names.find((person) => String(person._id) === paidBy)?.name,
-                paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
+                ...crossCurrency,
+                ...debtSnapshot,
+                note: data.note,
               },
-              alert: {
-                kind: 'settlement_recorded',
-                involved: [paidBy, data.paidTo],
-                switch: 'payments',
+              activity: {
+                type: 'settlement_recorded',
+                metadata: {
+                  settlementId: String(settlementId),
+                  paidBy,
+                  paidTo: data.paidTo,
+                  amount: command.amount,
+                  currency: data.currency,
+                  ...(data.paidCurrency ? { amountMinor, ...crossCurrency, ...debtSnapshot } : {}),
+                  paidByName: names.find((person) => String(person._id) === paidBy)?.name,
+                  paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
+                },
+                alert: {
+                  kind: 'settlement_recorded',
+                  involved: [paidBy, data.paidTo],
+                  switch: 'payments',
+                },
               },
-            },
+            };
           },
         ];
       },

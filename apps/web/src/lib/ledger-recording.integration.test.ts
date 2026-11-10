@@ -43,7 +43,6 @@ function record(
     groupId,
     actorId: alice,
     model: Expense,
-    source: 'expenses',
     transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
     retry: { key, command: { description: 'A record', amount: 10 } },
     currencies: [{ currency: 'INR', rule: 'listed' }],
@@ -51,31 +50,33 @@ function record(
       if (!members.has(bob)) throw new Refusal('INVALID_MEMBERS');
     },
     ...overrides,
-    async entries(): ReturnType<LedgerRecording<IExpenseDocument>['entries']> {
-      const id = new Types.ObjectId();
+    async prepare(): ReturnType<LedgerRecording<IExpenseDocument>['prepare']> {
       return [
-        {
-          document: {
-            _id: id,
-            description: 'A record',
-            amount: 10,
-            currency: 'INR',
-            category: 'food',
-            tag: 'Food',
-            date: new Date('2026-11-11T12:00:00Z'),
-            splitMethod: 'equal',
-            paidBy: [{ user: new Types.ObjectId(alice), amount: 10 }],
-            splitBetween: [{ user: new Types.ObjectId(bob), amount: 10 }],
-          },
-          activity: {
-            type: 'expense_added',
-            metadata: { expenseId: String(id), description: 'A record' },
-            alert: {
-              kind: 'expense_added',
-              involved: [alice, bob, bob, carol],
-              switch: alertSwitch,
+        async () => {
+          const id = new Types.ObjectId();
+          return {
+            document: {
+              _id: id,
+              description: 'A record',
+              amount: 10,
+              currency: 'INR',
+              category: 'food',
+              tag: 'Food',
+              date: new Date('2026-11-11T12:00:00Z'),
+              splitMethod: 'equal',
+              paidBy: [{ user: new Types.ObjectId(alice), amount: 10 }],
+              splitBetween: [{ user: new Types.ObjectId(bob), amount: 10 }],
             },
-          },
+            activity: {
+              type: 'expense_added',
+              metadata: { expenseId: String(id), description: 'A record' },
+              alert: {
+                kind: 'expense_added',
+                involved: [alice, bob, bob, carol],
+                switch: alertSwitch,
+              },
+            },
+          };
         },
       ];
     },

@@ -17,26 +17,18 @@ import {
   type IPendingActivity,
   type NotificationKind,
 } from './financial-write';
-import { settlementDebtSnapshot } from './services/settlement-debt';
 import Group, { type IGroupDocument } from './models/Group';
-import { activityService, type ActivitySource } from './services/activity.service';
+import { activityService } from './services/activity.service';
 
 interface LedgerRecord {
   _id: Types.ObjectId;
   creationRequest?: ICreationRequest;
   pendingActivity: IPendingActivity[];
 }
-interface RecordingEntry<T> {
-  /** Single payments require no Debt for a same-currency recording. */
-  paymentDebt?: {
-    sameCurrency: 'allow-without-debt';
-    currency: string;
-    paidCurrency?: string;
-    paidBy: string;
-    paidTo: string;
-    amountMinor: number;
+interface NewLedgerRecord<T> {
+  document: Partial<Omit<T, 'group' | 'createdBy' | 'creationRequest' | 'pendingActivity'>> & {
+    _id: Types.ObjectId;
   };
-  document: Partial<T> & { _id: Types.ObjectId };
   activity: {
     type: ActivityType;
     metadata: Record<string, unknown>;
@@ -51,13 +43,15 @@ export interface LedgerRecording<T extends LedgerRecord> {
   groupId: string;
   actorId: string;
   model: Model<T>;
-  source: ActivitySource;
   transactions: 'allow-standalone' | { required: Refusal };
   compatibility?: { membership: 'before-retry'; missingGroup?: 'fault' };
   retry?: { key: string; command: Record<string, unknown> };
   currencies: ReadonlyArray<{ currency: string; rule: 'listed' | 'held-by-ledger' }>;
   checkPeople: (members: Set<string>) => void;
-  entries: (group: IGroupDocument) => Promise<RecordingEntry<T>[]>;
+  /** Snapshot presentation data after replay, before waiting for the recording fence.
+   * Each returned description is then built from the committed Group, sequentially.
+   */
+  prepare: () => Promise<ReadonlyArray<(group: IGroupDocument) => Promise<NewLedgerRecord<T>>>>;
 }
 
 /** Record a description; callers never sequence retry, commit and publication themselves. */
@@ -65,14 +59,18 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
   const { groupId, actorId, model, retry } = description;
   await connectDB();
   await ensureLedgerWriteIndexes();
+  const source = model.collection.collectionName;
+  if (source !== 'expenses' && source !== 'settlements')
+    throw new Error('Ledger recording needs an Expense or Settlement model');
   const checkMembers = (group: IGroupDocument) => {
     const members = new Set(group.members.map((member) => String(member.user)));
     if (!members.has(actorId)) throw new Refusal('FORBIDDEN');
     description.checkPeople(members);
   };
+  let admittedGroup: IGroupDocument | undefined;
   // Single payments historically validate people even before confirming a stored retry.
   if (description.compatibility?.membership === 'before-retry') {
-    const admittedGroup = await Group.findById(groupId).lean();
+    admittedGroup = (await Group.findById(groupId).lean()) ?? undefined;
     if (!admittedGroup) {
       if (description.compatibility.missingGroup === 'fault') throw new Error('Group not found');
       throw new Refusal('FORBIDDEN');
@@ -90,7 +88,7 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
   const publish = async (rows: HydratedDocument<T>[]) => {
     for (const row of rows)
       await afterGroupCommit(() =>
-        activityService.publishPending(description.source, row._id, row.pendingActivity),
+        activityService.publishPending(source, row._id, row.pendingActivity),
       );
     return rows;
   };
@@ -98,6 +96,8 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
   if (existing) return publish([existing]);
   if (description.transactions !== 'allow-standalone' && !(await supportsGroupTransactions()))
     throw description.transactions.required;
+  if (admittedGroup?.isArchived) throw new Refusal('GROUP_ARCHIVED');
+  const descriptions = await description.prepare();
   let saved: HydratedDocument<T>[];
   try {
     saved = await withGroupMutation(
@@ -112,22 +112,15 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
         if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
         if (description.compatibility?.membership !== 'before-retry') checkMembers(group);
         const result = [];
-        for (const [index, entry] of (await description.entries(group)).entries()) {
-          const debt = entry.paymentDebt;
-          const debtSnapshot = debt?.paidCurrency
-            ? await settlementDebtSnapshot(
-                groupId,
-                debt.currency,
-                debt.paidBy,
-                debt.paidTo,
-                debt.amountMinor,
-              )
-            : {};
-          const event = makePendingActivity(groupId, entry.activity.type, actorId, {
-            ...entry.activity.metadata,
-            ...debtSnapshot,
-          });
-          const alert = entry.activity.alert;
+        for (const [index, build] of descriptions.entries()) {
+          const record = await build(group);
+          const event = makePendingActivity(
+            groupId,
+            record.activity.type,
+            actorId,
+            record.activity.metadata,
+          );
+          const alert = record.activity.alert;
           const capture =
             alert.switch === 'always' ||
             (alert.switch === 'payments' ? paymentAlertsEnabled() : expenseChangeAlertsEnabled());
@@ -135,14 +128,13 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
             event.notificationContext = ledgerNotificationContext(
               event,
               alert.kind,
-              { groupId, recordId: String(entry.document._id) },
+              { groupId, recordId: String(record.document._id) },
               alert.involved,
               new Set(group.members.map((member) => String(member.user))),
             );
           result.push(
             await model.create({
-              ...entry.document,
-              ...debtSnapshot,
+              ...record.document,
               group: groupId,
               createdBy: actorId,
               ...(index === 0 && retry
