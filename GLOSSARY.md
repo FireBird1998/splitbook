@@ -4,8 +4,9 @@ Shared-expense ledger for personal groups and trips. This file is the project's 
 
 ## Language
 
-**Ledger entry**:
+**Ledger record**:
 An Expense or a Settlement, the two records that change what members owe.
+_Avoid_: ledger entry (an entry is what a member typed)
 
 **Theme**:
 A group's shape and identity, chosen once at creation and derived from the stored `Group.category` field. Drives chrome, copy nouns, default tags, and date semantics.
