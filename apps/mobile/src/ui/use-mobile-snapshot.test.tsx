@@ -1,6 +1,7 @@
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, expect, it } from 'vitest';
-import { createMobileController } from '../data/mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -12,35 +13,33 @@ afterEach(() => {
 });
 
 async function signedIn() {
-  let cookie: string | null = null;
-  const user = { id: 'a00000000000000000000001', name: 'Alex', email: 'a@x.test', image: null };
-  const controller = createMobileController(
-    { apiBaseUrl: 'http://local', authOrigin: 'http://local', developmentPersonaEnabled: true },
-    {
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      fetch: async (url) =>
-        new Response(
-          JSON.stringify(
-            url.includes('sign-in')
-              ? { user }
-              : url.includes('get-session')
-                ? { user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } }
-                : url.endsWith('/api/groups')
-                  ? { status: 200, data: [] }
-                  : { status: 200, data: { buckets: [], groups: [] } },
-          ),
-          { headers: { 'Set-Cookie': 'better-auth.session_token=test.signature; Path=/' } },
-        ),
+  const server = fakeSplitbook();
+  server.world.people.alex = {
+    id: 'a00000000000000000000001',
+    name: 'Alex',
+    email: 'a@x.test',
+    image: null,
+  };
+  server.world.groups = [];
+  server.world.home = { buckets: [], groups: [] };
+  server.auth.cookie = () => 'better-auth.session_token=test.signature';
+  const phone = testPhone(server, {
+    origin: 'http://local',
+    parts: {
+      accountLocal: undefined,
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
     },
-  );
+  });
+  const controller = phone.open();
   dispose = controller.dispose;
   await controller.signIn('alex');
   return controller;
