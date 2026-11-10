@@ -4376,11 +4376,25 @@ exports[`recurring-expense record of recordings > named person is no longer a me
   },
   "answers": {
     "body": {
-      "code": "FORBIDDEN",
-      "error": "Forbidden",
-      "status": 403,
+      "data": {
+        "expenses": [],
+        "pagination": {
+          "limit": 20,
+          "page": 1,
+          "total": 0,
+          "totalPages": 0,
+        },
+        "summary": {
+          "count": 0,
+          "totalAmount": 0,
+          "totalsByCurrency": [],
+          "userGetsBack": 0,
+          "userOwes": 0,
+        },
+      },
+      "status": 200,
     },
-    "status": 403,
+    "status": 200,
   },
   "before": {
     "activities": [],
@@ -4653,8 +4667,8 @@ exports[`recurring-expense record of recordings > named person leaves between th
               "totalAmount": 120,
             },
           ],
-          "userGetsBack": 60,
-          "userOwes": 0,
+          "userGetsBack": 0,
+          "userOwes": 60,
         },
       },
       "status": 200,

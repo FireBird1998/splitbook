@@ -139,10 +139,29 @@ export function recordCreationPaths(recording: Recording) {
           }
           return transaction(callback, options);
         });
+      const waitForFence = async (arrival: Promise<void>, pending: Promise<Answer>) => {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            arrival,
+            pending.then(() => {
+              throw new Error('Request ended before its expected fence');
+            }),
+            new Promise<never>((_, reject) => {
+              timeout = setTimeout(
+                () => reject(new Error('Recording did not reach its expected fence')),
+                2_000,
+              );
+            }),
+          ]);
+        } finally {
+          clearTimeout(timeout);
+        }
+      };
       const winner = recording.requestOwner.run('winner', () => recording.send());
       let loser: Promise<Answer> | undefined;
       try {
-        await winnerReached;
+        await waitForFence(winnerReached, winner);
         await Group.updateOne(
           { _id: recording.groupId, 'tags._id': recording.foodId },
           { $set: { 'tags.$.name': 'Meals' } },
@@ -154,7 +173,7 @@ export function recordCreationPaths(recording: Recording) {
           { $push: { tags: { _id: replacement, name: 'Food', isArchived: false } } },
         );
         loser = recording.requestOwner.run('loser', () => recording.send());
-        await loserReached;
+        await waitForFence(loserReached, loser);
         releases.get('winner')!();
         const committed = await winner;
         releases.get('loser')!();

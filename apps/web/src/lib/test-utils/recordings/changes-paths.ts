@@ -28,6 +28,16 @@ export function recordChangesPaths(recording: Recording) {
       await recording.capture(() => recording.send({}, { 'X-Splitbook-Revision': '' }));
     });
   }
+  if (recording.writer === 'edit' || recording.writer === 'restore')
+    it('changing the people alerts the before-and-after union', async () => {
+      const recorded = await recording.capture(() =>
+        recording.send({ splitBetween: [{ user: priya }] }),
+      );
+      expect(
+        recorded.after.expenses[0].splitBetween.map((row: { user: unknown }) => String(row.user)),
+      ).toEqual([priya]);
+      expect(recorded.after.activities[0].notificationContext.recipientIds).toEqual([sam, priya]);
+    });
   if (recording.writer === 'edit') {
     it('an edit that changes nothing', async () => {
       await recording.capture(() => recording.send({ description: 'Recorded dinner' }));

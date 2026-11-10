@@ -7,7 +7,7 @@ import Expense from '@/lib/models/Expense';
 import Activity from '@/lib/models/Activity';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import { groupService } from '@/lib/services/group.service';
-import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
+import { DEMO_PERSONA_IDS, type DemoPersonaKey } from '@/lib/demo-personas';
 import { integrationTestDb } from '../integration-db';
 import {
   callRoute,
@@ -115,6 +115,9 @@ export function recordingFixture(writer: Writer) {
       ...(body === undefined ? {} : { body }),
       headers,
     });
+  };
+  const readAs = async (persona: DemoPersonaKey) => {
+    readerCookie = await signIn(persona);
   };
   const revision = () => (writer === 'restore' ? '1' : '0');
   const send = (changes: object = {}, headers: Record<string, string> = {}): Promise<Answer> => {
@@ -441,6 +444,7 @@ export function recordingFixture(writer: Writer) {
 
   return {
     writer,
+    readAs,
     isChange,
     fenceNumber,
     expenseBody,

@@ -81,6 +81,7 @@ export function recordCommonPaths(recording: Recording) {
     await recording.capture(() => recording.send());
   });
   it('named person is no longer a member before the request', async () => {
+    if (recording.writer === 'recurring-expense') await recording.readAs('priya');
     await recording.remove(sam);
     await recording.capture(() =>
       recording.send(
@@ -101,6 +102,7 @@ export function recordCommonPaths(recording: Recording) {
     await recording.interleave(() => recording.remove(alex));
   });
   it('named person leaves between the checks and the commit', async () => {
+    if (recording.writer === 'recurring-expense') await recording.readAs('priya');
     const changes =
       recording.writer === 'edit' || recording.writer === 'restore'
         ? {
