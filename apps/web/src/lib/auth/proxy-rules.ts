@@ -1,4 +1,3 @@
-import { Refusal, refusalAnswer } from '@splitbook/shared/refusals';
 /**
  * Route-protection rules applied by `src/proxy.ts`. Edge-safe and pure so the
  * decision table can be unit tested without a request pipeline.
@@ -8,7 +7,7 @@ import { Refusal, refusalAnswer } from '@splitbook/shared/refusals';
  * where validation lives: `getAuthUser()` answers 401 for API routes and the
  * authenticated layout redirects for pages.
  */
-
+import { Refusal, refusalAnswer } from '@splitbook/shared/refusals';
 import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { NextResponse } from 'next/server';
 

@@ -1,5 +1,5 @@
-import { Refusal, refusalAnswer } from '@splitbook/shared/refusals';
 import 'server-only';
+import { Refusal, refusalAnswer } from '@splitbook/shared/refusals';
 import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { timingSafeEqual } from 'node:crypto';
 import { refreshRates } from './service';
