@@ -838,3 +838,18 @@ it.fails('fails the sending test when a request has no answer', async () => {
   const response = await server.fetch('http://local/api/not-a-read', {});
   expect(response.status).toBe(404);
 });
+
+it('accepts an explicitly declared unanswered method and path', async () => {
+  const server = fakeSplitbook();
+  server.expectUnanswered('GET', '/api/not-a-read');
+  const response = await server.fetch('http://local/api/not-a-read', {});
+  expect(response.status).toBe(404);
+  expect(server.unanswered).toEqual(['GET /api/not-a-read']);
+});
+
+it('refuses catch-all unanswered declarations', () => {
+  const server = fakeSplitbook();
+  expect(() => server.expectUnanswered('*', '/api/not-a-read')).toThrow('method and path');
+  expect(() => server.expectUnanswered('GET', '*')).toThrow('method and path');
+  expect(() => server.expectUnanswered('GET', '/api/groups/*')).toThrow('method and path');
+});
