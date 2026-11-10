@@ -474,3 +474,14 @@ it('observes completed credential writes separately from a held or failed write'
   held.release();await saving;
   expect(store.writes).toEqual(['confirmed']);
 });
+
+it('reopens the same phone with the caller’s current runtime parts and build config',async()=>{
+  const server=fakeSplitbook(),phone=testPhone(server);
+  await phone.open().signIn('alex');
+  const app=phone.open({config:{apiBaseUrl:'http://api.test',authOrigin:'http://auth.test'},parts:{newSubmissionKey:()=> 'reopened-key'}});
+  await app.restore();app.startCreate();app.updateCreation({name:'Reopened Group'});await app.createGroup();
+  const request=server.requests.find(r=>r.method==='POST'&&r.path==='/api/groups')!;
+  expect(request.url.origin).toBe('http://api.test');expect(request.headers.get('Origin')).toBe('http://auth.test');
+  expect(request.headers.get('Idempotency-Key')).toBe('reopened-key');
+  expect(phone.stores.credentials.value).not.toBeNull();
+});
