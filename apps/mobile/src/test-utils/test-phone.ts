@@ -54,19 +54,27 @@ function faultable<T extends object>(store: T) {
       enumerable: true,
       configurable: true,
       value: (...args: unknown[]) => {
-        const rules=[...persistent].filter(rule=>rule.operation===operation && (rule.path===undefined || rule.path===args[1]));
-        const invoke=(index:number):unknown=>{
-          if(index<rules.length){
-            const rule=rules[index];
-            if(!rule.when()) return invoke(index+1);
-            const waiting=rule.action();
-            return waiting ? waiting.then(()=>invoke(index+1)) : invoke(index+1);
+        const rules = [...persistent].filter(
+          (rule) =>
+            rule.operation === operation && (rule.path === undefined || rule.path === args[1]),
+        );
+        const invoke = (index: number): unknown => {
+          if (index < rules.length) {
+            const rule = rules[index];
+            if (!rule.when()) return invoke(index + 1);
+            const waiting = rule.action();
+            return waiting ? waiting.then(() => invoke(index + 1)) : invoke(index + 1);
           }
-          const queue=next.get(operation);
-          const slot=queue?.findIndex(step=>step.path===undefined || step.path===args[1]) ?? -1;
-          if(slot>=0) return queue!.splice(slot,1)[0].action().then(()=>call.apply(store,args));
+          const queue = next.get(operation);
+          const slot =
+            queue?.findIndex((step) => step.path === undefined || step.path === args[1]) ?? -1;
+          if (slot >= 0)
+            return queue!
+              .splice(slot, 1)[0]
+              .action()
+              .then(() => call.apply(store, args));
           // Fast native reads must keep their turn: saved previews race immediate network answers.
-          return call.apply(store,args);
+          return call.apply(store, args);
         };
         return invoke(0);
       },
@@ -126,8 +134,8 @@ function cell<T>(initial: T) {
     get value() {
       return structuredClone(value);
     },
-    set value(next:T) {
-      value=structuredClone(next);
+    set value(next: T) {
+      value = structuredClone(next);
     },
     load: async () => structuredClone(value),
     save: async (next: T) => {
@@ -171,6 +179,7 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
   server: Pick<MobileDependencies, 'fetch'> & { online: boolean },
   options: {
     now?: number;
+    origin?: string;
     recordSeparator?: string;
     newSubmissionKey?: () => string;
     parts?: Omit<PhoneParts, 'savedQueries'> & { savedQueries?: Queries };
@@ -309,8 +318,8 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
       active?.dispose();
       active = (options.monitor === false ? createMobileController : createCheckedMobileController)(
         {
-          apiBaseUrl: 'http://localhost:4138',
-          authOrigin: 'http://localhost:4138',
+          apiBaseUrl: options.origin ?? 'http://localhost:4138',
+          authOrigin: options.origin ?? 'http://localhost:4138',
           developmentPersonaEnabled: true,
         },
         {
