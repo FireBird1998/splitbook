@@ -69,49 +69,54 @@ export class SettlementService {
           .select('name')
           .lean();
         return [
-          async function singlePaymentCrossCurrencySnapshot() {
-            // Same-currency payments don't require or record a Debt snapshot.
-            const debtSnapshot = data.paidCurrency
-              ? await settlementDebtSnapshot(
-                  groupId,
-                  data.currency,
-                  paidBy,
-                  data.paidTo,
-                  amountMinor,
-                )
-              : {};
-            return {
-              document: {
-                _id: settlementId,
-                paidBy: new Types.ObjectId(paidBy),
-                paidTo: new Types.ObjectId(data.paidTo),
-                amount: command.amount,
-                amountMinor,
-                moneyVersion: 1,
-                currency: data.currency,
-                ...crossCurrency,
-                ...debtSnapshot,
-                note: data.note,
-              },
-              activity: {
-                type: 'settlement_recorded',
-                metadata: {
-                  settlementId: String(settlementId),
-                  paidBy,
-                  paidTo: data.paidTo,
+          {
+            id: settlementId,
+            build: async function singlePaymentCrossCurrencySnapshot() {
+              // Same-currency payments don't require or record a Debt snapshot.
+              const debtSnapshot = data.paidCurrency
+                ? await settlementDebtSnapshot(
+                    groupId,
+                    data.currency,
+                    paidBy,
+                    data.paidTo,
+                    amountMinor,
+                  )
+                : {};
+              return {
+                document: {
+                  _id: settlementId,
+                  paidBy: new Types.ObjectId(paidBy),
+                  paidTo: new Types.ObjectId(data.paidTo),
                   amount: command.amount,
+                  amountMinor,
+                  moneyVersion: 1,
                   currency: data.currency,
-                  ...(data.paidCurrency ? { amountMinor, ...crossCurrency, ...debtSnapshot } : {}),
-                  paidByName: names.find((person) => String(person._id) === paidBy)?.name,
-                  paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
+                  ...crossCurrency,
+                  ...debtSnapshot,
+                  note: data.note,
                 },
-                alert: {
-                  kind: 'settlement_recorded',
-                  involved: [paidBy, data.paidTo],
-                  switch: 'payments',
+                activity: {
+                  type: 'settlement_recorded',
+                  metadata: {
+                    settlementId: String(settlementId),
+                    paidBy,
+                    paidTo: data.paidTo,
+                    amount: command.amount,
+                    currency: data.currency,
+                    ...(data.paidCurrency
+                      ? { amountMinor, ...crossCurrency, ...debtSnapshot }
+                      : {}),
+                    paidByName: names.find((person) => String(person._id) === paidBy)?.name,
+                    paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
+                  },
+                  alert: {
+                    kind: 'settlement_recorded',
+                    involved: [paidBy, data.paidTo],
+                    switch: 'payments',
+                  },
                 },
-              },
-            };
+              };
+            },
           },
         ];
       },

@@ -49,10 +49,10 @@ export const refusalExceptions = [
       'The trusted backup command must cover all time. This fault is retained for the owner in #1086.',
   },
   {
-    path: 'apps/web/src/lib/services/settlement-batch.service.ts',
+    path: 'apps/web/src/lib/ledger-recording.ts',
     code: 'IDEMPOTENCY_CONFLICT',
     when: '!first.batchSettlementIds?.length',
-    within: 'createSettlementBatch',
+    within: 'recordLedger',
     reason: 'A matching committed batch receipt must contain its atomically stored batch IDs.',
   },
   {
