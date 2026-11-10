@@ -420,4 +420,11 @@ describe('test phone', () => {
     store.value=null;expect(await store.load()).toBeNull();
   });
 
+  it('uses the fixture’s local origin for both API and authentication requests', async () => {
+    const server=fakeSplitbook(), phone=testPhone(server,{origin:'http://localhost:4145'});
+    const app=phone.open();await app.signIn('alex');
+    expect(server.requests.length).toBeGreaterThan(1);
+    expect([...new Set(server.requests.map(r=>r.url.origin))]).toEqual(['http://localhost:4145']);
+  });
+
 });
