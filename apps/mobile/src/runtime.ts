@@ -190,6 +190,7 @@ export const notificationAccess: NotificationAccess | null =
             {
               headers: {
                 Accept: 'application/json',
+                'Cache-Control': 'no-store',
                 'X-Installation-Key': installation.key,
                 Origin: controllerConfig.authOrigin,
                 Cookie: cookie,
