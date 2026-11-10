@@ -113,6 +113,9 @@ describe('POST /api/groups/[id]/invite', () => {
 
     const refused = await inviteByEmail(groupId, await signIn('sam'), 'priya at splitbook');
 
-    expect(refused).toEqual({ status: 422, body: { error: 'Invalid email address', status: 422 } });
+    expect(refused).toEqual({
+      status: 422,
+      body: { error: 'Invalid email address', status: 422, code: 'VALIDATION_ERROR' },
+    });
   });
 });

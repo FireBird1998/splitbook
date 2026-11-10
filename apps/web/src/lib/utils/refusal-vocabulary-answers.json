@@ -67,7 +67,7 @@
     "variant": "default",
     "data": {},
     "status": 422,
-    "body": "{\"error\":\"Enter a positive amount with the currency\u2019s supported precision.\",\"status\":422,\"code\":\"INVALID_MONEY\"}"
+    "body": "{\"error\":\"Enter a positive amount with the currency’s supported precision.\",\"status\":422,\"code\":\"INVALID_MONEY\"}"
   },
   {
     "code": "INVALID_JSON",
@@ -125,7 +125,7 @@
     "variant": "default",
     "data": {},
     "status": 422,
-    "body": "{\"error\":\"Currency is not one of this Group\u2019s currencies\",\"status\":422,\"code\":\"CURRENCY_MISMATCH\"}"
+    "body": "{\"error\":\"Currency is not one of this Group’s currencies\",\"status\":422,\"code\":\"CURRENCY_MISMATCH\"}"
   },
   {
     "code": "NO_SETTLEMENT_DEBT",
@@ -393,7 +393,7 @@
     "variant": "default",
     "data": {},
     "status": 409,
-    "body": "{\"error\":\"You have 100\u00a0items waiting in this Group. Save or delete some before keeping more.\",\"status\":409,\"code\":\"DRAFT_GROUP_LIMIT\"}"
+    "body": "{\"error\":\"You have 100 items waiting in this Group. Save or delete some before keeping more.\",\"status\":409,\"code\":\"DRAFT_GROUP_LIMIT\"}"
   },
   {
     "code": "DRAFT_NOT_FOUND",
@@ -502,7 +502,7 @@
     "variant": "default",
     "data": {},
     "status": 503,
-    "body": "{\"error\":\"Couldn\u2019t reach Splitbook. Try again.\",\"status\":503,\"code\":\"DATABASE_UNAVAILABLE\"}"
+    "body": "{\"error\":\"Couldn’t reach Splitbook. Try again.\",\"status\":503,\"code\":\"DATABASE_UNAVAILABLE\"}"
   },
   {
     "code": "CURRENCY_IN_USE",
@@ -523,7 +523,7 @@
       }
     },
     "status": 409,
-    "body": "{\"error\":\"EUR can\u2019t be removed while Maple House uses it.\",\"status\":409,\"code\":\"CURRENCY_IN_USE\",\"use\":{\"expenses\":{\"count\":2,\"items\":[]},\"settlements\":1,\"toReview\":{\"yours\":1,\"others\":0}}}"
+    "body": "{\"error\":\"EUR can’t be removed while Maple House uses it.\",\"status\":409,\"code\":\"CURRENCY_IN_USE\",\"use\":{\"expenses\":{\"count\":2,\"items\":[]},\"settlements\":1,\"toReview\":{\"yours\":1,\"others\":0}}}"
   },
   {
     "code": "CURRENCY_NOT_LISTED",
@@ -532,7 +532,7 @@
       "currency": "EUR"
     },
     "status": 404,
-    "body": "{\"error\":\"EUR isn\u2019t one of this Group\u2019s extra currencies.\",\"status\":404,\"code\":\"CURRENCY_NOT_LISTED\"}"
+    "body": "{\"error\":\"EUR isn’t one of this Group’s extra currencies.\",\"status\":404,\"code\":\"CURRENCY_NOT_LISTED\"}"
   },
   {
     "code": "CURRENCY_IS_MAIN",
@@ -541,7 +541,7 @@
       "currency": "INR"
     },
     "status": 409,
-    "body": "{\"error\":\"INR is the main currency, so it can\u2019t be removed.\",\"status\":409,\"code\":\"CURRENCY_IS_MAIN\"}"
+    "body": "{\"error\":\"INR is the main currency, so it can’t be removed.\",\"status\":409,\"code\":\"CURRENCY_IS_MAIN\"}"
   },
   {
     "code": "EXPORT_TOO_LARGE",
@@ -569,7 +569,7 @@
       ]
     },
     "status": 409,
-    "body": "{\"error\":\"Settle up before you leave: you owe \u20b9150.00 and are owed \u20ac12.50 in this Group.\",\"status\":409,\"code\":\"OPEN_BALANCE\",\"balances\":[{\"currency\":\"INR\",\"amount\":-150},{\"currency\":\"EUR\",\"amount\":12.5}]}"
+    "body": "{\"error\":\"Settle up before you leave: you owe ₹150.00 and are owed €12.50 in this Group.\",\"status\":409,\"code\":\"OPEN_BALANCE\",\"balances\":[{\"currency\":\"INR\",\"amount\":-150},{\"currency\":\"EUR\",\"amount\":12.5}]}"
   },
   {
     "code": "OPEN_BALANCE",
@@ -589,7 +589,7 @@
       "variant": "removal"
     },
     "status": 409,
-    "body": "{\"error\":\"Priya Shah owes \u20b9150.00 and is owed \u20ac12.50 in this Group. Settle up before removing them.\",\"status\":409,\"code\":\"OPEN_BALANCE\",\"balances\":[{\"currency\":\"INR\",\"amount\":-150},{\"currency\":\"EUR\",\"amount\":12.5}]}"
+    "body": "{\"error\":\"Priya Shah owes ₹150.00 and is owed €12.50 in this Group. Settle up before removing them.\",\"status\":409,\"code\":\"OPEN_BALANCE\",\"balances\":[{\"currency\":\"INR\",\"amount\":-150},{\"currency\":\"EUR\",\"amount\":12.5}]}"
   },
   {
     "code": "RECURRING_EXPENSE_PROBLEM",
@@ -654,7 +654,7 @@
     "variant": "default",
     "data": {},
     "status": 400,
-    "body": "{\"error\":\"Ask for 1 to 12\u00a0months of spending.\",\"status\":400,\"code\":\"INVALID_MONTHS\"}"
+    "body": "{\"error\":\"Ask for 1 to 12 months of spending.\",\"status\":400,\"code\":\"INVALID_MONTHS\"}"
   },
   {
     "code": "INVALID_TIME_ZONE",
