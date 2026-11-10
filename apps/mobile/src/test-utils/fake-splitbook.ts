@@ -310,6 +310,7 @@ export function fakeSplitbook() {
     issuedTo: new Map<string, SessionUser>(),
     expired: false,
     signInStatus: 200,
+    signInCode: null as string|null,
     sessionPresent: true,
     signOutStatus: 200,
     bootstrap: {environment:'staging',googleWebClientId:'123-test.apps.googleusercontent.com'} as unknown,
@@ -404,7 +405,7 @@ export function fakeSplitbook() {
         return Response.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
       }
       if ((url.pathname === '/api/auth/demo-persona/sign-in' || url.pathname === '/api/auth/sign-in/social') && method === 'POST') {
-        if (auth.signInStatus !== 200) return Response.json({}, {status:auth.signInStatus});
+        if (auth.signInStatus !== 200) return Response.json(auth.signInCode?{code:auth.signInCode}:{}, {status:auth.signInStatus});
         const persona = (url.pathname.endsWith('/social')
           ? (String(init.body).includes('sam') ? 'sam' : 'alex')
           : JSON.parse(String(init.body)).personaId) as PersonaId;
