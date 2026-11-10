@@ -1,3 +1,4 @@
+import { bodyFails, gatewayReply, hangUntilAborted, type GatewayBody } from './transport-faults';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { FetchResponse, MobileFetch, PersonaId, SessionUser } from '../data/types';
 
@@ -267,5 +268,35 @@ export function fakeSplitbook() {
     unanswered.push(`${method} ${url.pathname}${url.search}`);
     return Response.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
   };
-  return { world, fetch, requests, unanswered, reply };
+  return {
+    world,
+    fetch,
+    requests,
+    unanswered,
+    reply,
+    fault(
+      method: string,
+      path: string,
+      kind:
+        | 'offline'
+        | 'lost-reply'
+        | 'body-fails'
+        | 'headers'
+        | 'body'
+        | { status: number; body: GatewayBody },
+      options = {},
+    ) {
+      reply(
+        method,
+        path,
+        ({ init }) => {
+          if (typeof kind === 'object') return gatewayReply(kind.status, kind.body);
+          if (kind === 'headers' || kind === 'body') return hangUntilAborted(init, kind);
+          if (kind === 'lost-reply' || kind === 'body-fails') return bodyFails();
+          return Promise.reject(new TypeError('Network request failed'));
+        },
+        options,
+      );
+    },
+  };
 }

@@ -171,14 +171,14 @@ describe('fake Splitbook', () => {
     },
   );
   it.each(gatewayFailures)(
-    'keeps a gateway %s with %s out of the network-failure state',
+    'makes a gateway %s with %s the same network failure as the real reply',
     async (status, body) => {
       const server = fakeSplitbook();
       server.fault('GET', '/probe', { status, body });
       await expect(faultTransport(server).request('/probe', 1)).rejects.toMatchObject({
-        kind: 'server-error',
-        status,
-        networkFailure: false,
+        kind: 'network',
+        status: 0,
+        networkFailure: true,
       });
     },
   );
