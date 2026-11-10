@@ -1,3 +1,4 @@
+import { savedQueriesIn } from './saved-queries';
 import { describe, expect, it, vi } from 'vitest';
 import { fakeSplitbook } from './fake-splitbook';
 import { testPhone } from './test-phone';
@@ -375,6 +376,18 @@ describe('test phone', () => {
     wait=new Promise(()=>{});stop();
     await store.save('alex','maple',{draft:'Taxi'});
     expect(await store.load('alex','maple')).toEqual({draft:'Taxi'});
+  });
+
+  it('exposes faults on a supplied saved-query adapter without replacing its storage', async () => {
+    const rows=new Map<string,unknown>(), adapter=savedQueriesIn(rows);
+    const phone=testPhone(fakeSplitbook(),{parts:{savedQueries:adapter}});
+    await phone.stores.savedQueries.save('alex','/api/group',{saved:1});
+    expect(await adapter.load('alex','/api/group')).toEqual({saved:1});
+    const stop=phone.stores.savedQueries.at('/api/group').failPersistently('remove',new Error('Disk full'));
+    await expect(phone.stores.savedQueries.remove('alex','/api/group')).rejects.toThrow('Disk full');
+    expect(await adapter.load('alex','/api/group')).toEqual({saved:1});
+    stop(); await phone.stores.savedQueries.remove('alex','/api/group');
+    expect(await adapter.load('alex','/api/group')).toBeNull();
   });
 
 });
