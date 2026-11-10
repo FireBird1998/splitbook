@@ -302,13 +302,11 @@ function fixture() {
   });
   const phone = testPhone(backend, {
     newSubmissionKey: () => `group-queries-attempt-${String(server.created + 1).padStart(4, '0')}`,
-    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts', 'untrustedCopies'],
     parts: {
       pendingInvitation: undefined,
       draftRequests: undefined,
       tagRequests: undefined,
       groupCreations: undefined,
-      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
     },
   });
   const rows = phone.stores.savedQueries.records;
@@ -328,7 +326,6 @@ function fixture() {
   );
   for (const store of [queryStore, phone.stores.expenseDrafts, phone.stores.settlementAttempts]) {
     store.delayPersistently('load', () => device.storageDelay);
-    if (store !== queryStore) delete (store as AccountGroupRecordStore).keys;
   }
   const create = () => phone.open();
 
