@@ -428,6 +428,7 @@ export function fakeSplitbook() {
         '/api/notifications/device',
         '/api/auth/mcp/connections',
         '/api/user/assistant-groups',
+        ...Object.keys(world.pages).map((path) => new URL(path, 'http://local').pathname),
         ...world.groups.flatMap((g) =>
           [
             '',
