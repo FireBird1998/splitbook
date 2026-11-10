@@ -109,6 +109,7 @@ function setup(
   };
   return {
     expectUnanswered: server.expectUnanswered,
+    fault: server.fault,
     phone,
     create,
     controller: create(),
@@ -4101,7 +4102,7 @@ it.each(['create', 'edit', 'delete'] as const)(
 describe('acknowledging an interrupted shared Draft upload', () => {
   beforeEach(() => vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true'));
   afterEach(() => vi.unstubAllEnvs());
-  function uploadFixture({ malformedExpenseReceipt = false } = {}) {
+  function uploadFixture() {
     const submitted: Array<{ body: string; key: string | null }> = [];
     const rows: Array<{
       id: string;
@@ -4118,9 +4119,6 @@ describe('acknowledging an interrupted shared Draft upload', () => {
     let denyGroup = false;
     const fixture = setup(
       (path, init) => {
-        // Stopped under #1075: this one case depends on a malformed receipt to be Unconfirmed.
-        if (malformedExpenseReceipt && path.endsWith('/expenses') && init.method === 'POST')
-          return Promise.resolve(json({ status: 200, data: expensePage() }));
         if (denyGroup && path.startsWith(`/api/groups/${groupId}`))
           return Promise.resolve(json({ error: 'Group access denied', status: 403 }, 403));
         if (path !== `/api/groups/${groupId}/drafts`) return;
@@ -4277,7 +4275,9 @@ describe('acknowledging an interrupted shared Draft upload', () => {
   });
 
   it('does not treat an unconfirmed ordinary Expense save as a new shared Draft', async () => {
-    const { controller, submitted } = uploadFixture({ malformedExpenseReceipt: true });
+    const { controller, submitted, fault } = uploadFixture();
+    // Finish later explicitly rechecks the same financial save; its reply is lost again too.
+    fault('POST', `/api/groups/${groupId}/expenses`, 'lost-reply');
     try {
       await controller.signIn('alex');
       await controller.openExpense(groupId);
