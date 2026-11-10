@@ -1,3 +1,5 @@
+import { parseExpenseRecord } from '../data/expense-record';
+import { parseActivityPage } from '../data/activity';
 import { parseTripSummaryResponse } from '@splitbook/shared/trip-summary-read';
 import { createTransport } from '../data/transport';
 import { manualTimer, within, gatewayFailures } from './transport-faults';
@@ -373,5 +375,92 @@ describe('fake Splitbook', () => {
       amountMinor: 1000,
       paidBy: [{ user: { id: 'a00000000000000000000001' }, amountMinor: 1000 }],
     });
+  });
+  it('reads Expense records and filtered history pages from the world with the app readers', async () => {
+    const server = fakeSplitbook(),
+      group = server.world.groups[0]!,
+      id = 'b00000000000000000000009';
+    server.world.expenseRecords[group._id] = {
+      [id]: { ...expenseFixture(group, id), revision: 3, isDeleted: false, editHistory: [] },
+    };
+    server.world.activities[group._id] = [
+      {
+        _id: 'd00000000000000000000001',
+        group: group._id,
+        actor: group.members[0]!.user,
+        createdAt: group.updatedAt,
+        type: 'expense_added',
+        metadata: { expenseId: id, description: 'Groceries' },
+      },
+      {
+        _id: 'd00000000000000000000002',
+        group: group._id,
+        actor: group.members[0]!.user,
+        createdAt: group.updatedAt,
+        type: 'expense_added',
+        metadata: { expenseId: 'b00000000000000000000008', description: 'Other' },
+      },
+    ];
+    const signed = await server.fetch('http://local/api/auth/demo-persona/sign-in', {
+      method: 'POST',
+      body: '{"personaId":"alex"}',
+    });
+    const Cookie = signed.headers.get('Set-Cookie')!.split(';')[0];
+    const read = async (path: string) =>
+      (await server.fetch('http://local' + path, { headers: { Cookie } })).json();
+    expect(
+      parseExpenseRecord(await read(`/api/groups/${group._id}/expenses/${id}`), group._id, id),
+    ).toMatchObject({ revision: 3, amountMinor: 1000 });
+    expect(
+      parseActivityPage(
+        await read(`/api/groups/${group._id}/activity?expenseId=${id}&page=1&limit=20`),
+        group._id,
+        1,
+        id,
+      ).events.map((e) => e._id),
+    ).toEqual(['d00000000000000000000001']);
+    expect(
+      parseActivityPage(
+        await read(`/api/groups/${group._id}/activity?page=2&limit=20`),
+        group._id,
+        2,
+      ).events,
+    ).toEqual([]);
+    expect(server.unanswered).toEqual([]);
+  });
+  it.each(['request', 'reply'] as const)(
+    'holds at the %s boundary and captures the answer at the matching moment',
+    async (at) => {
+      const server = fakeSplitbook();
+      let value = 'before';
+      server.reply('GET', '/probe', () => Response.json({ value }));
+      const hold = server.hold('GET', /^\/probe/, { at });
+      const reading = server.fetch('http://local/probe?page=1', {});
+      await hold.arrived;
+      expect(server.requests.map((r) => r.path)).toEqual(['/probe?page=1']);
+      value = 'after';
+      hold.release();
+      expect(await (await reading).json()).toEqual({
+        value: at === 'request' ? 'after' : 'before',
+      });
+      expect(await (await server.fetch('http://local/probe', {})).json()).toEqual({
+        value: 'after',
+      });
+    },
+  );
+  it('loses a held reply after the request was taken, without returning its captured response', async () => {
+    const server = fakeSplitbook();
+    let accepted = 0;
+    server.reply('POST', '/probe', () => {
+      accepted++;
+      return Response.json({ accepted });
+    });
+    const held = server.hold('POST', '/probe');
+    const reading = server.fetch('http://local/probe', { method: 'POST', body: '{}' });
+    await held.arrived;
+    expect(accepted).toBe(1);
+    held.release('lost-reply');
+    await expect(reading).rejects.toThrow('Network request failed');
+    expect(server.requests).toHaveLength(1);
   });
 });

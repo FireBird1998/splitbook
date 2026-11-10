@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { describeExpenseEvents } from './expense-history';
-import { createMobileController } from './mobile-controller';
-import { savedQueriesIn } from '../test-utils/saved-queries';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 
 // Fictional people and Groups only.
 const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
@@ -74,9 +75,6 @@ const events = Array.from({ length: 30 }, (_, index) => {
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 function setup() {
-  let cookie: string | null = null;
-  let account: string | null = null;
-  let offline = false;
   let failing = false;
   // Access withdrawn: the Expense's changes only, or the whole Group.
   let denied: 'history' | 'group' | null = null;
@@ -86,106 +84,70 @@ function setup() {
   const saved = new Map<string, { record: unknown; events: unknown[] }>();
   // A backend that ignores the filter sends the whole Group's Activity.
   let unfiltered = false;
-  const drafts = new Map<string, unknown>();
-  const cache = new Map<string, unknown>();
   const holds = new Map<string, Promise<void>>();
-  const reads: string[] = [];
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
-    },
-    {
-      now: () => new Date(2026, 8, 27, 12).getTime(),
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      expenseDrafts: {
-        load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
-        save: async (accountId, id, value) => {
-          drafts.set(`${accountId}:${id}`, structuredClone(value));
-        },
-        remove: async (accountId, id) => {
-          drafts.delete(`${accountId}:${id}`);
-        },
-        clear: async () => drafts.clear(),
-      },
-      savedQueries: savedQueriesIn(cache),
-      accountLocal: {
-        owner: {
-          load: async () => account,
-          save: async (value) => {
-            account = value;
-          },
-          clear: async () => {
-            account = null;
-          },
-        },
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [],
-      },
-      fetch: async (url, init) => {
-        if (offline) throw new Error('Offline');
-        const address = new URL(url);
-        const path = address.pathname;
-        if ((init.method ?? 'GET') === 'GET' && path.startsWith('/api/groups/'))
-          reads.push(path + address.search);
-        if (path.endsWith('/sign-in'))
-          return new Response(JSON.stringify({ user: sam }), {
-            headers: { 'Set-Cookie': 'better-auth.session_token=test.signature; Path=/; HttpOnly' },
-          });
-        if (path.endsWith('/get-session'))
-          return json({
-            user: sam,
-            session: { userId: sam.id, expiresAt: '2030-01-01T00:00:00Z' },
-          });
-        if (path === '/api/groups') return json({ status: 200, data: [group] });
-        if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
-        if (path === `/api/groups/${groupId}`)
-          return denied === 'group'
-            ? json({ error: 'Forbidden', status: 403 }, 403)
-            : json({ status: 200, data: group });
-        const id = path.split('/').pop()!;
-        const current = saved.get(id)?.record ?? records[id];
-        if (path === `/api/groups/${groupId}/expenses/${id}` && current)
-          return json({ status: 200, data: current });
-        if (path === `/api/groups/${groupId}/activity`) {
-          if (historyOffline) throw new Error('Offline');
-          const expenseId = address.searchParams.get('expenseId');
-          // Decided as the read arrives: one already under way when access goes still answers.
-          const refused = denied !== null;
-          await holds.get(expenseId ?? '');
-          if (refused) return json({ error: 'Forbidden', status: 403 }, 403);
-          if (failing) return json({ error: 'Unavailable', status: 500 }, 500);
-          const page = Number(address.searchParams.get('page'));
-          const own = saved.get(expenseId ?? '')?.events as typeof events | undefined;
-          const matching = (own ?? events).filter(
-            (event) => unfiltered || !expenseId || event.metadata.expenseId === expenseId,
-          );
-          return json({
-            status: 200,
-            data: {
-              activities: matching.slice((page - 1) * 20, page * 20),
-              pagination: {
-                page,
-                limit: 20,
-                total: matching.length,
-                totalPages: Math.ceil(matching.length / 20),
-              },
-            },
-          });
-        }
-        return json({ error: 'Unavailable', status: 404 }, 404);
-      },
-    },
+  const server = fakeSplitbook();
+  server.world.people.sam = { ...sam, image: null };
+  server.world.groups = [group];
+  server.world.expenseRecords[groupId] = { ...records };
+  server.reply('GET', `/api/groups/${groupId}`, () =>
+    denied === 'group' ? json({ error: 'Forbidden', status: 403 }, 403) : undefined,
   );
+  // These reads had no answer in this suite’s backend.
+  for (const suffix of ['/expenses', '/balances'])
+    server.reply('GET', `/api/groups/${groupId}${suffix}`, () =>
+      json({ error: 'Unavailable', status: 404 }, 404),
+    );
+  server.reply('GET', `/api/groups/${groupId}/activity`, async ({ url: address }) => {
+    if (historyOffline) throw new Error('Offline');
+    const expenseId = address.searchParams.get('expenseId');
+    // Decided as the read arrives: one already under way when access goes still answers.
+    const refused = denied !== null;
+    await holds.get(expenseId ?? '');
+    if (refused) return json({ error: 'Forbidden', status: 403 }, 403);
+    if (failing) return json({ error: 'Unavailable', status: 500 }, 500);
+    const page = Number(address.searchParams.get('page'));
+    const own = saved.get(expenseId ?? '')?.events as typeof events | undefined;
+    const matching = (own ?? events).filter(
+      (event) => unfiltered || !expenseId || event.metadata.expenseId === expenseId,
+    );
+    return json({
+      status: 200,
+      data: {
+        activities: matching.slice((page - 1) * 20, page * 20),
+        pagination: {
+          page,
+          limit: 20,
+          total: matching.length,
+          totalPages: Math.ceil(matching.length / 20),
+        },
+      },
+    });
+  });
+  const phone = testPhone(server, {
+    now: new Date(2026, 8, 27, 12).getTime(),
+    recordSeparator: ':',
+    purge: [],
+    parts: {
+      newSubmissionKey: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
+      },
+    },
+  });
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  const controller = phone.open(),
+    drafts = phone.stores.expenseDrafts.records;
   /** Holds an Expense's history reads until the returned function is called. */
   const hold = (expenseId: string) => {
     let release!: () => void;
@@ -199,13 +161,21 @@ function setup() {
     controller,
     hold,
     /** Activity reads since the last call. */
-    activityReads: () => reads.splice(0).filter((path) => path.includes('/activity')),
-    setOffline: (value: boolean) => (offline = value),
+    activityReads: () =>
+      server
+        .sent()
+        .splice(0)
+        .filter((path) => path.startsWith('GET /api/groups/') && path.includes('/activity'))
+        .map((path) => path.slice(4)),
+    setOffline: (value: boolean) => (server.online = !value),
     setFailing: (value: boolean) => (failing = value),
     setDenied: (value: typeof denied) => (denied = value),
     setHistoryOffline: (value: boolean) => (historyOffline = value),
     /** Replaces what the server holds for one Expense. */
-    save: (id: string, record: unknown, own: unknown[]) => saved.set(id, { record, events: own }),
+    save: (id: string, record: unknown, own: unknown[]) => {
+      server.world.expenseRecords[groupId][id] = record;
+      return saved.set(id, { record, events: own });
+    },
     drafts,
     ignoreFilter: () => (unfiltered = true),
   };

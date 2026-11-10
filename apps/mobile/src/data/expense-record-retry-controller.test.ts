@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expensePage, activityPage } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #192: Try again on an Expense record opened from its saved copy. Fictional people and Groups only.
 const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
@@ -110,7 +111,11 @@ function gate() {
 
 /** A fictional backend Sam can lose touch with, and device stores that survive a restart. */
 function fixture() {
-  const clock = { now: Date.parse('2026-09-27T06:30:00.000Z') };
+  const backend = fakeSplitbook();
+  backend.world.people.sam = { ...sam, image: null };
+  backend.world.groups = [group];
+  backend.world.balances[groupId] = { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] };
+  backend.world.expenseRecords[groupId] = { [otherId]: other };
   const server = {
     offline: false,
     record: record(3, 'Electricity bill'),
@@ -120,32 +125,13 @@ function fixture() {
     /** The Expense's own path only, after its Group has been read. */
     expense: 200,
   };
-  let cookie: string | null = null,
-    owner: string | null = null,
-    identity: unknown = null,
-    cleanup = false;
-  const cache = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>();
   const requests: string[] = [];
   const held = gate();
   let holding: (path: string) => boolean = () => false;
-  const respond = (path: string, method = 'GET', revision?: string): FetchResponse => {
-    if (path.endsWith('/sign-in'))
-      return new Response(JSON.stringify({ user: sam }), {
-        headers: { 'Set-Cookie': 'better-auth.session_token=sam.signature; Path=/; HttpOnly' },
-      });
-    if (path.endsWith('/get-session'))
-      return json({ user: sam, session: { userId: sam.id, expiresAt: '2030-01-01T00:00:00Z' } });
-    if (path.endsWith('/sign-out')) return json({ success: true });
-    if (path === '/api/groups')
-      return json({ status: 200, data: server.group === 200 ? [group] : [] });
-    if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
-    if (path.startsWith(groupPath) && server.group !== 200)
-      return json({ error: 'Unavailable', status: server.group }, server.group);
-    if (path === groupPath) return json({ status: 200, data: group });
-    if (path === recordPath && server.expense !== 200)
+  const recordAnswer = (method = 'GET', revision?: string): FetchResponse => {
+    if (server.expense !== 200)
       return json({ error: 'Unavailable', status: server.expense }, server.expense);
-    if (path === recordPath && method !== 'GET') {
+    if (method !== 'GET') {
       // An edit or deletion applies only to the revision it was shown.
       if (revision !== String(server.record.revision))
         return json({ error: 'This Expense changed', code: 'STALE_REVISION', status: 409 }, 409);
@@ -155,131 +141,75 @@ function fixture() {
         isDeleted: method === 'DELETE',
       };
     }
-    if (path === recordPath) return json({ status: 200, data: server.record });
-    if (path === `${groupPath}/expenses/${otherId}`) return json({ status: 200, data: other });
-    if (path.startsWith(`${groupPath}/activity?`)) {
-      const query = new URL(path, 'http://local').searchParams;
-      const page = Number(query.get('page'));
-      const events = query.get('expenseId') === otherId ? [otherAdded] : server.events;
-      return json({
-        status: 200,
-        data: {
-          activities: events.slice((page - 1) * 20, page * 20),
-          pagination: { page, limit: 20, total: events.length, totalPages: 1 },
-        },
-      });
-    }
-    if (path.startsWith(`${groupPath}/expenses?`))
-      return json({
-        status: 200,
-        data: {
-          expenses: [server.record, other],
-          pagination: { page: 1, limit: 20, total: 2, totalPages: 1 },
-          summary: { count: 2, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
-        },
-      });
-    if (path === `${groupPath}/balances`)
-      return json({
-        status: 200,
-        data: { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] },
-      });
-    return json({ error: 'Unavailable', status: 404 }, 404);
+    return json({ status: 200, data: server.record });
   };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
+  backend.reply('GET', '/api/groups', () =>
+    json({ status: 200, data: server.group === 200 ? [group] : [] }),
+  );
+  backend.reply('*', recordPath, ({ method, headers }) =>
+    recordAnswer(method, headers.get('X-Splitbook-Revision') ?? undefined),
+  );
+  backend.reply('GET', `${groupPath}/activity`, ({ url }) => {
+    const page = Number(url.searchParams.get('page'));
+    const events = url.searchParams.get('expenseId') === otherId ? [otherAdded] : server.events;
+    // The old fixture reports one total page even for an empty or later page.
+    return json({
+      status: 200,
+      data: {
+        ...activityPage(events, page),
+        pagination: { page, limit: 20, total: events.length, totalPages: 1 },
       },
-      {
-        now: () => clock.now,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
+    });
+  });
+  backend.reply('GET', `${groupPath}/expenses`, () =>
+    json({ status: 200, data: expensePage([server.record, other]) }),
+  );
+  backend.reply('*', '*', ({ path, url, method, headers }) => {
+    const revision = headers.get('X-Splitbook-Revision') ?? undefined;
+    const sent = `${method} ${path}${revision === undefined ? '' : ` (revision ${revision})`}`;
+    // This suite’s observed log distinguishes a transport attempt made offline.
+    if (server.offline) {
+      requests.push(`${sent} (offline)`);
+      throw new Error('Offline');
+    }
+    requests.push(sent);
+    if (holding(path)) return held.hold(path);
+    if (url.pathname.startsWith(groupPath) && server.group !== 200)
+      return json({ error: 'Unavailable', status: server.group }, server.group);
+    return undefined;
+  });
+  const phone = testPhone(backend, {
+    now: Date.parse('2026-09-27T06:30:00.000Z'),
+    purge: ['savedQueries', 'expenseDrafts', 'offlineIdentity'],
+    parts: {
+      newSubmissionKey: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      pendingInvitation: {
+        load: async () => null,
+        save: async () => {
+          throw new Error('The device storage is full');
         },
-        offlineIdentity: {
-          load: async () => structuredClone(identity),
-          save: async (value) => {
-            identity = structuredClone(value);
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
-        savedQueries: savedQueriesIn(cache),
-        expenseDrafts: {
-          load: async (account, id) => structuredClone(drafts.get(account + id) ?? null),
-          save: async (account, id, value) => {
-            drafts.set(account + id, structuredClone(value));
-          },
-          remove: async (account, id) => {
-            drafts.delete(account + id);
-          },
-          clear: async () => drafts.clear(),
-        },
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          stores: [
-            {
-              clear: async () => {
-                cache.clear();
-                drafts.clear();
-                identity = null;
-              },
-            },
-          ],
-        },
-        fetch: async (url, init) => {
-          const address = new URL(url);
-          const path = address.pathname + address.search;
-          const method = init.method ?? 'GET';
-          const revision = (init.headers as Record<string, string>)['X-Splitbook-Revision'];
-          const sent = `${method} ${path}${revision === undefined ? '' : ` (revision ${revision})`}`;
-          // Attempts made offline are logged too, marked as never reaching the server.
-          if (server.offline) {
-            requests.push(`${sent} (offline)`);
-            throw new Error('Offline');
-          }
-          requests.push(sent);
-          if (holding(path)) return held.hold(path);
-          return respond(path, method, revision);
-        },
-        // An invitation opened here can't be kept, so it stays on its error until retried.
-        pendingInvitation: {
-          load: async () => null,
-          save: async () => {
-            throw new Error('The device storage is full');
-          },
-          clear: async () => undefined,
-        },
+        clear: async () => undefined,
       },
-    );
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+      },
+    },
+  });
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  const cache = phone.stores.savedQueries.records,
+    drafts = phone.stores.expenseDrafts.records;
+  const create = () => phone.open();
   return {
     create,
-    clock,
+    clock: phone.clock,
     server,
     cache,
     drafts,
@@ -288,7 +218,10 @@ function fixture() {
       holding = match;
     },
     /** The answer the fictional backend gives Sam for this read right now. */
-    answer: (path: string) => respond(path),
+    answer: (path: string) => {
+      if (path !== recordPath) throw new Error('This fixture exposes only its bill’s held answer');
+      return recordAnswer();
+    },
     /** Requests made since the last call, those attempted offline included. */
     sent: () => requests.splice(0),
     /** Whether this device keeps a saved copy of this path for Sam. */

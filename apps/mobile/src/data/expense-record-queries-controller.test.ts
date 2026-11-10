@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expensePage, activityPage } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
 
 // #220: an Expense record and its history on declarative queries: the record's Group, the record
@@ -115,14 +117,133 @@ function fixture() {
     /** Expenses created so far. */
     created: 0,
   };
-  let cookie: string | null = null,
-    owner: string | null = null,
-    cleanup = false;
-  /** The persister's rows, by account and path; the older saved-copy store's, the same way. */
-  const rows = new Map<string, unknown>(),
-    disk = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>();
-  /** What the saved-copy database can't do: remove a row. */
+  const backend = fakeSplitbook();
+  backend.world.people.alex = { ...alex, image: null };
+  backend.world.people.sam = { ...sam, image: null };
+  backend.world.groups = [maple, cabin];
+  Object.defineProperty(backend.world.expenseRecords, mapleId, {
+    get: () => Object.fromEntries(server.records),
+  });
+  backend.world.expenseRecords[cabinId] = {
+    [fareId]: { ...record(fareId, 'Ferry'), group: cabinId },
+  };
+  Object.defineProperty(backend.world.expenses, mapleId, {
+    get: () => ({
+      ...expensePage([...server.records.values()]),
+      pagination: { page: 1, limit: 20, total: server.records.size, totalPages: 1 },
+    }),
+  });
+  backend.world.balances[mapleId] = { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] };
+  const mine = (headers: Headers) => !headers.get('Cookie')?.includes('sam-');
+  // This fixture deliberately refuses Sam even though the wire Group still names Sam.
+  backend.reply('GET', '/api/groups', ({ headers }) =>
+    json({
+      status: 200,
+      data: mine(headers)
+        ? [maple, cabin].filter(
+            ({ _id }) => !server.archived.has(_id) && (_id !== mapleId || server.group === 200),
+          )
+        : [],
+    }),
+  );
+  backend.reply('GET', maplePath, () =>
+    json({
+      status: 200,
+      data: server.left
+        ? { ...maple, members: maple.members.filter(({ user }) => user._id !== alex.id) }
+        : maple,
+    }),
+  );
+  backend.reply('GET', `${maplePath}/activity`, ({ url }) => {
+    const page = Number(url.searchParams.get('page'));
+    if (url.searchParams.get('expenseId') === billId && page === server.failPage)
+      return json({}, 500);
+    return json({
+      status: 200,
+      data: activityPage(server.changes.get(url.searchParams.get('expenseId') ?? '') ?? [], page),
+    });
+  });
+  const afterWrite = (reply: FetchResponse) => {
+    // The server takes the write before the connection drops and stays down.
+    if (server.loseWrites) {
+      server.offline = true;
+      throw new TypeError('Network request failed');
+    }
+    return reply;
+  };
+  backend.reply('POST', `${maplePath}/expenses`, () => {
+    server.created++;
+    const id = hex('c', 900 + server.created);
+    // Preserve the original fixed create answer, which did not apply the request body.
+    server.records.set(id, record(id, 'Fresh groceries'));
+    return afterWrite(json({ status: 201, data: { _id: id, group: mapleId } }, 201));
+  });
+  backend.reply('*', '*', ({ url, method, headers, body }) => {
+    const id = /^\/api\/groups\/[^/]+\/expenses\/([a-f\d]{24})$/.exec(url.pathname)?.[1];
+    if (!id || !url.pathname.startsWith(maplePath)) return undefined;
+    const current = server.records.get(id);
+    if (!current || server.gone.has(id)) return json({}, 404);
+    if (id === billId && server.failRecord && method === 'GET') return json({}, 500);
+    if (method !== 'PATCH' && method !== 'DELETE') return undefined;
+    if (headers.get('X-Splitbook-Revision') !== String(current.revision))
+      return afterWrite(json({ error: 'Changed', code: 'STALE_REVISION', status: 409 }, 409));
+    server.records.set(id, {
+      ...current,
+      ...(body?.notes !== undefined ? { notes: body.notes as string } : {}),
+      revision: current.revision + 1,
+      isDeleted: method === 'DELETE',
+    });
+    return afterWrite(json({ status: 200, data: server.records.get(id) }));
+  });
+  const fareEvent = {
+    _id: hex('f', 1),
+    group: cabinId,
+    actor: person(sam),
+    createdAt: iso,
+    type: 'expense_added',
+    metadata: { expenseId: fareId, description: 'Ferry', amount: 30, currency: 'INR' },
+  };
+  backend.reply('GET', `${cabinPath}/activity`, () =>
+    json({ status: 200, data: activityPage([fareEvent]) }),
+  );
+  for (const suffix of ['/expenses', '/balances'])
+    backend.reply('GET', cabinPath + suffix, () => json({}, 404));
+  backend.reply('*', '*', ({ url, headers }) => {
+    if (server.offline) throw new TypeError('Network request failed');
+    if (url.pathname.startsWith(cabinPath)) return mine(headers) ? undefined : json({}, 403);
+    if (!url.pathname.startsWith(maplePath)) return undefined;
+    if (!mine(headers)) return json({}, 403);
+    if (server.group !== 200) return json({}, server.group);
+    return undefined;
+  });
+  type ConnectionState = { isConnected: boolean | null; isInternetReachable?: boolean | null };
+  let connectionState: ConnectionState | null = null;
+  const connection = new Set<(state: ConnectionState) => void>();
+  const phone = testPhone(backend, {
+    newSubmissionKey: () => `expense-record-queries-${String(server.created + 1).padStart(4, '0')}`,
+    purge: ['savedQueries', 'expenseDrafts', 'untrustedCopies'],
+    parts: {
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      // Keep this file’s full NetInfo signal, including internet reachability and its initial report.
+      netInfo: {
+        addEventListener(listener) {
+          connection.add(listener);
+          listener(connectionState ?? { isConnected: !server.offline });
+          return () => connection.delete(listener);
+        },
+      },
+      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
+    },
+  });
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  const rows = phone.stores.savedQueries.records,
+    drafts = phone.stores.expenseDrafts.records;
+  // This empty legacy-store probe was never supplied to the controller; keep its assertions honest.
+  const disk = new Map<string, unknown>();
   const device = { failRemoval: false };
   const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [];
   const pause = async (path: string) => {
@@ -132,280 +253,30 @@ function fixture() {
     step.arrive();
     await step.released;
   };
-  const calls: { method: string; path: string }[] = [];
-  const held: {
-    path: string;
-    arrive: () => void;
-    answer: Promise<void>;
-    exact: boolean;
-    /** Its answer is lost on the way back, as when the connection drops. */
-    lost: boolean;
-  }[] = [];
-  type ConnectionState = { isConnected: boolean | null; isInternetReachable?: boolean | null };
-  /** What NetInfo last reported, once a test has reported something. */
-  let connectionState: ConnectionState | null = null;
-  const connection = new Set<(state: ConnectionState) => void>();
-  const records = (map: Map<string, unknown>) => ({
-    load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
-    save: async (account: string, key: string, value: unknown) => {
-      map.set(account + key, structuredClone(value));
-    },
-    remove: async (account: string, key: string) => {
-      map.delete(account + key);
-    },
-    clear: async () => {
-      map.clear();
-    },
-    list: async (account: string) =>
-      [...map]
-        .filter(([key]) => key.startsWith(account))
-        .map(([key, value]) => ({
-          groupId: key.slice(account.length),
-          value: structuredClone(value),
-        })),
-  });
-  const untrusted = { value: null as unknown },
-    identity = { value: null as unknown };
-  const untrustedCopies = {
-    load: async () => structuredClone(untrusted.value),
-    save: async (value: unknown) => {
-      untrusted.value = structuredClone(value);
-    },
-    clear: async () => {
-      untrusted.value = null;
-    },
+  const savedQueries = phone.stores.savedQueries;
+  const { save, remove } = savedQueries;
+  savedQueries.save = async (account, key, value) => {
+    await pause(key);
+    await save(account, key, value);
   };
-  const savedQueries = {
-    ...records(rows),
-    keys: async (account: string) =>
-      [...rows.keys()]
-        .filter((key) => key.startsWith(account))
-        .map((key) => key.slice(account.length)),
-    save: async (account: string, key: string, value: unknown) => {
-      await pause(key);
-      rows.set(account + key, structuredClone(value));
-    },
-    remove: async (account: string, key: string) => {
-      if (device.failRemoval) throw new Error('The device storage is full');
-      rows.delete(account + key);
-    },
+  savedQueries.remove = (account, key) => {
+    if (device.failRemoval)
+      savedQueries.failNext('remove', new Error('The device storage is full'));
+    return remove(account, key);
   };
-  const signedIn = (init: RequestInit) =>
-    String((init.headers as Record<string, string>).Cookie ?? '').includes('sam.') ? sam : alex;
-  const respond = (path: string, init: RequestInit): FetchResponse => {
-    const method = init.method ?? 'GET';
-    if (path.endsWith('/sign-in')) {
-      const persona = String(init.body).includes('sam') ? 'sam' : 'alex';
-      return new Response(JSON.stringify({ user: persona === 'sam' ? sam : alex }), {
-        headers: {
-          'Set-Cookie': `better-auth.session_token=${persona}.signature; Path=/; HttpOnly`,
-        },
-      });
-    }
-    if (path.endsWith('/sign-out')) return json({ success: true });
-    const user = signedIn(init);
-    if (path.endsWith('/get-session'))
-      return json({
-        user: { ...user, image: null },
-        session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' },
-      });
-    // Sam belongs to no Group here.
-    const mine = user.id === alex.id;
-    if (path === '/api/groups')
-      return json({
-        status: 200,
-        data: mine
-          ? [maple, cabin].filter(
-              ({ _id }) => !server.archived.has(_id) && (_id !== mapleId || server.group === 200),
-            )
-          : [],
-      });
-    if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
-    if (path.startsWith(cabinPath)) return mine ? cabinAnswer(path) : json({}, 403);
-    if (!path.startsWith(maplePath)) return json({}, 404);
-    if (user.id !== alex.id) return json({}, 403);
-    if (server.group !== 200) return json({}, server.group);
-    if (path === maplePath)
-      return json({
-        status: 200,
-        data: server.left
-          ? { ...maple, members: maple.members.filter(({ user }) => user._id !== alex.id) }
-          : maple,
-      });
-    if (path === `${maplePath}/expenses` && method === 'POST') {
-      server.created += 1;
-      const id = hex('c', 900 + server.created);
-      server.records.set(id, record(id, 'Fresh groceries'));
-      return json({ status: 201, data: { _id: id, group: mapleId } }, 201);
-    }
-    const id = /\/expenses\/([a-f\d]{24})$/.exec(path)?.[1];
-    if (id) {
-      const current = server.records.get(id);
-      if (!current || server.gone.has(id)) return json({}, 404);
-      if (id === billId && server.failRecord && method === 'GET') return json({}, 500);
-      if (method === 'PATCH' || method === 'DELETE') {
-        const revision = (init.headers as Record<string, string>)['X-Splitbook-Revision'];
-        if (revision !== String(current.revision))
-          return json({ error: 'Changed', code: 'STALE_REVISION', status: 409 }, 409);
-        const sent = method === 'PATCH' ? JSON.parse(String(init.body)) : {};
-        server.records.set(id, {
-          ...current,
-          ...(sent.notes !== undefined ? { notes: sent.notes } : {}),
-          revision: current.revision + 1,
-          isDeleted: method === 'DELETE',
-        });
-      }
-      return json({ status: 200, data: server.records.get(id) });
-    }
-    if (path.startsWith(`${maplePath}/activity?`)) {
-      const query = new URL(path, 'http://local').searchParams;
-      const page = Number(query.get('page'));
-      if (query.get('expenseId') === billId && page === server.failPage) return json({}, 500);
-      const all = server.changes.get(query.get('expenseId') ?? '') ?? [];
-      return json({
-        status: 200,
-        data: {
-          activities: all.slice((page - 1) * 20, page * 20),
-          pagination: {
-            page,
-            limit: 20,
-            total: all.length,
-            totalPages: Math.ceil(all.length / 20),
-          },
-        },
-      });
-    }
-    if (path.startsWith(`${maplePath}/expenses?`))
-      return json({
-        status: 200,
-        data: {
-          expenses: [...server.records.values()],
-          pagination: { page: 1, limit: 20, total: server.records.size, totalPages: 1 },
-          summary: {
-            count: server.records.size,
-            totalsByCurrency: [],
-            userOwes: 0,
-            userGetsBack: 0,
-            byMember: [],
-          },
-        },
-      });
-    if (path === `${maplePath}/balances`)
-      return json({
-        status: 200,
-        data: { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] },
-      });
-    return json({}, 404);
-  };
-  /** Cabin Weekend: its one Expense, and an Activity event about it. */
-  const cabinAnswer = (path: string): FetchResponse => {
-    if (path === cabinPath) return json({ status: 200, data: cabin });
-    if (path === `${cabinPath}/expenses/${fareId}`)
-      return json({ status: 200, data: { ...record(fareId, 'Ferry'), group: cabinId } });
-    if (path.startsWith(`${cabinPath}/activity?`))
-      return json({
-        status: 200,
-        data: {
-          activities: [
-            {
-              _id: hex('f', 1),
-              group: cabinId,
-              actor: person(sam),
-              createdAt: iso,
-              type: 'expense_added',
-              metadata: { expenseId: fareId, description: 'Ferry', amount: 30, currency: 'INR' },
-            },
-          ],
-          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
-        },
-      });
-    return json({}, 404);
-  };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
-      },
-      {
-        newSubmissionKey: () =>
-          `expense-record-queries-${String(server.created + 1).padStart(4, '0')}`,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        savedQueries,
-        netInfo: {
-          // As NetInfo does, a new listener hears the connection as it is now.
-          addEventListener: (listener) => {
-            connection.add(listener);
-            listener(connectionState ?? { isConnected: !server.offline });
-            return () => connection.delete(listener);
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity.value),
-          save: async (value) => {
-            identity.value = structuredClone(value);
-          },
-          clear: async () => {
-            identity.value = null;
-          },
-        },
-        expenseDrafts: records(drafts),
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          untrustedCopies,
-          stores: [savedQueries, records(drafts), untrustedCopies],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname + new URL(url).search;
-          const method = init.method ?? 'GET';
-          calls.push({ method, path });
-          if (server.offline) throw new TypeError('Network request failed');
-          const index = held.findIndex((request) =>
-            request.exact ? path === request.path : path.startsWith(request.path),
-          );
-          const reply = respond(path, init);
-          // The write is recorded, then the connection drops before its reply, and stays down.
-          if (method !== 'GET' && server.loseWrites) {
-            server.offline = true;
-            throw new TypeError('Network request failed');
-          }
-          if (index < 0) return reply;
-          // The server answers as it is when the request arrives; the reply comes on release.
-          const [request] = held.splice(index, 1);
-          request.arrive();
-          return request.answer.then(() => {
-            if (request.lost) throw new TypeError('Network request failed');
-            return reply;
-          });
-        },
-      },
-    );
+  savedQueries.keys = async (account) =>
+    [...rows.keys()]
+      .filter((key) => key.startsWith(account))
+      .map((key) => key.slice(account.length));
+  savedQueries.list = async (account) =>
+    [...rows]
+      .filter(([key]) => key.startsWith(account))
+      .map(([key, value]) => ({
+        groupId: key.slice(account.length),
+        value: structuredClone(value),
+      }));
+  const calls = () => backend.requests.map(({ method, path }) => ({ method, path }));
+  const create = () => phone.open();
   return {
     create,
     server,
@@ -413,11 +284,13 @@ function fixture() {
     rows,
     disk,
     drafts,
-    untrusted: () => untrusted.value,
-    calls,
+    untrusted: () => phone.stores.untrustedCopies.value,
+    get calls() {
+      return calls();
+    },
     /** Every GET of Maple House since `from`, in order, named for what it reads. */
     gets: (from = 0) =>
-      calls
+      calls()
         .slice(from)
         .filter((call) => call.method === 'GET')
         .map(({ path }) => {
@@ -431,19 +304,18 @@ function fixture() {
           return path;
         }),
     /** The writes sent since `from`. */
-    writes: (from = 0) => calls.slice(from).filter((call) => call.method !== 'GET'),
+    writes: (from = 0) =>
+      calls()
+        .slice(from)
+        .filter((call) => call.method !== 'GET'),
     /** The next request whose path starts with `path` is answered at once; its reply on release. */
     hold(path: string, { exact = false, lost = false } = {}) {
-      let arrive!: () => void;
-      let release!: () => void;
-      const reached = new Promise<void>((resolve) => {
-        arrive = resolve;
-      });
-      const answer = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      held.push({ path, arrive, answer, exact, lost });
-      return { reached, release };
+      const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const held = backend.hold('*', exact ? path : new RegExp('^' + escaped));
+      return {
+        reached: held.arrived,
+        release: () => held.release(lost ? 'lost-reply' : undefined),
+      };
     },
     /** The next write of this path's row waits until released. */
     holdWrite(path: string) {
