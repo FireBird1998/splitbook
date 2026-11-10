@@ -512,6 +512,25 @@ describe('settling up in several currencies at once (#734)', () => {
     expect(plain).toEqual({ amount: 20, currency: 'EUR' });
   });
 
+  it('pays a Debt in a currency the Group no longer lists in its listed main currency (#1051)', async () => {
+    const { controller, batches } = await opened(({ pathname }) => {
+      if (pathname === `/api/groups/${groupId}`)
+        return json({ status: 200, data: { ...group, alternateCurrencies: [] } });
+      return undefined;
+    });
+    expect(controller.getSnapshot().settlement.batch).toMatchObject({
+      paidCurrency: 'INR',
+      debts: [
+        { currency: 'INR', amountMinor: 148000 },
+        { currency: 'EUR', amountMinor: 2000 },
+      ],
+    });
+    await controller.recordSettlement();
+    expect(batches).toEqual([{ key: 'settlement-key-1', body: inRupees }]);
+    expect(controller.getSnapshot().snackbar?.message).toBe('Payment recorded');
+    controller.dispose();
+  });
+
   it('records the member’s own rate for one Debt beside its suggestion, and puts the suggestion back', async () => {
     const { controller, batches } = await opened();
     controller.editBatchRate('EUR', '92.50');
