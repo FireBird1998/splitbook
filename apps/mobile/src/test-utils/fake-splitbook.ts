@@ -213,6 +213,7 @@ export interface FakeRequest {
   url: URL;
   method: string;
   path: string;
+  at: number;
   headers: Headers;
   body: Record<string, unknown> | undefined;
   init: RequestInit;
@@ -289,6 +290,7 @@ export function fakeSplitbook() {
     const request: FakeRequest = {
       url,
       method,
+      at: Date.now(),
       path: url.pathname + url.search,
       headers: new Headers(init.headers),
       body: init.body ? JSON.parse(String(init.body)) : undefined,

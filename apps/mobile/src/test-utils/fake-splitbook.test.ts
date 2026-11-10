@@ -465,13 +465,20 @@ describe('fake Splitbook', () => {
   });
   it('logs the time a request was sent, including an offline attempt', async () => {
     const server = fakeSplitbook();
-    const now = vi.spyOn(Date,'now').mockReturnValue(100);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(100);
     try {
-      await server.fetch('http://local/first',{});
-      now.mockReturnValue(200); server.online=false;
-      await expect(server.fetch('http://local/second',{})).rejects.toThrow('Network request failed');
-      expect(server.requests.map(({path,at})=>({path,at}))).toEqual([{path:'/first',at:100},{path:'/second',at:200}]);
-    } finally { now.mockRestore(); }
+      await server.fetch('http://local/first', {});
+      now.mockReturnValue(200);
+      server.online = false;
+      await expect(server.fetch('http://local/second', {})).rejects.toThrow(
+        'Network request failed',
+      );
+      expect(server.requests.map(({ path, at }) => ({ path, at }))).toEqual([
+        { path: '/first', at: 100 },
+        { path: '/second', at: 200 },
+      ]);
+    } finally {
+      now.mockRestore();
+    }
   });
-
 });
