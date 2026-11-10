@@ -607,6 +607,15 @@ describe('Record payment sheet states', () => {
     expect(record.props.disabled).toBe(true);
     expect(record.props.accessibilityHint).toBe('Tick “Sam Chen paid more than suggested” first.');
   });
+
+  it('names another payer by first name in the overpayment position (#1052)', () => {
+    const { root } = sheet(
+      base({ draft: { paidBy: sam, paidTo: you, currency: 'INR', amount: '1200', note: '' } }),
+    );
+    expect(text(root)).toContain(
+      'That’s ₹140.00 more than suggested. Afterwards Sam would be owed ₹2,260.00 in this Group.',
+    );
+  });
 });
 
 // #639: at 200% on a 360dp phone, the balance card's title broke mid-word beside its time ("ALL-T
