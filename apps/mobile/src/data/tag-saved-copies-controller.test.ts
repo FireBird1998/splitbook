@@ -24,7 +24,7 @@ const mb = 1_000_000;
  * Maple House's server, with Alex its admin and Sam a member, and this phone's stores, which
  * survive a restart as SQLite and SecureStore do.
  */
-function fixture() {
+function fixture({ nativeHttpCache = false } = {}) {
   const server = {
     offline: false,
     /** Maple House refuses Alex, and the Groups list leaves it out. */
@@ -165,6 +165,10 @@ function fixture() {
   };
   /** Every request sent so far, as `METHOD /path`. */
   const requests: string[] = [];
+  // A response left on disk by the older app, before this controller starts.
+  let httpTags = nativeHttpCache
+    ? { receivedAt: Date.now(), response: json({ status: 200, data: snapshot() }) }
+    : undefined;
   const respond = async (path: string, init: RequestInit) => {
     const method = init.method ?? 'GET';
     if (path.endsWith('/sign-in')) {
@@ -300,7 +304,23 @@ function fixture() {
           const path = new URL(url).pathname;
           requests.push(`${init.method ?? 'GET'} ${path}`);
           if (server.offline) throw new TypeError('Network request failed');
-          return respond(path, init);
+          // Android's HTTP cache can consider an earlier response fresh after a clock rollback,
+          // even without a server freshness lifetime. Revalidation must reach the server.
+          const cacheable =
+            nativeHttpCache && path === tagsPath && (init.method ?? 'GET') === 'GET';
+          const cacheControl = new Headers(init.headers).get('Cache-Control');
+          if (
+            cacheable &&
+            httpTags &&
+            Date.now() < httpTags.receivedAt &&
+            cacheControl !== 'no-cache' &&
+            cacheControl !== 'no-store'
+          )
+            return httpTags.response.clone();
+          const response = await respond(path, init);
+          if (cacheable && cacheControl !== 'no-store')
+            httpTags = { receivedAt: Date.now(), response: response.clone() };
+          return response;
         },
       },
     );
@@ -1126,6 +1146,23 @@ it('reads the Group Tags again on opening after the phone clock moves back', asy
   try {
     const f = fixture();
     const { controller, tags } = await readTagsOnline(f);
+    tags.close();
+    clock.mockReturnValue(Date.parse('2026-10-19T09:00:00.000Z'));
+    f.server.tags[0].name = 'Market';
+    const reopened = await openTags(controller);
+    expect(reopened.state().snapshot?.tags.map((tag) => tag.name)).toEqual(['Market', 'Rent']);
+    reopened.close();
+  } finally {
+    clock.mockRestore();
+  }
+});
+
+it('shows newly read Tags after clock rollback even when Android kept an HTTP response', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-20T09:00:00.000Z'));
+  try {
+    const f = fixture({ nativeHttpCache: true });
+    const { controller, tags } = await readTagsOnline(f);
+    expect(tags.state().snapshot?.tags.map((tag) => tag.name)).toEqual(['Food', 'Rent']);
     tags.close();
     clock.mockReturnValue(Date.parse('2026-10-19T09:00:00.000Z'));
     f.server.tags[0].name = 'Market';

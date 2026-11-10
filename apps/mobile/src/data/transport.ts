@@ -359,6 +359,8 @@ export function createTransport({
         method: options.method ?? 'GET',
         headers: {
           Accept: 'application/json',
+          // Saved copies are the only cache: native HTTP caching can reuse future-dated answers.
+          'Cache-Control': 'no-store',
           ...(options.installationKey ? { 'X-Installation-Key': options.installationKey } : {}),
           Origin: authOrigin,
           ...(options.body === undefined && options.serializedBody === undefined

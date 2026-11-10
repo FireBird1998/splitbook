@@ -79,6 +79,26 @@ const caught = (request: Promise<unknown>) =>
     (error: unknown) => error,
   );
 
+describe('HTTP caching (#1043)', () => {
+  it.each([
+    ['GET', '/api/groups'],
+    ['GET', `/api/groups/${groupId}/tag-actions`],
+    ['GET', '/.well-known/splitbook-mobile.json'],
+    ['POST', '/api/auth/sign-in/social'],
+    ['POST', `/api/groups/${groupId}/expenses`],
+    ['PUT', '/api/notifications/device'],
+    ['PATCH', `/api/groups/${groupId}/expenses/c00000000000000000000001`],
+    ['DELETE', `/api/groups/${groupId}/members/a00000000000000000000001`],
+  ] as const)('asks for no HTTP storage or reuse on %s %s', async (method, path) => {
+    const t = setup(async (init) => {
+      expect(new Headers(init.headers).get('Cache-Control')).toBe('no-store');
+      return Response.json({ data: {} });
+    });
+    await t.request(path, 1, { method });
+    expect(t.sent).toEqual([`${method} ${path}`]);
+  });
+});
+
 describe('a caller’s own cancel', () => {
   it.each(['headers', 'body'] as const)(
     'ends as cancelled, never as a network failure, when the caller aborts while waiting for the %s',
