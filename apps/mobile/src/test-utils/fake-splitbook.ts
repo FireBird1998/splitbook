@@ -245,6 +245,7 @@ export function fakeSplitbook() {
     pages: {} as Record<string, unknown>,
     groupsByAccount: {} as Record<string, WireGroup[]>,
     homeByAccount: {} as Record<string, unknown>,
+    toReview: null as unknown,
     home: { buckets: [] } as { buckets: unknown[]; groups?: unknown[] },
     balances: { [group._id]: { byCurrency: [] } } as Record<string, unknown>,
     expenses: { [group._id]: expensePage() } as Record<string, unknown>,
@@ -386,6 +387,7 @@ export function fakeSplitbook() {
         '/api/auth/get-session',
         '/api/groups',
         '/api/user/balances',
+        '/api/user/to-review',
         ...world.groups.flatMap((g) =>
           [
             '',
@@ -495,6 +497,7 @@ export function fakeSplitbook() {
           world.groupsByAccount[user.id] ??
             world.groups.filter((g) => g.members.some((m) => m.user._id === user.id)),
         );
+      if(url.pathname === '/api/user/to-review' && world.toReview!==null) return answer(world.toReview);
       if (url.pathname === '/api/user/balances')
         return answer(world.homeByAccount[user.id] ?? world.home);
       const found = world.groups.find((g) => url.pathname.startsWith(`/api/groups/${g._id}`));
