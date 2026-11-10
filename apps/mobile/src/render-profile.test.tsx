@@ -7,7 +7,6 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { ceilingsFile, harnessCeilings, measures } from '../scripts/ceilings';
 import { testPhone } from './test-utils/test-phone';
 import { fakeSplitbook } from './test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './data/account-record-storage';
 import { unbroken } from './test-utils/layout';
 import { emitAppState } from './test-utils/native';
 
@@ -408,10 +407,7 @@ function backend({ expensePages = pages, activityPages = pages, payment = false 
   });
   const phone = testPhone(server, {
     now: new Date(2026, 8, 27, 12).getTime(),
-    recordSeparator: ':',
-    settlementSeparator: ':',
     newSubmissionKey: () => 'render-profile-0001',
-    purge: [],
     parts: {
       savedQueries: undefined,
       offlineIdentity: undefined,
@@ -421,19 +417,9 @@ function backend({ expensePages = pages, activityPages = pages, payment = false 
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
   const drafts = phone.stores.expenseDrafts;
-  for (const store of [drafts, phone.stores.settlementAttempts]) {
-    delete (store as AccountGroupRecordStore).keys;
-    delete (store as AccountGroupRecordStore).list;
-  }
   // Draft persistence always awaited this gate, even when the fixture had no held write.
   drafts.stallPersistently('save', () => draftGate ?? Promise.resolve());
   const controller = phone.open({
