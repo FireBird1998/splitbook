@@ -111,9 +111,36 @@ function fixture(
 it('slides the five-page window and loads page one again with Load newer', async () => {
   const f = fixture();
   try {
+    const requested: number[] = [],
+      read = f.state.read;
+    f.state.read = async (page) => {
+      requested.push(page);
+      return { ...(await read(page)), pagination: { page, totalPages: 7 } };
+    };
     await f.client.fetchInfiniteQuery(f.options);
-    for (let page = 2; page <= 6; page++) await f.paging.older(f.key, () => f.observer);
+    for (let page = 2; page <= 5; page++) await f.paging.older(f.key, () => f.observer);
+    expect(f.observer.getCurrentResult().data?.pageParams).toEqual([1, 2, 3, 4, 5]);
+    expect(f.observer.getCurrentResult().hasPreviousPage).toBe(false);
+    requested.length = 0;
+    await f.paging.older(f.key, () => f.observer);
+    expect(requested).toEqual([6]);
     expect(f.observer.getCurrentResult().data?.pageParams).toEqual([2, 3, 4, 5, 6]);
+    expect(f.observer.getCurrentResult()).toMatchObject({
+      status: 'success',
+      hasPreviousPage: true,
+    });
+    expect(
+      f.observer.getCurrentResult().data?.pages.flatMap((page) => (page.value as Wire).items),
+    ).toEqual([
+      { id: '2', text: 'Page 2' },
+      { id: '3', text: 'Page 3' },
+      { id: '4', text: 'Page 4' },
+      { id: '5', text: 'Page 5' },
+      { id: '6', text: 'Page 6' },
+    ]);
+    expect(f.observer.getCurrentResult().data?.pages.at(-1)?.value).toMatchObject({
+      pagination: { page: 6, totalPages: 7 },
+    });
     const normal = f.state.read;
     f.state.read = async (page) =>
       page === 1
