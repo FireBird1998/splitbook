@@ -3,6 +3,7 @@ import { createCheckedMobileController } from './flow-monitor';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { AccountLocalStorage, MobileDependencies } from '../data/types';
 import { savedQueriesIn } from './saved-queries';
+import type { SavedQueryRecords } from '../data/saved-copy-budget';
 
 type StoreOperation = 'load' | 'save' | 'remove' | 'clear' | 'list' | 'keys' | 'retainGroups';
 
@@ -23,10 +24,23 @@ type PhoneParts = Omit<Partial<Omit<MobileDependencies, 'fetch'>>, 'accountLocal
 /** Faults stop at the native storage boundary, before its atomic read or write. */
 function faultable<T extends object>(store: T) {
   const next = new Map<string, { path?: string; action: () => Promise<void> }[]>();
-  const persistent = new Set<{ operation: StoreOperation; path?: string; when: () => boolean; action: () => Promise<void> }>();
-  const persist = (operation: StoreOperation, action: () => Promise<void>, when: () => boolean, path?: string) => {
-    const rule = { operation, action, when, path }; persistent.add(rule);
-    return () => { persistent.delete(rule); };
+  const persistent = new Set<{
+    operation: StoreOperation;
+    path?: string;
+    when: () => boolean;
+    action: () => Promise<void>;
+  }>();
+  const persist = (
+    operation: StoreOperation,
+    action: () => Promise<void>,
+    when: () => boolean,
+    path?: string,
+  ) => {
+    const rule = { operation, action, when, path };
+    persistent.add(rule);
+    return () => {
+      persistent.delete(rule);
+    };
   };
   const enqueue = (operation: StoreOperation, action: () => Promise<void>, path?: string) => {
     const queue = next.get(operation) ?? [];
@@ -41,11 +55,16 @@ function faultable<T extends object>(store: T) {
       configurable: true,
       value: async (...args: unknown[]) => {
         for (const rule of persistent)
-          if (rule.operation === operation && (rule.path === undefined || rule.path === args[1]) && rule.when())
+          if (
+            rule.operation === operation &&
+            (rule.path === undefined || rule.path === args[1]) &&
+            rule.when()
+          )
             await rule.action();
         const queue = next.get(operation);
-        const index = queue?.findIndex(step => step.path === undefined || step.path === args[1]) ?? -1;
-        await (index < 0 ? undefined : queue!.splice(index,1)[0].action());
+        const index =
+          queue?.findIndex((step) => step.path === undefined || step.path === args[1]) ?? -1;
+        await (index < 0 ? undefined : queue!.splice(index, 1)[0].action());
         return call.apply(store, args);
       },
     });
@@ -54,11 +73,20 @@ function faultable<T extends object>(store: T) {
     failNext(operation: StoreOperation, error = new Error('Fictional device storage failure')) {
       enqueue(operation, () => Promise.reject(error), path);
     },
-    failPersistently(operation: StoreOperation, error = new Error('Fictional device storage failure'), when = () => true) {
+    failPersistently(
+      operation: StoreOperation,
+      error = new Error('Fictional device storage failure'),
+      when = () => true,
+    ) {
       return persist(operation, () => Promise.reject(error), when, path);
     },
     delayPersistently(operation: StoreOperation, milliseconds: () => number) {
-      return persist(operation, () => new Promise<void>(resolve => setTimeout(resolve, milliseconds())), () => milliseconds() > 0, path);
+      return persist(
+        operation,
+        () => new Promise<void>((resolve) => setTimeout(resolve, milliseconds())),
+        () => milliseconds() > 0,
+        path,
+      );
     },
     stallNext(operation: StoreOperation, until: Promise<void>) {
       enqueue(operation, () => until, path);
@@ -71,10 +99,14 @@ function faultable<T extends object>(store: T) {
       const released = new Promise<void>((done) => {
         release = done;
       });
-      enqueue(operation, () => {
-        arrive();
-        return released;
-      }, path);
+      enqueue(
+        operation,
+        () => {
+          arrive();
+          return released;
+        },
+        path,
+      );
       return { arrived, release };
     },
   });
@@ -100,12 +132,13 @@ function cell<T>(initial: T) {
 function records(savedQueries = false, separator = '') {
   const rows = new Map<string, unknown>();
   const adapter = savedQueriesIn(rows, {}, separator);
+  const retainGroups: NonNullable<SavedQueryRecords['retainGroups']> = async () => {};
   // Saved-query helpers intentionally find API paths only. Native Draft/payment stores also
   // list plain Group ids, which is how Home discovers recovery copies after a restart.
   return faultable({
     records: rows,
     ...adapter,
-    ...(savedQueries ? { retainGroups: async (_account: string, _groups: string[]) => {} } : {}),
+    ...(savedQueries ? { retainGroups } : {}),
     list: async (account: string) =>
       savedQueries
         ? adapter.list!(account)
@@ -250,9 +283,12 @@ export function testPhone(
     stores,
     clock,
     connect(value: boolean, isInternetReachable?: boolean | null) {
-      connection = { isConnected: value, ...(isInternetReachable === undefined ? {} : { isInternetReachable }) };
+      connection = {
+        isConnected: value,
+        ...(isInternetReachable === undefined ? {} : { isInternetReachable }),
+      };
       server.online = value && isInternetReachable !== false;
-      listeners.forEach(listener => listener(connection!));
+      listeners.forEach((listener) => listener(connection!));
     },
     open() {
       active?.dispose();

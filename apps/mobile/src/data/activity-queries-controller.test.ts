@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse, MobileSnapshot } from './types';
 
 // #222: a Group's Activity on declarative queries: one query of up to 5 pages per Group that
@@ -99,93 +101,24 @@ function fixture() {
     /** What a Group's own read answers that differs from the Groups list, such as its Theme. */
     groupAnswers: {} as Record<string, Record<string, unknown>>,
   };
-  let cookie: string | null = null,
-    owner: string | null = null,
-    cleanup = false;
-  const rows = new Map<string, unknown>(),
-    disk = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>(),
-    attempts = new Map<string, unknown>();
-  /** What the saved-copy databases can't do: remove a row. */
-  const device = { failRemoval: false };
-  const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [];
-  /** Reads of rows held part-way, as on a slow disk, by path. */
-  const loads: typeof writes = [];
-  const pause = async (path: string) => {
-    const index = writes.findIndex((step) => step.path === path);
-    if (index < 0) return;
-    const [step] = writes.splice(index, 1);
-    step.arrive();
-    await step.released;
-  };
-  const calls: { method: string; path: string; account: string }[] = [];
-  const held: {
-    path: string;
-    arrive: () => void;
-    answer: Promise<void>;
-    lost: boolean;
-    exact: boolean;
-  }[] = [];
-  type ConnectionState = { isConnected: boolean | null; isInternetReachable?: boolean | null };
-  /** What NetInfo last reported, once a test has reported something. */
-  let connectionState: ConnectionState | null = null;
-  const connection = new Set<(state: ConnectionState) => void>();
-  const records = (map: Map<string, unknown>) => ({
-    load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
-    save: async (account: string, key: string, value: unknown) => {
-      map.set(account + key, structuredClone(value));
+  const backend = fakeSplitbook();
+  backend.world.people.alex = { ...alex, image: null };
+  backend.world.people.sam = { ...sam, image: null };
+  backend.world.groups = [maple, cabin];
+  backend.world.home = { buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 0 }] };
+  Object.defineProperty(server, 'offline', {
+    get: () => !backend.online,
+    set: (value: boolean) => {
+      backend.online = !value;
     },
-    remove: async (account: string, key: string) => {
-      map.delete(account + key);
-    },
-    clear: async () => {
-      map.clear();
-    },
-    list: async (account: string) =>
-      [...map]
-        .filter(([key]) => key.startsWith(account))
-        .map(([key, value]) => ({
-          groupId: key.slice(account.length),
-          value: structuredClone(value),
-        })),
   });
-  const untrusted = { value: null as unknown },
-    identity = { value: null as unknown };
-  const untrustedCopies = {
-    load: async () => structuredClone(untrusted.value),
-    save: async (value: unknown) => {
-      untrusted.value = structuredClone(value);
-    },
-    clear: async () => {
-      untrusted.value = null;
-    },
-  };
-  const savedQueries = {
-    ...records(rows),
-    load: async (account: string, key: string) => {
-      const index = loads.findIndex((step) => step.path === key);
-      if (index >= 0) {
-        const [step] = loads.splice(index, 1);
-        step.arrive();
-        await step.released;
-      }
-      return structuredClone(rows.get(account + key) ?? null);
-    },
-    keys: async (account: string) =>
-      [...rows.keys()]
-        .filter((key) => key.startsWith(account))
-        .map((key) => key.slice(account.length)),
-    save: async (account: string, key: string, value: unknown) => {
-      await pause(key);
-      rows.set(account + key, structuredClone(value));
-    },
-    remove: async (account: string, key: string) => {
-      if (device.failRemoval) throw new Error('The device storage is full');
-      rows.delete(account + key);
-    },
-  };
-  const signedIn = (init: RequestInit) =>
-    String((init.headers as Record<string, string>).Cookie ?? '').includes('sam.') ? sam : alex;
+  const device = { failRemoval: false };
+  const calls = () =>
+    backend.requests.map(({ method, path, headers }) => ({
+      method,
+      path,
+      account: headers.get('Cookie')?.includes('sam-') ? sam.id : alex.id,
+    }));
   /** A page of a Group's Activity; with `expenseId`, an Expense's history. */
   const activityPage = (groupId: string, page: number, expenseId?: string | null) => {
     const all = (server.events[groupId] ?? []).filter(
@@ -233,33 +166,33 @@ function fixture() {
     isDeleted: false,
     editHistory: [],
   });
-  const respond = (path: string, init: RequestInit): FetchResponse => {
-    const method = init.method ?? 'GET';
-    if (path.endsWith('/sign-in')) {
-      const persona = String(init.body).includes('sam') ? 'sam' : 'alex';
-      return new Response(JSON.stringify({ user: persona === 'sam' ? sam : alex }), {
-        headers: {
-          'Set-Cookie': `better-auth.session_token=${persona}.signature; Path=/; HttpOnly`,
+
+  for (const user of [alex, sam])
+    Object.defineProperty(backend.world.groupsByAccount, user.id, {
+      get: () => [maple, cabin].filter(({ _id }) => !server.revoked.has(_id)),
+    });
+
+  // Preserve the original Cabin page: no Expense rows, but totals still report one.
+  for (const { _id: id } of [maple, cabin])
+    Object.defineProperty(backend.world.pages, `/api/groups/${id}/expenses`, {
+      get: () => ({
+        expenses: id === mapleId ? [dinner()] : [],
+        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        summary: {
+          count: 1,
+          totalsByCurrency: [{ currency: 'INR', totalAmount: 10 }],
+          userOwes: 0,
+          userGetsBack: 0,
+          byMember: [],
         },
-      });
-    }
-    if (path.endsWith('/sign-out')) return json({ success: true });
-    const user = signedIn(init);
-    if (path.endsWith('/get-session'))
-      return json({
-        user: { ...user, image: null },
-        session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' },
-      });
-    if (path === '/api/groups')
-      return json({
-        status: 200,
-        data: [maple, cabin].filter(({ _id }) => !server.revoked.has(_id)),
-      });
-    if (path === '/api/user/balances')
-      return json({
-        status: 200,
-        data: { buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 0 }] },
-      });
+      }),
+    });
+  const respond = (path: string, init: RequestInit): FetchResponse | undefined => {
+    if (path.startsWith('/api/auth/')) return undefined;
+    const method = init.method ?? 'GET';
+
+    if ((path === '/api/groups' && method === 'GET') || path === '/api/user/balances')
+      return undefined;
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
     const group = [maple, cabin].find(({ _id }) => _id === id);
     if (!id || !group) return json({}, 404);
@@ -280,6 +213,7 @@ function fixture() {
     }
     if (path === `/api/groups/${id}/expenses/${dinnerId}` && method === 'GET')
       return json({ status: 200, data: dinner() });
+    // This original fixture edit did not check the revision; keep that shortcut explicit.
     if (path === `/api/groups/${id}/expenses/${dinnerId}` && method === 'PATCH') {
       const changes = JSON.parse(String(init.body)) as { description?: string };
       server.dinner.revision += 1;
@@ -292,21 +226,7 @@ function fixture() {
       });
       return json({ status: 200, data: dinner() });
     }
-    if (path.startsWith(`/api/groups/${id}/expenses?`))
-      return json({
-        status: 200,
-        data: {
-          expenses: id === mapleId ? [dinner()] : [],
-          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
-          summary: {
-            count: 1,
-            totalsByCurrency: [{ currency: 'INR', totalAmount: 10 }],
-            userOwes: 0,
-            userGetsBack: 0,
-            byMember: [],
-          },
-        },
-      });
+    if (path.startsWith(`/api/groups/${id}/expenses?`)) return undefined;
     if (path === `/api/groups/${id}/expenses` && method === 'POST') {
       server.created += 1;
       const sent = JSON.parse(String(init.body)) as { description: string };
@@ -320,89 +240,30 @@ function fixture() {
       });
     return json({}, 404);
   };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
-      },
-      {
-        newSubmissionKey: () =>
-          `activity-queries-attempt-${String(server.created + 1).padStart(4, '0')}`,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        savedQueries,
-        netInfo: {
-          // As NetInfo does, a new listener hears the connection as it is now.
-          addEventListener: (listener) => {
-            connection.add(listener);
-            listener(connectionState ?? { isConnected: !server.offline });
-            return () => connection.delete(listener);
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity.value),
-          save: async (value) => {
-            identity.value = structuredClone(value);
-          },
-          clear: async () => {
-            identity.value = null;
-          },
-        },
-        expenseDrafts: records(drafts),
-        settlementAttempts: records(attempts),
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          untrustedCopies,
-          stores: [savedQueries, records(drafts), records(attempts), untrustedCopies],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname + new URL(url).search;
-          const method = init.method ?? 'GET';
-          calls.push({ method, path, account: signedIn(init).id });
-          if (server.offline) throw new TypeError('Network request failed');
-          const index = held.findIndex((request) =>
-            request.exact ? path === request.path : path.startsWith(request.path),
-          );
-          if (index >= 0) {
-            // The server answers as it is when the request arrives; the reply comes on release.
-            const [request] = held.splice(index, 1),
-              reply = respond(path, init);
-            request.arrive();
-            return request.answer.then(() => {
-              if (request.lost) throw new TypeError('Network request failed');
-              return reply;
-            });
-          }
-          return respond(path, init);
-        },
-      },
-    );
+  backend.reply('*', '*', ({ path, init }) => respond(path, init));
+  const phone = testPhone(backend, {
+    newSubmissionKey: () =>
+      `activity-queries-attempt-${String(server.created + 1).padStart(4, '0')}`,
+    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts', 'untrustedCopies'],
+    parts: {
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
+    },
+  });
+  const rows = phone.stores.savedQueries.records,
+    disk = new Map<string, unknown>();
+  delete phone.stores.savedQueries.retainGroups;
+  phone.stores.savedQueries.failPersistently(
+    'remove',
+    new Error('The device storage is full'),
+    () => device.failRemoval,
+  );
+  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts])
+    delete (store as AccountGroupRecordStore).keys;
+  const create = () => phone.open();
   /** A request, as these checks name it. */
   const label = (path: string) => {
     const base = path.split('?')[0];
@@ -423,66 +284,45 @@ function fixture() {
     device,
     rows,
     disk,
-    calls,
-    untrusted: () => untrusted.value,
+    get calls() {
+      return calls();
+    },
+    untrusted: () => phone.stores.untrustedCopies.value,
     activityPage,
     /** Every GET since `from`, in order. */
     gets: (from = 0) =>
-      calls
+      calls()
         .slice(from)
         .filter((call) => call.method === 'GET')
         .map(({ path }) => label(path)),
     /** Every read of a Group's Activity since `from`, in order. */
     activityGets: (from = 0) =>
-      calls
+      calls()
         .slice(from)
         .filter((call) => call.method === 'GET' && /\/activity\?page=/.test(call.path))
         .map(({ path }) => label(path)),
     /** The next request whose path starts with `path` is answered at once; its reply on release. */
     hold(path: string, { lost = false, exact = false } = {}) {
-      let arrive!: () => void;
-      let release!: () => void;
-      const reached = new Promise<void>((resolve) => {
-        arrive = resolve;
-      });
-      const answer = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      held.push({ path, arrive, answer, lost, exact });
-      return { reached, release };
+      const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const held = backend.hold('*', exact ? path : new RegExp('^' + escaped));
+      return {
+        reached: held.arrived,
+        release: () => held.release(lost ? 'lost-reply' : undefined),
+      };
     },
     /** The next read of this path's row waits until released. */
     holdLoad(path: string) {
-      let arrive!: () => void;
-      let release!: () => void;
-      const reached = new Promise<void>((resolve) => {
-        arrive = resolve;
-      });
-      const released = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      loads.push({ path, arrive, released });
-      return { reached, release };
+      const held = phone.stores.savedQueries.at(path).holdNext('load');
+      return { reached: held.arrived, release: held.release };
     },
     /** The next write of this path's row waits until released. */
     holdWrite(path: string) {
-      let arrive!: () => void;
-      let release!: () => void;
-      const reached = new Promise<void>((resolve) => {
-        arrive = resolve;
-      });
-      const released = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      writes.push({ path, arrive, released });
-      return { reached, release };
+      const held = phone.stores.savedQueries.at(path).holdNext('save');
+      return { reached: held.arrived, release: held.release };
     },
     /** NetInfo reports the device's connection, and whether it reaches the internet. */
     connect(isConnected: boolean, isInternetReachable?: boolean | null) {
-      const state = { isConnected, isInternetReachable };
-      server.offline = !isConnected || isInternetReachable === false;
-      connectionState = state;
-      connection.forEach((listener) => listener(state));
+      phone.connect(isConnected, isInternetReachable);
     },
     /** This account's persister rows whose path starts with `prefix`, in path order. */
     savedRows: (prefix: string, account = alex.id) =>

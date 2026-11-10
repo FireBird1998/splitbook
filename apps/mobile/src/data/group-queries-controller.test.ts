@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { focusManager, onlineManager } from '@tanstack/query-core';
 import type { AccountGroupRecordStore, FindableRecordStore } from './account-record-storage';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { FetchResponse, MobileSnapshot } from './types';
 
 // #219: a Group's own view on declarative queries: the Group, its Expenses for the chosen Month
@@ -36,7 +37,6 @@ const groupOf = (_id: string, name: string, category: string) => ({
 });
 const maple = groupOf(mapleId, 'Maple House', 'home');
 const cabin = groupOf(cabinId, 'Cabin Weekend', 'trip');
-const listPath = '/api/groups';
 const homePath = '/api/user/balances';
 const maplePath = `/api/groups/${mapleId}`;
 const balancesPath = `${maplePath}/balances`;
@@ -119,31 +119,24 @@ function fixture() {
     server.materialized += 1;
     server.due = null;
   };
-  let cookie: string | null = null,
-    owner: string | null = null,
-    cleanup = false;
-  /** The persister's rows, by account and path; the older saved-copy store's, the same way. */
-  const rows = new Map<string, unknown>(),
-    disk = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>(),
-    attempts = new Map<string, unknown>();
-  /**
-   * What the saved-copy databases can't do: remove a row, or read one of them. `storageDelay`:
-   * how long each read of a stored record takes, in ms of the fake clock, as SQLite on a phone.
-   */
+  const backend = fakeSplitbook();
+  backend.world.people.alex = { ...alex, image: null };
+  backend.world.people.sam = { ...sam, image: null };
+  backend.world.groups = [maple, cabin];
+  Object.defineProperty(server, 'offline', {
+    get: () => !backend.online,
+    set: (value: boolean) => {
+      backend.online = !value;
+    },
+  });
   const device = { failRemoval: false, unreadableRow: false, storageDelay: 0 };
-  const slow = () =>
-    device.storageDelay ? new Promise((resolve) => setTimeout(resolve, device.storageDelay)) : null;
-  /** Writes of rows held part-way, as on a slow disk, by path. */
-  const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [];
-  const pause = async (path: string) => {
-    const index = writes.findIndex((step) => step.path === path);
-    if (index < 0) return;
-    const [step] = writes.splice(index, 1);
-    step.arrive();
-    await step.released;
-  };
-  const calls: { method: string; path: string; account: string; at: number }[] = [];
+  const calls = () =>
+    backend.requests.map(({ method, path, headers, at }) => ({
+      method,
+      path,
+      account: headers.get('Cookie')?.includes('sam-') ? sam.id : alex.id,
+      at,
+    }));
   const held: {
     path: string;
     arrive: () => void;
@@ -154,66 +147,6 @@ function fixture() {
     /** Holds only a request for exactly `path`. */
     exact: boolean;
   }[] = [];
-  type ConnectionState = { isConnected: boolean | null; isInternetReachable?: boolean | null };
-  /** What NetInfo last reported, once a test has reported something. */
-  let connectionState: ConnectionState | null = null;
-  const connection = new Set<(state: ConnectionState) => void>();
-  const records = (map: Map<string, unknown>) => ({
-    load: async (account: string, key: string) => {
-      await slow();
-      return structuredClone(map.get(account + key) ?? null);
-    },
-    save: async (account: string, key: string, value: unknown) => {
-      map.set(account + key, structuredClone(value));
-    },
-    remove: async (account: string, key: string) => {
-      map.delete(account + key);
-    },
-    clear: async () => {
-      map.clear();
-    },
-    list: async (account: string) =>
-      [...map]
-        .filter(([key]) => key.startsWith(account))
-        .map(([key, value]) => ({
-          groupId: key.slice(account.length),
-          value: structuredClone(value),
-        })),
-  });
-  const untrusted = { value: null as unknown },
-    identity = { value: null as unknown };
-  const untrustedCopies = {
-    load: async () => structuredClone(untrusted.value),
-    save: async (value: unknown) => {
-      untrusted.value = structuredClone(value);
-    },
-    clear: async () => {
-      untrusted.value = null;
-    },
-  };
-  const savedQueries = {
-    ...records(rows),
-    // One row that can't be read fails every read of all rows, as parsing it would; listing the
-    // keys reads none of them.
-    list: async (account: string) => {
-      if (device.unreadableRow) throw new SyntaxError('Unexpected token in a saved row');
-      return records(rows).list(account);
-    },
-    keys: async (account: string) =>
-      [...rows.keys()]
-        .filter((key) => key.startsWith(account))
-        .map((key) => key.slice(account.length)),
-    save: async (account: string, key: string, value: unknown) => {
-      await pause(key);
-      rows.set(account + key, structuredClone(value));
-    },
-    remove: async (account: string, key: string) => {
-      if (device.failRemoval) throw new Error('The device storage is full');
-      rows.delete(account + key);
-    },
-  };
-  const signedIn = (init: RequestInit) =>
-    String((init.headers as Record<string, string>).Cookie ?? '').includes('sam.') ? sam : alex;
   const page = (month: string, number: number) => {
     const all = server.rows[month] ?? [];
     return {
@@ -236,30 +169,21 @@ function fixture() {
       },
     };
   };
-  const respond = (path: string, init: RequestInit): FetchResponse => {
+
+  for (const user of [alex, sam])
+    Object.defineProperty(backend.world.groupsByAccount, user.id, {
+      get: () => [maple, cabin].filter(({ _id }) => !server.revoked.has(_id)),
+    });
+  Object.defineProperty(backend.world, 'home', {
+    get: () => ({ buckets: [{ currency: 'INR', youOwe: server.owe, youAreOwed: 0 }] }),
+  });
+  const respond = (path: string, init: RequestInit): FetchResponse | undefined => {
+    if (path.startsWith('/api/auth/')) return undefined;
     const method = init.method ?? 'GET';
-    if (path.endsWith('/sign-in')) {
-      const persona = String(init.body).includes('sam') ? 'sam' : 'alex';
-      return new Response(JSON.stringify({ user: persona === 'sam' ? sam : alex }), {
-        headers: {
-          'Set-Cookie': `better-auth.session_token=${persona}.signature; Path=/; HttpOnly`,
-        },
-      });
-    }
-    if (path.endsWith('/sign-out')) return json({ success: true });
-    const user = signedIn(init);
-    if (path.endsWith('/get-session'))
-      return json({
-        user: { ...user, image: null },
-        session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' },
-      });
-    const listed = [maple, cabin].filter(({ _id }) => !server.revoked.has(_id));
-    if (path === listPath) return json({ status: 200, data: listed });
-    if (path === homePath)
-      return json({
-        status: 200,
-        data: { buckets: [{ currency: 'INR', youOwe: server.owe, youAreOwed: 0 }] },
-      });
+
+    if (path === '/api/groups' && method === 'GET')
+      return json({ status: 200, data: backend.world.groupsByAccount[alex.id] });
+    if (path === '/api/user/balances') return json({ status: 200, data: backend.world.home });
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
     const group = [maple, cabin].find(({ _id }) => _id === id);
     if (!id || !group) return json({}, 404);
@@ -341,119 +265,86 @@ function fixture() {
     }
     return json({}, 404);
   };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
-      },
-      {
-        newSubmissionKey: () =>
-          `group-queries-attempt-${String(server.created + 1).padStart(4, '0')}`,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        savedQueries,
-        netInfo: {
-          // As NetInfo does, a new listener hears the connection as it is now.
-          addEventListener: (listener) => {
-            connection.add(listener);
-            listener(connectionState ?? { isConnected: !server.offline });
-            return () => connection.delete(listener);
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity.value),
-          save: async (value) => {
-            identity.value = structuredClone(value);
-          },
-          clear: async () => {
-            identity.value = null;
-          },
-        },
-        expenseDrafts: records(drafts),
-        settlementAttempts: records(attempts),
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          untrustedCopies,
-          stores: [savedQueries, records(drafts), records(attempts), untrustedCopies],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname + new URL(url).search;
-          const method = init.method ?? 'GET';
-          calls.push({ method, path, account: signedIn(init).id, at: Date.now() });
-          if (server.offline) throw new TypeError('Network request failed');
-          const wait =
-            method !== 'GET' || !server.delay
-              ? 0
-              : path === maplePath && server.groupDelay
-                ? server.groupDelay
-                : path.startsWith(`${maplePath}/expenses?`) && server.listDelay
-                  ? server.listDelay
-                  : server.delay;
-          if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
-          if (method !== 'GET') held.forEach((request) => (request.afterWrite = false));
-          if (method === 'POST' && path === `${maplePath}/expenses` && server.afterSave) {
-            const reply = respond(path, init),
-              after = server.afterSave;
-            server.afterSave = null;
-            after();
-            return reply;
-          }
-          const index = held.findIndex(
-            (request) =>
-              !request.afterWrite &&
-              (request.exact ? path === request.path : path.startsWith(request.path)),
-          );
-          if (index >= 0) {
-            // The server answers as it is when the request arrives; the reply comes on release.
-            const [request] = held.splice(index, 1),
-              reply = respond(path, init);
-            request.arrive();
-            return request.answer.then(() => {
-              if (request.lost) throw new TypeError('Network request failed');
-              return reply;
-            });
-          }
-          return respond(path, init);
-        },
-      },
+  backend.reply('*', '*', async ({ path, method, init }) => {
+    const wait =
+      method !== 'GET' || !server.delay
+        ? 0
+        : path === maplePath && server.groupDelay
+          ? server.groupDelay
+          : path.startsWith(`${maplePath}/expenses?`) && server.listDelay
+            ? server.listDelay
+            : server.delay;
+    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+    if (method !== 'GET') held.forEach((request) => (request.afterWrite = false));
+    if (method === 'POST' && path === `${maplePath}/expenses` && server.afterSave) {
+      const reply = respond(path, init),
+        after = server.afterSave;
+      server.afterSave = null;
+      after();
+      return reply;
+    }
+    const index = held.findIndex(
+      (request) =>
+        !request.afterWrite &&
+        (request.exact ? path === request.path : path.startsWith(request.path)),
     );
+    if (index >= 0) {
+      // The server answers as it is when the request arrives; the reply comes on release.
+      const [request] = held.splice(index, 1),
+        reply = respond(path, init);
+      request.arrive();
+      return request.answer.then(() => {
+        if (request.lost) throw new TypeError('Network request failed');
+        return reply;
+      });
+    }
+    return respond(path, init);
+  });
+  const phone = testPhone(backend, {
+    newSubmissionKey: () => `group-queries-attempt-${String(server.created + 1).padStart(4, '0')}`,
+    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts', 'untrustedCopies'],
+    parts: {
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
+    },
+  });
+  const rows = phone.stores.savedQueries.records;
+  // This legacy probe was never injected into the controller.
+  const disk = new Map<string, unknown>();
+  const queryStore = phone.stores.savedQueries;
+  delete queryStore.retainGroups;
+  queryStore.failPersistently(
+    'list',
+    new SyntaxError('Unexpected token in a saved row'),
+    () => device.unreadableRow,
+  );
+  queryStore.failPersistently(
+    'remove',
+    new Error('The device storage is full'),
+    () => device.failRemoval,
+  );
+  for (const store of [queryStore, phone.stores.expenseDrafts, phone.stores.settlementAttempts]) {
+    store.delayPersistently('load', () => device.storageDelay);
+    if (store !== queryStore) delete (store as AccountGroupRecordStore).keys;
+  }
+  const create = () => phone.open();
+
   return {
     create,
     server,
     device,
     rows,
     disk,
-    calls,
-    untrusted: () => untrusted.value,
+    get calls() {
+      return calls();
+    },
+    untrusted: () => phone.stores.untrustedCopies.value,
     /** Every GET since `from`, as `/path` with its September or August page, in order. */
     gets: (from = 0) =>
-      calls
+      calls()
         .slice(from)
         .filter((call) => call.method === 'GET')
         .map(({ path }) =>
@@ -480,23 +371,12 @@ function fixture() {
     },
     /** The next write of this path's row waits until released. */
     holdWrite(path: string) {
-      let arrive!: () => void;
-      let release!: () => void;
-      const reached = new Promise<void>((resolve) => {
-        arrive = resolve;
-      });
-      const released = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      writes.push({ path, arrive, released });
-      return { reached, release };
+      const held = phone.stores.savedQueries.at(path).holdNext('save');
+      return { reached: held.arrived, release: held.release };
     },
     /** NetInfo reports the device's connection, and whether it reaches the internet. */
     connect(isConnected: boolean, isInternetReachable?: boolean | null) {
-      const state = { isConnected, isInternetReachable };
-      server.offline = !isConnected || isInternetReachable === false;
-      connectionState = state;
-      connection.forEach((listener) => listener(state));
+      phone.connect(isConnected, isInternetReachable);
     },
     /** This account's persister rows whose path starts with `prefix`. */
     savedRows: (prefix: string, account = alex.id) =>
