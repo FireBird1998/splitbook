@@ -3,6 +3,7 @@
  * does is in `./ceilings.ts`, where its tests can reach it.
  */
 import { runCeilingsCompare } from './ceilings';
+import { checkTestPhoneCeiling } from './test-phone-ceiling';
 
 void runCeilingsCompare(process.argv.slice(2), {
   cwd: process.cwd(),
@@ -10,5 +11,14 @@ void runCeilingsCompare(process.argv.slice(2), {
   fetch,
   print: (line) => console.log(line),
 }).then((code) => {
+  if (code === 0) {
+    try {
+      const args = process.argv.slice(2);
+      console.log(checkTestPhoneCeiling(process.cwd(), args[args.indexOf('--base') + 1]!));
+    } catch (error) {
+      console.error((error as Error).message);
+      code = 1;
+    }
+  }
   process.exitCode = code;
 });
