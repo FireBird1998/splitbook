@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import 'server-only';
 import mongoose from 'mongoose';
 import { isDeepStrictEqual } from 'node:util';
@@ -13,17 +14,6 @@ import Expense from '@/lib/models/Expense';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import { supportsGroupTransactions, withGroupMutation } from '@/lib/group-mutation';
 
-export class TagManagementError extends Error {
-  constructor(
-    readonly code: string,
-    readonly status: number,
-    readonly snapshot?: TagSnapshot,
-    readonly existingTagId?: string,
-    message?: string,
-  ) {
-    super(message ?? code);
-  }
-}
 interface Receipt {
   group: mongoose.Types.ObjectId;
   actor: mongoose.Types.ObjectId;
@@ -70,7 +60,7 @@ async function accessibleGroup(groupId: string, actorId: string) {
     deletionRequestedAt: null,
     'members.user': actorId,
   }).lean();
-  if (!group) throw new Error('FORBIDDEN');
+  if (!group) throw new Refusal('FORBIDDEN');
   // Some historical Groups predate Tags; reads must not backfill their history.
   group.tags ??= [];
   return group;
@@ -106,18 +96,17 @@ export const tagManagementService = {
   },
   async submit(groupId: string, actorId: string, command: TagCommand): Promise<TagActionResult> {
     const parsed = tagCommandSchema.safeParse(command);
-    if (!parsed.success) throw new TagManagementError('INVALID_TAG_COMMAND', 400);
+    if (!parsed.success) throw new Refusal('INVALID_TAG_COMMAND');
     command = parsed.data;
     const initial = snapshot(await accessibleGroup(groupId, actorId), actorId);
-    if (!initial.canManage) throw new TagManagementError('TAG_ADMIN_REQUIRED', 403, initial);
-    if (!(await supportsGroupTransactions()))
-      throw new TagManagementError('TAG_TRANSACTIONS_REQUIRED', 503);
+    if (!initial.canManage) throw new Refusal('TAG_ADMIN_REQUIRED', { snapshot: initial });
+    if (!(await supportsGroupTransactions())) throw new Refusal('TAG_TRANSACTIONS_REQUIRED');
     await ensureIndexes();
     return withGroupMutation(groupId, async (session) => {
-      if (!session) throw new TagManagementError('TAG_TRANSACTIONS_REQUIRED', 503);
+      if (!session) throw new Refusal('TAG_TRANSACTIONS_REQUIRED');
       const group = await accessibleGroup(groupId, actorId);
       const current = snapshot(group, actorId);
-      if (!current.canManage) throw new TagManagementError('TAG_ADMIN_REQUIRED', 403, current);
+      if (!current.canManage) throw new Refusal('TAG_ADMIN_REQUIRED', { snapshot: current });
       const actor = new mongoose.Types.ObjectId(actorId);
       // Share account deletion's user fence, so a late receipt cannot survive account cleanup.
       const owner = await mongoose.connection
@@ -127,12 +116,12 @@ export const tagManagementService = {
           { $inc: { tagMutationSequence: 1 } },
           { session },
         );
-      if (!owner.matchedCount) throw new Error('FORBIDDEN');
+      if (!owner.matchedCount) throw new Refusal('FORBIDDEN');
       const scope = { group: group._id, actor, requestId: command.requestId };
       const previous = await receipts().findOne(scope, { session });
       if (previous) {
         if (!isDeepStrictEqual(previous.intent, command.intent))
-          throw new TagManagementError('REQUEST_KEY_REUSED', 409, current);
+          throw new Refusal('REQUEST_KEY_REUSED', { snapshot: current });
         return applied(previous, current);
       }
       const intent = command.intent;
@@ -144,7 +133,7 @@ export const tagManagementService = {
         intent.action !== 'create' &&
         (!tag || tag.isDeleted || (tag.revision ?? 0) !== intent.expectedRevision)
       ) {
-        throw new TagManagementError('TAG_CHANGED', 409, current);
+        throw new Refusal('TAG_CHANGED', { snapshot: current });
       }
       if (intent.action === 'create' || intent.action === 'rename') {
         const duplicate = group.tags.find(
@@ -154,7 +143,10 @@ export const tagManagementService = {
             candidate.name.toLowerCase() === intent.name.toLowerCase(),
         );
         if (duplicate)
-          throw new TagManagementError('TAG_EXISTS', 409, current, String(duplicate._id));
+          throw new Refusal('TAG_EXISTS', {
+            snapshot: current,
+            existingTagId: String(duplicate._id),
+          });
       }
       if (
         tag &&
@@ -162,7 +154,7 @@ export const tagManagementService = {
         !tag.isArchived &&
         group.tags.filter((candidate) => !candidate.isArchived && !candidate.isDeleted).length <= 1
       ) {
-        throw new TagManagementError('LAST_ACTIVE_TAG', 409, current);
+        throw new Refusal('LAST_ACTIVE_TAG', { snapshot: current });
       }
       if (tag && intent.action === 'delete') {
         const reference = {
@@ -172,20 +164,14 @@ export const tagManagementService = {
         const expenseCount = await Expense.countDocuments(reference);
         const templateCount = await RecurringExpense.countDocuments(reference);
         if (expenseCount + templateCount > 0)
-          throw new TagManagementError(
-            'TAG_IN_USE',
-            409,
-            current,
-            undefined,
-            'TAG_IN_USE:' + expenseCount + ':' + templateCount,
-          );
+          throw new Refusal('TAG_IN_USE', { snapshot: current });
       }
       const tagId = tag?._id ?? new mongoose.Types.ObjectId();
       if (tag && intent.action === 'rename' && tag.name !== intent.name) {
         const legacy = { group: group._id, tagId: null, tag: tag.name };
         if (group.tags.filter((candidate) => candidate.name === tag.name).length !== 1) {
           if ((await Expense.exists(legacy)) || (await RecurringExpense.exists(legacy)))
-            throw new TagManagementError('AMBIGUOUS_TAG', 409, current);
+            throw new Refusal('AMBIGUOUS_TAG', { snapshot: current });
         } else {
           await Expense.collection.updateMany(legacy, { $set: { tagId } }, { session });
           await RecurringExpense.collection.updateMany(legacy, { $set: { tagId } }, { session });

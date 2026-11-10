@@ -1,3 +1,4 @@
+import type { TagSnapshot } from '@splitbook/shared/tag-management';
 /** Frozen legacy input values for the immutable main census. Production uses Refusal. */
 import { Refusal } from '@splitbook/shared/refusals';
 import type { ExtraCurrencyUse } from '@splitbook/shared/group-currency-settings';
@@ -93,6 +94,18 @@ class CurrencyIsMainError extends Error {
   }
 }
 
+export class TagManagementError extends Error {
+  constructor(
+    readonly code: ConstructorParameters<typeof Refusal>[0],
+    readonly status: number,
+    readonly snapshot?: TagSnapshot,
+    readonly existingTagId?: string,
+    message?: string,
+  ) {
+    super(message ?? code);
+  }
+}
+
 const currentCurrencies = new WeakMap<Error, Refusal>();
 
 export function currencyInUseCase(currency: string, groupName: string, use: ExtraCurrencyUse) {
@@ -123,8 +136,14 @@ export function currentCause(
     | 'recurring-create'
     | 'tag-change'
     | 'payment'
-    | 'settlement',
+    | 'settlement'
+    | 'tag',
 ): Error {
+  if (caller === 'tag' && cause instanceof TagManagementError)
+    return new Refusal(cause.code, {
+      snapshot: cause.snapshot,
+      existingTagId: cause.existingTagId,
+    });
   const currency = currentCurrencies.get(cause);
   if (currency) return currency;
   if (caller === 'leave' && cause instanceof LeaveBlockedError) {

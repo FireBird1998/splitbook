@@ -9,9 +9,9 @@ import { auth } from '@/lib/auth';
 import * as response from '@/lib/utils/api-response';
 import { draftError } from '@/lib/draft-response';
 import { tagError, invalidTagId } from '@/lib/tag-management-http';
-import { TagManagementError } from '@/lib/services/tag-management.service';
 import { ExportTooLargeError } from '@/lib/services/export.service';
 import {
+  TagManagementError,
   LeaveBlockedError,
   RemovalBlockedError,
   currencyInUseCase,
@@ -69,7 +69,7 @@ const tagCodes = [
   'REQUEST_KEY_REUSED',
   'TAG_IN_USE',
   'AMBIGUOUS_TAG',
-];
+] as const;
 const classCases = [
   new LeaveBlockedError('LAST_ADMIN'),
   new LeaveBlockedError('OPEN_BALANCE', balances),
@@ -147,7 +147,7 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
         thrown: thrown(cause),
         answer: await recorded(
           cause instanceof TagManagementError
-            ? tagError(cause)
+            ? tagError(currentCause(cause, 'tag'))
             : response.serverError(currentCause(cause)),
         ),
       });
@@ -222,7 +222,8 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
         )
           continue;
         for (const cause of causes) {
-          const caller = migratedCallers[path]?.[method];
+          const caller =
+            migratedCallers[path]?.[method] ?? (text.includes('tagError') ? 'tag' : undefined);
           vi.mocked(auth.api.getSession).mockRejectedValue(currentCause(cause, caller));
           const answer = await handler(new Request('http://localhost/api/census', { method }), {
             params: Promise.resolve({ id: 'a00000000000000000000001' }),
@@ -308,7 +309,10 @@ it('records optional Tag payloads and ignores their internal count message', asy
     new TagManagementError('TAG_IN_USE', 409, snapshot, undefined, 'TAG_IN_USE:2:3'),
     new TagManagementError('INVALID_TAG_COMMAND', 400),
   ])
-    census.push({ thrown: thrown(cause), answer: await recorded(tagError(cause)) });
+    census.push({
+      thrown: thrown(cause),
+      answer: await recorded(tagError(currentCause(cause, 'tag'))),
+    });
   expect(census).toMatchSnapshot();
 });
 
