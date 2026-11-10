@@ -1,3 +1,5 @@
+import { Refusal } from './refusals';
+
 /** Tags belong to a Group; names are display text, never identity. */
 export interface IdentityTag {
   _id: unknown;
@@ -43,7 +45,7 @@ export function resolveTagReference(
   const hasSelection = incoming.tagId !== undefined || incoming.tag !== undefined;
   const keepsLegacyDisplay = existing?.tagId && !incoming.tagId && incoming.tag === existing.tag;
   const selection = !hasSelection || keepsLegacyDisplay ? existing : incoming;
-  if (!selection) throw new Error('INVALID_TAG');
+  if (!selection) throw new Refusal('INVALID_TAG');
   const tag = findReferencedTag(tags, selection);
   const oldTag = existing && findReferencedTag(tags, existing);
   const unchanged =
@@ -55,8 +57,8 @@ export function resolveTagReference(
   // Unknown legacy names remain readable/editable, but are never reassigned.
   if (!tag) {
     if (unchanged && !selection.tagId && existing?.tag) return { tag: existing.tag };
-    throw new Error('INVALID_TAG');
+    throw new Refusal('INVALID_TAG');
   }
-  if ((tag.isArchived || tag.isDeleted) && !unchanged) throw new Error('INVALID_TAG');
+  if ((tag.isArchived || tag.isDeleted) && !unchanged) throw new Refusal('INVALID_TAG');
   return { tagId: String(tag._id), tag: tag.name };
 }
