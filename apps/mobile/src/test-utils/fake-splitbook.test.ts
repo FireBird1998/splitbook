@@ -1,3 +1,4 @@
+import { parseNotificationPreferences } from '../data/notification-controls';
 import { parseToReviewResponse } from '@splitbook/shared/to-review-read';
 import { tagRead } from '../data/tag-management';
 import { parseExpenseRecord } from '../data/expense-record';
@@ -757,4 +758,10 @@ it('reads the world’s account-wide To review answer through the app reader',as
  const server=fakeSplitbook();server.world.toReview={total:0,groups:[]};const cookie=server.auth.issue('alex');
  const response=await server.fetch('http://local/api/user/to-review',{headers:{Cookie:cookie}});
  expect(response.status).toBe(200);expect(parseToReviewResponse(await response.json())).toEqual({total:0,groups:[]});
+});
+
+it('reads the world’s confirmed notification preferences through the app reader',async()=>{
+ const server=fakeSplitbook();server.world.notifications={available:true,enabled:false,expenseUpdates:false,payments:false,revision:0,activation:null,expenseCutoff:null,paymentCutoff:null};
+ const cookie=server.auth.issue('alex');const response=await server.fetch('http://local/api/notifications/device',{headers:{Cookie:cookie}});
+ expect(response.status).toBe(200);expect(parseNotificationPreferences(await response.json())).toEqual(server.world.notifications);
 });
