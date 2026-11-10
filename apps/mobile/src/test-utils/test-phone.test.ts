@@ -54,4 +54,15 @@ describe('test phone', () => {
     await stalled;
     expect(await store.load('alex', 'maple')).toEqual({ value: 3 });
   });
+  it('shows the current cleanup markers and keeps their write faults at the phone boundary', async () => {
+    const phone = testPhone(fakeSplitbook());
+    await phone.stores.cleanupMarker.mark();
+    expect(phone.stores.cleanupMarker.value).toBe(true);
+    await phone.stores.signOutRecord.mark({ invitationCleared: true });
+    expect(phone.stores.signOutRecord.value).toEqual({ invitationCleared: true });
+    phone.stores.cleanupMarker.failNext('save');
+    await expect(phone.stores.cleanupMarker.mark()).rejects.toThrow(
+      'Fictional device storage failure',
+    );
+  });
 });

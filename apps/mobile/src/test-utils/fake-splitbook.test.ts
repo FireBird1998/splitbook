@@ -182,4 +182,25 @@ describe('fake Splitbook', () => {
       });
     },
   );
+  it('can hold a request before deferring to its normal answer, and lists unknown API requests', async () => {
+    const server = fakeSplitbook();
+    let release!: () => void;
+    const wait = new Promise<void>((done) => {
+      release = done;
+    });
+    server.reply(
+      'GET',
+      '/api/not-a-route',
+      async () => {
+        await wait;
+        return undefined;
+      },
+      { once: true },
+    );
+    const pending = server.fetch('http://local/api/not-a-route', {});
+    expect(server.requests).toHaveLength(1);
+    release();
+    expect((await pending).status).toBe(404);
+    expect(server.unanswered).toEqual(['GET /api/not-a-route']);
+  });
 });
