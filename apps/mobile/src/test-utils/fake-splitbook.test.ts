@@ -830,5 +830,5 @@ it('can fail a session check without revoking its still-valid cookie', async () 
     headers: { Cookie: cookie },
   });
   expect(recovered.status).toBe(200);
-  expect((await recovered.json()).user.id).toBe('a00000000000000000000001');
+  expect(await recovered.json()).toMatchObject({ user: { id: 'a00000000000000000000001' } });
 });

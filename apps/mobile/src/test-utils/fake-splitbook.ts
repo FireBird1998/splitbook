@@ -317,6 +317,7 @@ export function fakeSplitbook() {
     signInStatus: 200,
     signInCode: null as string | null,
     sessionPresent: true,
+    sessionStatus: 200,
     signOutStatus: 200,
     bootstrap: {
       environment: 'staging',
@@ -463,6 +464,8 @@ export function fakeSplitbook() {
       }
       if (!user || auth.expired)
         return Response.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 });
+      if (url.pathname === '/api/auth/get-session' && auth.sessionStatus !== 200)
+        return Response.json({}, { status: auth.sessionStatus });
       if (url.pathname === '/api/auth/get-session')
         return Response.json(
           auth.sessionPresent
