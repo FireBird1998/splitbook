@@ -105,6 +105,7 @@ function fixture(
     empty?: boolean;
     laterReadyGroup?: boolean;
     held?: Promise<void>;
+    notificationsEnabled?: boolean;
     saveHeld?: Promise<void>;
     lost?: boolean;
     lostExpense?: boolean;
@@ -273,7 +274,7 @@ function fixture(
     backend.world.expenses[id] = page;
     backend.world.balances[id] = { byCurrency: [] };
   }
-  backend.world.notifications = notificationPreferences;
+  if (options.notificationsEnabled !== false) backend.world.notifications = notificationPreferences;
   backend.reply('*', '*', async ({ url, init }) => {
     const path = url.pathname;
     if (
@@ -443,7 +444,6 @@ function fixture(
   };
   const controller = makeController();
   return {
-    expectUnanswered: backend.expectUnanswered,
     restart: makeController,
     controller,
     saves,
@@ -1052,8 +1052,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(f.saves).toHaveLength(0);
   });
   it('keeps a committed lost-reply save reachable from Home after restart when the account list is empty', async () => {
-    const f = fixture({ lost: true });
-    f.expectUnanswered('POST', '/api/notifications/device');
+    const f = fixture({ lost: true, notificationsEnabled: false });
     await signIn(f);
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     await tap(list, 'Save 2 ready');

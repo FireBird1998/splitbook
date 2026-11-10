@@ -426,10 +426,14 @@ const text = (tree: ReactTestRenderer) =>
         .join(''),
     )
     .join('\n');
-const button = (tree: ReactTestRenderer, label: string) =>
-  tree.root.findAll(
+const button = (tree: ReactTestRenderer, label: string) => {
+  // A member can act only on the open sheet, never on the covered Save bar.
+  const sheets = tree.root.findAll((node) => String(node.type) === 'Modal' && node.props.visible);
+  const scope = sheets.at(-1) ?? tree.root;
+  return scope.findAll(
     (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === label,
   )[0];
+};
 async function tap(tree: ReactTestRenderer, label: string) {
   await act(async () => {
     expect(button(tree, label), label).toBeDefined();
@@ -534,6 +538,27 @@ async function enter(f: ReturnType<typeof fixture>) {
     await f.controller.updateExpenseDraft({ description: 'Phone groceries', amount: '9', tagId });
   });
 }
+
+it('keeps the entries through the close sheet’s enabled Finish later action', async () => {
+  const f = fixture({ empty: true });
+  await signIn(f);
+  await enter(f);
+  const editor = await form(f, 'light');
+  await act(async () => {
+    await f.controller.back();
+  });
+  const sheet = editor.root.find((node) => String(node.type) === 'Modal' && node.props.visible);
+  const action = sheet.find(
+    (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Finish later',
+  );
+  expect(action.props.disabled).not.toBe(true);
+  await tap(editor, 'Finish later');
+  expect(f.controller.getSnapshot().screen).toBe('group');
+  expect(f.controller.getSnapshot().expense.closePrompt).not.toBe(true);
+  expect(f.controller.getSnapshot().snackbar?.message).toBe('Kept in To review');
+  expect(f.uploads).toHaveLength(1);
+  expect(f.uploads[0]!.body).toContain('Phone groceries');
+});
 
 describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (mode) => {
   it('keeps an online item and closes with a View confirmation', async () => {

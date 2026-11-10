@@ -1,3 +1,4 @@
+import { expenseReceipt } from '../test-utils/expense-receipt';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage, activityPage } from '../test-utils/fake-splitbook';
@@ -18,7 +19,11 @@ const dinnerId = 'c00000000000000000000002';
 const tagId = 'f00000000000000000000001';
 const iso = '2026-09-15T06:30:00.000Z';
 const start = Date.parse(iso);
-const person = (user: typeof alex) => ({ _id: user.id, name: user.name, image: null });
+const person = (user: typeof alex) => ({
+  _id: user.id,
+  name: user.name,
+  image: null as string | null,
+});
 const maple = {
   _id: mapleId,
   createdBy: alex.id,
@@ -90,7 +95,7 @@ const changesOf = (id: string, prefix: string, count: number, description: strin
 /** A fictional backend for Alex and Sam, and device stores that outlive a controller. */
 function fixture() {
   const server = {
-    records: new Map<string, ReturnType<typeof record>>([
+    records: new Map<string, ReturnType<typeof record> | ReturnType<typeof expenseReceipt>>([
       [billId, record(billId, 'Electricity bill')],
       [dinnerId, record(dinnerId, 'Sunday dinner')],
     ]),
@@ -128,22 +133,15 @@ function fixture() {
     [fareId]: { ...record(fareId, 'Ferry'), group: cabinId },
   };
   Object.defineProperty(backend.world.expenses, mapleId, {
-    get: () => ({
-      ...expensePage([...server.records.values()]),
-      pagination: { page: 1, limit: 20, total: server.records.size, totalPages: 1 },
-    }),
+    get: () => expensePage([...server.records.values()].filter((row) => !row.isDeleted)),
   });
   backend.world.balances[mapleId] = { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] };
-  const mine = (headers: Headers) => !headers.get('Cookie')?.includes('sam-');
-  // This fixture deliberately refuses Sam even though the wire Group still names Sam.
-  backend.reply('GET', '/api/groups', ({ headers }) =>
+  backend.reply('GET', '/api/groups', () =>
     json({
       status: 200,
-      data: mine(headers)
-        ? [maple, cabin].filter(
-            ({ _id }) => !server.archived.has(_id) && (_id !== mapleId || server.group === 200),
-          )
-        : [],
+      data: [maple, cabin].filter(
+        ({ _id }) => !server.archived.has(_id) && (_id !== mapleId || server.group === 200),
+      ),
     }),
   );
   backend.reply('GET', maplePath, () =>
@@ -171,12 +169,12 @@ function fixture() {
     }
     return reply;
   };
-  backend.reply('POST', `${maplePath}/expenses`, () => {
+  backend.reply('POST', `${maplePath}/expenses`, ({ body }) => {
     server.created++;
     const id = hex('c', 900 + server.created);
-    // Preserve the original fixed create answer, which did not apply the request body.
-    server.records.set(id, record(id, 'Fresh groceries'));
-    return afterWrite(json({ status: 201, data: { _id: id, group: mapleId } }, 201));
+    const created = expenseReceipt(maple, body, id, alex.id);
+    server.records.set(id, created);
+    return afterWrite(json({ status: 201, data: created }, 201));
   });
   backend.reply('*', '*', ({ url, method, headers, body }) => {
     const id = /^\/api\/groups\/[^/]+\/expenses\/([a-f\d]{24})$/.exec(url.pathname)?.[1];
@@ -187,9 +185,27 @@ function fixture() {
     if (method !== 'PATCH' && method !== 'DELETE') return undefined;
     if (headers.get('X-Splitbook-Revision') !== String(current.revision))
       return afterWrite(json({ error: 'Changed', code: 'STALE_REVISION', status: 409 }, 409));
+    const fields = body ?? {};
+    const edited =
+      method === 'PATCH'
+        ? expenseReceipt(
+            maple,
+            {
+              ...current,
+              ...fields,
+              paidBy:
+                fields.paidBy ?? current.paidBy.map((row) => ({ ...row, user: row.user._id })),
+              splitBetween:
+                fields.splitBetween ??
+                current.splitBetween.map((row) => ({ ...row, user: row.user._id })),
+            },
+            id,
+            alex.id,
+          )
+        : current;
     server.records.set(id, {
-      ...current,
-      ...(body?.notes !== undefined ? { notes: body.notes as string } : {}),
+      ...edited,
+      createdBy: current.createdBy,
       revision: current.revision + 1,
       isDeleted: method === 'DELETE',
     });
@@ -206,13 +222,12 @@ function fixture() {
   backend.reply('GET', `${cabinPath}/activity`, () =>
     json({ status: 200, data: activityPage([fareEvent]) }),
   );
-  for (const suffix of ['/expenses', '/balances'])
-    backend.reply('GET', cabinPath + suffix, () => json({}, 404));
-  backend.reply('*', '*', ({ url, headers }) => {
+  backend.world.expenses[cabinId] = expensePage([backend.world.expenseRecords[cabinId][fareId]]);
+  backend.world.balances[cabinId] = { byCurrency: [] };
+  backend.reply('*', '*', ({ url }) => {
     if (server.offline) throw new TypeError('Network request failed');
-    if (url.pathname.startsWith(cabinPath)) return mine(headers) ? undefined : json({}, 403);
+    if (url.pathname.startsWith(cabinPath)) return undefined;
     if (!url.pathname.startsWith(maplePath)) return undefined;
-    if (!mine(headers)) return json({}, 403);
     if (server.group !== 200) return json({}, server.group);
     return undefined;
   });
@@ -242,7 +257,8 @@ function fixture() {
   delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
   const rows = phone.stores.savedQueries.records,
     drafts = phone.stores.expenseDrafts.records;
-  // This empty legacy-store probe was never supplied to the controller; keep its assertions honest.
+  // Stopped under #1075: this legacy probe is not injected. Pointing it at savedQueries
+  // exposes its vacuous empty-list assertion; the actual wire rows are asserted separately.
   const disk = new Map<string, unknown>();
   const device = { failRemoval: false };
   const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [];

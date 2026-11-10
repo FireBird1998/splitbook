@@ -83,10 +83,11 @@ function setup(served: Record<string, unknown> = record) {
   server.world.expenseRecords[groupId] = { [expenseId]: served };
   server.world.expenses[groupId] = expensePage([record]);
   server.world.balances[groupId] = { currency: 'INR', balances: [], debts: [], byCurrency: [] };
-  // The old backend ignored the Expense filter and returned the Group’s events.
-  server.reply('GET', `/api/groups/${groupId}/activity`, ({ url }) =>
-    json({ status: 200, data: activityPage(events, Number(url.searchParams.get('page'))) }),
-  );
+  server.reply('GET', `/api/groups/${groupId}/activity`, ({ url }) => {
+    const expense = url.searchParams.get('expenseId');
+    const own = events.filter((event) => !expense || event.metadata.expenseId === expense);
+    return json({ status: 200, data: activityPage(own, Number(url.searchParams.get('page'))) });
+  });
   const phone = testPhone(server, {
     now: new Date(2026, 8, 27, 12).getTime(),
     recordSeparator: ':',

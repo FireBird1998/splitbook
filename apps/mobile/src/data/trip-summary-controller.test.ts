@@ -1,3 +1,8 @@
+import { computeMemberBreakdown, computeUserOweGetBack } from '@splitbook/shared/expense-summary';
+import { parseTripSummaryResponse } from '@splitbook/shared/trip-summary-read';
+import { expenseReceipt } from '../test-utils/expense-receipt';
+import { toMajorAmount } from '@splitbook/shared/exact-money';
+import { tripSummary as summarizeTrip } from '@splitbook/shared/trip-summary';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { focusManager, onlineManager } from '@tanstack/query-core';
 import { testPhone } from '../test-utils/test-phone';
@@ -56,42 +61,49 @@ const spent: Record<string, { count: number; spent: number; share: number; paid:
   EUR: { count: 11, spent: 124_000, share: 40_000, paid: 60_000 },
   JPY: { count: 24, spent: 186_000, share: 62_000, paid: 70_400 },
 };
-/** The Trip summary as the server sends it: in `currency`, else the one with the most Expenses. */
-const tripSummary = (currency: string | null, timeZone: string) => {
-  const shown = currency ?? 'JPY';
-  const figures = spent[shown] ?? { count: 0, spent: 0, share: 0, paid: 0 };
-  return {
-    status: 200,
-    data: {
-      timeZone,
-      currency: shown,
-      tripDates: { start: '2026-10-02', end: '2026-10-12' },
-      window: null,
-      dayCount: 0,
-      tooManyDays: false,
-      spentMinor: figures.spent,
-      expenseCount: figures.count,
-      yourShareMinor: figures.share,
-      youPaidMinor: figures.paid,
-      yourExpenseCount: 1,
-      peopleCount: 2,
-      perPersonPerDayMinor: null,
-      days: [],
-      dailyAverageMinor: null,
-      beforeTrip: null,
-      afterTrip: null,
-      byTag: [],
-      suggestedPayments: [],
-      otherCurrencies: [],
-      hasExpenses: true,
-      currencies: ['INR', 'EUR', 'JPY'].map((code) => ({
-        currency: code,
-        expenseCount: spent[code]!.count,
-        spentMinor: spent[code]!.spent,
-      })),
-    },
-  };
-};
+/** Rows whose totals, Alex's shares and payments match the scenario's stated figures. */
+function tripRows(group: typeof lisbon) {
+  const figures =
+    group._id === lisbonId
+      ? spent
+      : group._id === baliId
+        ? {
+            INR: { count: 1, spent: 120_000, share: 60_000, paid: 120_000 },
+            EUR: { count: 1, spent: 4_000, share: 2_000, paid: 4_000 },
+          }
+        : {};
+  let serial = groups.indexOf(group) * 100;
+  return Object.entries(figures).flatMap(([currency, totals]) => {
+    const part = (total: number, index: number) =>
+      Math.floor(total / totals.count) + (index < total % totals.count ? 1 : 0);
+    return Array.from({ length: totals.count }, (_, index) => {
+      const amount = part(totals.spent, index),
+        share = part(totals.share, index),
+        paid = part(totals.paid, index);
+      return expenseReceipt(
+        group,
+        {
+          description: `${group.name} ${currency} ${index + 1}`,
+          currency,
+          amount: toMajorAmount(amount, currency),
+          date: '2026-10-02',
+          tagId,
+          paidBy: [
+            { user: alex.id, amount: toMajorAmount(paid, currency) },
+            { user: sam.id, amount: toMajorAmount(amount - paid, currency) },
+          ],
+          splitMethod: 'exact',
+          splitBetween: [
+            { user: alex.id, amount: toMajorAmount(share, currency) },
+            { user: sam.id, amount: toMajorAmount(amount - share, currency) },
+          ],
+        },
+        `e${String(++serial).padStart(23, '0')}`,
+        alex.id,
+      );
+    });
+  });
+}
 
 function fixture() {
   const api = fakeSplitbook();
@@ -109,38 +121,86 @@ function fixture() {
     offlineAfterPost: false,
   };
   for (const group of groups) {
-    // Keep the old fixtures: empty Expense pages still carry nonzero all-time totals, and
-    // even Bali receives the Lisbon & Tokyo summary. These are not new default-world rules.
-    const totalsByCurrency =
-      group._id === lisbonId
-        ? Object.entries(spent).map(([currency, row]) => ({
-            currency,
-            totalAmount: row.spent / (currency === 'JPY' ? 1 : 100),
-          }))
-        : group._id === baliId
-          ? [
-              { currency: 'INR', totalAmount: 1200 },
-              { currency: 'EUR', totalAmount: 40 },
-            ]
-          : [{ currency: 'INR', totalAmount: 0 }];
-    const page = emptyPage();
-    api.world.expenses[group._id] = { ...page, summary: { ...page.summary, totalsByCurrency } };
+    const rows = tripRows(group);
+    const currencies = [...new Set(rows.map((row) => row.currency))].map((currency) => {
+      const own = rows.filter((row) => row.currency === currency);
+      return {
+        currency,
+        expenseCount: own.length,
+        spentMinor: own.reduce((sum, row) => sum + row.amountMinor, 0),
+      };
+    });
+    const page = emptyPage(rows);
+    const main = rows.filter((row) => row.currency === group.defaultCurrency);
+    api.world.expenses[group._id] = {
+      ...page,
+      expenses: rows.slice(0, 20),
+      summary: {
+        ...page.summary,
+        ...computeUserOweGetBack(main, alex.id, group.defaultCurrency),
+        byMember: computeMemberBreakdown(
+          main,
+          group.members.map(({ user }) => user._id),
+          group.defaultCurrency,
+        ).map(({ userId, ...figures }) => ({
+          user: group.members.find(({ user }) => user._id === userId)!.user,
+          ...figures,
+        })),
+        totalsByCurrency: currencies.map(({ currency, spentMinor }) => ({
+          currency,
+          totalAmount: toMajorAmount(spentMinor, currency),
+        })),
+      },
+    };
     api.world.balances[group._id] = { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] };
     api.world.tripSummaries[group._id] = Object.fromEntries(
-      ['', 'INR', 'EUR', 'JPY'].map((currency) => [
-        currency,
-        tripSummary(currency || null, decodeURIComponent(PHONE_ZONE)).data,
-      ]),
+      ['', 'INR', 'EUR', 'JPY'].map((chosen) => {
+        const currency =
+          chosen ||
+          [...currencies].sort((a, b) => b.expenseCount - a.expenseCount)[0]?.currency ||
+          group.defaultCurrency;
+        const summary = summarizeTrip({
+          memberId: alex.id,
+          timeZone: decodeURIComponent(PHONE_ZONE),
+          currency,
+          startDate: group.startDate,
+          endDate: group.endDate,
+          expenses: rows.map((row) => ({
+            ...row,
+            id: row._id,
+            tag: { id: row.tagId ?? null, name: row.tag },
+          })),
+        });
+        return [
+          chosen,
+          parseTripSummaryResponse({
+            status: 200,
+            data: {
+              ...summary,
+              hasExpenses: rows.length > 0,
+              currencies,
+              suggestedPayments: summary.suggestedPayments.map((payment) => ({
+                ...payment,
+                from: { id: payment.from, name: payment.from === alex.id ? alex.name : sam.name },
+                to: { id: payment.to, name: payment.to === alex.id ? alex.name : sam.name },
+              })),
+            },
+          }),
+        ];
+      }),
     );
-    // This file's minimal create acknowledgement and connection loss stay explicit. The world
-    // is left alone, as before; only this fixture's request count and connection change.
-    api.reply('POST', `/api/groups/${group._id}/expenses`, () => {
+    api.reply('POST', `/api/groups/${group._id}/expenses`, ({ body }) => {
       server.created++;
       if (server.offlineAfterPost) server.offline = true;
       return json(
         {
           status: 201,
-          data: { _id: `e${String(server.created).padStart(23, '0')}`, group: group._id },
+          data: expenseReceipt(
+            group,
+            body,
+            `e${String(9000 + server.created).padStart(23, '0')}`,
+            alex.id,
+          ),
         },
         201,
       );

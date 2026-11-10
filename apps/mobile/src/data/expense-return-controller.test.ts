@@ -1,3 +1,5 @@
+import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
+import { createExpenseSchema } from '@splitbook/shared/validators/expense';
 import type { createMobileController } from './mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
@@ -111,21 +113,13 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
       user: person(row.user),
     })),
   });
-  const minor = (rows: unknown) =>
-    (rows as { amount: number }[]).map((row) => ({
-      ...row,
-      amountMinor: Math.round(row.amount * 100),
-    }));
   const store = (id: string, body: Record<string, unknown>, groupId: string) =>
     records.set(id, {
       ...body,
-      paidBy: minor(body.paidBy),
-      splitBetween: minor(body.splitBetween),
+      ...normalizeExpenseMoney(createExpenseSchema.parse(body)),
       _id: id,
       group: groupId,
       revision: 0,
-      amountMinor: Math.round(Number(body.amount) * 100),
-      moneyVersion: 1,
       tag: 'Groceries',
       createdAt: iso,
       updatedAt: iso,
@@ -159,10 +153,7 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
       Object.entries(patch).map(([field, value]) => [field, { old: record[field], new: value }]),
     );
     Object.assign(record, patch, {
-      // Money is kept in minor units too, as the ledger keeps it.
-      ...('amount' in patch ? { amountMinor: Math.round(Number(patch.amount) * 100) } : {}),
-      ...('paidBy' in patch ? { paidBy: minor(patch.paidBy) } : {}),
-      ...('splitBetween' in patch ? { splitBetween: minor(patch.splitBetween) } : {}),
+      ...normalizeExpenseMoney(createExpenseSchema.parse({ ...record, ...patch })),
       // A Tag's name follows its identity.
       ...('tagId' in patch
         ? { tag: groups[0].tags.find((row) => row._id === patch.tagId)?.name ?? record.tag }
@@ -191,7 +182,7 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
         loseResponses -= 1;
         throw new Error('The response was lost after the server committed the Expense');
       }
-      return json({ status: 201, data: { _id: created.get(key), group: target._id } }, 201);
+      return json({ status: 201, data: populated(records.get(created.get(key)!)!) }, 201);
     }
     if (route.endsWith('/expenses')) {
       const month = monthOf(url.searchParams.get('dateFrom'));

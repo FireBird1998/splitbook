@@ -54,15 +54,14 @@ function backend() {
       },
     ],
   };
-  // Preserve this file's old server exactly: its create reply is still a Household even when
-  // the form sent a Trip, and the original Group's Expense-list request answers 404. These are fixture defects,
-  // not the shared fake's defaults; correcting them belongs outside this move (#1063).
-  server.reply('GET', `/api/groups/${groupId}/expenses`, () => json({}, 404));
   server.reply('POST', '/api/groups', ({ body }) => {
     const created = {
       ...group,
+      ...body,
+      createdBy: sam.id,
       _id: 'b00000000000000000000009',
       name: String(body!.name),
+      category: String(body!.category),
       members: [
         { user: { _id: sam.id, name: 'Sam', email: sam.email }, role: 'admin', joinedAt: iso },
       ],

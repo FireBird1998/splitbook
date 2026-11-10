@@ -141,11 +141,6 @@ function setup(
   server.world.people.alex = user;
   server.world.groups = [group];
   server.world.balances[groupId] = balances().data;
-  // Preserve this file's fixed receipt: even a different request receives 10 INR / Paid already.
-  // Tests that need a matching or rejected receipt state that reply through intercept.
-  server.reply('POST', `/api/groups/${groupId}/settlements`, () =>
-    json({ status: 201, data: record }, 201),
-  );
   server.reply('*', '/api/notifications/device', () =>
     json({
       data: {

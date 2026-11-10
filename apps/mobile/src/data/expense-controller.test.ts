@@ -1,4 +1,5 @@
 import type { AccountGroupRecordStore } from './account-record-storage';
+import { expenseReceipt } from '../test-utils/expense-receipt';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
@@ -73,9 +74,8 @@ function setup(
   server.world.groups = [group];
   server.world.expenses[groupId] = expensePage();
   server.world.balances[groupId] = { currency: 'INR', balances: [], debts: [], byCurrency: [] };
-  // This suite’s old server answered an unhandled create with an empty read page, not a receipt.
-  server.reply('POST', `/api/groups/${groupId}/expenses`, () =>
-    json({ status: 200, data: expensePage() }),
+  server.reply('POST', `/api/groups/${groupId}/expenses`, ({ body }) =>
+    json({ status: 201, data: expenseReceipt(group, body, expenseId, memberIds[0]) }, 201),
   );
   server.reply('*', '*', ({ url, init }) => intercept?.(url.pathname, init));
   const phone = testPhone(server, {
@@ -4101,7 +4101,7 @@ it.each(['create', 'edit', 'delete'] as const)(
 describe('acknowledging an interrupted shared Draft upload', () => {
   beforeEach(() => vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true'));
   afterEach(() => vi.unstubAllEnvs());
-  function uploadFixture() {
+  function uploadFixture({ malformedExpenseReceipt = false } = {}) {
     const submitted: Array<{ body: string; key: string | null }> = [];
     const rows: Array<{
       id: string;
@@ -4118,6 +4118,9 @@ describe('acknowledging an interrupted shared Draft upload', () => {
     let denyGroup = false;
     const fixture = setup(
       (path, init) => {
+        // Stopped under #1075: this one case depends on a malformed receipt to be Unconfirmed.
+        if (malformedExpenseReceipt && path.endsWith('/expenses') && init.method === 'POST')
+          return Promise.resolve(json({ status: 200, data: expensePage() }));
         if (denyGroup && path.startsWith(`/api/groups/${groupId}`))
           return Promise.resolve(json({ error: 'Group access denied', status: 403 }, 403));
         if (path !== `/api/groups/${groupId}/drafts`) return;
@@ -4274,7 +4277,7 @@ describe('acknowledging an interrupted shared Draft upload', () => {
   });
 
   it('does not treat an unconfirmed ordinary Expense save as a new shared Draft', async () => {
-    const { controller, submitted } = uploadFixture();
+    const { controller, submitted } = uploadFixture({ malformedExpenseReceipt: true });
     try {
       await controller.signIn('alex');
       await controller.openExpense(groupId);

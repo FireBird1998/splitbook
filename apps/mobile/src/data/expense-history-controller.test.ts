@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { describeExpenseEvents } from './expense-history';
 import { testPhone } from '../test-utils/test-phone';
-import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import type { AccountGroupRecordStore } from './account-record-storage';
 
 // Fictional people and Groups only.
@@ -92,11 +92,8 @@ function setup() {
   server.reply('GET', `/api/groups/${groupId}`, () =>
     denied === 'group' ? json({ error: 'Forbidden', status: 403 }, 403) : undefined,
   );
-  // These reads had no answer in this suite’s backend.
-  for (const suffix of ['/expenses', '/balances'])
-    server.reply('GET', `/api/groups/${groupId}${suffix}`, () =>
-      json({ error: 'Unavailable', status: 404 }, 404),
-    );
+  server.world.expenses[groupId] = expensePage(Object.values(records));
+  server.world.balances[groupId] = { byCurrency: [] };
   server.reply('GET', `/api/groups/${groupId}/activity`, async ({ url: address }) => {
     if (historyOffline) throw new Error('Offline');
     const expenseId = address.searchParams.get('expenseId');

@@ -1,3 +1,4 @@
+import { expenseReceipt } from './expense-receipt';
 import { testPhone } from './test-phone';
 import { parseNotificationPreferences } from '../data/notification-controls';
 import { parseToReviewResponse } from '@splitbook/shared/to-review-read';
@@ -368,7 +369,32 @@ describe('fake Splitbook', () => {
   it('builds the common Expense row in the app reader’s wire shape', async () => {
     const server = fakeSplitbook(),
       group = server.world.groups[0]!;
+    group.alternateCurrencies = ['JPY'];
     const row = expenseFixture(group, 'b00000000000000000000009', 'Dinner');
+    const created = expenseReceipt(
+      group,
+      {
+        description: 'Train',
+        amount: 2501,
+        currency: 'JPY',
+        date: '2026-09-28',
+        paidBy: [{ user: group.members[0]!.user._id, amount: 2501 }],
+        splitMethod: 'equal',
+        splitBetween: group.members.slice(0, 2).map(({ user }) => ({ user: user._id })),
+        tag: 'Travel',
+        notes: 'Receipt from the request',
+      },
+      row._id,
+      group.members[0]!.user._id,
+    );
+    expect(parseExpenseRecord({ status: 200, data: created }, group._id, row._id)).toMatchObject({
+      description: 'Train',
+      amountMinor: 2501,
+      currency: 'JPY',
+      notes: 'Receipt from the request',
+      splitBetween: [{ amountMinor: 1251 }, { amountMinor: 1250 }],
+    });
+    expect(server.world.expenseRecords).toEqual({});
     const page = {
       status: 200,
       data: {
