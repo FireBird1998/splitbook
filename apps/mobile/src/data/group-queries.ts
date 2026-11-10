@@ -386,14 +386,15 @@ export function createGroupQueries(session: GroupSession) {
    * A saved copy shows only if its decoder reads it, and a saved Group lists the member. A
    * Month's list is saved page by page, each page under its own path with its own time.
    */
-  const readable = (key: QueryKey, value: unknown) => {
+  const readable = (key: QueryKey, value: unknown, expectedPage?: number) => {
     try {
       if (isTags(key)) return Boolean(tagsOf(value));
       if (isCurrencies(key)) return Boolean(currenciesOf(value));
       if (key[0] === 'group') return lists(groupOf(value));
       if (key[0] === 'balances') return Boolean(balancesOf(value));
       if (isTrip(key)) return Boolean(tripOf(value));
-      return Boolean(pageOf(value, key[3] as string, currencyOf(key[3] as string)));
+      const page = pageOf(value, key[3] as string, currencyOf(key[3] as string));
+      return expectedPage === undefined || page.pagination.page === expectedPage;
     } catch {
       return false;
     }
@@ -405,7 +406,7 @@ export function createGroupQueries(session: GroupSession) {
     (key[0] === 'ledger' && (isList(key) || isTrip(key) || isCurrencies(key)));
   const engine = createSavedReadEngine<GroupRows>(session, {
     path: (key, page) => (page === undefined ? queryKeyPath(key) : pagePath(key, page)),
-    readable, // Deliberately checks saved Expense-list rows without their page number (B8).
+    readable,
     ownsKey,
     rowScope: {
       groupId: (key) => key[3] as string,

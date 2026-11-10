@@ -1120,3 +1120,19 @@ describe('a new Expense offline takes one of the Group’s saved Tags (#638)', (
     }
   });
 });
+
+it('reads the Group Tags again on opening after the phone clock moves back', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-20T09:00:00.000Z'));
+  try {
+    const f = fixture();
+    const { controller, tags } = await readTagsOnline(f);
+    tags.close();
+    clock.mockReturnValue(Date.parse('2026-10-19T09:00:00.000Z'));
+    f.server.tags[0].name = 'Market';
+    const reopened = await openTags(controller);
+    expect(reopened.state().snapshot?.tags.map((tag) => tag.name)).toEqual(['Market', 'Rent']);
+    reopened.close();
+  } finally {
+    clock.mockRestore();
+  }
+});

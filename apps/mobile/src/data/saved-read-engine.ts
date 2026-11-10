@@ -180,6 +180,10 @@ export interface SavedReadView<Scope extends string = never> {
   cancelOnRemove: boolean;
   staleWhenOffline: boolean;
   freshnessSource?: FreshnessSource;
+  /** Connected assistants keeps save failures silent; display views offer an offline notice. */
+  saveFailure?: 'notice' | 'silent';
+  /** Without storage, assistants says not saved; other views keep the transport failure. */
+  noStorage?: 'read-error' | 'unavailable';
 }
 interface Run {
   answered: boolean;
@@ -233,6 +237,8 @@ export function createSavedReadEngine<Scope extends string = never>(
   const forgotten = new Map<string, number>(),
     /** The rows this session saved or restored: removable even by a store that can't list rows. */
     known = new Set<string>();
+  /** Individual row removals also retire a write already under way for that path (#323). */
+  const removedRows = new Map<string, number>();
   /** How many reads of each query answered: Activity never previews after one since its open. */
   const answeredReads = new Map<string, number>();
   const answerOf = (key: QueryKey) => answeredReads.get(hashKey(key)) ?? 0;
@@ -246,10 +252,11 @@ export function createSavedReadEngine<Scope extends string = never>(
   const scopeKey = (groupId: string, scope?: Scope) =>
     scope === undefined ? groupId : `${groupId}:${scope}`;
   /** Every scope reaching the row counts: a ledger removal leaves the Group's own row alone. */
-  const removals = (key: QueryKey) => {
+  const removals = (key: QueryKey, page?: number) => {
     const groupId = groupScope ? groupScope.groupId(key) : view.path(key);
     return (groupScope?.scopes?.(key) ?? [undefined])
       .map((scope) => forgotten.get(scopeKey(groupId, scope)) ?? 0)
+      .concat(removedRows.get(view.path(key, page)) ?? 0)
       .join(':');
   };
   const removed = (groupId: string, scope = groupScope?.defaultScope) => {
@@ -286,7 +293,7 @@ export function createSavedReadEngine<Scope extends string = never>(
       if (!session.current(owner) || !session.owns(lease.accountId)) return;
       if (!owns() || (groupScope && !session.savable?.(key))) return;
       const { accountId } = lease,
-        before = removals(key);
+        before = removals(key, page);
       known.add(path);
       await rows
         .save(accountId, path, {
@@ -298,13 +305,14 @@ export function createSavedReadEngine<Scope extends string = never>(
           value,
         })
         .catch(() => {
+          if (view.saveFailure === 'silent') return;
           const { offline } = session.snapshot();
           if (session.current(owner))
             session.publish({ offline: { ...offline, message: notSavedHere } });
         });
       // Removed while it was being written: it goes too, since `forget` never waits for it. One
       // that can't go is no longer trusted (#323).
-      if (removals(key) !== before)
+      if (removals(key, page) !== before)
         await rows
           .remove(accountId, path)
           .catch(() => session.distrust(accountId, view.rowScope.distrust(key)));
@@ -370,8 +378,10 @@ export function createSavedReadEngine<Scope extends string = never>(
     } catch (error) {
       answered(key, run);
       request.onAnswer?.();
-      if (!(error instanceof RequestError) || !error.networkFailure || !lease || !rows) throw error;
-      const row = obsolete() ? null : await savedRow(lease, path).catch(() => null);
+      if (!(error instanceof RequestError) || !error.networkFailure) throw error;
+      if ((!lease || !rows) && view.noStorage !== 'unavailable') throw error;
+      const row =
+        !lease || !rows || obsolete() ? null : await savedRow(lease, path).catch(() => null);
       // Overtaken by a change, a denial or a Groups list: it is read again, not shown.
       if (obsolete()) throw new Superseded();
       const saved =
@@ -459,6 +469,20 @@ export function createSavedReadEngine<Scope extends string = never>(
         view.readable(key, row.value, page)
         ? copy(row)
         : null;
+    },
+    /**
+     * Queues a row's removal in place of its pending save, checked against the same owner. Its
+     * retirement is immediate so a write already under way must remove its late row too (#323).
+     */
+    removeRow(key: QueryKey, { owner, owns }: { owner: number; owns(): boolean }) {
+      const lease = session.lease(),
+        path = view.path(key);
+      if (!lease || !rows || !session.current(owner) || !owns()) return;
+      removedRows.set(path, (removedRows.get(path) ?? 0) + 1);
+      queue.push(path, async () => {
+        if (!session.current(owner) || !session.owns(lease.accountId) || !owns()) return;
+        await rows.remove(lease.accountId, path).catch(() => undefined);
+      });
     },
     /** A query function's read of one row; `project` and `failure` shape what its query holds. */
     read<T = Envelope>(request: RowRead<T>): Promise<T> {

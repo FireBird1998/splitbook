@@ -1,19 +1,12 @@
-import { CancelledError, type QueryClient } from '@tanstack/query-core';
+import { CancelledError } from '@tanstack/query-core';
 import { z } from 'zod';
 import { assistantGroupsPath, connectedAssistantsPath } from '@splitbook/shared/api-paths';
 import { ASSISTANT_RULES } from '@splitbook/shared/assistant-rule';
 import { assistantGroupCount } from '@splitbook/shared/connected-assistant';
-import {
-  connectedAssistantsKey,
-  type QueryAccount,
-  type QueryKey,
-} from '@splitbook/shared/query-keys';
-import type { AccountGroupRecordStore } from './account-record-storage';
-import { createSavedCopyQueue } from './saved-read-engine';
-import { cachedRead } from './offline-cache';
+import { connectedAssistantsKey, type QueryKey } from '@splitbook/shared/query-keys';
+import { createSavedReadEngine, STALE, type SavedReadPorts } from './saved-read-engine';
 import { queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
-import type { AccountStorageLease } from './types';
 
 /** The member's Connected assistants, as Settings on the web reads them (#615, #620). */
 export const assistantsPath = connectedAssistantsPath();
@@ -120,29 +113,12 @@ function listed({ connections, groups }: Saved): ListedAssistant[] {
 }
 
 /** What the screen needs from the controller that owns it. */
-export interface AssistantsSession {
-  client: QueryClient;
-  /** The signed-in account in this environment; throws `Superseded` when there is none. */
-  account(): QueryAccount;
-  /** The persister's rows; without them nothing is saved or restored. */
-  rows?: AccountGroupRecordStore;
-  generation(): number;
-  current(owner: number): boolean;
-  lease(): AccountStorageLease | null;
-  /** The account lease's own checks, at write time: still this account, with no clean-up. */
-  owns(accountId: string): boolean;
-  /** Sends the read, checking the session first while offline. */
-  read(path: string, owner: number, signal?: AbortSignal): Promise<unknown>;
+export interface AssistantsSession extends SavedReadPorts {
   send(path: string, owner: number, body: unknown): Promise<unknown>;
   /** Splitbook can be reached: a write may be sent. */
   online(): boolean;
-  /** A Saved copy of `key` stands in for a read only when verified after this. */
-  distrusted(key: QueryKey, early: boolean): number;
-  /** This account's Saved copies in these scopes couldn't be removed: never shown again. */
-  distrust(accountId: string, scopes: string[]): void;
   state(): AssistantsState;
-  publish(next: AssistantsState): void;
-  now(): number;
+  show(next: AssistantsState): void;
 }
 
 /**
@@ -152,43 +128,21 @@ export interface AssistantsSession {
  * written on the saved-copy queue, checked at write time, and cleared with the account's others.
  */
 export function createAssistants(session: AssistantsSession) {
-  const queue = createSavedCopyQueue();
-  const update = (next: Partial<AssistantsState>) =>
-    session.publish({ ...session.state(), ...next });
+  const engine = createSavedReadEngine(session, {
+    path: () => assistantsPath,
+    readable: (_key, value) => savedSchema.safeParse(value).success,
+    ownsKey: (key) => key[0] === 'assistants',
+    rowScope: { kind: 'account', distrust: (key) => [key[0]] },
+    refusal: 'forbidden-only',
+    preview: 'same-run-unanswered',
+    automaticRefetch: false,
+    cancelOnRemove: true,
+    staleWhenOffline: false,
+    saveFailure: 'silent',
+    noStorage: 'unavailable',
+  });
+  const update = (next: Partial<AssistantsState>) => session.show({ ...session.state(), ...next });
 
-  /** This phone's Saved copy, unless one it couldn't remove makes it untrusted. */
-  const savedRow = async (lease: AccountStorageLease | null, key: QueryKey) => {
-    const { rows } = session;
-    if (!lease || !rows) return null;
-    const row = cachedRead(
-      await lease.write(() => rows.load(lease.accountId, assistantsPath)),
-      lease.accountId,
-      assistantsPath,
-      session.now(),
-    );
-    const value = row && savedSchema.safeParse(row.value);
-    return row && value?.success && row.refreshedAt > session.distrusted(key, false)
-      ? { refreshedAt: row.refreshedAt, value: value.data }
-      : null;
-  };
-  /**
-   * A write of the Saved copy on the saved-copy queue, where the latest for it wins. The session,
-   * the account and the read's own query (`owns`) are checked at write time, so nothing lands
-   * after sign-out, an account change or a Disconnect that made the read obsolete.
-   */
-  const queueWrite = (
-    lease: AccountStorageLease | null,
-    owner: number,
-    owns: () => boolean,
-    write: (rows: AccountGroupRecordStore, accountId: string) => Promise<void>,
-  ) => {
-    const { rows } = session;
-    if (!lease || !rows) return;
-    queue.push(assistantsPath, async () => {
-      if (!session.current(owner) || !session.owns(lease.accountId) || !owns()) return;
-      await write(rows, lease.accountId).catch(() => undefined);
-    });
-  };
   const show = (answer: Answer) => {
     const assistants = listed(answer.value),
       { confirming } = session.state();
@@ -225,47 +179,34 @@ export function createAssistants(session: AssistantsSession) {
    * copy answers with its own time; with none, it says so.
    */
   const fetchAssistants = async (key: QueryKey, owner: number, signal: AbortSignal) => {
-    const lease = session.lease(),
-      owns = queryOwner(session.client, key);
-    let value: Saved;
-    try {
-      const connections = await readConnections(owner, signal);
-      let groups: Saved['groups'] = null;
-      try {
-        groups = groupsSchema.parse(await session.read(assistantGroupsPath(), owner, signal));
-      } catch (error) {
-        // Without the Groups, the list still shows, without its counts.
-        if (error instanceof Superseded || signal.aborted || !session.current(owner)) throw error;
-      }
-      value = { connections, groups };
-    } catch (error) {
-      if (!(error instanceof RequestError) || !error.networkFailure) throw error;
-      const row = await savedRow(lease, key).catch(() => null);
-      if (!session.current(owner) || !owns()) throw new Superseded();
-      if (!row)
-        throw new RequestError(
-          notSavedAssistantsMessage,
-          0,
-          'OFFLINE_UNAVAILABLE',
-          false,
-          null,
-          'network',
-        );
-      return { source: 'saved', ...row } satisfies Answer;
-    }
-    if (!session.current(owner) || !owns()) throw new Superseded();
-    const refreshedAt = session.now();
-    queueWrite(lease, owner, owns, (rows, accountId) =>
-      rows.save(accountId, assistantsPath, {
-        version: 1,
-        accountId,
-        path: assistantsPath,
-        groupId: null,
-        refreshedAt,
-        value,
-      }),
-    );
-    return { source: 'network', refreshedAt, value } satisfies Answer;
+    const owns = queryOwner(session.client, key);
+    return engine.read({
+      key,
+      accept: (value) => {
+        savedSchema.parse(value);
+      },
+      send: async () => {
+        const connections = await readConnections(owner, signal);
+        let groups: Saved['groups'] = null;
+        try {
+          groups = groupsSchema.parse(await session.read(assistantGroupsPath(), owner, signal));
+        } catch (error) {
+          // Without the Groups, the list still shows, without its counts.
+          if (error instanceof Superseded || signal.aborted || !session.current(owner)) throw error;
+        }
+        return { connections, groups };
+      },
+      project: (answer): Answer => {
+        const projected = {
+          ...answer,
+          value: savedSchema.parse(answer.value),
+          // Connections have always stamped their combined copy on the session clock (#622).
+          refreshedAt: answer.source === 'network' ? session.now() : answer.refreshedAt,
+        };
+        if (answer.source === 'network') engine.save(key, { owner, owns }, projected);
+        return projected;
+      },
+    });
   };
 
   /**
@@ -285,7 +226,7 @@ export function createAssistants(session: AssistantsSession) {
       const answer = await session.client.fetchQuery({
         queryKey: key,
         queryFn: ({ signal }) => fetchAssistants(key, owner, signal),
-        staleTime: 0,
+        staleTime: STALE,
         retry: false,
       });
       if (session.current(owner)) show(answer);
@@ -295,10 +236,7 @@ export function createAssistants(session: AssistantsSession) {
       if (!session.current(owner)) return;
       if (error instanceof RequestError && error.status === 404) {
         update({ ...emptyAssistants(), available: false, status: 'ready' });
-        const lease = session.lease();
-        queueWrite(lease, owner, queryOwner(session.client, key), (rows, accountId) =>
-          rows.remove(accountId, assistantsPath),
-        );
+        engine.removeRow(key, { owner, owns: queryOwner(session.client, key) });
         return;
       }
       // Nothing of the list shows beside "not saved on this phone", not even what was read before.
@@ -336,11 +274,11 @@ export function createAssistants(session: AssistantsSession) {
       { client, rows } = session;
     await client.cancelQueries({ queryKey: key, exact: true });
     client.removeQueries({ queryKey: key, exact: true });
-    queue.drop(assistantsPath);
-    await queue.idle();
+    engine.drop([assistantsPath]);
+    await engine.idle();
     if (!lease || !rows || !session.current(owner)) return;
-    await rows
-      .remove(lease.accountId, assistantsPath)
+    await engine
+      .forgetRows(lease.accountId, [assistantsPath])
       .catch(() => session.distrust(lease.accountId, [key[0]]));
   };
 
@@ -379,8 +317,8 @@ export function createAssistants(session: AssistantsSession) {
     disconnect,
     dismiss: () => update({ snackbar: null }),
     /** Settles once no Saved copy is being written. */
-    idle: () => queue.idle(),
+    idle: () => engine.idle(),
     /** The session ended: nothing waiting is written. */
-    reset: () => queue.cancel(),
+    reset: () => engine.reset(),
   };
 }

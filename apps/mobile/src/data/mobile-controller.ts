@@ -168,7 +168,7 @@ import {
 import { parseInvitationLink, parseToReviewLink } from './invitation-links';
 import { parseGroupBalances } from './financial-dto';
 import { createHomeQueries, draftSummaries, emptyHome } from './home-queries';
-import { savedReadFreshness, type Envelope } from './saved-read-engine';
+import { savedReadFreshness, STALE, type Envelope } from './saved-read-engine';
 import { createGroupQueries, emptyExpenses, savedGroupShown, type Step } from './group-queries';
 import { createExpenseQueries } from './expense-queries';
 import { createActivityQueries } from './activity-queries';
@@ -1307,21 +1307,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   });
   /** Account → Connected assistants (#622), with its Saved copy among the account's others. */
   const assistantsData = createAssistants({
-    client: queryClient,
-    account: () => account(),
-    rows: savedCopies.rows,
-    generation: () => generation,
-    current,
-    lease: () => accountStorage(),
-    owns: (accountId) => accountStorage()?.accountId === accountId,
-    read: (path, owner, signal) => session.read(path, owner, signal),
-    distrusted: session.distrusted,
-    distrust: session.distrust,
+    ...session,
+    freshness,
+    offline: () => offlineSession,
     send: (path, owner, body) => request(path, owner, { method: 'POST', body }),
     online: () => !snapshot.offline.active && onlineManager.isOnline(),
     state: () => snapshot.assistants,
-    publish: (assistants) => publish({ ...snapshot, assistants }),
-    now,
+    show: (assistants) => publish({ ...snapshot, assistants }),
   });
   /** A Group's own view: the Group, its Expenses and its Balances (ADR 0006, M1-1, #219). */
   const groupQueries = createGroupQueries({
@@ -7795,7 +7787,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         );
       }),
       // A saved copy is never fresh, and neither is a read of them: each open reads them again.
-      staleTime: 0,
+      staleTime: STALE,
       retry: false,
       networkMode: 'always' as const,
       refetchOnReconnect: 'always' as const,
