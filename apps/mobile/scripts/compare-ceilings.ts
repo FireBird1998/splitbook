@@ -14,7 +14,10 @@ void runCeilingsCompare(process.argv.slice(2), {
   if (code === 0) {
     try {
       const args = process.argv.slice(2);
-      console.log(checkTestPhoneCeiling(process.cwd(), args[args.indexOf('--base') + 1]!));
+      const base =
+        args.find((arg) => arg.startsWith('--base='))?.slice('--base='.length) ??
+        args[args.indexOf('--base') + 1]!;
+      console.log(checkTestPhoneCeiling(process.cwd(), base));
     } catch (error) {
       console.error((error as Error).message);
       code = 1;

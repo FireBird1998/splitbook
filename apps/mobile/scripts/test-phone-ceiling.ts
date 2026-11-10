@@ -70,6 +70,7 @@ export function checkTestPhoneCeiling(cwd: string, base: string) {
     }
   };
   walk('src');
+  walk('scripts');
   const limit = JSON.parse(readFileSync(join(cwd, testPhoneCeilingFile), 'utf8'))
     .directControllerTestFiles as number;
   const git = (...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
