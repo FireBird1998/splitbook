@@ -152,14 +152,7 @@ function fixture() {
   backend.reply('GET', `${groupPath}/activity`, ({ url }) => {
     const page = Number(url.searchParams.get('page'));
     const events = url.searchParams.get('expenseId') === otherId ? [otherAdded] : server.events;
-    // The old fixture reports one total page even for an empty or later page.
-    return json({
-      status: 200,
-      data: {
-        ...activityPage(events, page),
-        pagination: { page, limit: 20, total: events.length, totalPages: 1 },
-      },
-    });
+    return json({ status: 200, data: activityPage(events, page) });
   });
   backend.reply('GET', `${groupPath}/expenses`, () =>
     json({ status: 200, data: expensePage([server.record, other]) }),
