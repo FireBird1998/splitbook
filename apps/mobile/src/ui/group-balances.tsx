@@ -2,6 +2,9 @@ import { Fragment, useState, type ReactNode } from 'react';
 import { Text, View, useWindowDimensions } from 'react-native';
 import { balanceCurrencies, openingBalanceCurrency } from '@splitbook/shared/balance-currencies';
 import { formatCurrency } from '@splitbook/shared/currency';
+import { minorMoney } from '@splitbook/shared/cross-currency-settlement';
+import { settleAllOffers, settleAllWords, type SettleAllOffer } from '@splitbook/shared/settle-all';
+import { paymentBalances } from '../data/payment-balances';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
 import { recordNeedsConnection, type PendingPayment } from '../data/settlement';
@@ -43,7 +46,7 @@ import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
 import { CurrencyTabs } from './currency-tabs';
 import { fonts, useTheme } from './theme';
-import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 /** Record's reason offline, here and on the Record payment sheet (#728). */
 export { recordNeedsConnection };
@@ -69,14 +72,10 @@ type SettleUpView = 'suggested' | 'before';
 const fewerPayments = (payments: number, debts: number) =>
   `${counted(payments, 'payment')} ${payments === 1 ? 'settles' : 'settle'} the same ${counted(debts, 'debt')}. Everyone ends settled up either way.`;
 
-/** "₹1,480.00 and €20.00", or "₹1,480.00, €20.00 and ¥8,400". */
-const andList = (words: string[]) =>
-  words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words.at(-1)}` : (words[0] ?? '');
-
 /** "€54.83 and ¥2,200", each amount in the money face, as every other amount is (#868). */
-function MoneyList({ amounts }: { amounts: string[] }) {
+function MoneyList({ amounts, label }: { amounts: string[]; label: string }) {
   return (
-    <CompactText variant="caption" tone="secondary" accessibilityLabel={andList(amounts)}>
+    <CompactText variant="caption" tone="secondary" accessibilityLabel={label}>
       {amounts.map((amount, index) => (
         <Fragment key={index}>
           {index === 0 ? '' : index === amounts.length - 1 ? ' and ' : ', '}
@@ -87,38 +86,6 @@ function MoneyList({ amounts }: { amounts: string[] }) {
   );
 }
 
-/**
- * Settle up (#734): each person the member owes, or who owes the member, in two currencies or
- * more, with those Debts in `currencies`' order. Each could be recorded on its own tab; one
- * payment can clear them all.
- */
-export function settleUpOffers(
-  balances: GroupCurrencyBalance[],
-  group: MobileGroup,
-  currentUserId: string,
-  currencies: string[],
-) {
-  const pairs = new Map<
-    string,
-    { paidBy: string; paidTo: string; other: string; youPay: boolean; debts: string[] }
-  >();
-  for (const currency of currencies)
-    for (const payment of recordablePayments(balances, group, currentUserId, currency)) {
-      const key = `${payment.paidBy}:${payment.paidTo}`;
-      const youPay = payment.paidBy === currentUserId;
-      const pair = pairs.get(key) ?? {
-        paidBy: payment.paidBy,
-        paidTo: payment.paidTo,
-        other: youPay ? payment.recipient : payment.payer,
-        youPay,
-        debts: [],
-      };
-      pair.debts.push(formatCurrency(payment.amount, currency));
-      pairs.set(key, pair);
-    }
-  return [...pairs.values()].filter(({ debts }) => debts.length > 1);
-}
-
 /** "You owe Sam Chen in 2 currencies", and Settle both (board "Settle both currencies at once"). */
 function SettleUpOffer({
   offer,
@@ -127,15 +94,14 @@ function SettleUpOffer({
   unavailable,
   onSettleAll,
 }: {
-  offer: ReturnType<typeof settleUpOffers>[number];
+  offer: SettleAllOffer;
   offline: boolean;
   locked: boolean;
   unavailable: string | null;
   onSettleAll: (paidBy: string, paidTo: string) => void;
 }) {
   const column = useTextColumn();
-  const count = offer.debts.length;
-  const action = count === 2 ? 'Settle both' : 'Settle all';
+  const words = settleAllWords(offer);
   return (
     <Card padded>
       <View
@@ -148,19 +114,20 @@ function SettleUpOffer({
       >
         <IconTile icon="swap-horizontal-outline" />
         <View style={{ flex: 1, minWidth: column ?? 0, gap: 2 }}>
-          <CompactText weight="semibold">
-            {offer.youPay
-              ? `You owe ${offer.other} in ${count}${NO_BREAK_SPACE}currencies`
-              : `${offer.other} owes you in ${count}${NO_BREAK_SPACE}currencies`}
-          </CompactText>
-          <MoneyList amounts={offer.debts} />
+          <CompactText weight="semibold">{words.lead}</CompactText>
+          <MoneyList
+            amounts={offer.debts.map(({ amountMinor, currency }) =>
+              minorMoney(amountMinor, currency),
+            )}
+            label={words.amounts}
+          />
         </View>
         <Trailing column={column}>
           <CompactButton
-            label={action}
+            label={words.action}
             variant="tonal"
             dense
-            accessibilityLabel={`${action} with ${offer.other}`}
+            accessibilityLabel={`${words.action} with ${offer.other}`}
             disabled={offline || locked || unavailable !== null}
             hint={
               offline
@@ -1028,7 +995,12 @@ export function GroupBalancesView({
         />
       ) : null}
       {onSettleAll
-        ? settleUpOffers(balances.data, group, currentUserId, currencies).map((offer) => (
+        ? settleAllOffers(
+            paymentBalances(balances.data),
+            currentUserId,
+            currencies,
+            group.members.map(({ user }) => user.id),
+          ).map((offer) => (
             <SettleUpOffer
               key={`${offer.paidBy}:${offer.paidTo}`}
               offer={offer}

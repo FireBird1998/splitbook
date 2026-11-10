@@ -1131,6 +1131,43 @@ describe('Balances, one currency at a time (#725)', () => {
       return { root, onSettleAll };
     };
 
+    it.each([
+      [false, '₹1,480.00 and €20.00'],
+      [true, '₹1,480.00, €20.00 and ¥8,400'],
+    ] as const)(
+      'keeps the offer’s visible amounts identical to its spoken list (three: %s)',
+      (three, expected) => {
+        const data = buckets().map((bucket) =>
+          three && bucket.currency === 'JPY'
+            ? {
+                ...bucket,
+                debts: bucket.debts.map(({ from, to, amount }) => ({ from: to, to: from, amount })),
+              }
+            : bucket,
+        );
+        const { root } = settleAll(data);
+        const [amounts] = labelled(root, expected);
+        expect(amounts).toBeDefined();
+        expect(wordsOf(amounts!)).toBe(expected);
+      },
+    );
+
+    it('already offers a Debt in a currency the Group no longer lists, after its listed currencies', () => {
+      const { root, onSettleAll } = settleAll(buckets(), {
+        group: { ...trip(), alternateCurrencies: [] },
+      });
+      expect(text(root)).toContain('You owe Sam Chen in 2\u00a0currencies');
+      expect(labelled(root, '₹1,480.00 and €20.00')).toHaveLength(1);
+      act(() => labelled(root, 'Settle both with Sam Chen')[0]!.props.onPress());
+      expect(onSettleAll).toHaveBeenCalledWith(you, sam);
+    });
+
+    it('does not count a Debt in an unsupported currency toward a Settle up offer (#1051)', () => {
+      const { root } = settleAll([tripInr(), { ...eur, currency: 'DEM' }]);
+      expect(labelled(root, 'Settle both with Sam Chen')).toHaveLength(0);
+      expect(text(root)).not.toContain('You owe Sam Chen in 2\u00a0currencies');
+    });
+
     it('offers to settle both with Sam in one payment, on every currency’s tab', () => {
       const { root, onSettleAll } = settleAll(buckets());
       const shown = text(root);
