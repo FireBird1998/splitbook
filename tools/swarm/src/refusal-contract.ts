@@ -149,7 +149,16 @@ export function checkRefusalSources(
       }
   }
   // Resolve the value behind a declaration, including a destructured object property.
-  function initializers(declaration: ts.Declaration): ts.Expression[] {
+  function initializers(
+    declaration: ts.Declaration,
+    seen = new Set<ts.Declaration>(),
+  ): ts.Expression[] {
+    if (seen.has(declaration)) return [];
+    const next = new Set(seen).add(declaration);
+    if (ts.isShorthandPropertyAssignment(declaration)) {
+      const value = checker.getShorthandAssignmentValueSymbol(declaration);
+      return (value?.declarations ?? []).flatMap((item) => initializers(item, next));
+    }
     if (
       (ts.isVariableDeclaration(declaration) ||
         ts.isEnumMember(declaration) ||
@@ -167,7 +176,7 @@ export function checkRefusalSources(
           checker.getTypeAtLocation(binding.initializer),
           key,
         );
-        return (property?.declarations ?? []).flatMap(initializers);
+        return (property?.declarations ?? []).flatMap((item) => initializers(item, next));
       }
     }
     return [];
@@ -241,6 +250,8 @@ export function checkRefusalSources(
   }
   function nativeError(node: ts.Node, seen = new Set<ts.Symbol>()): boolean {
     node = expression(node);
+    if (ts.isConditionalExpression(node))
+      return nativeError(node.whenTrue, seen) || nativeError(node.whenFalse, seen);
     if (ts.isIdentifier(node) && node.text === 'Error' && !symbol(node)) return true;
     if (
       ts.isPropertyAccessExpression(node) &&
@@ -257,7 +268,9 @@ export function checkRefusalSources(
       [...(assignments.get(found) ?? []), ...(parameterInputs.get(found) ?? [])].some((input) =>
         nativeError(input, next),
       ) ||
-      (found.declarations ?? []).flatMap(initializers).some((input) => nativeError(input, next))
+      (found.declarations ?? [])
+        .flatMap((item) => initializers(item))
+        .some((input) => nativeError(input, next))
     );
   }
   function origin(node: ts.Node, kind: 'error' | 'message', seen = new Set<ts.Symbol>()): boolean {
@@ -279,8 +292,7 @@ export function checkRefusalSources(
     const next = new Set(seen).add(found);
     const inputs = [...(assignments.get(found) ?? [])];
     for (const declaration of found.declarations ?? []) {
-      if (ts.isVariableDeclaration(declaration) && declaration.initializer)
-        inputs.push(declaration.initializer);
+      inputs.push(...initializers(declaration));
       if (
         kind === 'message' &&
         ts.isBindingElement(declaration) &&

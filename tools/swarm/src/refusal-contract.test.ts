@@ -145,3 +145,27 @@ it('enforces the contract inside the central answering function too', () => {
     ]),
   ).toHaveLength(1);
 });
+it.each([
+  "const code = 'SOME_CODE'; const codes = {code}; throw new Error(codes.code);",
+  "const Fault = Error; const constructors = {Fault}; throw new constructors.Fault('SOME_CODE');",
+])('finds shorthand property aliases (%s)', (source) => {
+  expect(checkRefusalSources([file(source)])).toHaveLength(1);
+});
+it('finds a conditional constructor alias', () => {
+  expect(
+    checkRefusalSources([
+      file("const Fault = flag ? Error : Error; throw new Fault('SOME_CODE');"),
+    ]),
+  ).toHaveLength(1);
+});
+it.each([
+  "const box = {err: cause}; if (box.err.message === 'SOME_CODE') return;",
+  "const {err} = {err: cause}; if (err.message === 'SOME_CODE') return;",
+  "const box = {text: cause.message}; if (box.text === 'SOME_CODE') return;",
+])('follows a caught alias through a property (%s)', (body) => {
+  expect(
+    checkRefusalSources([
+      file(`try {} catch (cause) { ${body} }`, 'apps/web/src/app/api/example/route.ts'),
+    ]),
+  ).toHaveLength(1);
+});
