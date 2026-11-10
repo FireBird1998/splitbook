@@ -574,4 +574,11 @@ describe('fake Splitbook', () => {
     ).toEqual(['d00000000000000000000021']);
     expect(server.unanswered).toEqual([]);
   });
+  it('distinguishes offline attempts from requests sent while connected', async () => {
+    const server=fakeSplitbook();server.online=false;
+    await expect(server.fetch('http://local/probe',{})).rejects.toThrow('Network request failed');
+    server.online=true;await server.fetch('http://local/probe',{});
+    expect(server.requests.map(r=>r.online)).toEqual([false,true]);
+  });
+
 });
