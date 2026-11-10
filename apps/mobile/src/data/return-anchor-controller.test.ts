@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
 
 // #225: fictional ledger, public commands, displayed rows and requests only.
@@ -110,7 +109,6 @@ function fixture() {
   });
   const phone = testPhone(backend, {
     now: Date.parse(iso),
-    purge: [],
     parts: {
       savedQueries: undefined,
       offlineIdentity: undefined,
@@ -121,20 +119,9 @@ function fixture() {
       groupCreations: undefined,
       netInfo: undefined,
       newSubmissionKey: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-      },
     },
   });
   const drafts = phone.stores.expenseDrafts;
-  delete (drafts as AccountGroupRecordStore).list;
-  delete (drafts as AccountGroupRecordStore).keys;
-  // The old Draft adapter was deliberately write-only; this file observes each save, not reload.
-  drafts.load = async () => null;
-  drafts.remove = async () => {};
-  drafts.clear = async () => {};
   const save = drafts.save;
   drafts.save = (account, id, value) => {
     stored.push(value);
