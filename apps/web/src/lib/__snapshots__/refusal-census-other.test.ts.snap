@@ -40,8 +40,8 @@ exports[`records dispatch authorization, invalid requests and a failed pass at H
   },
   {
     "answer": {
-      "body": "{"error":"Invalid request","status":400}",
-      "hasCode": false,
+      "body": "{"error":"Invalid request","status":400,"code":"VALIDATION_ERROR"}",
+      "hasCode": true,
       "status": 400,
     },
     "state": "unexpected query",

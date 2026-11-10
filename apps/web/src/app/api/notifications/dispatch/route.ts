@@ -16,7 +16,10 @@ export async function POST(request: Request) {
   )
     return unauthorized();
   if (new URL(request.url).search || (await request.text()).length)
-    return NextResponse.json({ error: 'Invalid request', status: 400 }, { status: 400 });
+    return NextResponse.json(
+      { error: 'Invalid request', status: 400, code: 'VALIDATION_ERROR' },
+      { status: 400 },
+    );
   try {
     return NextResponse.json(
       { data: await dispatchExpenseAlerts(), status: 200 },
