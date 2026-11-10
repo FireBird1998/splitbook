@@ -9,6 +9,10 @@ import {
   notificationOpeningTransitions,
 } from '../data/flow-transitions';
 
+// app.test.tsx stays outside this monitor (#1075): permission resume produces
+// notifications blocked ↔ ready, which production's flow-transitions.ts does not declare.
+// Its hand-made Banner snapshots also jump notificationOpening idle → opening/error.
+// Keep the real transition finding visible; do not relax the shared tables here.
 const tables = {
   expense: expenseTransitions,
   settlement: settlementTransitions,
@@ -30,6 +34,7 @@ export function monitorFlows(controller: MobileController) {
     'saveExpense',
     'keepExpenseAsSharedDraft',
     'deleteExpense',
+    'deleteExpenseAndClose',
     'recordSettlement',
     'createGroup',
     'leaveGroup',

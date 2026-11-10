@@ -331,8 +331,6 @@ function fixture(
       },
     },
     {
-      // The close sheet's Delete calls deleteExpenseAndClose, which the existing monitor does not wrap.
-      monitor: false,
       origin: 'http://localhost:4408',
       now: Date.parse(iso),
       newSubmissionKey: () => `fictional-review-${++operation}`,

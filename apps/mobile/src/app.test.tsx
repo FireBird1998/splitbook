@@ -205,7 +205,7 @@ function backend() {
     return undefined;
   });
   const phone = testPhone(server, {
-    // This screen suite also publishes hand-made notification states; report its undeclared transitions.
+    // See flow-monitor.ts: real permission transitions are missing from the production table.
     monitor: false,
     now: new Date(2026, 8, 27, 12).getTime(),
     newSubmissionKey: () => device.submissionKey,
