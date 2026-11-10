@@ -11,7 +11,6 @@ import type {
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
-import type { AccountGroupRecordStore } from '../data/account-record-storage';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import { setWindow, touchAlong } from '../test-utils/native';
@@ -336,22 +335,13 @@ function fixture(
       monitor: false,
       origin: 'http://localhost:4408',
       now: Date.parse(iso),
-      recordSeparator: ':',
-      draftRequestSeparator: ':',
       newSubmissionKey: () => `fictional-review-${++operation}`,
-      purge: ['expenseDrafts', 'draftRequests'],
       parts: {
         pendingInvitation: undefined,
         settlementAttempts: undefined,
         tagRequests: undefined,
         groupCreations: undefined,
         netInfo: undefined,
-        accountLocal: {
-          financialCleanup: undefined,
-          untrustedCopies: undefined,
-          signOutRecord: undefined,
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        },
       },
     },
   );
@@ -362,7 +352,6 @@ function fixture(
   const requests = Object.assign(phone.stores.draftRequests, {
     values: phone.stores.draftRequests.records,
   });
-  for (const store of [drafts, requests]) delete (store as AccountGroupRecordStore).keys;
   const makeController = () => {
     const controller = phone.open();
     controllers.push(controller);
@@ -838,13 +827,13 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
     const f = fixture({ empty: true });
     await signIn(f);
     await enter(f);
-    const stored = structuredClone(f.drafts.values.get(`${user.id}:${groupId}`)) as Record<
+    const stored = structuredClone(f.drafts.values.get(`${user.id}${groupId}`)) as Record<
       string,
       unknown
     >;
     delete stored.blank;
-    f.drafts.values.set(`${user.id}:${groupId}`, stored);
-    f.drafts.values.set(`${user.id}:${otherGroupId}`, { ...stored, groupId: otherGroupId });
+    f.drafts.values.set(`${user.id}${groupId}`, stored);
+    f.drafts.values.set(`${user.id}${otherGroupId}`, { ...stored, groupId: otherGroupId });
     const before = structuredClone(f.drafts.values);
     f.controller.dispose();
     const restarted = f.restart();
