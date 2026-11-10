@@ -70,7 +70,7 @@ The backend's own scripts keep their rules: they refuse root and `apps/web` `.en
 | Each push to a pull request, and each push to `main` or `pilot/tanstack-reads` | **PR checks**                    |
 | Nightly at 04:17 UTC, a manual run, and a pull request labelled **`full-ci`**  | **PR checks** and the full suite |
 
-- **PR checks** (`pr-checks`) is one job that installs once, then runs the format check, lint, typecheck, the design-system style policy (`pnpm web check:design-system`), the workspace unit tests in UTC, the web integration suite against real Mongo (#469), every mobile HTTP verifier (below) and, last, on a pull request, the ceilings ratchet (below). That is the gate without its install check, plus the style policy and the web integration suite. **The gate never runs the integration suite** (see [the gate](#pnpm-swarm-gate)), so a branch can pass the gate and fail PR checks: run `pnpm web test:integration` yourself ([docs/testing.md](../../docs/testing.md#running-it)) when a change touches the database, the routes or money. PR checks is the one check branch protection requires, so its name, `PR checks`, must not change.
+- **PR checks** (`pr-checks`) is one job that installs once, then runs the format check, lint, typecheck, the refusal contract (`pnpm check:refusals`), the design-system style policy (`pnpm web check:design-system`), the workspace unit tests in UTC, the web integration suite against real Mongo (#469), every mobile HTTP verifier (below) and, last, on a pull request, the ceilings ratchet (below). That is the gate without its install check, plus the style policy and the web integration suite. **The gate never runs the integration suite** (see [the gate](#pnpm-swarm-gate)), so a branch can pass the gate and fail PR checks: run `pnpm web test:integration` yourself ([docs/testing.md](../../docs/testing.md#running-it)) when a change touches the database, the routes or money. PR checks is the one check branch protection requires, so its name, `PR checks`, must not change.
 - **The full suite** adds `verify` (the unit and integration tests again, the Google sign-in recovery suite and the build), `expense-access` (the authenticated expense-access suite), `journeys` (the browser journeys, one job per Playwright project, side by side, each on a freshly seeded database), `playwright` (the Google sign-in journeys and the visual comparisons) and the unit tests in three more time zones.
 - **A docs-only pull request,** one that changes only Markdown, `docs/` or `.claude/` files, passes PR checks after the format check alone. Prettier formats Markdown and the `docs/` mockups, so that check still runs.
 - **A push to `main` runs PR checks only,** on the merged result, since branches needn't be up to date with `main` to merge. The full suite never runs on a push: a merge reaches it in that night's run.
@@ -157,6 +157,7 @@ Runs these steps in the worktree, in order, and prints one verdict:
 | ----------------------------- | ------------------------------------------------------------- | ------------- |
 | install check                 | as `pnpm swarm check`; on failure every other step is skipped | none          |
 | lint, typecheck, format check | `pnpm lint`, `pnpm typecheck`, `pnpm format:check`            | 15, 15, 5 min |
+| refusal contract              | `pnpm check:refusals`                                         | 2 min         |
 | unit tests                    | `pnpm --recursive --workspace-concurrency=1 test:unit`        | 20 min        |
 | ceilings                      | `pnpm --dir apps/mobile run ceilings:compare --base <base>`   | 5 min         |
 | backend                       | a new backend for this run, serving `next dev`                | 3 min         |
@@ -236,3 +237,18 @@ pnpm --filter @splitbook/swarm test
 ```
 
 The unit tests drive each command's public function (`up`, `down`, `gate`, `checkInstall`) with fake processes, Mongo and network, and real fixture directories. `src/live.test.ts` runs `up` and `gate` on real processes, with stand-in backend scripts that never become ready, to show that a timeout or an interruption leaves no process behind; runs `up --server production` and then `down` with a stand-in that retitles its server as `next start` does, from another time zone and after its `start.mjs` was killed, to show that nothing is left and the port is free; and tests the live services' guards: the drop check, `ps` start times (the same in any time zone and locale) and process groups, and Node's blocked ports. No test needs a Mongo server.
+
+### Refusal source contract
+
+`pnpm check:refusals` parses production source under `apps/web/src` and
+`packages/shared/src`. Plain `Error` code messages must use `new Refusal(code)`.
+Caught-message dispatch in HTTP routes and their imported adapters must use
+`serverError(cause)`, with typed `Refusal.code` available for a family's policy.
+Domain services, models and MCP protocol result policies keep their own boundaries.
+The central answering function retains the compatibility dispatch while the
+migration closes. Tests and fixtures are excluded.
+
+The twelve retained sites and their reasons live in
+`src/refusal-exceptions.ts`. Each exception matches its file, enclosing function,
+code and guard condition once. An unused or moved exception fails the check.
+The gate, PR checks and the full CI verification job run the same root command.

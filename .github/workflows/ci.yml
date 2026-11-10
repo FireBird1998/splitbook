@@ -163,6 +163,10 @@ jobs:
         working-directory: .
         run: pnpm typecheck
 
+      - name: Refusal contract
+        working-directory: .
+        run: pnpm check:refusals
+
       - name: Adopted design-system style policy
         run: pnpm check:design-system
 
@@ -446,6 +450,10 @@ jobs:
       - name: Typecheck (workspace)
         if: steps.changes.outputs.docs_only != 'true'
         run: pnpm typecheck
+
+      - name: Refusal contract
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm check:refusals
 
       - name: Adopted design-system style policy
         if: steps.changes.outputs.docs_only != 'true'
