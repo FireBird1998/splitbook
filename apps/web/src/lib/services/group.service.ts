@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
 import {
   findGroupDeletion,
@@ -89,50 +90,6 @@ type DepartureBlock =
   | { code: 'OPEN_BALANCE'; balances: OpenBalances }
   | { code: 'RECURRING_EXPENSE_PROBLEM'; recurringExpenses: BrokenRecurringExpenses };
 
-/**
- * Why a member can't leave yet: an open balance, a recurring Expense in its problem state that
- * still includes them (#257), or they are the last admin.
- */
-export class LeaveBlockedError extends Error {
-  constructor(
-    readonly code: DepartureBlock['code'] | 'LAST_ADMIN',
-    /** For OPEN_BALANCE: the member's non-zero balance in each currency, in minor units. */
-    readonly balances: OpenBalances = [],
-    /** For RECURRING_EXPENSE_PROBLEM: the recurring Expenses that still include them. */
-    readonly recurringExpenses: BrokenRecurringExpenses = [],
-    /** Whether the member is an admin, who can remove themselves from those. */
-    readonly admin = false,
-  ) {
-    super(code);
-    this.name = 'LeaveBlockedError';
-  }
-}
-
-/**
- * Why an admin can't remove this member yet: what would stop the member leaving. They still owe
- * or are owed in some currency, so their Debts would stay in Balances with nobody able to record
- * them (#875), or a recurring Expense in its problem state still includes them, so its missed
- * months would fall on the others once it is repaired (#257).
- */
-export class RemovalBlockedError extends Error {
-  readonly code: DepartureBlock['code'];
-  readonly balances: OpenBalances;
-  readonly recurringExpenses: BrokenRecurringExpenses;
-
-  constructor(
-    block: DepartureBlock,
-    /** The member, as the refusal names them. */
-    readonly memberName: string,
-  ) {
-    super(block.code);
-    this.name = 'RemovalBlockedError';
-    this.code = block.code;
-    this.balances = block.code === 'OPEN_BALANCE' ? block.balances : [];
-    this.recurringExpenses =
-      block.code === 'RECURRING_EXPENSE_PROBLEM' ? block.recurringExpenses : [];
-  }
-}
-
 export class GroupService {
   /** Request-scoped title read: authorize and project the name in one query. */
   getMemberName = cache(async (groupId: string, userId: string) => {
@@ -214,7 +171,7 @@ export class GroupService {
     assertCreateReplay(existing.creationRequest!, data);
     // A replay must not reveal a Group the creator no longer belongs to.
     if (!existing.members.some((member) => member.user.toString() === userId))
-      throw new Error('FORBIDDEN');
+      throw new Refusal('FORBIDDEN');
     return existing.populate('members.user', PERSON_FIELDS);
   }
 
@@ -266,7 +223,7 @@ export class GroupService {
     // Check admin permission
     const member = group.members.find((m) => m.user.toString() === userId);
     if (!member || member.role !== 'admin') {
-      throw new Error('FORBIDDEN');
+      throw new Refusal('FORBIDDEN');
     }
 
     // Track changes for activity log
@@ -313,7 +270,7 @@ export class GroupService {
         .select('defaultCurrency alternateCurrencies')
         .session(session ?? null)
         .lean();
-      if (!current) throw new Error('FORBIDDEN');
+      if (!current) throw new Refusal('FORBIDDEN');
       listAtSave = normaliseExtraCurrencies(current.defaultCurrency, current.alternateCurrencies);
       const dropped = listAtSave.filter((code) => !sentExtras.includes(code));
       await refuseCurrenciesInUse(groupAsRead, dropped, userId, session ?? null);
@@ -330,7 +287,7 @@ export class GroupService {
     };
 
     if (data.defaultCurrency && data.defaultCurrency !== group.defaultCurrency) {
-      if (await hasLedgerRecords(group)) throw new Error('CURRENCY_LOCKED');
+      if (await hasLedgerRecords(group)) throw new Refusal('CURRENCY_LOCKED');
       refuseCurrencies();
       // First financial writes set the monotonic lock using the old currency predicate.
       const changed = await withGroupMutation(groupId, async (session) => {
@@ -346,7 +303,7 @@ export class GroupService {
           { returnDocument: 'after', runValidators: true },
         );
       });
-      if (!changed) throw new Error('CURRENCY_LOCKED');
+      if (!changed) throw new Refusal('CURRENCY_LOCKED');
       recordListChange();
       await activityService.log(groupId, 'group_updated', userId, { changes, ...listRecord });
       return this.readAfterUpdate(await changed.populate('members.user', PERSON_FIELDS), userId);
@@ -390,7 +347,8 @@ export class GroupService {
       if (group) await activityService.log(groupId, 'assistant_rule_changed', userId, { rule });
       return !!group;
     });
-    if (!changed && !(await Group.exists({ _id: groupId, ...admin }))) throw new Error('FORBIDDEN');
+    if (!changed && !(await Group.exists({ _id: groupId, ...admin })))
+      throw new Refusal('FORBIDDEN');
     return { rule };
   }
 
@@ -405,7 +363,7 @@ export class GroupService {
 
     const member = group.members.find((m) => m.user.toString() === userId);
     if (!member || member.role !== 'admin') {
-      throw new Error('FORBIDDEN');
+      throw new Refusal('FORBIDDEN');
     }
 
     group.isArchived = true;
@@ -482,7 +440,7 @@ export class GroupService {
     // Check admin permission
     const actor = group.members.find((m) => m.user.toString() === actorId);
     if (!actor || actor.role !== 'admin') {
-      throw new Error('FORBIDDEN');
+      throw new Refusal('FORBIDDEN');
     }
 
     const target = group.members.find((m) => m.user.toString() === targetUserId);
@@ -492,7 +450,7 @@ export class GroupService {
     if (newRole === 'member' && target.role === 'admin') {
       const adminCount = group.members.filter((m) => m.role === 'admin').length;
       if (adminCount <= 1) {
-        throw new Error('LAST_ADMIN');
+        throw new Refusal('LAST_ADMIN', { variant: 'demotion' });
       }
     }
 
@@ -528,7 +486,7 @@ export class GroupService {
     // Balances follow Expense reads: add the recurring Expenses already due before checking,
     // and never let the member go on a run that may have missed one.
     const due = await recurringExpenseService.materializeDueExpenses(groupId);
-    if (!due.complete) throw new Error(conflict);
+    if (!due.complete) throw new Refusal(conflict);
 
     // Before the balance: repairing a recurring Expense can add months the member owes.
     const broken = await recurringExpenseService.problemTemplatesIncluding(groupId, memberId);
@@ -554,12 +512,12 @@ export class GroupService {
     // Check admin permission
     const actor = group.members.find((m) => m.user.toString() === actorId);
     if (!actor || actor.role !== 'admin') {
-      throw new Error('FORBIDDEN');
+      throw new Refusal('FORBIDDEN');
     }
 
     // Prevent self-removal
     if (targetUserId === actorId) {
-      throw new Error('SELF_REMOVE');
+      throw new Refusal('SELF_REMOVE');
     }
 
     const target = group.members.find((m) => m.user.toString() === targetUserId);
@@ -569,14 +527,25 @@ export class GroupService {
     if (target.role === 'admin') {
       const adminCount = group.members.filter((m) => m.role === 'admin').length;
       if (adminCount <= 1) {
-        throw new Error('LAST_ADMIN');
+        throw new Refusal('LAST_ADMIN', { variant: 'removal' });
       }
     }
 
     const person = await User.findById(targetUserId).select('name').lean<{ name?: string }>();
     const name = person?.name?.trim() || null;
     const block = await this.departureBlock(groupId, targetUserId, 'REMOVAL_CONFLICT');
-    if (block) throw new RemovalBlockedError(block, name ?? 'This member');
+    if (block?.code === 'OPEN_BALANCE')
+      throw new Refusal(block.code, {
+        balances: block.balances,
+        memberName: name ?? 'This member',
+        variant: 'removal',
+      });
+    if (block)
+      throw new Refusal(block.code, {
+        recurringExpenses: block.recurringExpenses,
+        memberName: name ?? 'This member',
+        variant: 'removal',
+      });
 
     // Checking took a while: the actor must still be an admin, and the member still here, at
     // the moment of the update. The version bump makes a member change loaded before this
@@ -592,7 +561,7 @@ export class GroupService {
         { returnDocument: 'after' },
       ),
     );
-    if (!removed) throw new Error('REMOVAL_CONFLICT');
+    if (!removed) throw new Refusal('REMOVAL_CONFLICT');
 
     await activityService.log(groupId, 'member_left', actorId, {
       userId: targetUserId,
@@ -620,7 +589,7 @@ export class GroupService {
 
     const previous = await findGroupDeletion(groupId, actorId);
     if (previous) {
-      if (!deleteIfLastMember) throw new Error('GROUP_DELETION_CONFIRMATION_REQUIRED');
+      if (!deleteIfLastMember) throw new Refusal('GROUP_DELETION_CONFIRMATION_REQUIRED');
       return resumeGroupDeletion(groupId);
     }
     // A concurrent join or leave can change who remains between the read and
@@ -630,22 +599,26 @@ export class GroupService {
       if (!group) return null;
 
       const self = group.members.find((m) => m.user.toString() === actorId);
-      if (!self) throw new Error('FORBIDDEN');
+      if (!self) throw new Refusal('FORBIDDEN');
       const others = group.members.filter((m) => m.user.toString() !== actorId);
 
       if (others.length === 0) {
-        if (!deleteIfLastMember) throw new Error('GROUP_DELETION_CONFIRMATION_REQUIRED');
+        if (!deleteIfLastMember) throw new Refusal('GROUP_DELETION_CONFIRMATION_REQUIRED');
         return requestGroupDeletion(groupId, actorId);
       }
 
       if (self.role === 'admin' && !others.some((m) => m.role === 'admin')) {
-        throw new LeaveBlockedError('LAST_ADMIN');
+        throw new Refusal('LAST_ADMIN');
       }
 
       const block = await this.departureBlock(groupId, actorId, 'LEAVE_CONFLICT');
-      if (block?.code === 'OPEN_BALANCE') throw new LeaveBlockedError(block.code, block.balances);
+      if (block?.code === 'OPEN_BALANCE')
+        throw new Refusal(block.code, { balances: block.balances });
       if (block)
-        throw new LeaveBlockedError(block.code, [], block.recurringExpenses, self.role === 'admin');
+        throw new Refusal(block.code, {
+          recurringExpenses: block.recurringExpenses,
+          admin: self.role === 'admin',
+        });
 
       // An admin may leave only while another admin remains at the moment of the update.
       const stillHandedOver =
@@ -668,7 +641,7 @@ export class GroupService {
       });
       return { archived: false };
     }
-    throw new Error('LEAVE_CONFLICT');
+    throw new Refusal('LEAVE_CONFLICT');
   }
 
   // ─── Tag Management ─────────────────────────────────
@@ -692,7 +665,7 @@ export class GroupService {
     const tag = current.tags.find((candidate) => candidate.id === tagId && !candidate.isDeleted);
     if (!tag) return null;
     if ((data.name !== undefined) === (data.isArchived !== undefined))
-      throw new Error('INVALID_TAG');
+      throw new Refusal('INVALID_TAG');
     const intent =
       data.name !== undefined
         ? {
@@ -731,7 +704,7 @@ export class GroupService {
     if (!group) return null;
 
     const member = group.members.find((m) => m.user.toString() === userId);
-    if (!member) throw new Error('FORBIDDEN');
+    if (!member) throw new Refusal('FORBIDDEN');
 
     const inviteCode = crypto.randomBytes(4).toString('hex'); // 8-char hex
     const expiresAt = new Date();

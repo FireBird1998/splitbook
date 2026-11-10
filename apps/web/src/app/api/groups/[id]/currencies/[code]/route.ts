@@ -2,7 +2,6 @@ import {
   getAuthUser,
   unauthorized,
   success,
-  forbidden,
   serverError,
   routeIds,
 } from '@/lib/utils/api-response';
@@ -21,7 +20,6 @@ export async function DELETE(
     const { id } = await routeIds(params.then(({ id }) => ({ id })));
     return success(await groupCurrencyService.remove(id, code, user.id!));
   } catch (err) {
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    return serverError(err);
+    return serverError(err, 'membership');
   }
 }

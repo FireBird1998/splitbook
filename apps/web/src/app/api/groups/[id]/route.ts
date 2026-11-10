@@ -64,8 +64,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     return success(group);
   } catch (err) {
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    return serverError(err);
+    return serverError(err, 'membership');
   }
 }
 
@@ -81,7 +80,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
     return success({ message: 'Group archived' });
   } catch (err) {
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    return serverError(err);
+    return serverError(err, 'membership');
   }
 }

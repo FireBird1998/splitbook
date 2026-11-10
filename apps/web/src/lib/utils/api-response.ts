@@ -1,4 +1,4 @@
-import { Refusal, refusalAnswer, refusalVocabulary } from '@splitbook/shared/refusals';
+import { Refusal, refusalAnswer, type RefusalCaller } from '@splitbook/shared/refusals';
 import { headers } from 'next/headers';
 import {
   DATABASE_UNAVAILABLE,
@@ -14,11 +14,6 @@ import {
   DatabaseUnavailableError,
   isDatabaseNoAnswer,
 } from '@/lib/mongodb-client';
-import {
-  CurrencyInUseError,
-  CurrencyIsMainError,
-  CurrencyNotListedError,
-} from '@/lib/group-currency-refusals';
 
 export interface AuthUser {
   /** 24-hex user id, byte-for-byte the stored ObjectId string. */
@@ -123,9 +118,9 @@ export function notFound(resource: string = 'Resource') {
 /**
  * Answer a thrown value, preserving the legacy answers during the service migration.
  */
-export function serverError(err?: unknown) {
+export function serverError(err?: unknown, caller?: RefusalCaller) {
   if (err instanceof Refusal) {
-    const answer = refusalAnswer(err);
+    const answer = refusalAnswer(err, caller);
     return NextResponse.json(answer, { status: answer.status });
   }
   if (err instanceof MoneyValidationError) {
@@ -136,14 +131,6 @@ export function serverError(err?: unknown) {
       { status: 422 },
     );
   }
-  // A Group currency removal's refusal says what still uses the currency (#721).
-  if (err instanceof CurrencyInUseError)
-    return NextResponse.json(
-      { error: err.message, status: 409, code: err.code, use: err.use },
-      { status: 409 },
-    );
-  if (err instanceof CurrencyNotListedError) return error(err.message, 404, err.code);
-  if (err instanceof CurrencyIsMainError) return error(err.message, 409, err.code);
   if (err instanceof Error) {
     // Only these plain messages had a central answer before migration. Other old errors keep
     // their fallthrough until their area moves to Refusal.
@@ -162,10 +149,9 @@ export function serverError(err?: unknown) {
       'INVALID_ID',
       'ACCOUNT_CHANGED',
     ] as const;
-    if (err.name === 'VersionError') return serverError(new Refusal('STALE_REVISION'));
+    if (err.name === 'VersionError') return serverError(new Refusal('STALE_REVISION'), caller);
     if (legacyCodes.some((code) => code === err.message)) {
-      const answer = refusalVocabulary[err.message as (typeof legacyCodes)[number]];
-      return error(answer.words, answer.status, err.message);
+      return serverError(new Refusal(err.message as (typeof legacyCodes)[number]), caller);
     }
   }
 

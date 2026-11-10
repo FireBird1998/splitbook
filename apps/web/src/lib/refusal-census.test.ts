@@ -9,13 +9,15 @@ import * as response from '@/lib/utils/api-response';
 import { draftError } from '@/lib/draft-response';
 import { tagError, invalidTagId } from '@/lib/tag-management-http';
 import { TagManagementError } from '@/lib/services/tag-management.service';
-import { LeaveBlockedError, RemovalBlockedError } from '@/lib/services/group.service';
 import { ExportTooLargeError } from '@/lib/services/export.service';
 import {
-  CurrencyInUseError,
-  CurrencyNotListedError,
-  CurrencyIsMainError,
-} from '@/lib/group-currency-refusals';
+  LeaveBlockedError,
+  RemovalBlockedError,
+  currencyInUseCase,
+  currencyNotListedCase,
+  currencyIsMainCase,
+  currentCause,
+} from '@/lib/test-utils/legacy-refusal-fixtures';
 
 vi.mock('@/lib/db', () => ({ default: vi.fn() }));
 vi.mock('next/headers', () => ({ headers: () => new Headers() }));
@@ -75,13 +77,13 @@ const classCases = [
   new RemovalBlockedError({ code: 'OPEN_BALANCE', balances }, 'Priya Shah'),
   new RemovalBlockedError({ code: 'RECURRING_EXPENSE_PROBLEM', recurringExpenses }, 'Priya Shah'),
   new ExportTooLargeError(12345, 10000),
-  new CurrencyInUseError('EUR', 'Maple House', {
+  currencyInUseCase('EUR', 'Maple House', {
     expenses: { count: 2, items: [] },
     settlements: 1,
     toReview: { yours: 1, others: 0 },
   }),
-  new CurrencyNotListedError('EUR'),
-  new CurrencyIsMainError('INR'),
+  currencyNotListedCase('EUR'),
+  currencyIsMainCase('INR'),
   ...tagCodes.map(
     (code) =>
       new TagManagementError(
@@ -143,7 +145,9 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
       census.push({
         thrown: thrown(cause),
         answer: await recorded(
-          cause instanceof TagManagementError ? tagError(cause) : response.serverError(cause),
+          cause instanceof TagManagementError
+            ? tagError(cause)
+            : response.serverError(currentCause(cause)),
         ),
       });
     expect(census).toMatchSnapshot();
@@ -170,6 +174,12 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
       census.push(await recorded(response.notFound(resource)));
     expect(census).toMatchSnapshot();
   });
+  // Fixed class inputs survive removal of production class imports and catch branches.
+  const classRoutes: Record<string, string[]> = {
+    '../app/api/groups/[id]/leave/route.ts': ['LeaveBlockedError'],
+    '../app/api/groups/[id]/members/[userId]/route.ts': ['RemovalBlockedError'],
+    '../app/api/export/route.ts': ['ExportTooLargeError'],
+  };
   for (const [path, load] of Object.entries(routes).sort()) {
     const text = readFileSync(resolve('src/lib', path), 'utf8');
     if (!text.includes('getAuthUser')) continue;
@@ -181,7 +191,7 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
         ...codes.map((code) => new Error(code)),
         ...classCases.filter(
           (cause) =>
-            text.includes(cause.constructor.name) ||
+            classRoutes[path]?.includes(cause.constructor.name) ||
             (cause instanceof TagManagementError && text.includes('tagError')),
         ),
       ];
@@ -192,7 +202,14 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
         )
           continue;
         for (const cause of causes) {
-          vi.mocked(auth.api.getSession).mockRejectedValue(cause);
+          const caller = path.includes('/leave/')
+            ? 'leave'
+            : path.includes('/members/')
+              ? method === 'PATCH'
+                ? 'demotion'
+                : 'removal'
+              : undefined;
+          vi.mocked(auth.api.getSession).mockRejectedValue(currentCause(cause, caller));
           const answer = await handler(new Request('http://localhost/api/census', { method }), {
             params: Promise.resolve({ id: 'a00000000000000000000001' }),
           });

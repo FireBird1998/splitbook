@@ -3,15 +3,12 @@ import {
   unauthorized,
   success,
   notFound,
-  forbidden,
   serverError,
   validationError,
-  error,
   readJson,
   routeIds,
 } from '@/lib/utils/api-response';
-import { removalOpenBalance, removalRecurringProblem } from '@/lib/departure-refusals';
-import { groupService, RemovalBlockedError } from '@/lib/services/group.service';
+import { groupService } from '@/lib/services/group.service';
 import { z } from 'zod/v4';
 
 const updateMemberSchema = z.object({
@@ -42,10 +39,7 @@ export async function PATCH(
 
     return success(result);
   } catch (err) {
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    if (err instanceof Error && err.message === 'LAST_ADMIN')
-      return error('Cannot demote the last admin. Promote another member first.', 409);
-    return serverError(err);
+    return serverError(err, 'membership');
   }
 }
 
@@ -67,21 +61,6 @@ export async function DELETE(
 
     return success({ message: 'Member removed' });
   } catch (err) {
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    if (err instanceof Error && err.message === 'LAST_ADMIN')
-      return error('Cannot remove the last admin.', 409);
-    if (err instanceof Error && err.message === 'SELF_REMOVE')
-      return error('You cannot remove yourself. Use leave group instead.', 400);
-    if (err instanceof RemovalBlockedError)
-      return err.code === 'OPEN_BALANCE'
-        ? removalOpenBalance(err.memberName, err.balances)
-        : removalRecurringProblem(err.memberName, err.recurringExpenses);
-    if (err instanceof Error && err.message === 'REMOVAL_CONFLICT')
-      return error(
-        'This Group changed while you were removing this member. Try again.',
-        409,
-        'REMOVAL_CONFLICT',
-      );
-    return serverError(err);
+    return serverError(err, 'membership');
   }
 }
