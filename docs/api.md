@@ -9,7 +9,7 @@ states its own success format.
 
 ## Error contract
 
-A vocabulary refusal has `{ error, status, code, …data }`. `error` is the words
+Every refusal Splitbook writes carries a code, with `{ error, status, code, …data }`. `error` is the words
 shown to the member, `status` matches the HTTP status, and `code`
 is the stable machine-readable refusal code. Clients match `code` to select
 behaviour. The vocabulary in `packages/shared/src/refusals.ts` supplies statuses
@@ -45,13 +45,11 @@ A changed or missing Group deletion request answers `409`,
 `NOTIFICATION_SETTINGS_CHANGED` (`409`) and `NOTIFICATION_TOKEN_REQUIRED`
 (`400`) in its existing words.
 
-The notification-registration `503` "Notifications are not available yet."
-still carries no code, pending the owner's decision about Android. Adding the
-proposed `NOTIFICATIONS_UNAVAILABLE` changes Android Settings from its offline
-state to its error state. The handoff requires holding that change.
-The two existing invitation schema answers below and dispatch's `400`
-"Invalid request" also retain their bodies pending scope clarification.
-Better Auth and MCP keep their own protocol answers.
+Notification registration answers `503` `NOTIFICATIONS_UNAVAILABLE` with
+"Notifications are not available yet." and its private response headers.
+Android notification controls keep the offline state and its existing banner for this code.
+Older Android APKs show the error state for this answer until they update.
+Better Auth and the MCP transport keep their own protocol answers.
 
 Some refusals add data. Money rules supply their own words and, when present,
 a `field` path. A schema refusal supplies `details` with issue paths and
@@ -133,6 +131,7 @@ A test compares every code and all of its statuses with the vocabulary.
 | `NOT_A_TRIP`                           | 409         |
 | `NOT_FOUND`                            | 404         |
 | `NOT_HOUSEHOLD`                        | 422         |
+| `NOTIFICATIONS_UNAVAILABLE`            | 503         |
 | `NOTIFICATION_SETTINGS_CHANGED`        | 409         |
 | `NOTIFICATION_TOKEN_REQUIRED`          | 400         |
 | `OPEN_BALANCE`                         | 409         |
@@ -166,8 +165,9 @@ A test compares every code and all of its statuses with the vocabulary.
 
 ### Validation and money
 
-A body or query the route's schema refuses answers **422** `VALIDATION_ERROR`,
-with each problem in `details` as `{ path, message }`, the shape the Draft APIs
+A body or query the route's schema refuses answers `VALIDATION_ERROR`, with
+status **422** except the dispatch job's **400**. Schema validation normally
+supplies each problem in `details` as `{ path, message }`, the shape the Draft APIs
 use too (#538):
 
 ```json
@@ -182,9 +182,11 @@ use too (#538):
 An Expense create refused only for the total amount’s precision uses
 `INVALID_MONEY_PRECISION` instead, retaining the same `details` shape (#748).
 
-Two routes refuse with a message of their own instead: an invite's email
-(`Invalid email address`) and an invitation's action (`Invalid action`), both
-**422** without `details`. Tag commands answer **400** `INVALID_TAG_COMMAND`.
+Three hand-written schema refusals carry `VALIDATION_ERROR` and their own words,
+without `details`. An invite's email (`Invalid email address`) and an invitation's
+action (`Invalid action`) answer **422**. The dispatch job (`Invalid request`)
+answers **400**. `VALIDATION_ERROR` is separate from `RefusalCode`. Tag commands
+answer **400** `INVALID_TAG_COMMAND`.
 
 ### Authentication and faults
 

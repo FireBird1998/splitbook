@@ -516,11 +516,15 @@ it('records invitation schema refusals before persistence', async () => {
   try {
     for (const { state, handler, body, expected } of [
       {
-        state: 'invalid invitation action', handler: answerInvitation, body: { action: 'wait' },
+        state: 'invalid invitation action',
+        handler: answerInvitation,
+        body: { action: 'wait' },
         expected: '{"error":"Invalid action","status":422,"code":"VALIDATION_ERROR"}',
       },
       {
-        state: 'invalid invite email', handler: sendInvitation, body: { email: 'not-an-email' },
+        state: 'invalid invite email',
+        handler: sendInvitation,
+        body: { email: 'not-an-email' },
         expected: '{"error":"Invalid email address","status":422,"code":"VALIDATION_ERROR"}',
       },
     ]) {
