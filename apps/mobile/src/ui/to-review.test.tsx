@@ -420,9 +420,6 @@ function fixture(
     },
   );
   delete phone.stores.savedQueries.retainGroups;
-  const drafts = Object.assign(phone.stores.expenseDrafts, {
-    values: phone.stores.expenseDrafts.records,
-  });
   const requests = Object.assign(phone.stores.draftRequests, {
     values: phone.stores.draftRequests.records,
   });
