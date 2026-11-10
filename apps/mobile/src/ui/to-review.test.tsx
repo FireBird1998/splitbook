@@ -23,7 +23,6 @@ import type {
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
-import type { AccountGroupRecordStore } from '../data/account-record-storage';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
@@ -409,10 +408,7 @@ function fixture(
     {
       origin: 'http://localhost:4408',
       now: Date.parse(iso),
-      recordSeparator: ':',
-      draftRequestSeparator: ':',
       newSubmissionKey: () => 'fictional-review-request',
-      purge: ['expenseDrafts', 'draftRequests'],
       parts: {
         notifications: notificationDevice,
         pendingInvitation: undefined,
@@ -420,12 +416,6 @@ function fixture(
         tagRequests: undefined,
         groupCreations: undefined,
         netInfo: undefined,
-        accountLocal: {
-          financialCleanup: undefined,
-          untrustedCopies: undefined,
-          signOutRecord: undefined,
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        },
       },
     },
   );
@@ -436,7 +426,6 @@ function fixture(
   const requests = Object.assign(phone.stores.draftRequests, {
     values: phone.stores.draftRequests.records,
   });
-  for (const store of [drafts, requests]) delete (store as AccountGroupRecordStore).keys;
   const makeController = () => {
     const controller = phone.open();
     controllers.push(controller);
