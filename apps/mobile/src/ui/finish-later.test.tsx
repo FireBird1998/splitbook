@@ -371,6 +371,7 @@ function fixture(
   const controller = makeController();
   return {
     restart: makeController,
+    hold: backend.hold,
     controller,
     drafts,
     uploads,
@@ -381,6 +382,7 @@ function fixture(
     },
     limitRace: () => {
       race = true;
+      items = Array.from({ length: 100 }, (_, index) => review(row(index + 1, `Item ${index}`, 1)));
     },
     saves,
     reviews,
@@ -437,6 +439,7 @@ const button = (tree: ReactTestRenderer, label: string) => {
 async function tap(tree: ReactTestRenderer, label: string) {
   await act(async () => {
     expect(button(tree, label), label).toBeDefined();
+    expect(button(tree, label).props.disabled, label).not.toBe(true);
     button(tree, label).props.onPress();
     await new Promise((resolve) => setTimeout(resolve, 10));
   });
@@ -779,8 +782,23 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
     await act(async () => {
       await f.controller.refreshToReview();
     });
-    f.limitRace();
+    // To review observes Group/Home, not an open form: refresh there, then resume the entries.
+    await act(async () => {
+      await f.controller.closeExpense(true);
+      await f.controller.refreshToReview();
+      await f.controller.openExpense(groupId);
+      f.controller.resumeExpenseDraft();
+    });
+    expect(button(editor, 'Finish later').props.disabled).not.toBe(true);
+    const upload = f.hold('POST', `/api/groups/${groupId}/drafts`, { at: 'request' });
     await tap(editor, 'Finish later');
+    await upload.arrived;
+    // Another device fills this member's collection after the enabled press, before its reply.
+    f.limitRace();
+    await act(async () => {
+      upload.release();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
     expect(f.controller.getSnapshot().screen).toBe('expense');
     expect(f.drafts.values.size).toBe(1);
     expect(text(editor)).toContain('You have 100\u00a0items waiting in this Group.');
