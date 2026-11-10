@@ -112,7 +112,8 @@ export function recordingFixture(writer: Writer) {
       params: { id: groupId, expenseId },
       cookie: asReader ? readerCookie : cookie,
       ...(body === undefined ? {} : { body }),
-      headers,
+      // Empty overrides describe an absent header in these HTTP cases.
+      headers: Object.fromEntries(Object.entries(headers).filter(([, value]) => value !== '')),
     });
   };
   const readAs = async (persona: DemoPersonaKey) => {
@@ -121,7 +122,6 @@ export function recordingFixture(writer: Writer) {
   const revision = () => (writer === 'restore' ? '1' : '0');
   const send = (changes: object = {}, headers: Record<string, string> = {}): Promise<Answer> => {
     const keyed = { 'Idempotency-Key': 'recording-submission-0001', ...headers };
-    if (keyed['Idempotency-Key'] === '') delete (keyed as Partial<typeof keyed>)['Idempotency-Key'];
     switch (writer) {
       case 'manual-expense':
         return http(routes.expenses.POST, 'POST', 'expenses', expenseBody(changes), keyed);
