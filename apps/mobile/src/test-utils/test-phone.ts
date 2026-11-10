@@ -187,10 +187,11 @@ export function testPhone(
       moment = next;
     },
   };
-  let online = server.online,
-    key = 0,
+  let key = 0,
     active: MobileController | undefined;
-  const listeners = new Set<(state: { isConnected: boolean }) => void>();
+  type Connection = { isConnected: boolean; isInternetReachable?: boolean | null };
+  let connection: Connection | undefined;
+  const listeners = new Set<(state: Connection) => void>();
   const parts = {
     credentials: stores.credentials,
     savedQueries: stores.savedQueries,
@@ -202,9 +203,9 @@ export function testPhone(
     tagRequests: stores.tagRequests,
     groupCreations: stores.groupCreations,
     netInfo: {
-      addEventListener(listener: (state: { isConnected: boolean }) => void) {
+      addEventListener(listener: (state: Connection) => void) {
         listeners.add(listener);
-        listener({ isConnected: online });
+        listener(connection ?? { isConnected: server.online });
         return () => {
           listeners.delete(listener);
         };
@@ -247,10 +248,10 @@ export function testPhone(
   const phone = {
     stores,
     clock,
-    connect(value: boolean) {
-      online = value;
-      server.online = value;
-      listeners.forEach((listener) => listener({ isConnected: online }));
+    connect(value: boolean, isInternetReachable?: boolean | null) {
+      connection = { isConnected: value, ...(isInternetReachable === undefined ? {} : { isInternetReachable }) };
+      server.online = value && isInternetReachable !== false;
+      listeners.forEach(listener => listener(connection!));
     },
     open() {
       active?.dispose();
