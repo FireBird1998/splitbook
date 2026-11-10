@@ -377,21 +377,55 @@ describe('fake Splitbook', () => {
     });
   });
   it('reads Expense records and filtered history pages from the world with the app readers', async () => {
-    const server = fakeSplitbook(), group = server.world.groups[0]!, id = 'b00000000000000000000009';
-    server.world.expenseRecords[group._id] = { [id]: { ...expenseFixture(group, id), revision: 3, isDeleted: false, editHistory: [] } };
+    const server = fakeSplitbook(),
+      group = server.world.groups[0]!,
+      id = 'b00000000000000000000009';
+    server.world.expenseRecords[group._id] = {
+      [id]: { ...expenseFixture(group, id), revision: 3, isDeleted: false, editHistory: [] },
+    };
     server.world.activities[group._id] = [
-      { _id: 'd00000000000000000000001', group: group._id, actor: group.members[0]!.user,
-        createdAt: group.updatedAt, type: 'expense_added', metadata: { expenseId: id, description: 'Groceries' } },
-      { _id: 'd00000000000000000000002', group: group._id, actor: group.members[0]!.user,
-        createdAt: group.updatedAt, type: 'expense_added', metadata: { expenseId: 'b00000000000000000000008', description: 'Other' } },
+      {
+        _id: 'd00000000000000000000001',
+        group: group._id,
+        actor: group.members[0]!.user,
+        createdAt: group.updatedAt,
+        type: 'expense_added',
+        metadata: { expenseId: id, description: 'Groceries' },
+      },
+      {
+        _id: 'd00000000000000000000002',
+        group: group._id,
+        actor: group.members[0]!.user,
+        createdAt: group.updatedAt,
+        type: 'expense_added',
+        metadata: { expenseId: 'b00000000000000000000008', description: 'Other' },
+      },
     ];
-    const signed = await server.fetch('http://local/api/auth/demo-persona/sign-in', {method:'POST',body:'{"personaId":"alex"}'});
+    const signed = await server.fetch('http://local/api/auth/demo-persona/sign-in', {
+      method: 'POST',
+      body: '{"personaId":"alex"}',
+    });
     const Cookie = signed.headers.get('Set-Cookie')!.split(';')[0];
-    const read = async (path: string) => (await server.fetch('http://local'+path, {headers:{Cookie}})).json();
-    expect(parseExpenseRecord(await read(`/api/groups/${group._id}/expenses/${id}`),group._id,id)).toMatchObject({ revision:3, amountMinor:1000 });
-    expect(parseActivityPage(await read(`/api/groups/${group._id}/activity?expenseId=${id}&page=1&limit=20`), group._id,1,id).events.map(e=>e._id)).toEqual(['d00000000000000000000001']);
-    expect(parseActivityPage(await read(`/api/groups/${group._id}/activity?page=2&limit=20`), group._id,2).events).toEqual([]);
+    const read = async (path: string) =>
+      (await server.fetch('http://local' + path, { headers: { Cookie } })).json();
+    expect(
+      parseExpenseRecord(await read(`/api/groups/${group._id}/expenses/${id}`), group._id, id),
+    ).toMatchObject({ revision: 3, amountMinor: 1000 });
+    expect(
+      parseActivityPage(
+        await read(`/api/groups/${group._id}/activity?expenseId=${id}&page=1&limit=20`),
+        group._id,
+        1,
+        id,
+      ).events.map((e) => e._id),
+    ).toEqual(['d00000000000000000000001']);
+    expect(
+      parseActivityPage(
+        await read(`/api/groups/${group._id}/activity?page=2&limit=20`),
+        group._id,
+        2,
+      ).events,
+    ).toEqual([]);
     expect(server.unanswered).toEqual([]);
   });
-
 });

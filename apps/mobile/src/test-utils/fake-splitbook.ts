@@ -99,6 +99,19 @@ export function expensePage(expenses: unknown[] = [], page = 1) {
   };
 }
 
+/** Activity and Expense history share the server’s 20-row page shape. */
+export function activityPage(activities: unknown[] = [], page = 1) {
+  return {
+    activities: activities.slice((page - 1) * 20, page * 20),
+    pagination: {
+      page,
+      limit: 20,
+      total: activities.length,
+      totalPages: Math.ceil(activities.length / 20),
+    },
+  };
+}
+
 /** A stable suggestion used by the payment fixtures, in the rate endpoint's wire shape. */
 export const rateSuggestion = (from: string, to: string, rate: string) => ({
   from,
@@ -216,6 +229,8 @@ export function fakeSplitbook() {
     home: { buckets: [] } as { buckets: unknown[]; groups?: unknown[] },
     balances: { [group._id]: { byCurrency: [] } } as Record<string, unknown>,
     expenses: { [group._id]: expensePage() } as Record<string, unknown>,
+    expenseRecords: {} as Record<string, Record<string, unknown>>,
+    activities: {} as Record<string, unknown[]>,
     settlements: { [group._id]: [] as unknown[] },
     rates: { [group._id]: {} } as Record<string, Record<string, unknown>>,
     tripSummaries: { [group._id]: { '': emptyTripSummary(group.defaultCurrency) } } as Record<
@@ -270,9 +285,16 @@ export function fakeSplitbook() {
       '/api/groups',
       '/api/user/balances',
       ...world.groups.flatMap((g) =>
-        ['', '/balances', '/expenses', '/settlements', '/rates', '/trip-summary'].map(
-          (suffix) => `/api/groups/${g._id}${suffix}`,
-        ),
+        [
+          '',
+          '/balances',
+          '/expenses',
+          '/settlements',
+          '/rates',
+          '/trip-summary',
+          '/activity',
+          ...Object.keys(world.expenseRecords[g._id] ?? {}).map((id) => '/expenses/' + id),
+        ].map((suffix) => `/api/groups/${g._id}${suffix}`),
       ),
     ];
     const writePaths = [
@@ -380,6 +402,16 @@ export function fakeSplitbook() {
       }
       if (url.pathname === base) return answer(found);
       if (url.pathname === base + '/balances') return answer(world.balances[found._id]);
+      if (url.pathname === base + '/activity') {
+        const id = url.searchParams.get('expenseId');
+        const rows = (world.activities[found._id] ?? []).filter(
+          (row) => !id || (row as { metadata?: { expenseId?: string } }).metadata?.expenseId === id,
+        );
+        return answer(activityPage(rows, Number(url.searchParams.get('page') ?? 1)));
+      }
+      const expense =
+        world.expenseRecords[found._id]?.[url.pathname.slice((base + '/expenses/').length)];
+      if (url.pathname.startsWith(base + '/expenses/') && expense) return answer(expense);
       if (url.pathname === base + '/expenses') return answer(world.expenses[found._id]);
     }
     unanswered.push(`${method} ${url.pathname}${url.search}`);
