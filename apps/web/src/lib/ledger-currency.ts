@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
 import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
@@ -17,7 +18,7 @@ export async function lockLedgerCurrency(groupId: string, currency: string): Pro
       { timestamps: false },
     ),
   );
-  if (!result.matchedCount) throw new Error('CURRENCY_MISMATCH');
+  if (!result.matchedCount) throw new Refusal('CURRENCY_MISMATCH');
 }
 
 /**
@@ -47,7 +48,7 @@ export async function lockClearedCurrency(groupId: string, currency: string): Pr
   } catch (error) {
     if (!(error instanceof Error) || error.message !== 'CURRENCY_MISMATCH') throw error;
   }
-  if (!(await ledgerStillUses(groupId, currency))) throw new Error('CURRENCY_MISMATCH');
+  if (!(await ledgerStillUses(groupId, currency))) throw new Refusal('CURRENCY_MISMATCH');
   await withGroupMutation(groupId, async () =>
     Group.updateOne({ _id: groupId }, { $set: { currencyLocked: true } }, { timestamps: false }),
   );

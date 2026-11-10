@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import 'server-only';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import mongoose, { type ClientSession } from 'mongoose';
@@ -96,8 +97,8 @@ export async function withGroupMutation<T>(
         { _id: new mongoose.Types.ObjectId(groupId), deletionRequestedAt: null },
         { timeoutMS: remainingTime(deadline) },
       );
-    if (!group) throw new Error('FORBIDDEN');
-    if (budget.ledger && group.isArchived) throw new Error('GROUP_ARCHIVED');
+    if (!group) throw new Refusal('FORBIDDEN');
+    if (budget.ledger && group.isArchived) throw new Refusal('GROUP_ARCHIVED');
     remainingTime(deadline);
     return write();
   }
@@ -122,7 +123,7 @@ export async function withGroupMutation<T>(
         (await db
           .collection('groups')
           .countDocuments({ _id: id, deletionRequestedAt: null }, { session }));
-      throw new Error(archived ? 'GROUP_ARCHIVED' : 'FORBIDDEN');
+      throw new Refusal(archived ? 'GROUP_ARCHIVED' : 'FORBIDDEN');
     }
     remainingTime(deadline);
     // Every retried transaction owns a fresh list. Failed attempts never publish.

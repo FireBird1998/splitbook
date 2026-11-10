@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { createHash } from 'node:crypto';
 import { Schema, Types } from 'mongoose';
 import type { ActivityType } from '@splitbook/shared/types';
@@ -75,7 +76,7 @@ export const PENDING_ACTIVITY_LIMIT = 100;
 export function parseIdempotencyKey(value: string | null | undefined): string | undefined {
   if (value == null) return undefined;
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(value)) {
-    throw new Error('INVALID_IDEMPOTENCY_KEY');
+    throw new Refusal('INVALID_IDEMPOTENCY_KEY');
   }
   return value;
 }
@@ -159,7 +160,7 @@ export function assertCreateReplay(
     stored.fingerprintVersion !== 1 ||
     stored.fingerprint !== fingerprintCreateCommand(normalizedCommand)
   ) {
-    throw new Error('IDEMPOTENCY_CONFLICT');
+    throw new Refusal('IDEMPOTENCY_CONFLICT');
   }
 }
 
@@ -293,5 +294,5 @@ export function involvedMembers(record: {
 
 /** Refuse another mutation before committing if a sustained outage has filled this outbox. */
 export function assertPendingActivityCapacity(events: readonly IPendingActivity[] = []): void {
-  if (events.length >= PENDING_ACTIVITY_LIMIT) throw new Error('ACTIVITY_BACKLOG_FULL');
+  if (events.length >= PENDING_ACTIVITY_LIMIT) throw new Refusal('ACTIVITY_BACKLOG_FULL');
 }

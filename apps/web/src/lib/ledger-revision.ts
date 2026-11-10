@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 /**
  * HTTP commands require the revision that was displayed to the editor. Clients send it in
  * `X-Splitbook-Revision`: a host may evaluate `If-Match` as an HTTP precondition and answer 412
@@ -13,6 +14,6 @@ export function requestRevision(request: Request): number {
 /** Undefined is reserved for trusted in-process callers, not the HTTP adapter. */
 export function assertExpectedRevision(actual: number | undefined, expected?: number): void {
   if (expected === undefined) return;
-  if (!Number.isSafeInteger(expected) || expected < 0) throw new Error('REVISION_REQUIRED');
-  if ((actual ?? 0) !== expected) throw new Error('STALE_REVISION');
+  if (!Number.isSafeInteger(expected) || expected < 0) throw new Refusal('REVISION_REQUIRED');
+  if ((actual ?? 0) !== expected) throw new Refusal('STALE_REVISION');
 }

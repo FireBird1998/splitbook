@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { describe, expect, it } from 'vitest';
 import { assertExpectedRevision, requestRevision } from './ledger-revision';
 
@@ -31,6 +32,8 @@ describe('the revision an edit or deletion was made against', () => {
     expect(outcome({ 'X-Splitbook-Revision': '2' })).toBe('STALE_REVISION');
     expect(outcome({ 'If-Match': '2' })).toBe('STALE_REVISION');
     expect(outcome({})).toBe('REVISION_REQUIRED');
+    expect(() => assertExpectedRevision(3, 2)).toThrow(Refusal);
+    expect(() => assertExpectedRevision(3, NaN)).toThrow(Refusal);
     expect(outcome({ 'If-Match': 'abc' })).toBe('REVISION_REQUIRED');
   });
 
