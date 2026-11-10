@@ -211,4 +211,39 @@ describe('test phone', () => {
     expect(phone.stores.expenseDrafts.records.size).toBe(0);
     expect(phone.stores.cleanupMarker.value).toBe(false);
   });
+  it('can omit account storage entirely, as a credentials-only view test did', async () => {
+    const phone = testPhone(fakeSplitbook(), { parts: { accountLocal: undefined } });
+    phone.stores.owner.failNext('load');
+    const app = phone.open();
+    await app.signIn('sam');
+    expect(app.getSnapshot().auth).toMatchObject({
+      status: 'authenticated',
+      user: { name: 'Sam Chen' },
+    });
+    expect(phone.stores.owner.value).toBeNull();
+  });
+  it('keeps an explicit native purge list and omitted optional account parts', async () => {
+    const phone = testPhone(fakeSplitbook(), {
+      parts: {
+        accountLocal: {
+          financialCleanup: undefined,
+          untrustedCopies: undefined,
+          signOutRecord: undefined,
+        },
+      },
+      purge: ['settlementAttempts'],
+    });
+    phone.stores.signOutRecord.failNext('save');
+    const app = phone.open();
+    await app.signIn('alex');
+    const account = 'a00000000000000000000001';
+    await phone.stores.settlementAttempts.save(account, 'maple', { unfinished: true });
+    await phone.stores.savedQueries.save(account, '/api/groups', {
+      kept: 'not in this fixture’s purge list',
+    });
+    await app.signOut();
+    expect(app.getSnapshot().auth).toMatchObject({ status: 'signed-out', message: null });
+    expect(phone.stores.settlementAttempts.records.size).toBe(0);
+    expect(phone.stores.savedQueries.records.size).toBeGreaterThan(0);
+  });
 });
