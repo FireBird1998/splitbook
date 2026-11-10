@@ -188,6 +188,7 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
     config?: Partial<MobileConfig>;
     recordSeparator?: string;
     settlementSeparator?: string;
+    draftRequestSeparator?: string;
     newSubmissionKey?: () => string;
     parts?: Omit<PhoneParts, 'savedQueries'> & { savedQueries?: Queries };
     purge?: readonly PurgeStore[];
@@ -219,7 +220,7 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
     savedQueries: queries,
     expenseDrafts: records(false, options.recordSeparator),
     settlementAttempts: records(false, options.settlementSeparator),
-    draftRequests: records(),
+    draftRequests: records(false, options.draftRequestSeparator),
     tagRequests: records(),
     groupCreations: (() => {
       const rows = new Map<string, unknown>();
