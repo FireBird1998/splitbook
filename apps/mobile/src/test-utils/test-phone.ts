@@ -182,6 +182,7 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
     origin?: string;
     config?: Partial<MobileConfig>;
     recordSeparator?: string;
+    settlementSeparator?: string;
     newSubmissionKey?: () => string;
     parts?: Omit<PhoneParts, 'savedQueries'> & { savedQueries?: Queries };
     purge?: readonly PurgeStore[];
@@ -212,7 +213,7 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
     pendingInvitation: cell<string | null>(null),
     savedQueries: queries,
     expenseDrafts: records(false, options.recordSeparator),
-    settlementAttempts: records(),
+    settlementAttempts: records(false, options.settlementSeparator),
     draftRequests: records(),
     tagRequests: records(),
     groupCreations: (() => {
