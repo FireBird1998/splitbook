@@ -520,21 +520,28 @@ it('can explicitly keep two runtimes on one phone until a normal restart dispose
   expect(restarted.getSnapshot().auth.user?.id).toBe('a00000000000000000000001');
 });
 
-it('keeps a Draft-request store’s separated rows and lists their Group ids',async()=>{
- const phone=testPhone(fakeSplitbook(),{draftRequestSeparator:':'});
- await phone.stores.draftRequests.save('alex','maple',{request:'same-key'});
- expect([...phone.stores.draftRequests.records.keys()]).toEqual(['alex:maple']);
- expect(await phone.stores.draftRequests.load('alex','maple')).toEqual({request:'same-key'});
- expect(await phone.stores.draftRequests.list('alex')).toEqual([{groupId:'maple',value:{request:'same-key'}}]);
+it('keeps a Draft-request store’s separated rows and lists their Group ids', async () => {
+  const phone = testPhone(fakeSplitbook(), { draftRequestSeparator: ':' });
+  await phone.stores.draftRequests.save('alex', 'maple', { request: 'same-key' });
+  expect([...phone.stores.draftRequests.records.keys()]).toEqual(['alex:maple']);
+  expect(await phone.stores.draftRequests.load('alex', 'maple')).toEqual({ request: 'same-key' });
+  expect(await phone.stores.draftRequests.list('alex')).toEqual([
+    { groupId: 'maple', value: { request: 'same-key' } },
+  ]);
 });
 
-it('provides independent native notification controls with each phone’s installation and token',async()=>{
- const first=notificationNative({installation:{id:'fictional-device',key:'fictional-proof'},token:'fictional-token'});
- const second=notificationNative();
- expect(await first.installation()).toEqual({id:'fictional-device',key:'fictional-proof'});
- expect(await first.token()).toBe('fictional-token');
- first.requestPermission.mockResolvedValueOnce('denied');
- expect(await first.requestPermission()).toBe('denied');
- expect(await second.requestPermission()).toBe('granted');
- await first.clear();expect(first.clear).toHaveBeenCalledOnce();expect(second.clear).not.toHaveBeenCalled();
+it('provides independent native notification controls with each phone’s installation and token', async () => {
+  const first = notificationNative({
+    installation: { id: 'fictional-device', key: 'fictional-proof' },
+    token: 'fictional-token',
+  });
+  const second = notificationNative();
+  expect(await first.installation()).toEqual({ id: 'fictional-device', key: 'fictional-proof' });
+  expect(await first.token()).toBe('fictional-token');
+  first.requestPermission.mockResolvedValueOnce('denied');
+  expect(await first.requestPermission()).toBe('denied');
+  expect(await second.requestPermission()).toBe('granted');
+  await first.clear();
+  expect(first.clear).toHaveBeenCalledOnce();
+  expect(second.clear).not.toHaveBeenCalled();
 });

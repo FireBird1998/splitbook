@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { FetchResponse } from './types';
 const groupId = 'b00000000000000000000001';
 const actor = 'a00000000000000000000001';
@@ -39,43 +40,28 @@ function setup(
     init: RequestInit,
   ) => FetchResponse | Promise<FetchResponse> | undefined = () => undefined,
 ) {
-  let cookie: string | null = null;
-  return createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4141',
-      authOrigin: 'http://localhost:4141',
-      developmentPersonaEnabled: true,
+  const backend = fakeSplitbook();
+  backend.world.people.alex = user;
+  backend.world.groups = [group];
+  backend.world.activities[groupId] = [event];
+  backend.reply('*', '*', ({ url, init }) => intercept(url, init));
+  const native = testPhone(backend, {
+    origin: 'http://localhost:4141',
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
+      accountLocal: undefined,
     },
-    {
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      fetch: async (url, init) => {
-        const address = new URL(url),
-          path = address.pathname;
-        const override = intercept(address, init);
-        if (override) return override;
-        if (path.endsWith('/sign-in'))
-          return new Response(JSON.stringify({ user }), {
-            headers: { 'Set-Cookie': 'better-auth.session_token=alex.signature; Max-Age=2592000' },
-          });
-        if (path.endsWith('/get-session'))
-          return json({ user, session: { userId: actor, expiresAt: '2030-01-01T00:00:00Z' } });
-        if (path.endsWith('/sign-out')) return json({ success: true });
-        if (path === '/api/groups') return json({ status: 200, data: [group] });
-        if (path === `/api/groups/${groupId}`) return json({ status: 200, data: group });
-        if (path.endsWith('/user/balances')) return json({ status: 200, data: { buckets: [] } });
-        if (path.endsWith('/activity')) return json(page());
-        return json({}, 404);
-      },
-    },
-  );
+  });
+  return native.open();
 }
 describe('native Group Activity', () => {
   it('loads authorized backend events with actor, event time and currency-specific snapshot money', async () => {

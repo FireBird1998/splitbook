@@ -2,7 +2,8 @@ import { parseNotificationEnvelope } from './notification-alerts';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 import type { SavedQueryRecords } from './saved-copy-budget';
 import { describe, expect, it, vi } from 'vitest';
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import { testPhone, notificationNative } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { FetchResponse } from './types';
 const groupId = 'b00000000000000000000001';
 const actor = 'a00000000000000000000001';
@@ -43,127 +44,72 @@ function setup(
     init: RequestInit,
   ) => FetchResponse | Promise<FetchResponse | undefined> | undefined = () => undefined,
   savedQueries?: SavedQueryRecords,
+  options: { failedRevoke?: boolean } = {},
 ) {
-  let cookie: string | null = null;
-  let owner: string | null = null;
-  let cleanup = false;
-  const records = new Map<string, unknown>();
-  const drafts = {
-    load: async (account: string, id: string) => records.get(account + ':' + id) ?? null,
-    save: async (account: string, id: string, value: unknown) => {
-      records.set(account + ':' + id, structuredClone(value));
-    },
-    remove: async (account: string, id: string) => {
-      records.delete(account + ':' + id);
-    },
-    clear: async () => {
-      records.clear();
-    },
-    keys: async () => [],
+  const backend = fakeSplitbook();
+  backend.world.people.alex = user;
+  backend.world.people.sam = {
+    id: 'a00000000000000000000002',
+    name: 'Sam',
+    email: 'sam@example.test',
+    image: null,
   };
-  return createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4141',
-      authOrigin: 'http://localhost:4141',
-      developmentPersonaEnabled: true,
+  backend.world.groups = [group];
+  // The old fixture listed this Alex-only Group for either account; keep its inconsistent list.
+  backend.world.groupsByAccount[backend.world.people.sam.id] = [group];
+  backend.world.activities[groupId] = [event];
+  backend.world.expenses[groupId] = {
+    expenses: [],
+    pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+    summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
+  };
+  backend.world.balances[groupId] = { currency: 'INR', balances: [], debts: [], byCurrency: [] };
+  backend.world.notifications = {
+    available: true,
+    enabled: true,
+    expenseUpdates: true,
+    payments: true,
+    revision: 1,
+    activation,
+    binding,
+    expenseCutoff: new Date(0).toISOString(),
+    paymentCutoff: new Date(0).toISOString(),
+  };
+  backend.reply('*', '*', ({ url, init }) => intercept(url, init));
+  if (options.failedRevoke) backend.fault('POST', '/api/auth/sign-out', 'offline');
+  const notifications = notificationNative({
+    installation: {
+      id: '00000000-0000-4000-8000-000000000840',
+      key: 'private-installation-proof-840840840',
     },
-    {
+    token: 'private-token',
+  });
+  const native = testPhone(backend, {
+    origin: 'http://localhost:4141',
+    recordSeparator: ':',
+    purge: ['expenseDrafts'],
+    parts: {
       savedQueries,
-      expenseDrafts: drafts,
+      notifications,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
       accountLocal: {
-        owner: {
-          load: async () => owner,
-          save: async (value) => {
-            owner = value;
-          },
-          clear: async () => {
-            owner = null;
-          },
-        },
-        cleanupMarker: {
-          load: async () => cleanup,
-          mark: async () => {
-            cleanup = true;
-          },
-          clear: async () => {
-            cleanup = false;
-          },
-        },
-        stores: [drafts],
-      },
-      notifications: {
-        installation: async () => ({
-          id: '00000000-0000-4000-8000-000000000840',
-          key: 'private-installation-proof-840840840',
-        }),
-        permission: async () => 'granted',
-        requestPermission: async () => 'granted',
-        token: async () => 'private-token',
-        clear: async () => {},
-        openSettings: async () => {},
-      },
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      fetch: async (url, init) => {
-        const address = new URL(url),
-          path = address.pathname;
-        const override = intercept(address, init);
-        if (override) {
-          const response = await override;
-          if (response) return response;
-        }
-        if (path === '/api/notifications/device')
-          return json({
-            data: {
-              available: true,
-              enabled: true,
-              expenseUpdates: true,
-              payments: true,
-              revision: 1,
-              activation,
-              binding,
-              expenseCutoff: new Date(0).toISOString(),
-              paymentCutoff: new Date(0).toISOString(),
-            },
-          });
-        if (path.endsWith('/sign-in'))
-          return new Response(JSON.stringify({ user }), {
-            headers: { 'Set-Cookie': 'better-auth.session_token=alex.signature; Max-Age=2592000' },
-          });
-        if (path.endsWith('/get-session'))
-          return json({ user, session: { userId: actor, expiresAt: '2030-01-01T00:00:00Z' } });
-        if (path.endsWith('/sign-out')) return json({ success: true });
-        if (path === '/api/groups') return json({ status: 200, data: [group] });
-        if (path === `/api/groups/${groupId}`) return json({ status: 200, data: group });
-        if (path.endsWith('/user/balances')) return json({ status: 200, data: { buckets: [] } });
-        if (path.endsWith('/expenses'))
-          return json({
-            data: {
-              expenses: [],
-              pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-              summary: {
-                count: 0,
-                totalsByCurrency: [],
-                userOwes: 0,
-                userGetsBack: 0,
-                byMember: [],
-              },
-            },
-          });
-        if (path.endsWith('/balances'))
-          return json({ data: { currency: 'INR', balances: [], debts: [], byCurrency: [] } });
-        if (path.endsWith('/activity')) return json(page());
-        return json({}, 404);
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
       },
     },
-  );
+  });
+  native.stores.expenseDrafts.keys = async () => [];
+  delete (native.stores.expenseDrafts as import('./account-record-storage').AccountGroupRecordStore)
+    .list;
+  return native.open();
 }
 
 const binding = '00000000-0000-4000-8000-000000000001';
@@ -232,24 +178,7 @@ describe('Expense notification receipt and tap at the Android controller seam', 
       email: 'sam@example.test',
       image: null,
     };
-    let account = user;
-    const controller = setup((url, init) => {
-      if (url.pathname.endsWith('/sign-out'))
-        return Promise.reject(new TypeError('Network request failed'));
-      if (url.pathname.endsWith('/sign-in')) {
-        account = String(init.body).includes('sam') ? sam : user;
-        return new Response(JSON.stringify({ user: account }), {
-          headers: {
-            'Set-Cookie': `better-auth.session_token=${account.name}.signature; Max-Age=2592000`,
-          },
-        });
-      }
-      if (url.pathname.endsWith('/get-session'))
-        return json({
-          user: account,
-          session: { userId: account.id, expiresAt: '2030-01-01T00:00:00Z' },
-        });
-    });
+    const controller = setup(undefined, undefined, { failedRevoke: true });
     await controller.signIn('alex');
     await controller.signOut();
     expect(controller.getSnapshot().auth.status).toBe('sign-out-unconfirmed');

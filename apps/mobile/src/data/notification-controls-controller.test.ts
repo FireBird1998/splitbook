@@ -1,7 +1,7 @@
 import { onlineManager } from '@tanstack/query-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
-import type { MobileDependencies } from './types';
+import { testPhone, notificationNative } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 const user = {
   id: 'a00000000000000000000001',
   name: 'Alex',
@@ -32,25 +32,26 @@ function device(available = true) {
   let unreachable = false;
   let hold: Promise<void> | null = null;
   let heldRead: Promise<void> | null = null;
-  const requestPermission = vi.fn(async () => 'granted' as const);
-  const clear = vi.fn(async () => {});
   const writes: unknown[] = [];
-  const notifications = {
-    installation: async () => ({
+  const notifications = notificationNative({
+    installation: {
       id: '00000000-0000-4000-8000-000000000001',
       key: 'private-installation-proof-000000000001',
-    }),
-    permission: async () => 'granted' as const,
-    requestPermission,
-    token: async () => 'private-native-token',
-    clear,
-    openSettings: vi.fn(async () => {}),
-  };
-  const fetch: MobileDependencies['fetch'] = async (url, init) => {
-    if (url.includes('demo-persona/sign-in')) return response({ user, token: 'session' }, 200);
-    if (url.includes('get-session'))
-      return response({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
-    if (url.includes('sign-out')) return response({ success: true });
+    },
+    token: 'private-native-token',
+  });
+  const backend = fakeSplitbook();
+  backend.world.people.alex = user;
+  backend.world.groups = [];
+  backend.auth.cookie = () => 'better-auth.session_token=fictional.signature';
+  backend.reply('*', '*', async ({ url: address, init }) => {
+    const url = address.href;
+    if (
+      ['/api/auth/demo-persona/sign-in', '/api/auth/get-session', '/api/auth/sign-out'].includes(
+        address.pathname,
+      )
+    )
+      return undefined;
     if (url.includes('/api/notifications/device')) {
       if (unreachable) throw new TypeError('Fictional offline boundary');
       if (init.method !== 'POST' && heldRead) await heldRead;
@@ -94,19 +95,27 @@ function device(available = true) {
     }
     if (url.includes('/api/groups')) return response({ data: [] });
     return response({ data: {} });
-  };
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:3000',
-      authOrigin: 'http://localhost:3000',
-      developmentPersonaEnabled: true,
-    },
-    {
-      fetch,
+  });
+  const native = testPhone(backend, {
+    origin: 'http://localhost:3000',
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
+      accountLocal: undefined,
       notifications,
       credentials: { load: async () => null, save: async () => {}, clear: async () => {} },
     },
-  );
+  });
+  const controller = native.open();
+
   return {
     controller,
     notifications,

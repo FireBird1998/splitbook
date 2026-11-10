@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import { testPhone, notificationNative } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { MobileDependencies, MobileTimer } from './types';
 
 /**
@@ -53,8 +54,6 @@ type Post = Record<string, unknown> & { cookie: string };
 /** One phone, its server and its saved session; each `app()` is a fresh process of the app. */
 function phone() {
   let registration: Registration | null = null;
-  let saved: string | null = null;
-  let sessions = 0;
   let ids = 0;
   const posts: Post[] = [];
   let gets = 0;
@@ -126,6 +125,41 @@ function phone() {
     };
     return json({ data: state() });
   };
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.people.sam = sam;
+  backend.auth.cookie = (persona, sequence) =>
+    `better-auth.session_token=${backend.world.people[persona].name}-${sequence}.signature`;
+  Object.defineProperty(backend.world, 'groups', { get: () => [group(server.signedIn)] });
+  backend.reply('*', '*', ({ url, init, body, headers }) => {
+    const path = url.pathname;
+    if (path === '/api/auth/demo-persona/sign-in') {
+      server.signedIn = body?.personaId === 'sam' ? sam : alex;
+      return undefined;
+    }
+    if (['/api/auth/get-session', '/api/auth/sign-out'].includes(path)) return undefined;
+    const cookie =
+      /better-auth\.session_token=([^;]+)/.exec(headers.get('Cookie') ?? '')?.[1] ?? '';
+    if (path === '/api/notifications/device') return answerDevice(init, cookie);
+    if (path === '/api/groups' || path === '/api/user/balances') return undefined;
+    return json({ data: {} });
+  });
+  const phoneDevice = testPhone(backend, {
+    origin: 'http://localhost:4144',
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
+      accountLocal: undefined,
+    },
+  });
   /**
    * Like expo-notifications, every token read also announces that token to the push token
    * listener: during the read (`'during'`) or just after it returns (`'after'`).
@@ -137,15 +171,13 @@ function phone() {
   ) => {
     let listener: ((token: string) => void) | null = null;
     const notifications = {
-      installation: async () => ({
-        id: '00000000-0000-4000-8000-000000000844',
-        key: 'private-installation-proof-844844844',
+      ...notificationNative({
+        installation: {
+          id: '00000000-0000-4000-8000-000000000844',
+          key: 'private-installation-proof-844844844',
+        },
+        token: 'private-token-1',
       }),
-      permission: vi.fn(async () => 'granted' as const),
-      requestPermission: vi.fn(async () => 'granted' as const),
-      token: vi.fn(async () => 'private-token-1'),
-      clear: vi.fn(async () => {}),
-      openSettings: async () => {},
       onToken: vi.fn((next: (token: string) => void) => {
         listener = next;
         return () => {
@@ -161,51 +193,8 @@ function phone() {
       else setTimeout(() => listener?.(token), 0);
       return token;
     });
-    const controller = createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4144',
-        authOrigin: 'http://localhost:4144',
-        developmentPersonaEnabled: true,
-      },
-      {
-        notifications,
-        timer,
-        credentials: {
-          load: async () => saved,
-          save: async (value) => {
-            saved = value;
-          },
-          clear: async () => {
-            saved = null;
-          },
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname;
-          const cookie =
-            /better-auth\.session_token=([^;]+)/.exec(
-              String((init.headers as Record<string, string> | undefined)?.Cookie ?? ''),
-            )?.[1] ?? '';
-          if (path.endsWith('/sign-in')) {
-            server.signedIn = String(init.body).includes('sam') ? sam : alex;
-            return json(
-              { user: server.signedIn },
-              200,
-              `${server.signedIn.name}-${++sessions}.signature`,
-            );
-          }
-          if (path.endsWith('/get-session'))
-            return json({
-              user: server.signedIn,
-              session: { userId: server.signedIn.id, expiresAt: '2030-01-01T00:00:00Z' },
-            });
-          if (path.endsWith('/sign-out')) return json({ success: true });
-          if (path === '/api/notifications/device') return answerDevice(init, cookie);
-          if (path === '/api/groups') return json({ data: [group(server.signedIn)] });
-          if (path.endsWith('/user/balances')) return json({ data: { buckets: [] } });
-          return json({ data: {} });
-        },
-      },
-    );
+    const controller = phoneDevice.open({ parts: { notifications, timer } });
+
     return {
       controller,
       notifications,

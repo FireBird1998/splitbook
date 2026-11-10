@@ -381,13 +381,22 @@ export function until(
 }
 
 /** Native notification boundary shared by controller suites; each instance keeps its own spies. */
-export function notificationNative(options:{installation?:{id:string;key:string};token?:string}={}){
- type Permission=Awaited<ReturnType<NonNullable<MobileDependencies['notifications']>['permission']>>;
- return {
-  installation:options.installation?async()=>({...options.installation!}):notificationDevice.installation,
-  permission:vi.fn<()=>Promise<Permission>>(notificationDevice.permission),
-  requestPermission:vi.fn<()=>Promise<Permission>>(notificationDevice.requestPermission),
-  token:vi.fn(options.token===undefined?notificationDevice.token:async()=>options.token!),
-  clear:vi.fn(notificationDevice.clear),openSettings:vi.fn(notificationDevice.openSettings),
- };
+export function notificationNative(
+  options: { installation?: { id: string; key: string }; token?: string } = {},
+) {
+  type Permission = Awaited<
+    ReturnType<NonNullable<MobileDependencies['notifications']>['permission']>
+  >;
+  return {
+    installation: options.installation
+      ? async () => ({ ...options.installation! })
+      : notificationDevice.installation,
+    permission: vi.fn<() => Promise<Permission>>(notificationDevice.permission),
+    requestPermission: vi.fn<() => Promise<Permission>>(notificationDevice.requestPermission),
+    token: vi.fn(
+      options.token === undefined ? notificationDevice.token : async () => options.token!,
+    ),
+    clear: vi.fn(notificationDevice.clear),
+    openSettings: vi.fn(notificationDevice.openSettings),
+  };
 }
