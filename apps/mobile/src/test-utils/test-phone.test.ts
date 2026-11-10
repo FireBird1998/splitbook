@@ -450,3 +450,13 @@ it('opens the phone with its build configuration and distinct API and auth origi
   expect(server.requests[0].url.origin).toBe('http://10.0.2.2:4127');
   expect(server.requests[0].headers.get('Origin')).toBe('http://localhost:4127');
 });
+
+it('keeps a payment store’s separated native keys independently of Draft keys', async () => {
+  const phone=testPhone(fakeSplitbook(),{settlementSeparator:':'});
+  await phone.stores.settlementAttempts.save('alex','maple',{payment:1});
+  expect([...phone.stores.settlementAttempts.records.keys()]).toEqual(['alex:maple']);
+  expect(await phone.stores.settlementAttempts.load('alex','maple')).toEqual({payment:1});
+  expect(await phone.stores.settlementAttempts.list('alex')).toEqual([{groupId:'maple',value:{payment:1}}]);
+  await phone.stores.expenseDrafts.save('alex','maple',{draft:1});
+  expect([...phone.stores.expenseDrafts.records.keys()]).toEqual(['alexmaple']);
+});
