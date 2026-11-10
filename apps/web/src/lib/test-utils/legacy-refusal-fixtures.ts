@@ -121,7 +121,8 @@ export function currentCause(
     | 'expense'
     | 'recurring'
     | 'recurring-create'
-    | 'tag-change',
+    | 'tag-change'
+    | 'payment',
 ): Error {
   const currency = currentCurrencies.get(cause);
   if (currency) return currency;
@@ -155,6 +156,17 @@ export function currentCause(
       if (caller === 'recurring-create' && code === 'NOT_HOUSEHOLD') return new Refusal(code);
     }
     if (caller === 'tag-change' && code === 'INVALID_TAG') return new Refusal(code);
+    if (caller === 'payment') {
+      if (code === 'FORBIDDEN_SETTLEMENT') return new Refusal(code, { variant: 'payment' });
+      if (
+        code === 'INVALID_MEMBERS' ||
+        code === 'SAME_PARTY' ||
+        code === 'CURRENCY_MISMATCH' ||
+        code === 'NO_SETTLEMENT_DEBT' ||
+        code === 'SETTLEMENT_TRANSACTIONS_REQUIRED'
+      )
+        return new Refusal(code);
+    }
 
     if (code === 'LAST_ADMIN' && (caller === 'demotion' || caller === 'removal'))
       return new Refusal(code, { variant: caller });
