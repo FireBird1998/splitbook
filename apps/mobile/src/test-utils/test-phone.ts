@@ -1,10 +1,24 @@
 import { onTestFinished } from 'vitest';
 import { createCheckedMobileController } from './flow-monitor';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
-import type { MobileDependencies } from '../data/types';
+import type { AccountLocalStorage, MobileDependencies } from '../data/types';
 import { savedQueriesIn } from './saved-queries';
 
 type StoreOperation = 'load' | 'save' | 'remove' | 'clear' | 'list' | 'keys';
+
+type PurgeStore =
+  | 'savedQueries'
+  | 'offlineIdentity'
+  | 'expenseDrafts'
+  | 'settlementAttempts'
+  | 'draftRequests'
+  | 'tagRequests'
+  | 'groupCreations'
+  | 'financialCleanup'
+  | 'untrustedCopies';
+type PhoneParts = Omit<Partial<Omit<MobileDependencies, 'fetch'>>, 'accountLocal'> & {
+  accountLocal?: Partial<AccountLocalStorage>;
+};
 
 /** Faults stop at the native storage boundary, before its atomic read or write. */
 function faultable<T extends object>(store: T) {
@@ -98,7 +112,8 @@ export function testPhone(
   options: {
     now?: number;
     newSubmissionKey?: () => string;
-    parts?: Partial<Omit<MobileDependencies, 'fetch'>>;
+    parts?: PhoneParts;
+    purge?: readonly PurgeStore[];
     monitor?: boolean;
   } = {},
 ) {
@@ -181,25 +196,36 @@ export function testPhone(
     newSubmissionKey: options.newSubmissionKey ?? (() => `test-phone-key-${++key}`),
     ...options.parts,
   };
-  const accountLocal: NonNullable<MobileDependencies['accountLocal']> = {
-    owner: stores.owner,
-    cleanupMarker: stores.cleanupMarker,
+  const accountParts = options.parts?.accountLocal;
+  const accountLocal: AccountLocalStorage = {
     signOutRecord: stores.signOutRecord,
     financialCleanup: stores.financialCleanup,
     untrustedCopies: stores.untrustedCopies,
-    // A part a test took away (`parts: { savedQueries: undefined }`) is not a store to purge.
-    stores: [
-      parts.savedQueries,
-      parts.offlineIdentity,
-      parts.expenseDrafts,
-      parts.settlementAttempts,
-      parts.draftRequests,
-      parts.tagRequests,
-      parts.groupCreations,
-      stores.financialCleanup,
-      stores.untrustedCopies,
-    ].filter((store) => store !== undefined),
+    ...accountParts,
+    owner: accountParts?.owner ?? stores.owner,
+    cleanupMarker: accountParts?.cleanupMarker ?? stores.cleanupMarker,
+    stores: [],
   };
+  const available = {
+    savedQueries: parts.savedQueries,
+    offlineIdentity: parts.offlineIdentity,
+    expenseDrafts: parts.expenseDrafts,
+    settlementAttempts: parts.settlementAttempts,
+    draftRequests: parts.draftRequests,
+    tagRequests: parts.tagRequests,
+    groupCreations: parts.groupCreations,
+    financialCleanup: accountLocal.financialCleanup,
+    untrustedCopies: accountLocal.untrustedCopies,
+  };
+  // A fixture may deliberately omit a part, or keep a different native purge registry. Preserve
+  // both conditions; tests must not silently gain cleanup of a store their original phone kept.
+  accountLocal.stores =
+    accountParts?.stores ??
+    (options.purge ?? (Object.keys(available) as PurgeStore[]))
+      .map((key) => available[key])
+      .filter((store) => store !== undefined);
+  const omitAccount =
+    options.parts && 'accountLocal' in options.parts && accountParts === undefined;
   const phone = {
     stores,
     clock,
@@ -218,7 +244,7 @@ export function testPhone(
         },
         {
           ...parts,
-          accountLocal: options.parts?.accountLocal ?? accountLocal,
+          accountLocal: omitAccount ? undefined : accountLocal,
           fetch: server.fetch,
         },
       );
