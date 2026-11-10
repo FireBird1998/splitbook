@@ -1319,6 +1319,149 @@ exports[`recurring-expense record of recordings > a changed template keeps the r
 }
 `;
 
+exports[`recurring-expense record of recordings > a failed first insertion leaves the currency lock the writer committed 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [
+      {
+        "_id": "<template-1>",
+        "amount": 120,
+        "category": "food",
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "dayOfMonth": 1,
+        "description": "Recorded dinner",
+        "endsOn": null,
+        "group": "<group-1>",
+        "isPaused": false,
+        "lastGeneratedFor": null,
+        "paidBy": [
+          {
+            "amount": 120,
+            "user": "<member-b>",
+          },
+        ],
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "startsOn": "2026-11-01T00:00:00.000Z",
+        "tag": "Groceries",
+        "tagId": "<tag-groceries-1>",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+      },
+    ],
+  },
+  "answers": {
+    "body": {
+      "data": {
+        "expenses": [],
+        "pagination": {
+          "limit": 20,
+          "page": 1,
+          "total": 0,
+          "totalPages": 0,
+        },
+        "summary": {
+          "count": 0,
+          "totalAmount": 0,
+          "totalsByCurrency": [],
+          "userGetsBack": 0,
+          "userOwes": 0,
+        },
+      },
+      "status": 200,
+    },
+    "status": 200,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [
+      {
+        "_id": "<template-1>",
+        "amount": 120,
+        "category": "food",
+        "createdAt": "2026-11-11T11:59:00.000Z",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "dayOfMonth": 1,
+        "description": "Recorded dinner",
+        "endsOn": null,
+        "group": "<group-1>",
+        "isPaused": false,
+        "lastGeneratedFor": null,
+        "paidBy": [
+          {
+            "amount": 120,
+            "user": "<member-b>",
+          },
+        ],
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "user": "<member-b>",
+          },
+          {
+            "amount": 60,
+            "user": "<member-c>",
+          },
+        ],
+        "splitMethod": "equal",
+        "startsOn": "2026-11-01T00:00:00.000Z",
+        "tag": "Groceries",
+        "tagId": "<tag-groceries-1>",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
+      },
+    ],
+  },
+}
+`;
+
 exports[`recurring-expense record of recordings > actor is no longer a member before the request 1`] = `
 {
   "after": {

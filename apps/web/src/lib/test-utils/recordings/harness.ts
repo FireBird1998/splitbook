@@ -1,3 +1,8 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import mongoose from 'mongoose';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -75,7 +80,7 @@ export function recordWriter(writer: Writer) {
     tag: 'Food',
     date: '2026-11-01',
     paidBy: [{ user: alex, amount: 120 }],
-    splitMethod: 'equal',
+    splitMethod: 'equal' as const,
     splitBetween: [{ user: sam }, { user: priya }],
     ...changes,
   });
@@ -113,6 +118,7 @@ export function recordWriter(writer: Writer) {
   const revision = () => (writer === 'restore' ? '1' : '0');
   const send = (changes: object = {}, headers: Record<string, string> = {}): Promise<Answer> => {
     const keyed = { 'Idempotency-Key': 'recording-submission-0001', ...headers };
+    if (keyed['Idempotency-Key'] === '') delete (keyed as Partial<typeof keyed>)['Idempotency-Key'];
     switch (writer) {
       case 'manual-expense':
         return http(routes.expenses.POST, 'POST', 'expenses', expenseBody(changes), keyed);
@@ -157,7 +163,7 @@ export function recordWriter(writer: Writer) {
   };
   const collection = (name: string) => mongoose.connection.db!.collection(name);
   const remove = (member: string) =>
-    Group.collection.updateOne(
+    Group.updateOne(
       { _id: new mongoose.Types.ObjectId(groupId) },
       { $pull: { members: { user: new mongoose.Types.ObjectId(member) } } },
     );
@@ -222,7 +228,10 @@ export function recordWriter(writer: Writer) {
       expect(after.settlements).toHaveLength(initial.settlements.length);
       expect(after.activities).toEqual(initial.activities);
     }
-    expect(names.normalise({ before: initial, answers, after })).toMatchSnapshot();
+    const record = names.normalise({ before: initial, answers, after });
+    if (process.env.RECORDING_STANDALONE_RESULT)
+      await writeFile(process.env.RECORDING_STANDALONE_RESULT, JSON.stringify(record));
+    else expect(record).toMatchSnapshot();
     return { answers, after, before: initial };
   };
 
@@ -274,10 +283,14 @@ export function recordWriter(writer: Writer) {
 
   beforeAll(async () => {
     await connectSignedIn(db);
-    await requireReplicaSet();
+    if (process.env.RECORDING_STANDALONE_RESULT) {
+      const hello = await mongoose.connection.db!.admin().command({ hello: 1 });
+      expect(hello.setName).toBeUndefined();
+      expect(hello.msg).not.toBe('isdbgrid');
+    } else await requireReplicaSet();
     routes = await handlers();
   });
-  beforeEach(async () => {
+  const prepare = async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(clock.getTime() - 60_000));
     vi.stubEnv('ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED', 'true');
@@ -400,7 +413,8 @@ export function recordWriter(writer: Writer) {
     }
     await Activity.deleteMany({});
     vi.setSystemTime(clock);
-  });
+  };
+  beforeEach(prepare);
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
@@ -510,7 +524,11 @@ export function recordWriter(writer: Writer) {
               splitBetween: [{ user: sam }, { user: priya }],
             }
           : {};
-      await interleave(() => remove(sam), changes);
+      await interleave(
+        () => remove(sam),
+        changes,
+        writer === 'edit' || writer === 'restore' ? 1 : fenceNumber,
+      );
     });
     it('two requests race with the same retry identity', async () => {
       const transaction = mongoose.connection.transaction.bind(mongoose.connection);
@@ -792,6 +810,139 @@ export function recordWriter(writer: Writer) {
         }
       });
     }
+    if (isChange)
+      it('a full Activity backlog refuses another event without saving the change', async () => {
+        const pending = Array.from({ length: 100 }, (_, ordinal) => ({
+          _id: new mongoose.Types.ObjectId(),
+          group: new mongoose.Types.ObjectId(groupId),
+          actor: new mongoose.Types.ObjectId(alex),
+          occurredAt: clock,
+          type: 'expense_updated',
+          metadata: { expenseId, ordinal },
+        }));
+        await Expense.collection.updateOne(
+          { _id: new mongoose.Types.ObjectId(expenseId) },
+          { $set: { pendingActivity: pending } },
+        );
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const recorded = await capture(() => send());
+        expect(recorded.after.activities).toHaveLength(0);
+        expect(recorded.after.expenses[0].pendingActivity).toHaveLength(100);
+      });
+    if (writer === 'manual-expense' || writer === 'edit' || writer === 'restore')
+      it('a currency removed before the financial commit refuses the recording', async () => {
+        await interleave(
+          () => Group.updateOne({ _id: groupId }, { $pull: { alternateCurrencies: 'EUR' } }),
+          { currency: 'EUR' },
+        );
+      });
+    if (writer === 'single-settlement' || writer === 'settlement-batch') {
+      it('a paying currency removed before the financial commit refuses the recording', async () => {
+        const cross = {
+          currency: 'INR',
+          amount: 30,
+          amountPaidMinor: 3000,
+          appliedRate: '1',
+          rateKind: 'entered',
+        };
+        await interleave(
+          () => Group.updateOne({ _id: groupId }, { $pull: { alternateCurrencies: 'EUR' } }),
+          writer === 'single-settlement'
+            ? { ...cross, paidCurrency: 'EUR' }
+            : { paidCurrency: 'EUR', settlements: [cross] },
+        );
+      });
+      it('a real standalone database keeps its own transaction requirement', async () => {
+        if (process.env.RECORDING_STANDALONE_RESULT) {
+          const recorded = await capture(() => send());
+          expect((recorded.answers as Answer).status).toBe(
+            writer === 'single-settlement' ? 201 : 503,
+          );
+          return;
+        }
+        const standaloneUri = process.env.STANDALONE_TEST_MONGODB_URI;
+        if (!standaloneUri)
+          throw new Error('Recordings require STANDALONE_TEST_MONGODB_URI for topology coverage');
+        // Auth and models share one client. A separate process exercises a fresh server instance
+        // against the real standalone database, then returns its record to this writer's snapshot.
+        const directory = await mkdtemp(join(tmpdir(), 'splitbook-recording-'));
+        const result = join(directory, 'record.json');
+        try {
+          await promisify(execFile)(
+            process.execPath,
+            [
+              resolve('node_modules/vitest/vitest.mjs'),
+              'run',
+              `src/lib/recording-${writer}.integration.test.ts`,
+              '-t',
+              'a real standalone database keeps its own transaction requirement',
+              '--maxWorkers',
+              '1',
+            ],
+            {
+              cwd: process.cwd(),
+              timeout: 15_000,
+              env: {
+                ...process.env,
+                TEST_MONGODB_URI: standaloneUri,
+                RECORDING_STANDALONE_RESULT: result,
+              },
+            },
+          );
+          expect(JSON.parse(await readFile(result, 'utf8'))).toMatchSnapshot();
+        } finally {
+          await rm(directory, { recursive: true, force: true });
+        }
+      });
+    }
+    if (writer === 'manual-expense' || writer === 'single-settlement')
+      it('two saves without a submission key are two recordings', async () => {
+        await capture(async () => [
+          await send({}, { 'Idempotency-Key': '' }),
+          await send({}, { 'Idempotency-Key': '' }),
+        ]);
+      });
+    if (writer === 'tag-change')
+      it('a stale Expense does not stop the next Expense from changing', async () => {
+        const second = await http(
+          routes.expenses.POST,
+          'POST',
+          'expenses',
+          expenseBody({ description: 'Another dinner' }),
+        );
+        expect(second.status).toBe(201);
+        await Activity.deleteMany({});
+        const recorded = await capture(() =>
+          send({
+            expenses: [
+              { id: expenseId, revision: 91 },
+              { id: second.body.data._id, revision: 0 },
+            ],
+          }),
+        );
+        expect(
+          (recorded.answers as Answer).body.data.results.map(
+            (row: { outcome: string }) => row.outcome,
+          ),
+        ).toEqual(['changed-elsewhere', 'changed']);
+      });
+    if (writer === 'manual-expense' || writer === 'recurring-expense')
+      it('a failed first insertion leaves the currency lock the writer committed', async () => {
+        await Expense.createCollection();
+        await mongoose.connection.db!.command({
+          collMod: 'expenses',
+          validator: { description: { $ne: 'Recorded dinner' } },
+        });
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+          const recorded = await capture(() => send());
+          expect(recorded.after.expenses).toHaveLength(0);
+          expect(recorded.after.activities).toHaveLength(0);
+          expect(recorded.after.group?.currencyLocked).toBe(writer === 'recurring-expense');
+        } finally {
+          await mongoose.connection.db!.command({ collMod: 'expenses', validator: {} });
+        }
+      });
     for (const recovery of ['retry', 'feed'] as const)
       it(`Activity fails after the commit, then ${recovery}`, async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -801,10 +952,20 @@ export function recordWriter(writer: Writer) {
         const before = await state();
         const first = await send();
         const pending = await state();
+        expect(pending.activities).toHaveLength(0);
+        expect(
+          [...pending.expenses, ...pending.settlements].flatMap((row) => row.pendingActivity ?? []),
+        ).toHaveLength(1);
         fault.mockRestore();
         const recovered =
           recovery === 'retry' ? await send() : await http(routes.feed.GET, 'GET', 'activity');
         const after = await state();
+        const publishesOnRetry = [
+          'manual-expense',
+          'single-settlement',
+          'settlement-batch',
+        ].includes(writer);
+        expect(after.activities).toHaveLength(recovery === 'feed' || publishesOnRetry ? 1 : 0);
         expect(names.normalise({ before, first, pending, recovered, after })).toMatchSnapshot();
       });
   });
