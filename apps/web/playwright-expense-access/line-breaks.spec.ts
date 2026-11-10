@@ -16,12 +16,22 @@ import { test, expect, dataOf, joinGroup, type Ledger } from './fixtures';
 
 const { alex, sam, priya } = DEMO_PERSONA_IDS;
 
+// The Date column uses EEE d MMM this year. In its Outfit font, May is the widest short
+// month and 20 May is the widest day + month once the weekday stacks above it.
+const WIDEST_DAY = '2026-05-20T12:00:00.000Z';
+const WIDEST_DAY_WITH_YEAR = '2000-05-20T12:00:00.000Z';
+const TWO_DIGIT_NOVEMBER = '2026-11-10T12:00:00.000Z';
+const VIEWER_TODAY = new Date('2026-11-11T12:00:00.000Z');
+
+test.use({ timezoneId: 'UTC' });
+
 /** Widths from a small laptop to a wide screen, in 32 px steps. */
 const WIDTHS = Array.from({ length: 21 }, (_, step) => 960 + step * 32);
 /** The browser's text size, as its setting makes it: every rem grows. */
 const TEXT_SIZES = [100, 110, 125, 150, 175, 200];
 
 async function open(page: Page, ledger: Ledger, path: string) {
+  await page.clock.setFixedTime(VIEWER_TODAY);
   await page.context().addCookies((await ledger.alex.storageState()).cookies);
   await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}${path}`);
 }
@@ -109,7 +119,7 @@ async function twoPersonHousehold(ledger: Ledger) {
           currency: 'INR',
           category: 'housing',
           tag: 'Utilities',
-          date: new Date().toISOString(),
+          date: WIDEST_DAY,
           paidBy: [{ user: sam, amount }],
           splitMethod: 'equal',
           splitBetween: [{ user: alex }, { user: sam }],
@@ -172,7 +182,7 @@ test('a payment’s record keeps its rates, their fetched time and its date whol
         currency: 'EUR',
         category: 'food',
         tag: 'Food',
-        date: new Date().toISOString(),
+        date: WIDEST_DAY,
         paidBy: [{ user: sam, amount: 40 }],
         splitMethod: 'equal',
         splitBetween: [{ user: alex }, { user: sam }],
@@ -180,11 +190,6 @@ test('a payment’s record keeps its rates, their fetched time and its date whol
     }),
     201,
   );
-  // Frankfurter's rates of the day before, fetched at 17:44 that day, in the viewer's time.
-  const day = new Date();
-  day.setDate(day.getDate() - 1);
-  const asOf = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
-  const fetchedAt = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 17, 44);
   await dataOf(
     await ledger.alex.post(`/api/groups/${group}/settlements`, {
       data: {
@@ -197,8 +202,8 @@ test('a payment’s record keeps its rates, their fetched time and its date whol
         rateKind: 'suggested',
         suggestedRate: '92.1',
         rateSource: 'frankfurter',
-        rateAsOf: asOf,
-        rateFetchedAt: fetchedAt.toISOString(),
+        rateAsOf: '2026-05-20',
+        rateFetchedAt: '2026-05-20T17:44:00.000Z',
       },
     }),
     201,
@@ -210,8 +215,7 @@ test('a payment’s record keeps its rates, their fetched time and its date whol
   const card = page.getByRole('region', { name: 'Payment', exact: true });
   const fetched = card.getByText(/fetched\s/);
   await expect(fetched).toBeVisible();
-  const month = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[fetchedAt.getMonth()];
-  const when = `${fetchedAt.getDate()} ${month} 17:44`;
+  const when = '20 May 17:44';
   await expect(fetched).toContainText(`fetched ${when}`);
 
   // #899: the Debt before the payment, "−€20.00", keeps its sign: no line ends with it.
@@ -253,7 +257,8 @@ test('a payment’s record keeps its rates, their fetched time and its date whol
 /** The demo's Goa Friends Trip, as `pnpm web demo:seed` writes it: three members, seven Expenses. */
 async function demoTrip(ledger: Ledger) {
   const plan = buildDemoSeedPlan();
-  const day = (daysAgo: number) => daysAgoDate(daysAgo).toISOString().slice(0, 10);
+  const tripSeedDay = new Date('2026-05-27T12:00:00.000Z');
+  const day = (daysAgo: number) => daysAgoDate(daysAgo, tripSeedDay).toISOString();
   const group = (
     await dataOf(
       await ledger.alex.post('/api/groups', {
@@ -262,8 +267,8 @@ async function demoTrip(ledger: Ledger) {
           category: 'trip',
           defaultCurrency: plan.currency,
           alternateCurrencies: [],
-          startDate: day(10),
-          endDate: day(7),
+          startDate: day(10).slice(0, 10),
+          endDate: day(7).slice(0, 10),
         },
       }),
       201,
@@ -283,7 +288,7 @@ async function demoTrip(ledger: Ledger) {
         data: {
           ...{ description, amount, currency, category, tag, paidBy, splitMethod },
           splitBetween: expense.splitBetween,
-          date: daysAgoDate(expense.daysAgo).toISOString(),
+          date: day(expense.daysAgo),
         },
       }),
       201,
@@ -352,6 +357,7 @@ async function groupWith(
   ledger: Ledger,
   name: string,
   expenses: Array<Record<string, unknown> & { paidBy: Array<{ user: string; amount: number }> }>,
+  date = WIDEST_DAY,
 ) {
   const group = (
     await dataOf(
@@ -376,7 +382,7 @@ async function groupWith(
   for (const expense of expenses)
     await dataOf(
       await actors[expense.paidBy[0]!.user]!.post(`/api/groups/${group}/expenses`, {
-        data: { category: 'housing', tag: 'Utilities', date: new Date().toISOString(), ...expense },
+        data: { category: 'housing', tag: 'Utilities', date, ...expense },
       }),
       201,
     );
@@ -549,81 +555,98 @@ async function brokenName(table: Locator) {
 // table's stacking it needs about 660 px. The Designer's review: stacked, "Sam Chen" took a line
 // a word under the initials, three lines where it had two; a short name now takes two at most,
 // in the long-name Group's other rows and in a Group of short names alike.
-test('the Expenses table keeps You in its card with a long name, CHF 10,000,000.00 or both (#942)', async ({
-  page,
-  ledger,
-}) => {
-  const named = await groupWith(ledger, 'Long name', [
-    {
-      description: 'Flat rent',
-      amount: 54_000,
-      currency: 'INR',
-      paidBy: [{ user: alex, amount: 54_000 }],
-      splitMethod: 'equal',
-      splitBetween: [{ user: alex }, { user: sam }, { user: priya }],
-    },
-    {
-      description: 'House-warming party snacks',
-      amount: 3240,
-      currency: 'INR',
-      paidBy: [{ user: sam, amount: 3240 }],
-      splitMethod: 'shares',
-      splitBetween: [
-        { user: alex, shares: 1 },
-        { user: sam, shares: 2 },
-        { user: priya, shares: 1 },
-      ],
-    },
-    {
-      description: 'AC servicing — two rooms',
-      amount: 1800,
-      currency: 'INR',
-      paidBy: [{ user: alex, amount: 1800 }],
-      splitMethod: 'percentage',
-      splitBetween: [
-        { user: alex, percentage: 60 },
-        { user: sam, percentage: 40 },
-      ],
-    },
-    {
-      description: 'Monthly staples — rice, dal, oil',
-      amount: 1864.5,
-      currency: 'INR',
-      paidBy: [{ user: priya, amount: 1864.5 }],
-      splitMethod: 'equal',
-      splitBetween: [{ user: alex }, { user: sam }, { user: priya }],
-    },
-  ]);
-  const large = await groupWith(ledger, 'Large amounts', [
-    tenMillion('Security deposit', sam, [alex, sam]),
-    tenMillion('Renovation fund', alex, [alex, sam]),
-  ]);
-  const both = await groupWith(ledger, 'Large amounts, long name', [
-    tenMillion('Security deposit', priya, [alex, priya]),
-    tenMillion('Renovation fund', alex, [alex, sam]),
-  ]);
-  const everyday = await groupWith(ledger, 'Everyday', [
-    {
-      description: 'Monthly staples — rice, dal, oil',
-      amount: 1864.5,
-      currency: 'INR',
-      paidBy: [{ user: priya, amount: 1864.5 }],
-      splitMethod: 'equal',
-      splitBetween: [{ user: alex }, { user: sam }, { user: priya }],
-    },
-    {
-      description: 'House-warming party snacks',
-      amount: 3240,
-      currency: 'INR',
-      paidBy: [{ user: sam, amount: 3240 }],
-      splitMethod: 'shares',
-      splitBetween: [
-        { user: alex, shares: 1 },
-        { user: sam, shares: 2 },
-        { user: priya, shares: 1 },
-      ],
-    },
-  ]);
+async function checkExpenseTableFits(page: Page, ledger: Ledger, date: string, label: string) {
+  const named = await groupWith(
+    ledger,
+    'Long name',
+    [
+      {
+        description: 'Flat rent',
+        amount: 54_000,
+        currency: 'INR',
+        paidBy: [{ user: alex, amount: 54_000 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }, { user: sam }, { user: priya }],
+      },
+      {
+        description: 'House-warming party snacks',
+        amount: 3240,
+        currency: 'INR',
+        paidBy: [{ user: sam, amount: 3240 }],
+        splitMethod: 'shares',
+        splitBetween: [
+          { user: alex, shares: 1 },
+          { user: sam, shares: 2 },
+          { user: priya, shares: 1 },
+        ],
+      },
+      {
+        description: 'AC servicing — two rooms',
+        amount: 1800,
+        currency: 'INR',
+        paidBy: [{ user: alex, amount: 1800 }],
+        splitMethod: 'percentage',
+        splitBetween: [
+          { user: alex, percentage: 60 },
+          { user: sam, percentage: 40 },
+        ],
+      },
+      {
+        description: 'Monthly staples — rice, dal, oil',
+        amount: 1864.5,
+        currency: 'INR',
+        paidBy: [{ user: priya, amount: 1864.5 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }, { user: sam }, { user: priya }],
+      },
+    ],
+    date,
+  );
+  const large = await groupWith(
+    ledger,
+    'Large amounts',
+    [
+      tenMillion('Security deposit', sam, [alex, sam]),
+      tenMillion('Renovation fund', alex, [alex, sam]),
+    ],
+    date,
+  );
+  const both = await groupWith(
+    ledger,
+    'Large amounts, long name',
+    [
+      tenMillion('Security deposit', priya, [alex, priya]),
+      tenMillion('Renovation fund', alex, [alex, sam]),
+    ],
+    date,
+  );
+  const everyday = await groupWith(
+    ledger,
+    'Everyday',
+    [
+      {
+        description: 'Monthly staples — rice, dal, oil',
+        amount: 1864.5,
+        currency: 'INR',
+        paidBy: [{ user: priya, amount: 1864.5 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }, { user: sam }, { user: priya }],
+      },
+      {
+        description: 'House-warming party snacks',
+        amount: 3240,
+        currency: 'INR',
+        paidBy: [{ user: sam, amount: 3240 }],
+        splitMethod: 'shares',
+        splitBetween: [
+          { user: alex, shares: 1 },
+          { user: sam, shares: 2 },
+          { user: priya, shares: 1 },
+        ],
+      },
+    ],
+    date,
+  );
   await withLongName(page, named);
   await withLongName(page, both);
 
@@ -638,8 +661,17 @@ test('the Expenses table keeps You in its card with a long name, CHF 10,000,000.
     await open(page, ledger, `/groups/${group}`);
     const table = page.getByRole('main').getByRole('table');
     await expect(table.getByText(shown).first()).toBeVisible();
+    await expect(table.getByRole('cell', { name: label, exact: true }).first()).toBeVisible();
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
     for (const width of [1280, 1366, 1440]) {
       await page.setViewportSize({ width, height: 900 });
+      // ResizeObserver remeasures the table's columns on the next animation frame.
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
       await expect(table.getByRole('columnheader', { name: 'You' })).toBeVisible();
       for (const problem of [
         ...(await pastTheCard(table)),
@@ -652,7 +684,20 @@ test('the Expenses table keeps You in its card with a long name, CHF 10,000,000.
     }
   }
   expect(cut).toEqual([]);
-});
+}
+
+for (const [date, label] of [
+  [TWO_DIGIT_NOVEMBER, 'Tue 10 Nov'],
+  [WIDEST_DAY, 'Wed 20 May'],
+  [WIDEST_DAY_WITH_YEAR, 'Sat 20 May 2000'],
+] as const) {
+  test(`the Expenses table keeps You in its card with a long name, CHF 10,000,000.00 or both (#942): ${label}`, async ({
+    page,
+    ledger,
+  }) => {
+    await checkExpenseTableFits(page, ledger, date, label);
+  });
+}
 
 // #942: with the long name, a split "By percentage" and CHF 10,000,000.00 all at once, the
 // columns need more than the card beside the side panel at 1280 px even stacked (652 px of 624
