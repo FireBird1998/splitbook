@@ -97,7 +97,8 @@ and pathname; include a query to match it exactly. Wildcards and unused declarat
 `phone.open()` again disposes the old controller and restarts on the same stores; teardown is
 automatic. `phone.connect(false)` drops the connection. The platform clock stays in use unless
 `testPhone(server, { now })` supplies one; only then can `phone.clock.now` move it. Preserve a
-suite's original parts and purge list: `parts: { savedQueries: undefined }` omits that store.
+suite's intentionally absent parts: `parts: { savedQueries: undefined }` omits that store. All
+supplied native stores are registered for account cleanup, as on the real phone.
 
 New tests use the phone. Only `runtime.test.ts`, `runtime-notifications.test.ts` and
 `runtime-http-store-failure.test.ts` construct controllers directly to test runtime wiring.

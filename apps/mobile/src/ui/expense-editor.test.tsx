@@ -26,7 +26,6 @@ import { mockDeviceLocale } from '../test-utils/device-locale';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { onlineManager } from '@tanstack/query-core';
 import type { MobileController } from '../data/mobile-controller';
-import type { AccountGroupRecordStore } from '../data/account-record-storage';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import type { FetchResponse } from '../data/types';
@@ -171,9 +170,7 @@ function backend({
     return undefined;
   });
   const phone = testPhone(server, {
-    recordSeparator: ':',
     newSubmissionKey: () => 'native-expense-test-0001',
-    purge: ['expenseDrafts'],
     parts: {
       notifications: notificationDevice,
       offlineIdentity: undefined,
@@ -183,18 +180,10 @@ function backend({
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
   delete phone.stores.savedQueries.retainGroups;
   const drafts = phone.stores.expenseDrafts;
-  delete (drafts as AccountGroupRecordStore).keys;
-  delete (drafts as AccountGroupRecordStore).list;
   const controller = phone.open({ parts: { now } });
   return { controller, drafts, writes, submissions, edits };
 }

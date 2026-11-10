@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse, MobileSnapshot } from './types';
 
 // #222: a Group's Activity on declarative queries: one query of up to 5 pages per Group that
@@ -244,13 +243,11 @@ function fixture() {
   const phone = testPhone(backend, {
     newSubmissionKey: () =>
       `activity-queries-attempt-${String(server.created + 1).padStart(4, '0')}`,
-    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts', 'untrustedCopies'],
     parts: {
       pendingInvitation: undefined,
       draftRequests: undefined,
       tagRequests: undefined,
       groupCreations: undefined,
-      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
     },
   });
   const rows = phone.stores.savedQueries.records,
@@ -261,8 +258,6 @@ function fixture() {
     new Error('The device storage is full'),
     () => device.failRemoval,
   );
-  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts])
-    delete (store as AccountGroupRecordStore).keys;
   const create = () => phone.open();
   /** A request, as these checks name it. */
   const label = (path: string) => {

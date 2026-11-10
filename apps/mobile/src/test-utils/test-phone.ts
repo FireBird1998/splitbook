@@ -8,19 +8,7 @@ import type { SavedQueryRecords } from '../data/saved-copy-budget';
 
 type StoreOperation = 'load' | 'save' | 'remove' | 'clear' | 'list' | 'keys' | 'retainGroups';
 
-type PurgeStore =
-  | 'savedQueries'
-  | 'offlineIdentity'
-  | 'expenseDrafts'
-  | 'settlementAttempts'
-  | 'draftRequests'
-  | 'tagRequests'
-  | 'groupCreations'
-  | 'financialCleanup'
-  | 'untrustedCopies';
-type PhoneParts = Omit<Partial<Omit<MobileDependencies, 'fetch'>>, 'accountLocal'> & {
-  accountLocal?: Partial<AccountLocalStorage>;
-};
+type PhoneParts = Partial<Omit<MobileDependencies, 'fetch'>>;
 
 /** Faults stop at the native storage boundary, before its atomic read or write. */
 function faultable<T extends object>(store: T) {
@@ -152,9 +140,9 @@ function cell<T>(initial: T) {
     },
   });
 }
-function records(savedQueries = false, separator = '') {
+function records(savedQueries = false) {
   const rows = new Map<string, unknown>();
-  const adapter = savedQueriesIn(rows, {}, separator);
+  const adapter = savedQueriesIn(rows);
   const retainGroups: NonNullable<SavedQueryRecords['retainGroups']> = async () => {};
   // Saved-query helpers intentionally find API paths only. Native Draft/payment stores also
   // list plain Group ids, which is how Home discovers recovery copies after a restart.
@@ -166,17 +154,17 @@ function records(savedQueries = false, separator = '') {
       savedQueries
         ? adapter.list!(account)
         : [...rows]
-            .filter(([key]) => key.startsWith(account + separator))
+            .filter(([key]) => key.startsWith(account))
             .map(([key, value]) => ({
-              groupId: key.slice(account.length + separator.length),
+              groupId: key.slice(account.length),
               value: structuredClone(value),
             })),
     keys: async (account: string) =>
       savedQueries
         ? adapter.keys!(account)
         : [...rows.keys()]
-            .filter((key) => key.startsWith(account + separator))
-            .map((key) => key.slice(account.length + separator.length)),
+            .filter((key) => key.startsWith(account))
+            .map((key) => key.slice(account.length)),
   });
 }
 
@@ -187,12 +175,8 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
     now?: number;
     origin?: string;
     config?: Partial<MobileConfig>;
-    recordSeparator?: string;
-    settlementSeparator?: string;
-    draftRequestSeparator?: string;
     newSubmissionKey?: () => string;
     parts?: Omit<PhoneParts, 'savedQueries'> & { savedQueries?: Queries };
-    purge?: readonly PurgeStore[];
     monitor?: boolean;
   } = {},
 ) {
@@ -219,9 +203,9 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
     offlineIdentity: cell<unknown>(null),
     pendingInvitation: cell<string | null>(null),
     savedQueries: queries,
-    expenseDrafts: records(false, options.recordSeparator),
-    settlementAttempts: records(false, options.settlementSeparator),
-    draftRequests: records(false, options.draftRequestSeparator),
+    expenseDrafts: records(),
+    settlementAttempts: records(),
+    draftRequests: records(),
     tagRequests: records(),
     groupCreations: (() => {
       const rows = new Map<string, unknown>();
@@ -283,13 +267,12 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
     ...(options.parts?.savedQueries ? { savedQueries: stores.savedQueries } : {}),
   };
   const accountParts = options.parts?.accountLocal;
-  const accountLocal: AccountLocalStorage = {
+  const accountLocal: AccountLocalStorage = accountParts ?? {
     signOutRecord: stores.signOutRecord,
     financialCleanup: stores.financialCleanup,
     untrustedCopies: stores.untrustedCopies,
-    ...accountParts,
-    owner: accountParts?.owner ?? stores.owner,
-    cleanupMarker: accountParts?.cleanupMarker ?? stores.cleanupMarker,
+    owner: stores.owner,
+    cleanupMarker: stores.cleanupMarker,
     stores: [],
   };
   const available = {
@@ -303,13 +286,9 @@ export function testPhone<Queries extends SavedQueryRecords | undefined = undefi
     financialCleanup: accountLocal.financialCleanup,
     untrustedCopies: accountLocal.untrustedCopies,
   };
-  // A fixture may deliberately omit a part, or keep a different native purge registry. Preserve
-  // both conditions; tests must not silently gain cleanup of a store their original phone kept.
-  accountLocal.stores =
-    accountParts?.stores ??
-    (options.purge ?? (Object.keys(available) as PurgeStore[]))
-      .map((key) => available[key])
-      .filter((store) => store !== undefined);
+  // Every supplied native store is purged, as in the runtime. Explicitly absent parts stay out.
+  if (!accountParts)
+    accountLocal.stores = Object.values(available).filter((store) => store !== undefined);
   const omitAccount =
     options.parts && 'accountLocal' in options.parts && accountParts === undefined;
   type OpenOptions = {

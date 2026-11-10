@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FreshSnapshot, Unrouted } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
 
@@ -296,8 +295,6 @@ function world({ google = false } = {}) {
       origin,
       config: { ...(google && { googleWebClientId: googleClient }) },
       now: Date.parse(iso),
-      recordSeparator: ':',
-      settlementSeparator: ':',
       newSubmissionKey: () => `route-key-${String(++keys).padStart(4, '0')}`,
       parts: {
         draftRequests: undefined,
@@ -308,28 +305,10 @@ function world({ google = false } = {}) {
           const user = await chooser.next;
           return { status: 'success', idToken: `${user === sam ? 'sam' : 'alex'}-id`, nonce: 'n' };
         },
-        accountLocal: {
-          financialCleanup: undefined,
-          untrustedCopies: undefined,
-          signOutRecord: undefined,
-          stores: [
-            {
-              clear: async (): Promise<void> => {
-                native.stores.savedQueries.records.clear();
-                native.stores.expenseDrafts.records.clear();
-                native.stores.settlementAttempts.records.clear();
-                native.stores.groupCreations.records.clear();
-                native.stores.offlineIdentity.value = null;
-              },
-            },
-          ],
-        },
       },
     },
   );
   delete native.stores.savedQueries.retainGroups;
-  for (const store of [native.stores.expenseDrafts, native.stores.settlementAttempts])
-    delete (store as AccountGroupRecordStore).keys;
   const device = {
     get cookie() {
       return native.stores.credentials.value;

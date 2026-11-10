@@ -3,7 +3,6 @@ import { createExpenseSchema } from '@splitbook/shared/validators/expense';
 import type { createMobileController } from './mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import { describe, expect, it } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import type { ExpenseDraft } from './expense-draft';
@@ -282,10 +281,8 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
     if (fault === 'resend') return answer(method, path, init);
     return first;
   });
-  const purge: { clear(): Promise<void> }[] = [];
   const phone = testPhone(backend, {
     now: Date.parse(iso),
-    recordSeparator: ':',
     newSubmissionKey: () => `native-return-${backend.requests.length}-0001`,
     parts: {
       ...(savedCopies ? {} : { offlineIdentity: undefined, savedQueries: undefined }),
@@ -295,17 +292,8 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        stores: purge,
-      },
     },
   });
-  purge.push(phone.stores.expenseDrafts, phone.stores.savedQueries);
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
   const drafts = phone.stores.expenseDrafts.records,
     copies = phone.stores.savedQueries.records;
   const create = (now = Date.parse(iso)) => {
@@ -893,7 +881,9 @@ describe('Closing an edit begun on an Expense’s record (#664)', () => {
 
     await controller.discardExpenseDraft();
     expect(controller.getSnapshot().expense).toMatchObject({ status: 'detail', groupDraft: null });
-    expect([...server.drafts.keys()]).toEqual([`${people[0].id}:${tripId}`]);
+    expect([...server.drafts.keys()].map((key) => `${key.slice(0, 24)}:${key.slice(24)}`)).toEqual([
+      `${people[0].id}:${tripId}`,
+    ]);
     await controller.openGroup(tripId);
     expect(controller.getSnapshot().keptDraft).toMatchObject({
       groupId: tripId,

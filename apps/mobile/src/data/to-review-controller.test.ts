@@ -6,7 +6,6 @@ import type {
 import type { MobileController } from './mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 
 const user = {
   id: 'a00000000000000000000001',
@@ -227,30 +226,18 @@ function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
   const native = testPhone(backend, {
     origin: 'http://localhost:4433',
     now: Date.parse(iso),
-    recordSeparator: ':',
-    draftRequestSeparator: ':',
     newSubmissionKey: () => `fictional-433-${++operation}`,
-    purge: ['expenseDrafts', 'draftRequests'],
     parts: {
       offlineIdentity: undefined,
       pendingInvitation: undefined,
       settlementAttempts: undefined,
       tagRequests: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
   delete native.stores.savedQueries.retainGroups;
-  const drafts = native.stores.expenseDrafts,
-    requests = native.stores.draftRequests;
-  for (const store of [drafts, requests]) delete (store as AccountGroupRecordStore).keys;
+  const drafts = native.stores.expenseDrafts;
   drafts.stallPersistently('list', () => deviceHeld ?? Promise.resolve());
-  native.stores.groupCreations.clear = async () => {};
   const makeController = () => {
     const controller = native.open();
     controllers.push(controller);

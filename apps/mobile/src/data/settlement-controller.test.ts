@@ -172,7 +172,6 @@ function setup(
       draftRequests: undefined,
       tagRequests: undefined,
       groupCreations: undefined,
-      accountLocal: { signOutRecord: undefined, untrustedCopies: undefined },
       notifications: withNotifications
         ? {
             installation: async () => ({
@@ -187,8 +186,6 @@ function setup(
           }
         : undefined,
     },
-    // Saved queries were deliberately not in this file's original native purge registry.
-    purge: ['settlementAttempts', 'financialCleanup'],
   });
   const store = phone.stores.settlementAttempts;
   const device = { failRemoval: false };

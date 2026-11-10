@@ -143,7 +143,6 @@ function fixture() {
     },
     {
       origin: 'http://localhost:4157',
-      purge: ['savedQueries', 'untrustedCopies'],
       parts: {
         pendingInvitation: undefined,
         expenseDrafts: undefined,
@@ -152,7 +151,6 @@ function fixture() {
         tagRequests: undefined,
         groupCreations: undefined,
         newSubmissionKey: undefined,
-        accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
       },
     },
   );

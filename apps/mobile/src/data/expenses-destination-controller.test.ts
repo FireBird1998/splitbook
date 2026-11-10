@@ -3,7 +3,6 @@ import { calculateSplitAmountsMinor } from '@splitbook/shared/split-calculation'
 import { mobileExpensePosition } from './expense-position';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
 
 // #116: the Expenses destination's reads, the member's position on each Expense, and the
@@ -144,9 +143,7 @@ function ledger() {
   }
   const phone = testPhone(backend, {
     now: new Date(2026, 8, 28, 12).getTime(),
-    recordSeparator: ':',
     newSubmissionKey: () => `native-expenses-${backend.requests.length}-0001`,
-    purge: ['expenseDrafts'],
     parts: {
       savedQueries: undefined,
       offlineIdentity: undefined,
@@ -156,16 +153,8 @@ function ledger() {
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
   const controller = phone.open(),
     drafts = phone.stores.expenseDrafts.records;
   const requests = () => backend.requests.map(({ method, path }) => ({ method, path }));
@@ -176,7 +165,7 @@ function ledger() {
     },
     expenses,
     drafts,
-    keptKey: `${alex.id}:${householdId}`,
+    keptKey: `${alex.id}${householdId}`,
     writes: () =>
       requests().filter((row) => row.method !== 'GET' && row.path.startsWith('/api/groups/')),
     loseNextCreate: () => {

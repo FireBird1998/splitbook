@@ -1,4 +1,3 @@
-import type { AccountGroupRecordStore } from './account-record-storage';
 import { expenseReceipt } from '../test-utils/expense-receipt';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
@@ -80,9 +79,7 @@ function setup(
   server.reply('*', '*', ({ url, init }) => intercept?.(url.pathname, init));
   const phone = testPhone(server, {
     now: localNoon,
-    recordSeparator: ':',
     newSubmissionKey: options.newSubmissionKey ?? (() => 'native-expense-test-0001'),
-    purge: ['expenseDrafts', ...(options.draftRequests ? ['draftRequests' as const] : [])],
     parts: {
       savedQueries: options.savedQueries,
       ...(options.draftRequests ? {} : { draftRequests: undefined }),
@@ -93,15 +90,8 @@ function setup(
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-      },
     },
   });
-  // The original Draft adapter did not enumerate values for Home.
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
   /** `now` lets a restarted app open on a later day. */
   const create = (now = localNoon) => {
     phone.clock.now = now;
@@ -109,6 +99,7 @@ function setup(
   };
   return {
     expectUnanswered: server.expectUnanswered,
+    fault: server.fault,
     phone,
     create,
     controller: create(),
@@ -170,7 +161,7 @@ describe('native Expense creation and editing', () => {
       const attempt = shape.includes('create')
         ? { key: 'restart-expense-0001', body: buildExpenseBody(editor.draft!, editor.context!) }
         : null;
-      f.records.set(`${memberIds[0]}:${groupId}`, {
+      f.records.set(`${memberIds[0]}${groupId}`, {
         version: 1,
         accountId: memberIds[0],
         groupId,
@@ -658,10 +649,11 @@ describe('native Expense creation and editing', () => {
     );
     const opening = controller.openExpense(groupId);
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
-    await controller.back();
+    // A Back press navigates at once; its Home loading can await this held native read.
+    const goingBack = controller.back();
     const destination = controller.getSnapshot().screen;
     release();
-    await opening;
+    await Promise.all([opening, goingBack]);
     expect(controller.getSnapshot().screen).toBe(destination);
     expect(destination).not.toBe('expense');
   });
@@ -1520,7 +1512,7 @@ describe('native Expense creation and editing', () => {
   it('resumes a pre-custom-splits draft with the original equal allocation', async () => {
     const { controller, records } = setup();
     await controller.signIn('alex');
-    records.set(`${memberIds[0]}:${groupId}`, {
+    records.set(`${memberIds[0]}${groupId}`, {
       version: 1,
       accountId: memberIds[0],
       groupId,
@@ -2379,7 +2371,7 @@ describe('keeping only drafts that change something', () => {
     };
     return { ...harness, saves: () => saves };
   };
-  const key = `${memberIds[0]}:${groupId}`;
+  const key = `${memberIds[0]}${groupId}`;
 
   it('stores nothing for an Edit closed without a change', async () => {
     const { controller, records, saves } = withSaved();
@@ -2746,7 +2738,7 @@ describe('Save straight after the last keystroke', () => {
     release();
     await Promise.all([typing, leaving]);
     expect(controller.getSnapshot().screen).toBe('group');
-    expect(records.get(`${memberIds[0]}:${groupId}`)).toMatchObject({
+    expect(records.get(`${memberIds[0]}${groupId}`)).toMatchObject({
       draft: { description: 'Dinner' },
     });
   });
@@ -2776,7 +2768,7 @@ describe('Save straight after the last keystroke', () => {
         groupDraft: { description: 'Dinner', original: { _id: expenseId } },
       },
     });
-    expect(records.get(`${memberIds[0]}:${groupId}`)).toMatchObject({
+    expect(records.get(`${memberIds[0]}${groupId}`)).toMatchObject({
       draft: { description: 'Dinner', original: { _id: expenseId } },
     });
   });
@@ -4101,7 +4093,7 @@ it.each(['create', 'edit', 'delete'] as const)(
 describe('acknowledging an interrupted shared Draft upload', () => {
   beforeEach(() => vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true'));
   afterEach(() => vi.unstubAllEnvs());
-  function uploadFixture({ malformedExpenseReceipt = false } = {}) {
+  function uploadFixture() {
     const submitted: Array<{ body: string; key: string | null }> = [];
     const rows: Array<{
       id: string;
@@ -4118,9 +4110,6 @@ describe('acknowledging an interrupted shared Draft upload', () => {
     let denyGroup = false;
     const fixture = setup(
       (path, init) => {
-        // Stopped under #1075: this one case depends on a malformed receipt to be Unconfirmed.
-        if (malformedExpenseReceipt && path.endsWith('/expenses') && init.method === 'POST')
-          return Promise.resolve(json({ status: 200, data: expensePage() }));
         if (denyGroup && path.startsWith(`/api/groups/${groupId}`))
           return Promise.resolve(json({ error: 'Group access denied', status: 403 }, 403));
         if (path !== `/api/groups/${groupId}/drafts`) return;
@@ -4277,7 +4266,9 @@ describe('acknowledging an interrupted shared Draft upload', () => {
   });
 
   it('does not treat an unconfirmed ordinary Expense save as a new shared Draft', async () => {
-    const { controller, submitted } = uploadFixture({ malformedExpenseReceipt: true });
+    const { controller, submitted, fault } = uploadFixture();
+    // Finish later explicitly rechecks the same financial save; its reply is lost again too.
+    fault('POST', `/api/groups/${groupId}/expenses`, 'lost-reply');
     try {
       await controller.signIn('alex');
       await controller.openExpense(groupId);

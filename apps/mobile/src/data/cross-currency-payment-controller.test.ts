@@ -92,9 +92,7 @@ function setup(
       draftRequests: undefined,
       tagRequests: undefined,
       groupCreations: undefined,
-      accountLocal: { signOutRecord: undefined, untrustedCopies: undefined },
     },
-    purge: ['settlementAttempts', 'financialCleanup'],
   });
   return {
     controller: phone.open(),

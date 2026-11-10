@@ -10,7 +10,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MobileController } from '../data/mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from '../data/account-record-storage';
 import type { MobileFetch } from '../data/types';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import type { TagCommand } from '@splitbook/shared/tag-management';
@@ -219,7 +218,6 @@ async function openManageTags(offline = false) {
   const phone = testPhone(tagBackend(), {
     origin: 'http://tags.example.test',
     newSubmissionKey: () => crypto.randomUUID(),
-    purge: ['tagRequests'],
     parts: {
       savedQueries: undefined,
       offlineIdentity: undefined,
@@ -229,15 +227,8 @@ async function openManageTags(offline = false) {
       draftRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
-  delete (phone.stores.tagRequests as AccountGroupRecordStore).list;
   controller = phone.open();
   await controller.signIn('alex');
   await showManageTags(offline);
@@ -841,7 +832,6 @@ function coldPhone() {
   const phone = testPhone(backend, {
     origin: 'http://tags.example.test',
     newSubmissionKey: () => crypto.randomUUID(),
-    purge: ['tagRequests', 'savedQueries'],
     parts: {
       pendingInvitation: undefined,
       expenseDrafts: undefined,
@@ -849,16 +839,9 @@ function coldPhone() {
       draftRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
   delete phone.stores.savedQueries.retainGroups;
-  delete (phone.stores.tagRequests as AccountGroupRecordStore).list;
   const boot = () => phone.open();
   return {
     boot,

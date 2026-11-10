@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage, activityPage } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
 
 // #192: Try again on an Expense record opened from its saved copy. Fictional people and Groups only.
@@ -173,7 +172,6 @@ function fixture() {
   });
   const phone = testPhone(backend, {
     now: Date.parse('2026-09-27T06:30:00.000Z'),
-    purge: ['savedQueries', 'expenseDrafts', 'offlineIdentity'],
     parts: {
       newSubmissionKey: undefined,
       settlementAttempts: undefined,
@@ -188,15 +186,8 @@ function fixture() {
         },
         clear: async () => undefined,
       },
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-      },
     },
   });
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
   const cache = phone.stores.savedQueries.records,
     drafts = phone.stores.expenseDrafts.records;
   const create = () => phone.open();

@@ -202,21 +202,10 @@ function fixture() {
   backend.reply('*', '*', ({ path, init }) => respond(path, init));
   const phone = testPhone(backend, {
     newSubmissionKey: () => 'home-queries-attempt-0001',
-    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts', 'untrustedCopies'],
     parts: {
       pendingInvitation: undefined,
       draftRequests: undefined,
       tagRequests: undefined,
-      groupCreations: {
-        load: (account): Promise<unknown> =>
-          phone.stores.settlementAttempts.load('creation:', account),
-        save: (account, value): Promise<void> =>
-          phone.stores.settlementAttempts.save('creation:', account, value),
-        remove: (account): Promise<void> =>
-          phone.stores.settlementAttempts.remove('creation:', account),
-        clear: async () => {},
-      },
-      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
     },
   });
   // Home’s original NetInfo always reported connected until explicitly changed, even if fetch failed.
@@ -246,9 +235,6 @@ function fixture() {
   // This fixture's original row adapter awaited pause even when no operation was held.
   for (const operation of ['load', 'save', 'remove'] as const)
     store.stallPersistently(operation, () => Promise.resolve());
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
-  delete (phone.stores.settlementAttempts as AccountGroupRecordStore).keys;
-  delete (phone.stores.settlementAttempts as AccountGroupRecordStore).list;
   const holdRow = (operation: 'load' | 'save' | 'remove', path: string) => {
     const held = store.at(path).holdNext(operation);
     return { reached: held.arrived, release: held.release };

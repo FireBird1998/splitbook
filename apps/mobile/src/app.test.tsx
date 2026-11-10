@@ -18,7 +18,6 @@ import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { testPhone } from './test-utils/test-phone';
 import { fakeSplitbook } from './test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './data/account-record-storage';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
 import {
@@ -206,35 +205,18 @@ function backend() {
     return undefined;
   });
   const phone = testPhone(server, {
-    // This screen suite also publishes hand-made notification states; report its undeclared transitions.
+    // See flow-monitor.ts: real permission transitions are missing from the production table.
     monitor: false,
     now: new Date(2026, 8, 27, 12).getTime(),
-    recordSeparator: ':',
     newSubmissionKey: () => device.submissionKey,
-    purge: ['groupCreations', 'settlementAttempts', 'tagRequests', 'draftRequests'],
     parts: {
       notifications: notificationDevice,
       savedQueries: undefined,
       offlineIdentity: undefined,
       pendingInvitation: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
-  for (const store of [
-    phone.stores.settlementAttempts,
-    phone.stores.tagRequests,
-    phone.stores.draftRequests,
-  ]) {
-    delete (store as AccountGroupRecordStore).keys;
-    delete (store as AccountGroupRecordStore).list;
-  }
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
   phone.stores.expenseDrafts.failPersistently(
     'save',
     new Error('Device storage full'),

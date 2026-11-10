@@ -4,7 +4,6 @@ import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { refreshFeedback } from '../ui/refresh-feedback';
 import { testPhone } from '../test-utils/test-phone';
 import { expensePage, fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse, MobileSnapshot } from './types';
 
 // #127: first load, refresh, offline and cold-start states at the controller's public seam.
@@ -188,25 +187,9 @@ function fixture() {
         save: async () => {},
         clear: async () => {},
       },
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        stores: [
-          {
-            clear: async (): Promise<void> => {
-              await clearing;
-              phone.stores.savedQueries.records.clear();
-              phone.stores.expenseDrafts.records.clear();
-              phone.stores.groupCreations.records.clear();
-              phone.stores.offlineIdentity.value = null;
-            },
-          },
-        ],
-      },
     },
-    recordSeparator: ':',
   });
+  phone.stores.savedQueries.stallPersistently('clear', () => clearing);
   Object.defineProperty(state, 'cleanup', {
     get: () => phone.stores.cleanupMarker.value,
     set: (value: boolean) => {
@@ -225,7 +208,6 @@ function fixture() {
   ])
     store.stallPersistently('load', waitForStorage);
   phone.stores.expenseDrafts.stallPersistently('list', waitForStorage);
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
   const cache = phone.stores.savedQueries.records;
   const clock = phone.clock;
   const create = () => phone.open();

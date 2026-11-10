@@ -223,30 +223,6 @@ describe('test phone', () => {
     });
     expect(phone.stores.owner.value).toBeNull();
   });
-  it('keeps an explicit native purge list and omitted optional account parts', async () => {
-    const phone = testPhone(fakeSplitbook(), {
-      parts: {
-        accountLocal: {
-          financialCleanup: undefined,
-          untrustedCopies: undefined,
-          signOutRecord: undefined,
-        },
-      },
-      purge: ['settlementAttempts'],
-    });
-    phone.stores.signOutRecord.failNext('save');
-    const app = phone.open();
-    await app.signIn('alex');
-    const account = 'a00000000000000000000001';
-    await phone.stores.settlementAttempts.save(account, 'maple', { unfinished: true });
-    await phone.stores.savedQueries.save(account, '/api/groups', {
-      kept: 'not in this fixture’s purge list',
-    });
-    await app.signOut();
-    expect(app.getSnapshot().auth).toMatchObject({ status: 'signed-out', message: null });
-    expect(phone.stores.settlementAttempts.records.size).toBe(0);
-    expect(phone.stores.savedQueries.records.size).toBeGreaterThan(0);
-  });
   it('waits for a public snapshot condition, including one that is already true', async () => {
     const { until } = await import('./test-phone');
     const phone = testPhone(fakeSplitbook()),
@@ -256,23 +232,6 @@ describe('test phone', () => {
     await signedIn;
     await until(app, (snapshot) => snapshot.auth.user?.name === 'Alex Rivera');
     expect(app.getSnapshot().auth.status).toBe('authenticated');
-  });
-  it('keeps a fixture’s separated Draft keys across restart and sign-out', async () => {
-    const phone = testPhone(fakeSplitbook(), { recordSeparator: ':' });
-    const account = 'a00000000000000000000001',
-      group = 'b00000000000000000000001';
-    const app = phone.open();
-    await app.signIn('alex');
-    await app.openExpense(group);
-    await app.updateExpenseDraft({ description: 'Dinner' });
-    expect([...phone.stores.expenseDrafts.records.keys()]).toEqual([account + ':' + group]);
-    expect(await phone.stores.expenseDrafts.keys(account)).toEqual([group]);
-    const before = await phone.stores.expenseDrafts.load(account, group);
-    const restarted = phone.open();
-    await restarted.restore();
-    expect(await phone.stores.expenseDrafts.load(account, group)).toEqual(before);
-    await restarted.signOut();
-    expect(phone.stores.expenseDrafts.records.size).toBe(0);
   });
   it('holds and fails only the requested saved-query path', async () => {
     const phone = testPhone(fakeSplitbook()),
@@ -454,18 +413,6 @@ it('opens the phone with its build configuration and distinct API and auth origi
   expect(server.requests[0].headers.get('Origin')).toBe('http://localhost:4127');
 });
 
-it('keeps a payment store’s separated native keys independently of Draft keys', async () => {
-  const phone = testPhone(fakeSplitbook(), { settlementSeparator: ':' });
-  await phone.stores.settlementAttempts.save('alex', 'maple', { payment: 1 });
-  expect([...phone.stores.settlementAttempts.records.keys()]).toEqual(['alex:maple']);
-  expect(await phone.stores.settlementAttempts.load('alex', 'maple')).toEqual({ payment: 1 });
-  expect(await phone.stores.settlementAttempts.list('alex')).toEqual([
-    { groupId: 'maple', value: { payment: 1 } },
-  ]);
-  await phone.stores.expenseDrafts.save('alex', 'maple', { draft: 1 });
-  expect([...phone.stores.expenseDrafts.records.keys()]).toEqual(['alexmaple']);
-});
-
 it('observes completed credential writes separately from a held or failed write', async () => {
   const phone = testPhone(fakeSplitbook());
   const store = phone.stores.credentials;
@@ -520,16 +467,6 @@ it('can explicitly keep two runtimes on one phone until a normal restart dispose
   expect(first.getSnapshot().detail.data).toBeNull();
   await restarted.restore();
   expect(restarted.getSnapshot().auth.user?.id).toBe('a00000000000000000000001');
-});
-
-it('keeps a Draft-request store’s separated rows and lists their Group ids', async () => {
-  const phone = testPhone(fakeSplitbook(), { draftRequestSeparator: ':' });
-  await phone.stores.draftRequests.save('alex', 'maple', { request: 'same-key' });
-  expect([...phone.stores.draftRequests.records.keys()]).toEqual(['alex:maple']);
-  expect(await phone.stores.draftRequests.load('alex', 'maple')).toEqual({ request: 'same-key' });
-  expect(await phone.stores.draftRequests.list('alex')).toEqual([
-    { groupId: 'maple', value: { request: 'same-key' } },
-  ]);
 });
 
 it('provides independent native notification controls with each phone’s installation and token', async () => {

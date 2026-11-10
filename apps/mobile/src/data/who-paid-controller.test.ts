@@ -1,5 +1,4 @@
 import { expenseReceipt } from '../test-utils/expense-receipt';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import { describe, expect, it } from 'vitest';
@@ -59,9 +58,7 @@ async function setup() {
   });
   const phone = testPhone(server, {
     now: Date.parse(iso),
-    recordSeparator: ':',
     newSubmissionKey: () => 'native-expense-test-0001',
-    purge: ['expenseDrafts'],
     parts: {
       savedQueries: undefined,
       offlineIdentity: undefined,
@@ -71,17 +68,8 @@ async function setup() {
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
-  // The original Draft adapter did not enumerate values for Home.
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
   const controller = phone.open(),
     records = phone.stores.expenseDrafts.records;
   await controller.signIn('alex');
@@ -89,7 +77,7 @@ async function setup() {
   await controller.updateExpenseDraft({ description: 'Weekly groceries', tagId });
   const expense = () => controller.getSnapshot().expense;
   const stored = () =>
-    (records.get(`${memberIds[0]}:${groupId}`) as { draft: { payers: unknown } }).draft;
+    (records.get(`${memberIds[0]}${groupId}`) as { draft: { payers: unknown } }).draft;
   return { controller, posts, expense, stored };
 }
 

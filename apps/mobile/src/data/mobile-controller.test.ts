@@ -223,12 +223,28 @@ function setup(
   });
   const fetch = vi.fn<MobileFetch>((url, init) => send(url, init));
   backend.fetch = fetch;
+  const suppliedAccount = options.accountLocal ?? device?.accountLocal;
+  // Fault cases replace the public owner/marker/clear seam; supplied native journals still purge.
+  const accountLocal = suppliedAccount && {
+    signOutRecord: native.stores.signOutRecord,
+    financialCleanup: native.stores.financialCleanup,
+    untrustedCopies: native.stores.untrustedCopies,
+    ...suppliedAccount,
+    stores: [
+      ...new Set([
+        ...suppliedAccount.stores,
+        ...(options.expenseDrafts ? [options.expenseDrafts] : []),
+        native.stores.financialCleanup,
+        native.stores.untrustedCopies,
+      ]),
+    ],
+  };
   const controller = (options.concurrent ? native.openConcurrent : native.open)({
     config: { developmentPersonaEnabled: options.enabled ?? true },
     parts: {
       credentials: store.credentials,
       pendingInvitation: options.pending,
-      accountLocal: options.accountLocal ?? device?.accountLocal,
+      accountLocal,
       groupCreations: device?.groupCreations,
       expenseDrafts: options.expenseDrafts,
       newSubmissionKey:
@@ -1494,21 +1510,10 @@ describe('native session and Group boundary', () => {
     /** Alex at the new-Group form, with the server keeping what each creation sends. */
     const creating = async () => {
       const sent: Array<Record<string, unknown>> = [];
-      const drafts = new Map<string, unknown>();
+      const store = memoryCredentials();
       const { controller } = setup({
-        expenseDrafts: {
-          keys: async () => [...drafts.keys()],
-          load: async (_accountId, id) => structuredClone(drafts.get(id) ?? null),
-          save: async (_accountId, id, value) => {
-            drafts.set(id, structuredClone(value));
-          },
-          remove: async (_accountId, id) => {
-            drafts.delete(id);
-          },
-          clear: async () => {
-            drafts.clear();
-          },
-        },
+        store,
+        expenseDrafts: store.kit.native.stores.expenseDrafts,
         intercept: (path, init) => {
           if (path === '/api/groups' && init.method === 'POST') {
             sent.push(JSON.parse(String(init.body)));

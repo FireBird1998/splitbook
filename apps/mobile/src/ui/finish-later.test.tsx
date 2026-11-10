@@ -11,7 +11,6 @@ import type {
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
-import type { AccountGroupRecordStore } from '../data/account-record-storage';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import { setWindow, touchAlong } from '../test-utils/native';
@@ -332,26 +331,15 @@ function fixture(
       },
     },
     {
-      // The close sheet's Delete calls deleteExpenseAndClose, which the existing monitor does not wrap.
-      monitor: false,
       origin: 'http://localhost:4408',
       now: Date.parse(iso),
-      recordSeparator: ':',
-      draftRequestSeparator: ':',
       newSubmissionKey: () => `fictional-review-${++operation}`,
-      purge: ['expenseDrafts', 'draftRequests'],
       parts: {
         pendingInvitation: undefined,
         settlementAttempts: undefined,
         tagRequests: undefined,
         groupCreations: undefined,
         netInfo: undefined,
-        accountLocal: {
-          financialCleanup: undefined,
-          untrustedCopies: undefined,
-          signOutRecord: undefined,
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        },
       },
     },
   );
@@ -362,7 +350,6 @@ function fixture(
   const requests = Object.assign(phone.stores.draftRequests, {
     values: phone.stores.draftRequests.records,
   });
-  for (const store of [drafts, requests]) delete (store as AccountGroupRecordStore).keys;
   const makeController = () => {
     const controller = phone.open();
     controllers.push(controller);
@@ -371,6 +358,7 @@ function fixture(
   const controller = makeController();
   return {
     restart: makeController,
+    hold: backend.hold,
     controller,
     drafts,
     uploads,
@@ -381,6 +369,7 @@ function fixture(
     },
     limitRace: () => {
       race = true;
+      items = Array.from({ length: 100 }, (_, index) => review(row(index + 1, `Item ${index}`, 1)));
     },
     saves,
     reviews,
@@ -437,6 +426,7 @@ const button = (tree: ReactTestRenderer, label: string) => {
 async function tap(tree: ReactTestRenderer, label: string) {
   await act(async () => {
     expect(button(tree, label), label).toBeDefined();
+    expect(button(tree, label).props.disabled, label).not.toBe(true);
     button(tree, label).props.onPress();
     await new Promise((resolve) => setTimeout(resolve, 10));
   });
@@ -779,8 +769,23 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
     await act(async () => {
       await f.controller.refreshToReview();
     });
-    f.limitRace();
+    // To review observes Group/Home, not an open form: refresh there, then resume the entries.
+    await act(async () => {
+      await f.controller.closeExpense(true);
+      await f.controller.refreshToReview();
+      await f.controller.openExpense(groupId);
+      f.controller.resumeExpenseDraft();
+    });
+    expect(button(editor, 'Finish later').props.disabled).not.toBe(true);
+    const upload = f.hold('POST', `/api/groups/${groupId}/drafts`, { at: 'request' });
     await tap(editor, 'Finish later');
+    await upload.arrived;
+    // Another device fills this member's collection after the enabled press, before its reply.
+    f.limitRace();
+    await act(async () => {
+      upload.release();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
     expect(f.controller.getSnapshot().screen).toBe('expense');
     expect(f.drafts.values.size).toBe(1);
     expect(text(editor)).toContain('You have 100\u00a0items waiting in this Group.');
@@ -820,13 +825,13 @@ describe.each(['light', 'dark'] as const)('Finish later at 130 percent in %s', (
     const f = fixture({ empty: true });
     await signIn(f);
     await enter(f);
-    const stored = structuredClone(f.drafts.values.get(`${user.id}:${groupId}`)) as Record<
+    const stored = structuredClone(f.drafts.values.get(`${user.id}${groupId}`)) as Record<
       string,
       unknown
     >;
     delete stored.blank;
-    f.drafts.values.set(`${user.id}:${groupId}`, stored);
-    f.drafts.values.set(`${user.id}:${otherGroupId}`, { ...stored, groupId: otherGroupId });
+    f.drafts.values.set(`${user.id}${groupId}`, stored);
+    f.drafts.values.set(`${user.id}${otherGroupId}`, { ...stored, groupId: otherGroupId });
     const before = structuredClone(f.drafts.values);
     f.controller.dispose();
     const restarted = f.restart();

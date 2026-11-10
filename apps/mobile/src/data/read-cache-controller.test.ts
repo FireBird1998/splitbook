@@ -1,6 +1,5 @@
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import { describe, expect, it, vi } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { DISPLAY_FRESHNESS_MS } from './mobile-controller';
@@ -210,7 +209,6 @@ function fixture(options: { freshness?: number; pendingInvitation?: PendingInvit
   const phone = testPhone(backend, {
     now: Date.parse(iso),
     newSubmissionKey: () => `attempt-${String(++keys).padStart(4, '0')}`,
-    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts'],
     parts: {
       displayFreshnessMs: options.freshness,
       pendingInvitation: options.pendingInvitation,
@@ -218,19 +216,9 @@ function fixture(options: { freshness?: number; pendingInvitation?: PendingInvit
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      offlineIdentity: { load: async () => null, save: async () => {}, clear: async () => {} },
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-      },
     },
   });
   delete phone.stores.savedQueries.retainGroups;
-  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts]) {
-    delete (store as AccountGroupRecordStore).list;
-    delete (store as AccountGroupRecordStore).keys;
-  }
   const disk = phone.stores.savedQueries.records,
     drafts = phone.stores.expenseDrafts.records;
   const create = () => phone.open();

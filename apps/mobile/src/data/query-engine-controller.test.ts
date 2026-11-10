@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
 import { hangUntilAborted } from '../test-utils/transport-faults';
 
@@ -167,7 +166,6 @@ function fixture(options: { freshness?: number } = {}) {
   );
   const phone = testPhone(backend, {
     newSubmissionKey: () => `attempt-${String(++keys).padStart(4, '0')}`,
-    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts'],
     parts: {
       displayFreshnessMs: options.freshness,
       pendingInvitation: undefined,
@@ -175,12 +173,6 @@ function fixture(options: { freshness?: number } = {}) {
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      offlineIdentity: { load: async () => null, save: async () => {}, clear: async () => {} },
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-      },
     },
   });
   const disk = phone.stores.savedQueries.records;
@@ -191,10 +183,6 @@ function fixture(options: { freshness?: number } = {}) {
     if (path === groupPath) purges++;
     await remove(account, path);
   };
-  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts]) {
-    delete (store as AccountGroupRecordStore).keys;
-    delete (store as AccountGroupRecordStore).list;
-  }
   const create = () => phone.open();
   /** GET requests sent for exactly this path, or starting with it when it ends in `?`. */
   const reads = (match: string) =>

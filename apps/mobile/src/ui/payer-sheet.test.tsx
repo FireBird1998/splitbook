@@ -9,7 +9,6 @@ import {
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ExpenseDraft } from '../data/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
-import type { AccountGroupRecordStore } from '../data/account-record-storage';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { FetchResponse } from '../data/types';
@@ -82,9 +81,7 @@ function backend() {
   });
   const phone = testPhone(server, {
     now: Date.parse(iso),
-    recordSeparator: ':',
     newSubmissionKey: () => 'native-expense-test-0001',
-    purge: ['expenseDrafts'],
     parts: {
       savedQueries: undefined,
       offlineIdentity: undefined,
@@ -94,20 +91,12 @@ function backend() {
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
   const controller = phone.open();
   const stored = () =>
     (
-      phone.stores.expenseDrafts.records.get(`${alexId}:${groupId}`) as
+      phone.stores.expenseDrafts.records.get(`${alexId}${groupId}`) as
         | { draft: ExpenseDraft }
         | undefined
     )?.draft;

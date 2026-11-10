@@ -1,6 +1,5 @@
 import { testPhone } from '../test-utils/test-phone';
 import { expensePage, fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import type { SavedQueryRecords } from './saved-copy-budget';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -167,22 +166,6 @@ function fixture(
       draftRequests: undefined,
       tagRequests: undefined,
       netInfo: undefined,
-      accountLocal: {
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        stores: [
-          {
-            clear: async (): Promise<void> => {
-              phone.stores.savedQueries.records.clear();
-              phone.stores.offlineIdentity.value = null;
-              phone.stores.expenseDrafts.records.clear();
-              phone.stores.groupCreations.records.clear();
-              phone.stores.settlementAttempts.records.clear();
-              phone.stores.financialCleanup.value = null;
-            },
-          },
-        ],
-      },
     },
   });
   const cache = phone.stores.savedQueries.records,
@@ -233,8 +216,6 @@ function fixture(
     new Error('Cleanup journal unavailable'),
     () => device.failJournalClear,
   );
-  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts])
-    delete (store as AccountGroupRecordStore).keys;
   const create = () => phone.open();
 
   return {

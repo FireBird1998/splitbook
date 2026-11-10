@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { describeExpenseEvents } from './expense-history';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 
 // Fictional people and Groups only.
 const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
@@ -122,8 +121,6 @@ function setup() {
   });
   const phone = testPhone(server, {
     now: new Date(2026, 8, 27, 12).getTime(),
-    recordSeparator: ':',
-    purge: [],
     parts: {
       newSubmissionKey: undefined,
       offlineIdentity: undefined,
@@ -133,16 +130,8 @@ function setup() {
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
   const controller = phone.open(),
     drafts = phone.stores.expenseDrafts.records;
   /** Holds an Expense's history reads until the returned function is called. */
@@ -432,7 +421,7 @@ describe('An Expense record once access to its Group is withdrawn', () => {
       draft: { notes: 'Meter read on the 20th', original: { _id: ids.bill } },
       history: { events: [] },
     });
-    expect(drafts.get(`${sam.id}:${groupId}`)).toMatchObject({
+    expect(drafts.get(`${sam.id}${groupId}`)).toMatchObject({
       draft: { notes: 'Meter read on the 20th' },
     });
   });

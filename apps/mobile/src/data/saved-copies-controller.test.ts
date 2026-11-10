@@ -3,7 +3,6 @@ import { onlineManager } from '@tanstack/query-core';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
 import type { TagCommand } from '@splitbook/shared/tag-management';
 
@@ -315,25 +314,15 @@ function fixture(tagActions = false) {
       tagActions
         ? '00000000-0000-4000-8000-000000000001'
         : `attempt-${String(++keys).padStart(4, '0')}`,
-    purge: [
-      'savedQueries',
-      'offlineIdentity',
-      'expenseDrafts',
-      'settlementAttempts',
-      'tagRequests',
-      'untrustedCopies',
-    ],
     parts: {
       pendingInvitation: undefined,
       draftRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
     },
   });
   const store = phone.stores.savedQueries;
   delete store.retainGroups;
-  delete (store as AccountGroupRecordStore).list;
   store.failPersistently(
     'remove',
     new Error('The device storage is full'),
@@ -356,7 +345,6 @@ function fixture(tagActions = false) {
   const drafts = phone.stores.expenseDrafts,
     attempts = phone.stores.settlementAttempts,
     tagRequests = phone.stores.tagRequests;
-  for (const part of [drafts, attempts, tagRequests]) delete (part as AccountGroupRecordStore).keys;
   const clock = phone.clock;
   const create = () => phone.open();
   const holds: {

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import { buildExpenseBody, draftFromExpense, type ExpenseDraft } from './expense-draft';
 import { expenseRecordSchema } from './expense-record';
 import type { MobileGroup } from './types';
@@ -87,7 +86,6 @@ function fixture() {
   const phone = testPhone(backend, {
     origin: 'http://localhost:4146',
     now,
-    recordSeparator: ':',
     parts: {
       pendingInvitation: undefined,
       settlementAttempts: undefined,
@@ -96,25 +94,10 @@ function fixture() {
       groupCreations: undefined,
       netInfo: undefined,
       newSubmissionKey: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        stores: [
-          {
-            clear: async (): Promise<void> => {
-              phone.stores.savedQueries.records.clear();
-              phone.stores.offlineIdentity.value = null;
-              phone.stores.expenseDrafts.records.clear();
-            },
-          },
-        ],
-      },
     },
   });
   phone.stores.owner.value = accountId;
   delete phone.stores.savedQueries.retainGroups;
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
   const drafts = phone.stores.expenseDrafts.records;
   const create = () => phone.open();
   return {
@@ -123,7 +106,7 @@ function fixture() {
     drafts,
     /** Stores a draft record for an account and Group, as the Expense form would. */
     keep: (groupId: string, record: object, account = accountId) =>
-      drafts.set(`${account}:${groupId}`, { version: 1, accountId: account, groupId, ...record }),
+      drafts.set(`${account}${groupId}`, { version: 1, accountId: account, groupId, ...record }),
     respond: (value: unknown) => {
       balances = value;
     },

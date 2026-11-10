@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MobileController } from './mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import { notificationTaskProtected } from './notification-alerts';
 import type { WidgetCopy } from '@splitbook/shared/balances-widget';
 import { groupWidget } from '@splitbook/shared/group-widget';
@@ -144,12 +143,6 @@ function fixture(extraMembers: (typeof alex)[] = []) {
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      settlementAttempts: {
-        load: async () => null,
-        save: async () => {},
-        remove: async () => {},
-        clear: async () => {},
-      },
       widgets: {
         write: async (copy) => {
           await hold;
@@ -166,25 +159,15 @@ function fixture(extraMembers: (typeof alex)[] = []) {
           events.push('redraw');
         },
       },
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        stores: [
-          {
-            clear: async (): Promise<void> => {
-              native.stores.savedQueries.records.clear();
-              events.push('account-purged');
-            },
-          },
-        ],
-      },
     },
   });
+  const clear = native.stores.savedQueries.clear;
+  native.stores.savedQueries.clear = async () => {
+    await clear();
+    events.push('account-purged');
+  };
   native.stores.owner.value = alex.id;
   delete native.stores.savedQueries.retainGroups;
-  delete (native.stores.expenseDrafts as AccountGroupRecordStore).keys;
-  native.stores.expenseDrafts.list = async () => [];
   const make = () => {
     const controller = native.open();
     controllers.push(controller);
