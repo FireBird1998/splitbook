@@ -1,20 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { performance } from 'node:perf_hooks';
-import { createMobileController } from '../src/data/mobile-controller';
+import type { MobileSnapshot } from '../src/data/types';
 import { measurementWindows } from './measurement-harness';
 
 function recorder() {
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4000',
-      authOrigin: 'http://localhost:4000',
-      developmentPersonaEnabled: true,
-    },
-    {
-      fetch: async () => Response.json({}),
-      credentials: { load: async () => null, save: async () => {}, clear: async () => {} },
-    },
-  );
+  // These predicates ignore the snapshot; the window needs only a stable value and an unsubscribe.
+  const snapshot = {} as MobileSnapshot;
+  const controller = { getSnapshot: () => snapshot, subscribe: () => () => undefined };
   return measurementWindows(() => controller, 10);
 }
 afterEach(() => {
