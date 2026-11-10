@@ -1008,7 +1008,7 @@
         "date": "2026-11-10",
         "splitMethod": "equal",
         "tagId": "c00000000000000000000001",
-        "notes": ""
+        "notes": "Receipt checked"
       }
     },
     "shown": {
@@ -1035,7 +1035,7 @@
         { "user": "a00000000000000000000003", "amount": "—" }
       ],
       "advancedInitiallyOpen": true,
-      "formContents": "What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared 2 people paid  · Split equally  · 2 of 3 members Less Paid by You ​ ​ Sam Chen ​ ​ Total: ₹100.00 / ₹100.00 ✓ Add payer Single payer Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Notes (optional) Notes (optional)",
+      "formContents": "What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared 2 people paid  · Split equally  · 2 of 3 members Less Paid by You ​ ​ Sam Chen ​ ​ Total: ₹100.00 / ₹100.00 ✓ Add payer Single payer Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Notes (optional) Receipt checked Notes (optional)",
       "roundingNote": null
     }
   },

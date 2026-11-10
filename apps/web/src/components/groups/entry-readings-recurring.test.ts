@@ -149,6 +149,8 @@ async function read(row: TypedEntry, edit: boolean): Promise<Reading> {
   const change = async (label: string, value: string) =>
     act(async () => field(label).props.onChange({ target: { value } }));
   await change('Description', row.description);
+  await change('Category', row.category);
+  await change('Tag', row.tagId);
   await act(async () => root().findAllByType(MoneyTextField)[0].props.onValueChange(row.amount));
   await change('Starts on', day);
   await change('Paid by', row.payerId);

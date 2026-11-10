@@ -336,3 +336,55 @@ it('shows the separate single-payer field and the zero-payer conflict comparison
     conflictReview: ['payers'],
   });
 });
+
+it('records To review’s missing-fact gate and local rejection instead of only its Split preview (#1111)', () => {
+  expect(cell('android-review', 'amounts-partly-blank').shown).toMatchObject({
+    split: { status: { kind: 'adds-up' } },
+    reviewScreen: {
+      saveDisabled: true,
+      text: expect.stringContaining('One thing left before you can save: who shared it'),
+    },
+  });
+  for (const id of [
+    'shares-fractional',
+    'unreadable-amount',
+    'unreadable-payer',
+    'unreadable-split-amount',
+    'unreadable-percentage',
+    'unreadable-share',
+  ]) {
+    expect(cell('android-review', id).shown, id).toMatchObject({
+      reviewScreen: {
+        saveDisabled: true,
+        text: expect.stringContaining('Correct the entered amount or details before saving.'),
+      },
+    });
+  }
+  expect(cell('android-review', 'unreadable-amount').shown).toMatchObject({
+    reviewScreen: {
+      valuesKept: { amount: 100 },
+      fields: expect.arrayContaining([
+        { label: 'Amount, Indian Rupee', value: 'not a number', editable: true },
+      ]),
+    },
+  });
+});
+
+it('keeps a historical zero payer through a notes edit and records the money-change difference (#1111)', () => {
+  for (const column of ['web-edit', 'android-edit'])
+    expect(money(column, 'saved-zero-payer-unchanged').paidBy).toEqual([
+      { user: alex, amountMinor: 10000 },
+      { user: sam, amountMinor: 0 },
+    ]);
+  expect(cell('android-edit', 'saved-zero-payer-unchanged').result).toEqual({
+    kind: 'command',
+    value: { notes: 'Receipt checked' },
+  });
+  expect(money('web-edit', 'saved-zero-payer-money-change').paidBy).toEqual([
+    { user: alex, amountMinor: 12000 },
+    { user: sam, amountMinor: 0 },
+  ]);
+  expect(money('android-edit', 'saved-zero-payer-money-change').paidBy).toEqual([
+    { user: alex, amountMinor: 12000 },
+  ]);
+});

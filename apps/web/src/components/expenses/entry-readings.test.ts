@@ -1,6 +1,6 @@
 import { recording } from '@splitbook/shared/test-support/expense-entry-recording';
-import { createElement, useLayoutEffect } from 'react';
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { createElement, useLayoutEffect, useState } from 'react';
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider } from '@mui/material/styles';
 import { SWRConfig } from 'swr';
@@ -135,43 +135,52 @@ function unsupported(): Reading {
   };
 }
 
-/** This is input adaptation to the flat editor shape, without reading any typed number. */
-function flat(row: TypedEntry): DraftEntries {
-  const result: DraftEntries = {
-    description: row.description,
-    amount: row.amount,
-    currency: row.currency,
-    date: row.date,
-    category: row.category,
-    notes: row.notes,
-    tagId: row.tagId,
-    splitMethod: row.splitMethod,
-  };
-  for (const payer of row.payers) {
-    result['paidBy.' + payer.user] = 'yes';
-    result['paidBy.' + payer.user + '.amount'] = payer.amount;
-  }
-  const part =
-    row.splitMethod === 'percentage'
-      ? 'percentage'
-      : row.splitMethod === 'shares'
-        ? 'shares'
-        : 'amount';
-  for (const user of row.participantIds) {
-    result['splitBetween.' + user] = 'yes';
-    if (row.splitMethod !== 'equal')
-      result['splitBetween.' + user + '.' + part] = row.splitValues[user] ?? '';
-  }
-  return result;
-}
 it('records the web To review editor and the Draft it reads (#1111)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', { addEventListener() {}, removeEventListener() {} });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  const words = (node: ReactTestInstance): string =>
+    node.type === 'style'
+      ? ''
+      : node.children
+          .map((child) => (typeof child === 'string' ? child : ' ' + words(child) + ' '))
+          .join('')
+          .replace(/[\t\r\n ]+/g, ' ')
+          .trim();
   const cells: Record<string, Reading> = {};
   for (const row of entries) {
     if (row.savedZeroPayer) {
       cells[row.id] = unsupported();
       continue;
     }
-    const input = flat(row);
+    let input: DraftEntries = {};
+    function Form() {
+      const [entries, setEntries] = useState<DraftEntries>({});
+      useLayoutEffect(() => {
+        input = entries;
+      });
+      return createElement(ReviewExpenseFields, {
+        entries,
+        context: {
+          members: people,
+          tags: tags.map((t) => ({ id: t._id, name: t.name })),
+          currency: 'INR',
+          category: 'home',
+          viewerId: alex,
+        },
+        onChange: (patch) => setEntries((previous) => ({ ...previous, ...patch })),
+      });
+    }
+    await act(async () => {
+      renderer = create(
+        createElement(ThemeProvider, { theme: createAppTheme('light') }, createElement(Form)),
+      );
+    });
+    await act(async () =>
+      renderer!.root.findByType(ExpenseFields).props.chooseSplitMethod(row.splitMethod),
+    );
+    // The same whole typed change given to Android's public reviewFormChange seam.
+    await act(async () => renderer!.root.findByType(ExpenseFields).props.edit(open(row).values));
     let result: Reading['result'];
     try {
       result = { kind: 'draft', value: draftValues(input) };
@@ -181,28 +190,17 @@ it('records the web To review editor and the Draft it reads (#1111)', async () =
     cells[row.id] = {
       result,
       shown: {
-        formContents: text(
-          renderToStaticMarkup(
-            createElement(
-              ThemeProvider,
-              { theme: createAppTheme('light') },
-              createElement(ReviewExpenseFields, {
-                entries: input,
-                context: {
-                  members: people,
-                  tags: tags.map((t) => ({ id: t._id, name: t.name })),
-                  currency: 'INR',
-                  category: 'home',
-                  viewerId: alex,
-                },
-                onChange: () => {},
-              }),
-            ),
-          ),
-        ),
+        formContents: words(renderer!.root),
+        fields: renderer!.root.findAllByType('input').map((n) => ({
+          label: n.props['aria-label'] ?? '',
+          value: n.props.value ?? '',
+          type: n.props.type,
+        })),
         roundingNote: null,
       },
     };
+    await act(async () => renderer!.unmount());
+    renderer = undefined;
   }
   await expect(await recording(cells)).toMatchFileSnapshot(
     '../../../../../test/expense-entry-readings/recordings/web-review.json',

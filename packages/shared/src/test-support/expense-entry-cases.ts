@@ -91,6 +91,7 @@ export const entries: TypedEntry[] = [
   entry('saved-zero-payer-unchanged', {
     ...payers('100', '0'),
     savedZeroPayer: 'unchanged',
+    notes: 'Receipt checked',
   }),
   entry('saved-zero-payer-money-change', {
     ...payers('120', '0'),

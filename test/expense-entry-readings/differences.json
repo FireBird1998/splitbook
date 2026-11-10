@@ -29,8 +29,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
       ["server-complete"],
@@ -80,8 +79,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new", "server-complete"],
       ["android-edit"],
       ["web-finish-later", "android-finish-later", "web-review", "android-review"]
@@ -130,8 +128,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new", "server-complete"],
       ["android-edit"],
       ["web-finish-later", "android-finish-later", "web-review", "android-review"]
@@ -180,8 +177,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
       ["server-complete"],
@@ -231,8 +227,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
       ["server-complete"],
@@ -340,8 +335,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
       ["server-complete"],
@@ -411,8 +405,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
       ["server-complete"],
@@ -514,8 +507,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
       ["server-complete"],
@@ -669,10 +661,11 @@
       ["web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
-      ["server-complete", "android-review"],
+      ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
-      ["web-review"]
+      ["web-review"],
+      ["android-review"]
     ]
   },
   "payers-partly-blank": {
@@ -841,13 +834,11 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
       ["server-complete"],
-      ["web-finish-later", "android-finish-later", "android-review"],
-      ["web-review"]
+      ["web-finish-later", "android-finish-later", "web-review", "android-review"]
     ],
     "displays": [
       ["web-new"],
@@ -1082,8 +1073,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
       ["server-complete"],
@@ -1190,16 +1180,7 @@
         }
       },
       {
-        "columns": ["web-review"],
-        "reading": {
-          "kind": "refusal",
-          "issues": [
-            { "field": "", "message": "amount: Invalid input: expected number, received NaN" }
-          ]
-        }
-      },
-      {
-        "columns": ["android-review"],
+        "columns": ["web-review", "android-review"],
         "reading": {
           "kind": "refusal",
           "issues": [
@@ -1216,8 +1197,7 @@
       ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
-      ["web-review"],
-      ["android-review"]
+      ["web-review", "android-review"]
     ],
     "displays": [
       ["web-new"],
@@ -1226,10 +1206,11 @@
       ["web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
-      ["server-complete", "android-review"],
+      ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
-      ["web-review"]
+      ["web-review"],
+      ["android-review"]
     ]
   },
   "unreadable-payer": {
@@ -1311,12 +1292,13 @@
     "displays": [
       ["web-new"],
       ["web-edit"],
-      ["web-recurring", "web-recurring.edit", "server-complete", "android-review"],
+      ["web-recurring", "web-recurring.edit", "server-complete"],
       ["android-new"],
       ["android-edit"],
       ["web-finish-later"],
       ["android-finish-later"],
-      ["web-review"]
+      ["web-review"],
+      ["android-review"]
     ]
   },
   "unreadable-split-amount": {
@@ -1396,10 +1378,11 @@
       ["web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
-      ["server-complete", "android-review"],
+      ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
-      ["web-review"]
+      ["web-review"],
+      ["android-review"]
     ]
   },
   "unreadable-percentage": {
@@ -1470,8 +1453,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit", "android-new", "android-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
@@ -1484,10 +1466,11 @@
       ["web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
-      ["server-complete", "android-review"],
+      ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
-      ["web-review"]
+      ["web-review"],
+      ["android-review"]
     ]
   },
   "unreadable-share": {
@@ -1567,8 +1550,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new", "android-edit"],
       ["server-complete"],
       ["web-finish-later"],
@@ -1582,10 +1564,11 @@
       ["web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
-      ["server-complete", "android-review"],
+      ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
-      ["web-review"]
+      ["web-review"],
+      ["android-review"]
     ]
   },
   "unticked-typed-value": {
@@ -1617,8 +1600,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
       ["server-complete"],
@@ -1735,8 +1717,7 @@
     ],
     "wireResults": [
       ["web-new", "web-edit"],
-      ["web-recurring"],
-      ["web-recurring.edit"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
       ["server-complete"],

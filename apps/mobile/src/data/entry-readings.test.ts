@@ -1,3 +1,12 @@
+import { ReviewRunOverlay } from '../ui/review-run';
+import { TextInput } from 'react-native';
+import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
+import {
+  completeExpenseDraftSchema,
+  missingDraftFields,
+  type ExpenseDraftValues,
+} from '@splitbook/shared/validators/expense-draft';
+import { mockDeviceLocale } from '../test-utils/device-locale';
 import { createElement } from 'react';
 import { act, create, type ReactTestInstance } from 'react-test-renderer';
 import { SplitSheet } from '../ui/split-sheet';
@@ -32,6 +41,7 @@ import {
   savedExpense,
   people,
   refusal,
+  type TypedEntry,
   type Reading,
 } from '@splitbook/shared/test-support/expense-entry-cases';
 
@@ -261,23 +271,162 @@ it('records Android Finish later through the phone (#1111)', async () => {
   );
 });
 
+/** Read the actual review warning/Save state; an invalid picker change is caught by this screen. */
+async function reviewFeedback(row: TypedEntry, values: ExpenseDraftValues, rejected: boolean) {
+  const server = world();
+  const parsed = completeExpenseDraftSchema.safeParse(values);
+  const allocated = parsed.success ? normalizeExpenseMoney(parsed.data) : null;
+  const draft = {
+    id: 'e00000000000000000000001',
+    groupId,
+    revision: 0,
+    state: 'active',
+    preparedBy: { kind: 'member' },
+    changedBy: { kind: 'member' },
+    values,
+    missingFields: parsed.success ? [] : missingDraftFields(values, parsed.error.issues),
+    createdAt: day + 'T00:00:00.000Z',
+    updatedAt: day + 'T00:00:00.000Z',
+  };
+  const reviewed = {
+    draft,
+    review: 'a'.repeat(64),
+    problems: parsed.success ? [] : parsed.error.issues.map((i) => i.message),
+    duplicates: [],
+    ...(allocated
+      ? {
+          allocation: {
+            currency: allocated.currency,
+            paidBy: allocated.paidBy.map((p) => ({ user: String(p.user), amount: p.amount })),
+            splitBetween: allocated.splitBetween.map((p) => ({
+              user: String(p.user),
+              amount: p.amount,
+            })),
+          },
+        }
+      : {}),
+  };
+  server.world.toReview = {
+    total: 1,
+    groups: [
+      {
+        groupId,
+        groupName: 'Maple House',
+        currency: 'INR',
+        category: 'home',
+        count: 1,
+        items: [{ draft, problems: reviewed.problems, duplicates: [] }],
+      },
+    ],
+  };
+  server.world.pages['/api/groups/' + groupId + '/drafts'] = [draft];
+  server.reply('POST', '/api/groups/' + groupId + '/drafts/review', () =>
+    Response.json({ status: 200, data: [reviewed] }),
+  );
+  const phone = testPhone(server, { now: Date.parse(day + 'T12:00:00Z') });
+  const app = phone.open();
+  await app.signIn('alex');
+  await app.refreshToReview();
+  await app.startReviewRun(groupId, draft.id);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  let renderer!: ReturnType<typeof create>;
+  await act(async () => {
+    renderer = create(createElement(ReviewRunOverlay, { controller: app }));
+  });
+  expect(
+    app.getSnapshot().toReview.run?.context,
+    row.id + ': ' + JSON.stringify(app.getSnapshot().toReview),
+  ).toBeTruthy();
+  if (rejected) {
+    if (row.id === 'unreadable-amount')
+      await act(async () => {
+        const field = renderer.root
+          .findAllByType(TextInput)
+          .find((n) => n.props.accessibilityLabel?.startsWith('Amount,'))!;
+        expect(field.props.editable, row.id).not.toBe(false);
+        field.props.onChangeText(row.amount);
+      });
+    else {
+      const payer = row.id === 'unreadable-payer';
+      await act(async () => {
+        const tile = renderer.root.findAll(
+          (n) =>
+            String(n.type) === 'Pressable' &&
+            String(n.props.accessibilityLabel).startsWith(payer ? 'Paid by' : 'Split'),
+        )[0];
+        expect(tile.props.disabled, row.id).not.toBe(true);
+        tile.props.onPress();
+      });
+      await act(async () => {
+        if (payer)
+          renderer.root
+            .findByType(PayerSheet)
+            .props.onChange({ multiPayer: true, payers: row.payers });
+        else renderer.root.findByType(SplitSheet).props.onChange({ splitValues: row.splitValues });
+      });
+    }
+  }
+  const save = renderer.root.findAll(
+    (n) => n.props.accessibilityLabel === 'Save expense' && n.props.accessibilityRole === 'button',
+  )[0];
+  expect(save, row.id).toBeDefined();
+  const result = {
+    text: words(renderer.root),
+    saveDisabled: save.props.disabled === true,
+    fields: renderer.root.findAllByType(TextInput).map((n) => ({
+      label: n.props.accessibilityLabel ?? '',
+      value: n.props.value,
+      editable: n.props.editable !== false,
+    })),
+    valuesKept: app.getSnapshot().toReview.run!.items[0].item.draft.values,
+  };
+  await act(async () => renderer.unmount());
+  phone.dispose();
+  return result;
+}
+
 it('records Android To review changes through its existing form conversion (#1111)', async () => {
+  vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+  mockDeviceLocale('en-US');
   const cells: Record<string, Reading> = {};
   for (const row of entries) {
     if (row.savedZeroPayer) {
       cells[row.id] = unsupportedEdit();
       continue;
     }
+    let value: ExpenseDraftValues;
     try {
       // A member edits the typed fields of an initially incomplete stored item.
-      const value = reviewFormChange({}, row, row.currency);
-      cells[row.id] = {
-        result: { kind: 'draft', value },
-        shown: await shown(reviewForm(value, row.currency)),
-      };
+      value = reviewFormChange({}, row, row.currency);
     } catch (error) {
-      cells[row.id] = { result: refusal(error) };
+      // Start from another real entry in the one case list, then try the rejected picker change.
+      const control = entries.find(
+        (e) =>
+          e.id ===
+          (row.id === 'unreadable-payer'
+            ? 'multiple-payers'
+            : row.splitMethod === 'shares'
+              ? 'shares'
+              : row.splitMethod === 'percentage'
+                ? 'percentage'
+                : ['unequal', 'exact'].includes(row.splitMethod)
+                  ? 'amounts'
+                  : 'equal'),
+      )!;
+      const base = reviewFormChange({}, control, row.currency);
+      cells[row.id] = {
+        result: refusal(error),
+        shown: { reviewScreen: await reviewFeedback(row, base, true) },
+      };
+      continue;
     }
+    cells[row.id] = {
+      result: { kind: 'draft', value },
+      shown: {
+        ...(await shown(reviewForm(value, row.currency))),
+        reviewScreen: await reviewFeedback(row, value, false),
+      },
+    };
   }
   await expect(await recording(cells)).toMatchFileSnapshot(
     '../../../../test/expense-entry-readings/recordings/android-review.json',

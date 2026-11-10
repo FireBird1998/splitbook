@@ -1157,7 +1157,7 @@
     }
   },
   "saved-zero-payer-unchanged": {
-    "result": { "kind": "command", "value": {} },
+    "result": { "kind": "command", "value": { "notes": "Receipt checked" } },
     "shown": {
       "sheets": {
         "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
