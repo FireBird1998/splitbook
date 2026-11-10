@@ -120,7 +120,7 @@ describe('what a route checks before the address (#539)', () => {
         params: { id: 'not-an-id' },
         cookie: '',
       }),
-    ).toEqual({ status: 401, body: { error: 'Unauthorized', status: 401 } });
+    ).toEqual({ status: 401, body: { error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' } });
   });
 
   it('still answers 409 RECURRING_EXPENSES_OFF first while recurring Expenses are off', async () => {

@@ -13,7 +13,7 @@ vi.mock('@/lib/auth', () => ({ auth: { api: { getSession: vi.fn() } } }));
 vi.mock('@/lib/db', () => ({ default: vi.fn() }));
 
 // Supplemental baseline recorded on origin's #1082 responder before moving Drafts.
-// The original census snapshots remain immutable.
+// The supplemental uncertainty answer stays fixed through the approved corrections.
 it.each([
   {
     subject: 'creation',

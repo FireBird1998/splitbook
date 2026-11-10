@@ -348,7 +348,10 @@ describe('only members', () => {
     await insertExpense(theirs, '2026-09-05T12:00:00Z', { [bob]: 1000, [alice]: 500 });
 
     const insights = await read(theirs);
-    expect(insights).toEqual({ status: 403, body: { error: 'Forbidden', status: 403 } });
+    expect(insights).toEqual({
+      status: 403,
+      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
+    });
     expect(insights).toEqual(await readBalances(theirs));
   });
 
@@ -360,7 +363,10 @@ describe('only members', () => {
     await Group.updateOne({ _id: left }, { $pull: { members: { user: oid(alice) } } });
 
     const insights = await read(left);
-    expect(insights).toEqual({ status: 403, body: { error: 'Forbidden', status: 403 } });
+    expect(insights).toEqual({
+      status: 403,
+      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
+    });
     expect(insights).toEqual(await readBalances(left));
   });
 
@@ -612,7 +618,7 @@ describe('requests it refuses', () => {
     session.userId = null;
     expect(await read(maple)).toEqual({
       status: 401,
-      body: { error: 'Unauthorized', status: 401 },
+      body: { error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' },
     });
   });
 });

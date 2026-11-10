@@ -139,7 +139,7 @@ async function events(id: string) {
   );
 }
 describe('Settlement batch HTTP contract (#734)', () => {
-  it('keeps the single and batch authorization words for a member outside both parties', async () => {
+  it('uses the payment authorization words on both routes for a member outside both parties', async () => {
     const id = await trip();
     await groupService.addMember(id, priya);
     const single = await callRoute(settlements.POST, {
@@ -152,7 +152,7 @@ describe('Settlement batch HTTP contract (#734)', () => {
     expect(single).toEqual({
       status: 422,
       body: {
-        error: 'Only the payer or recipient can record this settlement',
+        error: 'Only the payer or recipient can record this payment',
         status: 422,
         code: 'FORBIDDEN_SETTLEMENT',
       },

@@ -97,7 +97,10 @@ describe('PATCH /api/user/profile', () => {
   it('refuses a change without a session and changes nothing', async () => {
     const refused = await changeProfile('', { name: 'Nobody' });
 
-    expect(refused).toEqual({ status: 401, body: { error: 'Unauthorized', status: 401 } });
+    expect(refused).toEqual({
+      status: 401,
+      body: { error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' },
+    });
     expect((await readProfile(await signIn('sam'))).body.data.name).toBe('Sam Chen');
   });
 });

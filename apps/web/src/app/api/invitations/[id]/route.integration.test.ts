@@ -102,7 +102,10 @@ describe('POST /api/invitations/[id]', () => {
 
     const refused = await answerInvitation(invitationId, await signIn('sam'), 'accept');
 
-    expect(refused).toEqual({ status: 404, body: { error: 'Invitation not found', status: 404 } });
+    expect(refused).toEqual({
+      status: 404,
+      body: { error: 'Invitation not found', status: 404, code: 'NOT_FOUND' },
+    });
     expect(await groupStatusFor(groupId, 'sam')).toBe(403);
     const stored = await Invitation.findById(invitationId).lean();
     expect(stored?.status).toBe('pending');
@@ -117,7 +120,11 @@ describe('POST /api/invitations/[id]', () => {
 
     expect(again).toEqual({
       status: 400,
-      body: { error: 'Invitation is no longer pending', status: 400 },
+      body: {
+        error: 'Invitation is no longer pending',
+        status: 400,
+        code: 'INVITATION_NOT_PENDING',
+      },
     });
     expect(await groupStatusFor(groupId, 'priya')).toBe(403);
   });
@@ -133,7 +140,7 @@ describe('POST /api/invitations/[id]', () => {
 
     expect(expired).toEqual({
       status: 410,
-      body: { error: 'Invitation has expired', status: 410 },
+      body: { error: 'Invitation has expired', status: 410, code: 'INVITATION_EXPIRED' },
     });
     expect(await groupStatusFor(groupId, 'priya')).toBe(403);
   });

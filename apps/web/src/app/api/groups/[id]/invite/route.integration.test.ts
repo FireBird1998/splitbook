@@ -91,7 +91,7 @@ describe('POST /api/groups/[id]/invite', () => {
 
     expect(again).toEqual({
       status: 409,
-      body: { error: 'This person has already been invited', status: 409 },
+      body: { error: 'This person has already been invited', status: 409, code: 'ALREADY_INVITED' },
     });
     expect(await priyasPendingGroups()).toEqual(['Coorg Weekend']);
   });
@@ -101,7 +101,10 @@ describe('POST /api/groups/[id]/invite', () => {
 
     const refused = await inviteByEmail(groupId, await signIn('priya'), PRIYA_EMAIL);
 
-    expect(refused).toEqual({ status: 403, body: { error: 'Forbidden', status: 403 } });
+    expect(refused).toEqual({
+      status: 403,
+      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
+    });
     expect(await priyasPendingGroups()).toEqual([]);
   });
 

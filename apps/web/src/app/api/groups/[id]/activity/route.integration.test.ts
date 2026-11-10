@@ -152,11 +152,11 @@ describe('GET /api/groups/[id]/activity filtered to one Expense', () => {
 
     expect(await readActivity(groupId, dave, `?expenseId=${expenseId}`)).toEqual({
       status: 403,
-      body: { error: 'Forbidden', status: 403 },
+      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
     });
     expect(await readActivity(groupId, null, `?expenseId=${expenseId}`)).toEqual({
       status: 401,
-      body: { error: 'Unauthorized', status: 401 },
+      body: { error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' },
     });
   });
 });

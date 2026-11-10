@@ -110,6 +110,9 @@ describe('POST and GET /api/groups', () => {
   it('refuses a Group without a session', async () => {
     const refused = await createGroup('', coorgWeekend);
 
-    expect(refused).toEqual({ status: 401, body: { error: 'Unauthorized', status: 401 } });
+    expect(refused).toEqual({
+      status: 401,
+      body: { error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' },
+    });
   });
 });
