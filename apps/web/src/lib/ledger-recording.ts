@@ -1,7 +1,7 @@
 import 'server-only';
 import { Refusal } from '@splitbook/shared/refusals';
 import type { ActivityType } from '@splitbook/shared/types';
-import type { Model, Types } from 'mongoose';
+import type { HydratedDocument, Model, Types } from 'mongoose';
 import connectDB from './db';
 import { afterGroupCommit, withGroupMutation } from './group-mutation';
 import { ensureLedgerWriteIndexes } from './ledger-indexes';
@@ -68,65 +68,75 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
     }
     checkMembers(admittedGroup);
   }
-  if (retry) {
+  const replay = async () => {
+    if (!retry) return null;
     const existing = await model
       .findOne({ group: groupId, createdBy: actorId, 'creationRequest.key': retry.key })
       .select('+creationRequest +pendingActivity');
-    if (existing) {
-      assertCreateReplay(existing.creationRequest!, retry.command);
+    if (existing) assertCreateReplay(existing.creationRequest!, retry.command);
+    return existing;
+  };
+  const publish = async (rows: HydratedDocument<T>[]) => {
+    for (const row of rows)
       await afterGroupCommit(() =>
-        activityService.publishPending(description.source, existing._id, existing.pendingActivity),
+        activityService.publishPending(description.source, row._id, row.pendingActivity),
       );
-      return [existing];
-    }
-  }
-  const saved = await withGroupMutation(
-    groupId,
-    async () => {
-      for (const use of description.currencies) await lockLedgerCurrency(groupId, use.currency);
-      const group = await Group.findById(groupId).lean();
-      if (!group) throw new Refusal('FORBIDDEN');
-      if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
-      if (description.compatibility?.membership !== 'before-retry') checkMembers(group);
-      const result = [];
-      for (const [index, entry] of (await description.entries(group)).entries()) {
-        const event = makePendingActivity(
-          groupId,
-          entry.activity.type,
-          actorId,
-          entry.activity.metadata,
-        );
-        const alert = entry.activity.alert;
-        const capture =
-          alert.switch === 'always' ||
-          (alert.switch === 'payments' ? paymentAlertsEnabled() : expenseChangeAlertsEnabled());
-        if (capture)
-          event.notificationContext = ledgerNotificationContext(
-            event,
-            alert.kind,
-            { groupId, recordId: String(entry.document._id) },
-            alert.involved,
-            new Set(group.members.map((member) => String(member.user))),
+    return rows;
+  };
+  const existing = await replay();
+  if (existing) return publish([existing]);
+  let saved: HydratedDocument<T>[];
+  try {
+    saved = await withGroupMutation(
+      groupId,
+      async () => {
+        for (const use of description.currencies) await lockLedgerCurrency(groupId, use.currency);
+        const group = await Group.findById(groupId).lean();
+        if (!group) throw new Refusal('FORBIDDEN');
+        if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
+        if (description.compatibility?.membership !== 'before-retry') checkMembers(group);
+        const result = [];
+        for (const [index, entry] of (await description.entries(group)).entries()) {
+          const event = makePendingActivity(
+            groupId,
+            entry.activity.type,
+            actorId,
+            entry.activity.metadata,
           );
-        result.push(
-          await model.create({
-            ...entry.document,
-            group: groupId,
-            createdBy: actorId,
-            ...(index === 0 && retry
-              ? { creationRequest: createRequestMetadata(retry.key, retry.command) }
-              : {}),
-            pendingActivity: [event],
-          }),
-        );
-      }
-      return result;
-    },
-    { ledger: true },
-  );
-  for (const row of saved)
-    await afterGroupCommit(() =>
-      activityService.publishPending(description.source, row._id, row.pendingActivity),
+          const alert = entry.activity.alert;
+          const capture =
+            alert.switch === 'always' ||
+            (alert.switch === 'payments' ? paymentAlertsEnabled() : expenseChangeAlertsEnabled());
+          if (capture)
+            event.notificationContext = ledgerNotificationContext(
+              event,
+              alert.kind,
+              { groupId, recordId: String(entry.document._id) },
+              alert.involved,
+              new Set(group.members.map((member) => String(member.user))),
+            );
+          result.push(
+            await model.create({
+              ...entry.document,
+              group: groupId,
+              createdBy: actorId,
+              ...(index === 0 && retry
+                ? { creationRequest: createRequestMetadata(retry.key, retry.command) }
+                : {}),
+              pendingActivity: [event],
+            }),
+          );
+        }
+        return result;
+      },
+      { ledger: true },
     );
-  return saved;
+  } catch (error) {
+    if (retry && (error as { code?: number }).code === 11000) {
+      const raced = await replay();
+      if (raced) return publish([raced]);
+    }
+    throw error;
+  }
+  return publish(saved);
 }

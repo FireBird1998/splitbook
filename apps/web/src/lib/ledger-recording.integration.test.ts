@@ -180,27 +180,40 @@ describe('ledger recording', () => {
     let arrivals = 0;
     let release!: () => void;
     let reject!: (error: Error) => void;
-    const gate = new Promise<void>((resolve, fail) => { release = resolve; reject = fail; });
-    const barrier = vi.spyOn(mongoose.connection, 'transaction').mockImplementation(async (write, options) => {
-      if (++arrivals === 2) release();
-      await gate;
-      return transaction(write, options);
+    const gate = new Promise<void>((resolve, fail) => {
+      release = resolve;
+      reject = fail;
     });
+    const barrier = vi
+      .spyOn(mongoose.connection, 'transaction')
+      .mockImplementation(async (write, options) => {
+        if (++arrivals === 2) release();
+        await gate;
+        return transaction(write, options);
+      });
     const timeout = setTimeout(() => reject(new Error('Concurrent writers did not arrive')), 1000);
     try {
       const results = await Promise.allSettled([record(key), record(key)]);
-      expect(results.every(result => result.status === 'fulfilled')).toBe(true);
-      const ids = results.flatMap(result => result.status === 'fulfilled' ? result.value.map(row => String(row._id)) : []);
+      expect(results.every((result) => result.status === 'fulfilled')).toBe(true);
+      const ids = results.flatMap((result) =>
+        result.status === 'fulfilled' ? result.value.map((row) => String(row._id)) : [],
+      );
       expect(ids).toHaveLength(2);
       expect(ids[0]).toBe(ids[1]);
       expect(await Expense.countDocuments()).toBe(1);
       expect(await Activity.countDocuments()).toBe(1);
-    } finally { clearTimeout(timeout); barrier.mockRestore(); release(); }
+    } finally {
+      clearTimeout(timeout);
+      barrier.mockRestore();
+      release();
+    }
   });
   it('leaves an atomic pending event when publication fails and recovers it on retry', async () => {
     const key = randomUUID();
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const outage = vi.spyOn(Activity, 'updateOne').mockImplementation(() => { throw new Error('Storage unavailable'); });
+    const outage = vi.spyOn(Activity, 'updateOne').mockImplementation(() => {
+      throw new Error('Storage unavailable');
+    });
     const [saved] = await record(key);
     expect(await Activity.countDocuments()).toBe(0);
     const pending = (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity;
@@ -211,7 +224,8 @@ describe('ledger recording', () => {
     expect(String(replayed._id)).toBe(String(saved._id));
     expect(await Expense.countDocuments()).toBe(1);
     expect(await Activity.countDocuments()).toBe(1);
-    expect((await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity).toHaveLength(0);
+    expect(
+      (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity,
+    ).toHaveLength(0);
   });
-
 });
