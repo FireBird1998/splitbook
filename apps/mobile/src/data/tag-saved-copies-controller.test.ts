@@ -188,19 +188,11 @@ function fixture({ nativeHttpCache = false } = {}) {
   const phone = testPhone(backend, {
     origin: 'http://localhost:4157',
     newSubmissionKey: () => `00000000-0000-4000-8000-${String(++keys).padStart(12, '0')}`,
-    purge: [
-      'savedQueries',
-      'tagRequests',
-      'expenseDrafts',
-      'settlementAttempts',
-      'untrustedCopies',
-    ],
     parts: {
       pendingInvitation: undefined,
       draftRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
     },
   });
   const cache = phone.stores.savedQueries.records;
