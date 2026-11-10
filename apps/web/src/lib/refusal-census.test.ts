@@ -188,6 +188,8 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
     Partial<Record<string, Parameters<typeof currentCause>[1]>>
   > = {
     '../app/api/export/route.ts': { GET: 'export' },
+    '../app/api/groups/[id]/invite/route.ts': { POST: 'invitation' },
+    '../app/api/invitations/[id]/route.ts': { POST: 'invitation' },
     '../app/api/groups/[id]/leave/route.ts': { POST: 'leave' },
     '../app/api/groups/[id]/members/[userId]/route.ts': { PATCH: 'demotion', DELETE: 'removal' },
     '../app/api/groups/[id]/settlements/batch/route.ts': { POST: 'payment' },

@@ -148,7 +148,8 @@ export function currentCause(
     | 'payment'
     | 'settlement'
     | 'tag'
-    | 'export',
+    | 'export'
+    | 'invitation',
 ): Error {
   if (caller === 'export' && cause instanceof ExportTooLargeError)
     return new Refusal('EXPORT_TOO_LARGE', { rows: cause.rows, limit: cause.limit });
@@ -182,6 +183,13 @@ export function currentCause(
   }
   if (cause.constructor === Error) {
     const code = cause.message;
+    if (
+      caller === 'invitation' &&
+      (code === 'ALREADY_INVITED' ||
+        code === 'INVITATION_NOT_PENDING' ||
+        code === 'INVITATION_EXPIRED')
+    )
+      return new Refusal(code);
     if (caller === 'expense' || caller === 'recurring' || caller === 'recurring-create') {
       if (code === 'INVALID_MEMBERS') return new Refusal(code, { variant: 'expense' });
       if (code === 'INVALID_TAG' || code === 'CURRENCY_MISMATCH') return new Refusal(code);
