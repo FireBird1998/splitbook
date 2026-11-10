@@ -704,3 +704,10 @@ it('aborts a held reply after the server took the sign-in without undoing its se
   expect(server.auth.sessions.size).toBe(1);
   held.release();
 });
+
+it('reports a missing session without returning protected session data', async()=>{
+  const server=fakeSplitbook();const cookie=server.auth.issue('alex');
+  server.auth.sessionPresent=false;
+  const response=await server.fetch('http://local/api/auth/get-session',{headers:{Cookie:cookie}});
+  expect(response.status).toBe(200);expect(parseSession(await response.json())).toBeNull();
+});
