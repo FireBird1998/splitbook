@@ -4,7 +4,7 @@ import { createMobileController, type MobileController } from '../data/mobile-co
 import type { AccountLocalStorage, MobileDependencies } from '../data/types';
 import { savedQueriesIn } from './saved-queries';
 
-type StoreOperation = 'load' | 'save' | 'remove' | 'clear' | 'list' | 'keys';
+type StoreOperation = 'load' | 'save' | 'remove' | 'clear' | 'list' | 'keys' | 'retainGroups';
 
 type PurgeStore =
   | 'savedQueries'
@@ -105,6 +105,7 @@ function records(savedQueries = false, separator = '') {
   return faultable({
     records: rows,
     ...adapter,
+    ...(savedQueries ? { retainGroups: async (_account: string, _groups: string[]) => {} } : {}),
     list: async (account: string) =>
       savedQueries
         ? adapter.list!(account)
