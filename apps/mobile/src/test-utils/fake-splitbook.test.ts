@@ -593,4 +593,12 @@ describe('fake Splitbook', () => {
     expect((await read()).snapshot).toEqual({canManage:true,tags:[{id:'c00000000000000000000001',name:'Food',revision:0,isArchived:false,isDeleted:false}]});
   });
 
+  it('keeps a mutable pathname-only view without clearing the complete request log', async () => {
+    const server=fakeSplitbook(), paths=server.sent({query:false,method:false});
+    await server.fetch('http://local/first?page=1',{});
+    expect(paths).toEqual(['/first']);paths.length=0;
+    await server.fetch('http://local/second?page=2',{method:'POST',body:'{}'});
+    expect(paths).toEqual(['/second']);expect(server.requests).toHaveLength(2);
+  });
+
 });
