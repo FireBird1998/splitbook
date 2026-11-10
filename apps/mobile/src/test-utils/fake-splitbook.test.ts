@@ -1,3 +1,5 @@
+import { createTransport } from '../data/transport';
+import { manualTimer, within, gatewayFailures } from './transport-faults';
 import {
   parseRecordedBatch,
   parseRecordedSettlement,
@@ -5,10 +7,27 @@ import {
 } from '../data/settlement';
 import { parseCreatedGroup } from '../data/dto';
 import { parseRateSuggestionResponse } from '@splitbook/shared/cross-currency-payment';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseGroup, parseGroups, parseSession, parseSignIn } from '../data/dto';
 import { parseExpensePage, parseGroupBalances, parseHomeBalances } from '../data/financial-dto';
 import { fakeSplitbook } from './fake-splitbook';
+
+function faultTransport(server: ReturnType<typeof fakeSplitbook>) {
+  const timers = manualTimer();
+  const transport = createTransport({
+    apiBase: 'http://local',
+    authOrigin: 'http://local',
+    secureTransport: false,
+    googleEnabled: false,
+    fetch: server.fetch,
+    timer: timers.timer,
+    now: () => 1,
+    session: { current: () => true, cookie: () => null, saveCookie: async () => undefined },
+    onExpired: async () => undefined,
+    onGroupDenied: async () => undefined,
+  });
+  return { ...transport, ...timers };
+}
 
 // HTTP is the seam: default responses must be readable by the actual app.
 describe('fake Splitbook', () => {
@@ -123,4 +142,44 @@ describe('fake Splitbook', () => {
     expect(server.world).toEqual(before);
     expect(server.unanswered).toEqual([]);
   });
+  it.each(['offline', 'lost-reply', 'body-fails'] as const)(
+    'makes %s a network failure to the real transport',
+    async (kind) => {
+      const server = fakeSplitbook();
+      server.fault('POST', '/probe', kind, { once: true });
+      const t = faultTransport(server);
+      await expect(t.request('/probe', 1, { method: 'POST', body: '{}' })).rejects.toMatchObject({
+        kind: 'network',
+        networkFailure: true,
+      });
+      expect(server.requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
+        'POST /probe',
+      ]);
+      expect(server.unanswered).toEqual([]);
+    },
+  );
+  it.each(['headers', 'body'] as const)(
+    'times out a reply hung at its %s with the real transport',
+    async (stage) => {
+      const server = fakeSplitbook();
+      server.fault('GET', '/probe', stage);
+      const t = faultTransport(server);
+      const error = t.request('/probe', 1).catch((error) => error);
+      await vi.waitFor(() => expect(server.requests).toHaveLength(1));
+      t.elapse(20_000);
+      expect(await within(error)).toMatchObject({ kind: 'timeout', networkFailure: true });
+    },
+  );
+  it.each(gatewayFailures)(
+    'keeps a gateway %s with %s out of the network-failure state',
+    async (status, body) => {
+      const server = fakeSplitbook();
+      server.fault('GET', '/probe', { status, body });
+      await expect(faultTransport(server).request('/probe', 1)).rejects.toMatchObject({
+        kind: 'server-error',
+        status,
+        networkFailure: false,
+      });
+    },
+  );
 });
