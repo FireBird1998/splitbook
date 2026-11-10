@@ -151,6 +151,15 @@ export function fakeSplitbook() {
   };
   const unanswered: string[] = [];
   const requests: FakeRequest[] = [];
+  const sentViews = new Map<boolean, string[]>();
+  const sent = ({ query = true } = {}) => {
+    let view = sentViews.get(query);
+    if (!view) {
+      view = requests.map((r) => `${r.method} ${query ? r.path : r.url.pathname}`);
+      sentViews.set(query, view);
+    }
+    return view;
+  };
   const replies: { method: string; path: string; answer: Answer; once: boolean }[] = [];
   const reply = (method: string, path: string, answer: Answer, { once = false } = {}) => {
     replies.unshift({ method, path, answer, once });
@@ -170,6 +179,8 @@ export function fakeSplitbook() {
       init,
     };
     requests.push(request);
+    for (const [query, view] of sentViews)
+      view.push(`${method} ${query ? request.path : url.pathname}`);
     if (!online) throw new TypeError('Network request failed');
     // Replacements can observe a request and defer to its normal answer with undefined.
     for (const entry of [...replies]) {
@@ -303,6 +314,7 @@ export function fakeSplitbook() {
     },
     fetch,
     requests,
+    sent,
     unanswered,
     reply,
     fault(
