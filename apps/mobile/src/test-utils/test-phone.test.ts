@@ -500,3 +500,16 @@ it('reopens the same phone with the caller’s current runtime parts and build c
   expect(request.headers.get('Idempotency-Key')).toBe('reopened-key');
   expect(phone.stores.credentials.value).not.toBeNull();
 });
+
+it('can explicitly keep two runtimes on one phone until a normal restart disposes both',async()=>{
+  const server=fakeSplitbook(),phone=testPhone(server);
+  const first=phone.open();await first.signIn('alex');
+  const second=phone.openConcurrent();await second.restore();
+  await first.openGroup('b00000000000000000000001');
+  expect(first.getSnapshot().screen).toBe('group');
+  const restarted=phone.open();await restarted.restore();
+  const before=server.requests.length;
+  await first.refresh('pull');await second.refresh('pull');
+  expect(server.requests).toHaveLength(before);
+  expect(restarted.getSnapshot().auth.user?.id).toBe('a00000000000000000000001');
+});
