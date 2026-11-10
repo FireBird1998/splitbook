@@ -1,6 +1,6 @@
 import type { TagSnapshot } from '@splitbook/shared/tag-management';
 /** Frozen legacy input values for the immutable main census. Production uses Refusal. */
-import { Refusal } from '@splitbook/shared/refusals';
+import { Refusal, refusalVocabulary } from '@splitbook/shared/refusals';
 import type { ExtraCurrencyUse } from '@splitbook/shared/group-currency-settings';
 /** A member's non-zero balance in each currency, in minor units: negative owes, positive is owed. */
 type OpenBalances = { currency: string; amountMinor: number }[];
@@ -149,7 +149,8 @@ export function currentCause(
     | 'settlement'
     | 'tag'
     | 'export'
-    | 'invitation',
+    | 'invitation'
+    | 'draft',
 ): Error {
   if (caller === 'export' && cause instanceof ExportTooLargeError)
     return new Refusal('EXPORT_TOO_LARGE', { rows: cause.rows, limit: cause.limit });
@@ -158,6 +159,22 @@ export function currentCause(
       snapshot: cause.snapshot,
       existingTagId: cause.existingTagId,
     });
+  // The old census descriptions stay fixed while their migrated request producers are typed.
+  if (
+    caller === 'draft' &&
+    cause.constructor === Error &&
+    ![
+      'BACKUP_ALL_TIME',
+      'GROUP_DELETION_CHANGED',
+      'GROUP_DELETION_NOT_REQUESTED',
+      'GROUP_NOT_FOUND',
+      'INVALID_CURRENCY',
+      'INVALID_MONEY',
+      'INVALID_REQUEST_FINGERPRINT',
+    ].includes(cause.message) &&
+    Object.hasOwn(refusalVocabulary, cause.message)
+  )
+    return new Refusal(cause.message as ConstructorParameters<typeof Refusal>[0]);
   const currency = currentCurrencies.get(cause);
   if (currency) return currency;
   if (caller === 'leave' && cause instanceof LeaveBlockedError) {

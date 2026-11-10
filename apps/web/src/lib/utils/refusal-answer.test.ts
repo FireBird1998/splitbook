@@ -135,12 +135,3 @@ it('keeps the membership caller’s FORBIDDEN answer for typed and legacy produc
 });
 
 import draftAnswers from '../refusal-census-draft-answers.json';
-it('answers an unconfirmed Draft save through the central answering seam', async () => {
-  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-  log.mockClear();
-  const answer = serverError(new Error('submitted private data'), 'draft-save');
-  expect(answer.status).toBe(503);
-  expect(await answer.text()).toBe(draftAnswers[0].body);
-  expect(log).not.toHaveBeenCalled();
-  log.mockRestore();
-});

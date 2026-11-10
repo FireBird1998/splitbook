@@ -5,7 +5,7 @@ import {
   DATABASE_UNAVAILABLE_MESSAGE,
 } from '@splitbook/shared/database-unavailable';
 import { NextResponse } from 'next/server';
-import { ZodError } from 'zod';
+import type { ZodError } from 'zod';
 import { auth } from '@/lib/auth';
 import { MoneyValidationError, StoredMoneyError } from '@splitbook/shared/exact-money';
 import { ACCOUNT_CHANGED, EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
@@ -13,7 +13,6 @@ import {
   AuthDatabaseWatch,
   DatabaseUnavailableError,
   isDatabaseNoAnswer,
-  isDatabaseUnreachable,
 } from '@/lib/mongodb-client';
 
 export interface AuthUser {
@@ -119,40 +118,7 @@ export function notFound(resource: string = 'Resource') {
 /**
  * Answer a thrown value, preserving the legacy answers during the service migration.
  */
-export type ServerErrorCaller = RefusalCaller | 'draft' | 'draft-save';
-
-export function serverError(err?: unknown, caller?: ServerErrorCaller): NextResponse {
-  if (caller === 'draft' || caller === 'draft-save') {
-    if (err instanceof ZodError) return validationError(err);
-    if (err instanceof SyntaxError) return serverError(new Refusal('INVALID_JSON'));
-    // Legacy inputs retain the private Draft seam's own classification. Unknown failures
-    // may contain submitted values, so they receive uncertainty words without being logged.
-    const draftCodes = [
-      'DRAFTS_DISABLED',
-      'REQUEST_TOO_LARGE',
-      'DRAFT_GROUP_LIMIT',
-      'DRAFT_NOT_FOUND',
-      'DRAFT_TRANSACTIONS_REQUIRED',
-    ] as const;
-    if (err instanceof Error && draftCodes.some((code) => code === err.message))
-      return serverError(new Refusal(err.message as (typeof draftCodes)[number]));
-    if (
-      err instanceof Error &&
-      [
-        'FORBIDDEN',
-        'GROUP_ARCHIVED',
-        'IDEMPOTENCY_CONFLICT',
-        'STALE_REVISION',
-        'REVISION_REQUIRED',
-        'ACCOUNT_CHANGED',
-      ].includes(err.message)
-    )
-      return serverError(err);
-    if (isDatabaseUnreachable(err)) return databaseUnavailable(err);
-    return serverError(
-      new Refusal('DRAFT_UNCONFIRMED', caller === 'draft-save' ? { variant: 'save' } : undefined),
-    );
-  }
+export function serverError(err?: unknown, caller?: RefusalCaller): NextResponse {
   if (err instanceof Refusal) {
     const answer = refusalAnswer(err, caller);
     return NextResponse.json(answer, { status: answer.status });
