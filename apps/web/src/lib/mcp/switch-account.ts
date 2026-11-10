@@ -1,3 +1,4 @@
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { APIError, createAuthEndpoint, sessionMiddleware } from 'better-auth/api';
 import { deleteSessionCookie } from 'better-auth/cookies';
 import { verifyOAuthQueryParams } from '@better-auth/oauth-provider';
@@ -20,7 +21,7 @@ export const switchMcpAccount = createAuthEndpoint(
       });
     await endCurrentSession(ctx);
     deleteSessionCookie(ctx);
-    ctx.setHeader('Cache-Control', 'no-store');
+    ctx.setHeader('Cache-Control', API_CACHE_CONTROL);
     return ctx.json({
       url: `/login?${new URLSearchParams({ callbackUrl: `/mcp/consent?${ctx.body.oauth_query}` })}`,
     });

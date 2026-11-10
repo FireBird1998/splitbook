@@ -2,6 +2,8 @@
 
 All endpoints return JSON. Auth required unless marked 🔓 (public).
 
+Responses under `/api/` carry `Cache-Control: private, no-store` to prevent browsers, phones and shared caches from storing them.
+
 Standard response format:
 
 ```json

@@ -8,6 +8,7 @@
  * authenticated layout redirects for pages.
  */
 
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { NextResponse } from 'next/server';
 
 export interface ProxyDecisionInput {
@@ -61,7 +62,7 @@ export function resolveProxyResponse({
     return NextResponse.json(UNAUTHORIZED_BODY, {
       status: 401,
       ...(pathname === '/api/notifications/device'
-        ? { headers: { 'Cache-Control': 'private, no-store' } }
+        ? { headers: { 'Cache-Control': API_CACHE_CONTROL } }
         : {}),
     });
   }

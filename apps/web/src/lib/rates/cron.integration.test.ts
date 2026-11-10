@@ -54,7 +54,7 @@ it('fetches once for concurrent daily cron calls and never returns the rate tabl
   expect(results.map((result) => result.status)).toEqual([200, 200, 200]);
   expect(calls).toBe(1);
   for (const response of results) {
-    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(JSON.stringify(await response.json())).not.toMatch(/"rate"|"entries"|"EUR"/);
   }
   expect((await readRateSuggestion('EUR', 'INR', now)).suggestion?.rate).toBe('100');
@@ -157,7 +157,7 @@ it.each(['throws', 'empty', 'stale'])(
     try {
       const response = await unavailable(request('Bearer synthetic-cron-fixture'));
       expect(response.status).toBe(502);
-      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
       expect(await response.json()).toEqual({
         data: { refreshed: false, reason: 'providers_unavailable', availableCurrencies: 29 },
         status: 502,

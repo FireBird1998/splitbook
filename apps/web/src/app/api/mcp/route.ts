@@ -1,3 +1,4 @@
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { connectedAssistantActor } from '@/lib/mcp/assistant-actor';
 import { boundedBody } from '@/lib/draft-http';
 import { allowMcpRequest } from '@/lib/mcp/request-limit';
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   } catch {
     return Response.json(
       { error: 'Request too large' },
-      { status: 413, headers: { 'Cache-Control': 'no-store' } },
+      { status: 413, headers: { 'Cache-Control': API_CACHE_CONTROL } },
     );
   }
   const boundedRequest = new Request(request.url, {

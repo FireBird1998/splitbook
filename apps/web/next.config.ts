@@ -1,6 +1,16 @@
 import type { NextConfig } from 'next';
+import { API_CACHE_CONTROL } from './src/lib/api-cache-control';
 
 const nextConfig: NextConfig = {
+  // Apply before proxy refusals and route handlers. Pages and assets keep their own policy.
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [{ key: 'Cache-Control', value: API_CACHE_CONTROL }],
+      },
+    ];
+  },
   // `forbidden()`: a Group's server page (the statement, #319) refuses a non-member with a
   // real HTTP 403 and `groups/[id]/forbidden.tsx`, without exposing any Group data.
   experimental: { authInterrupts: true },

@@ -1,3 +1,4 @@
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { z } from 'zod';
 import { CURRENCY_CODES } from '@splitbook/shared/currency';
 import {
@@ -33,6 +34,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   } catch (err) {
     response = failedRead(err, req);
   }
-  response.headers.set('Cache-Control', 'private, no-store');
+  response.headers.set('Cache-Control', API_CACHE_CONTROL);
   return response;
 }

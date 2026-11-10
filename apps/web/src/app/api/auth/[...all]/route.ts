@@ -1,3 +1,4 @@
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { toNextJsHandler } from 'better-auth/next-js';
 import { auth } from '@/lib/auth';
 import { mcpUnavailableResponse } from '@/lib/mcp/config';
@@ -13,9 +14,13 @@ const handlers = toNextJsHandler(auth);
 async function answer(handle: () => Promise<Response>) {
   const watch = new AuthDatabaseWatch();
   const response = await watch.run(handle);
-  return response.status >= 500 && watch.unreachable !== undefined
-    ? databaseUnavailable(watch.unreachable)
-    : response;
+  if (response.status >= 500 && watch.unreachable !== undefined)
+    return databaseUnavailable(watch.unreachable);
+  // Function responses can override Next's configured header at the host. Align any cache
+  // policy Better Auth emits itself, including session, OAuth token and metadata responses.
+  if (response.headers.has('Cache-Control'))
+    response.headers.set('Cache-Control', API_CACHE_CONTROL);
+  return response;
 }
 
 export async function GET(request: Request) {

@@ -1,4 +1,5 @@
 import 'server-only';
+import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { timingSafeEqual } from 'node:crypto';
 import { refreshRates } from './service';
 import type { RateProviders } from './providers';
@@ -9,7 +10,7 @@ export function createRefreshHandler(providers: RateProviders, now = () => new D
     const secret = process.env.CRON_SECRET;
     const supplied = Buffer.from(request.headers.get('authorization') ?? '');
     const expected = Buffer.from(`Bearer ${secret ?? ''}`);
-    const headers = { 'Cache-Control': 'no-store' };
+    const headers = { 'Cache-Control': API_CACHE_CONTROL };
     if (!secret || supplied.length !== expected.length || !timingSafeEqual(supplied, expected))
       return Response.json({ error: 'Unauthorized', status: 401 }, { status: 401, headers });
     try {

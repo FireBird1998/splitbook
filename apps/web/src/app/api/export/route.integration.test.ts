@@ -880,7 +880,7 @@ describe('Export preview (#611)', () => {
     const answer = await request(alice, `${path}&preview=1`);
     expect(answer.headers.get('content-type')).toContain('application/json');
     expect(answer.headers.get('content-disposition')).toBeNull();
-    expect(answer.headers.get('cache-control')).toBe('no-store');
+    expect(answer.headers.get('cache-control')).toBe('private, no-store');
     const preview = json(answer);
     exportPreviewSchema.parse(preview);
     const rows = parseCsv(file.text);
@@ -932,7 +932,7 @@ describe('Export preview (#611)', () => {
     expect(backup.groups[0]).not.toHaveProperty('recurringExpenses');
     expect(backup.groups[0]).not.toHaveProperty('activity');
     const answer = await request(alice, `${path}&preview=1`);
-    expect(answer.headers.get('cache-control')).toBe('no-store');
+    expect(answer.headers.get('cache-control')).toBe('private, no-store');
     const preview = json(answer);
     exportPreviewSchema.parse(preview);
     expect(preview).toMatchObject({
@@ -989,7 +989,7 @@ describe('Export preview (#611)', () => {
       `/api/export?groups=${id}&format=statement&preview=1&from=2026-09-01&to=2026-09-30&tz=Asia%2FKolkata`,
     );
     expect(response.status).toBe(200);
-    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
     const preview = json(response);
     exportPreviewSchema.parse(preview);
     expect(preview).toMatchObject({ format: 'statement', empty: false });
@@ -1097,7 +1097,7 @@ describe('Export preview (#611)', () => {
     await settlementService.create(id, { paidTo: alice, amount: 1, currency: 'INR' }, bob);
     const answer = await request(alice, `/api/export?groups=${id}&format=json&include=&preview=1`);
     expect(answer.status).toBe(200);
-    expect(answer.headers.get('cache-control')).toBe('no-store');
+    expect(answer.headers.get('cache-control')).toBe('private, no-store');
     expect(json(answer)).toMatchObject({
       historyIncluded: false,
       paymentsIncluded: false,
