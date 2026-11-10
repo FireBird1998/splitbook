@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TagCommand } from '@splitbook/shared/tag-management';
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
-import { savedQueriesIn } from '../test-utils/saved-queries';
-import type { AccountGroupRecordStore } from './account-record-storage';
+import { testPhone } from '../test-utils/test-phone';
+import { expensePage, fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { SavedQueryRecords } from './saved-copy-budget';
 import { expenseTagPending } from './expense-draft';
 
 // #638: a Group's Tags are kept in its Saved copy, beside its other saved reads (ADR 0006). After
@@ -57,80 +57,17 @@ function fixture({ nativeHttpCache = false } = {}) {
     ],
   };
   let user = alex,
-    cookie: string | null = null,
-    owner: string | null = null,
-    identity: unknown = null,
-    cleanup = false,
     keys = 0;
-  /** This phone's saved copies, by account and path. */
-  const cache = new Map<string, unknown>();
-  /** Each saved row's size as the saved-copy budget measures it, by path (0 when unnamed). */
-  const sizes = new Map<string, number>();
-  const memory = (): AccountGroupRecordStore & { map: Map<string, unknown> } => {
-    const map = new Map<string, unknown>();
-    return {
-      map,
-      load: async (account, id) => structuredClone(map.get(account + id) ?? null),
-      save: async (account, id, value) => {
-        map.set(account + id, structuredClone(value));
-      },
-      remove: async (account, id) => {
-        map.delete(account + id);
-      },
-      clear: async () => map.clear(),
-      list: async (account) =>
-        [...map]
-          .filter(([key]) => key.startsWith(account))
-          .map(([key, value]) => ({ groupId: key.slice(account.length), value })),
-      keys: async (account) =>
-        [...map.keys()]
-          .filter((key) => key.startsWith(account))
-          .map((key) => key.slice(account.length)),
-    };
-  };
-  const kept = memory(),
-    drafts = memory(),
-    attempts = memory();
-  const tagRequests = {
-    ...kept,
-    keys: async (account: string) => {
-      server.keysListed += 1;
-      await server.holdKeys;
-      return kept.keys!(account);
-    },
-    load: async (account: string, id: string) => {
-      await new Promise((resolve) => setTimeout(resolve, server.tagLoadDelay));
-      if (server.failTagLoad) throw new Error('The device storage could not be read');
-      return kept.load(account, id);
-    },
-  };
-  const rows = savedQueriesIn(cache);
-  const savedQueries = {
-    ...rows,
-    remove: async (account: string, path: string) => {
-      if (server.failRemoval) throw new Error('The device storage is full');
-      await rows.remove(account, path);
-    },
-    usage: async (account: string) =>
-      [...cache.keys()]
-        .filter((key) => key.startsWith(account))
-        .map((key) => ({
-          path: key.slice(account.length),
-          bytes: sizes.get(key.slice(account.length)) ?? 0,
-          lastUsed: 0,
-        })),
-  };
-  const record = (value: { current: unknown }) => ({
-    load: async () => structuredClone(value.current),
-    save: async (next: unknown) => {
-      value.current = structuredClone(next);
-    },
-    clear: async () => {
-      value.current = null;
+  const backend = fakeSplitbook();
+  backend.world.people.alex = { ...alex, image: null };
+  backend.world.people.sam = { ...sam, image: null };
+  Object.defineProperty(server, 'offline', {
+    get: () => !backend.online,
+    set: (value: boolean) => {
+      backend.online = !value;
     },
   });
-  const untrusted = { current: null as unknown };
-
+  const sizes = new Map<string, number>();
   const person = (who: typeof alex) => ({ _id: who.id, name: who.name, email: who.email });
   const group = () => ({
     _id: mapleId,
@@ -155,52 +92,22 @@ function fixture({ nativeHttpCache = false } = {}) {
   });
   const snapshot = () => ({ canManage: user === alex, tags: structuredClone(server.tags) });
   const json = (body: unknown, status = 200) => Response.json(body, { status });
-  const emptyPage = {
-    status: 200,
-    data: {
-      expenses: [],
-      pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-      summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
-    },
-  };
   /** Every request sent so far, as `METHOD /path`. */
-  const requests: string[] = [];
+  const requests = backend.sent({ query: false });
   // A response left on disk by the older app, before this controller starts.
   let httpTags = nativeHttpCache
     ? { receivedAt: Date.now(), response: json({ status: 200, data: snapshot() }) }
     : undefined;
   const respond = async (path: string, init: RequestInit) => {
     const method = init.method ?? 'GET';
-    if (path.endsWith('/sign-in')) {
-      user = String(init.body).includes('sam') ? sam : alex;
-      return new Response(JSON.stringify({ user: { ...user, image: null } }), {
-        headers: { 'Set-Cookie': `better-auth.session_token=${user.name}.signature; Path=/` },
-      });
-    }
-    if (path.endsWith('/get-session'))
-      return json({
-        user: { ...user, image: null },
-        session: { userId: user.id, expiresAt: '2030-01-01T00:00:00.000Z' },
-      });
-    if (path.endsWith('/sign-out')) return json({ success: true });
+    if (path.startsWith('/api/auth/')) return undefined;
     const member = (user === alex || server.samMember) && !server.revoked && !server.left;
-    if (path === '/api/groups')
-      return json({ status: 200, data: member && !server.unlisted ? [group()] : [] });
-    if (path === '/api/user/balances')
-      return json({
-        status: 200,
-        data: {
-          buckets: [],
-          groups: member && !server.unlisted ? [{ groupId: mapleId, balances: [] }] : [],
-        },
-      });
     if (path === `${maplePath}/leave` && method === 'POST') {
       server.left = true;
       return json({ status: 200, data: { archived: false } });
     }
     if (path.startsWith(maplePath) && !member)
       return json({ error: 'Forbidden', status: 403 }, 403);
-    if (path === maplePath) return json({ status: 200, data: group() });
     if (path === tagsPath && method === 'POST') {
       const command = JSON.parse(String(init.body)) as TagCommand;
       const { intent } = command;
@@ -227,7 +134,7 @@ function fixture({ nativeHttpCache = false } = {}) {
     }
     if (path === tagsPath) {
       await server.holdRead;
-      return json({ status: 200, data: snapshot() });
+      return json({ status: 200, data: backend.world.tags[mapleId] });
     }
     if (path.startsWith(`${tagsPath}/`)) {
       const requestId = path.slice(tagsPath.length + 1);
@@ -239,91 +146,98 @@ function fixture({ nativeHttpCache = false } = {}) {
           : { state: 'not-applied', requestId, snapshot: snapshot() },
       });
     }
-    if (path.startsWith(`${maplePath}/expenses`)) return json(emptyPage);
-    if (path === `${maplePath}/balances`)
-      return json({
-        status: 200,
-        data: { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] },
-      });
-    throw new Error(`Unexpected fixture request ${method} ${path}`);
+    return undefined;
   };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4157',
-        authOrigin: 'http://localhost:4157',
-        developmentPersonaEnabled: true,
-      },
-      {
-        newSubmissionKey: () => `00000000-0000-4000-8000-${String(++keys).padStart(12, '0')}`,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity),
-          save: async (value) => {
-            identity = structuredClone(value);
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
-        savedQueries,
-        tagRequests,
-        expenseDrafts: drafts,
-        settlementAttempts: attempts,
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          untrustedCopies: record(untrusted),
-          stores: [savedQueries, tagRequests, drafts, attempts, record(untrusted)],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname;
-          requests.push(`${init.method ?? 'GET'} ${path}`);
-          if (server.offline) throw new TypeError('Network request failed');
-          // Android's HTTP cache can consider an earlier response fresh after a clock rollback,
-          // even without a server freshness lifetime. Revalidation must reach the server.
-          const cacheable =
-            nativeHttpCache && path === tagsPath && (init.method ?? 'GET') === 'GET';
-          const cacheControl = new Headers(init.headers).get('Cache-Control');
-          if (
-            cacheable &&
-            httpTags &&
-            Date.now() < httpTags.receivedAt &&
-            cacheControl !== 'no-cache' &&
-            cacheControl !== 'no-store'
-          )
-            return httpTags.response.clone();
-          const response = await respond(path, init);
-          if (cacheable && cacheControl !== 'no-store')
-            httpTags = { receivedAt: Date.now(), response: response.clone() };
-          return response;
-        },
-      },
-    );
+  Object.defineProperty(backend.world, 'groups', { get: () => [group()] });
+  const listed = () =>
+    (user === alex || server.samMember) && !server.revoked && !server.left && !server.unlisted;
+  for (const member of [alex, sam])
+    Object.defineProperty(backend.world.groupsByAccount, member.id, {
+      get: () => (listed() ? [group()] : []),
+    });
+  Object.defineProperty(backend.world, 'home', {
+    get: () => ({
+      buckets: [],
+      groups: listed() ? [{ groupId: mapleId, balances: [] }] : [],
+    }),
+  });
+  backend.world.expenses[mapleId] = expensePage();
+  backend.world.balances[mapleId] = { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] };
+  Object.defineProperty(backend.world.tags, mapleId, { get: () => snapshot() });
+  backend.reply('*', '*', async ({ url, init }) => {
+    const path = url.pathname;
+
+    if (path.endsWith('/sign-in')) user = String(init.body).includes('sam') ? sam : alex;
+    // Android's HTTP cache can consider an earlier response fresh after a clock rollback,
+    // even without a server freshness lifetime. Revalidation must reach the server.
+    const cacheable = nativeHttpCache && path === tagsPath && (init.method ?? 'GET') === 'GET';
+    const cacheControl = new Headers(init.headers).get('Cache-Control');
+    if (
+      cacheable &&
+      httpTags &&
+      Date.now() < httpTags.receivedAt &&
+      cacheControl !== 'no-cache' &&
+      cacheControl !== 'no-store'
+    )
+      return httpTags.response.clone();
+    const response = await respond(path, init);
+    if (response && cacheable && cacheControl !== 'no-store')
+      httpTags = { receivedAt: Date.now(), response: response.clone() };
+    return response;
+  });
+  const phone = testPhone(backend, {
+    origin: 'http://localhost:4157',
+    newSubmissionKey: () => `00000000-0000-4000-8000-${String(++keys).padStart(12, '0')}`,
+    purge: [
+      'savedQueries',
+      'tagRequests',
+      'expenseDrafts',
+      'settlementAttempts',
+      'untrustedCopies',
+    ],
+    parts: {
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
+    },
+  });
+  const cache = phone.stores.savedQueries.records;
+  const savedQueries = phone.stores.savedQueries as typeof phone.stores.savedQueries &
+    SavedQueryRecords;
+  delete savedQueries.retainGroups;
+  savedQueries.failPersistently(
+    'remove',
+    new Error('The device storage is full'),
+    () => server.failRemoval,
+  );
+  savedQueries.usage = async (account) =>
+    [...cache.keys()]
+      .filter((key) => key.startsWith(account))
+      .map((key) => ({
+        path: key.slice(account.length),
+        bytes: sizes.get(key.slice(account.length)) ?? 0,
+        lastUsed: 0,
+      }));
+  const tagRequests = phone.stores.tagRequests;
+  const listKeys = tagRequests.keys;
+  tagRequests.keys = (account) => {
+    server.keysListed++;
+    return listKeys(account);
+  };
+  tagRequests.stallPersistently('keys', () => server.holdKeys ?? Promise.resolve());
+  tagRequests.stallPersistently(
+    'load',
+    () => new Promise<void>((resolve) => setTimeout(resolve, server.tagLoadDelay)),
+  );
+  tagRequests.failPersistently(
+    'load',
+    new Error('The device storage could not be read'),
+    () => server.failTagLoad,
+  );
+  const create = () => phone.open();
+
   /** The Tags this phone keeps for Maple House, as Alex's saved row holds them, or null. */
   const savedTags = (account = alex.id) => {
     const row = cache.get(account + tagsPath) as
@@ -345,7 +259,7 @@ function fixture({ nativeHttpCache = false } = {}) {
     requests,
     /** The session cookie is gone, as after a 401: this account's data stays on disk. */
     forgetCookie: () => {
-      cookie = null;
+      void phone.stores.credentials.clear();
     },
   };
 }

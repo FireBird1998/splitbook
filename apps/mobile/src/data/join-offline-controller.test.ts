@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { savedQueriesIn } from '../test-utils/saved-queries';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { expensePage, fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { FetchResponse, MobileSnapshot } from './types';
 
 // #286: Join is a write, so it waits for a connection as every other write does (#200), and the
@@ -49,26 +49,22 @@ const mapleHouse = {
  */
 function phone() {
   const network = { online: true };
-  let cookie: string | null = null,
-    owner: string | null = null,
-    identity: unknown = null,
-    invitation: string | null = null,
-    joined = false;
-  const disk = new Map<string, unknown>();
+  let joined = false;
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.groups = [cedarFlat, mapleHouse];
+  Object.defineProperty(backend.world.groupsByAccount, alex.id, {
+    get: () => (joined ? [cedarFlat, mapleHouse] : [cedarFlat]),
+  });
+  backend.world.home = { buckets: [], groups: [] };
+  for (const item of backend.world.groups) {
+    backend.world.expenses[item._id] = expensePage();
+    backend.world.balances[item._id] = { byCurrency: [] };
+  }
   const sent: string[] = [];
   const holds = new Map<string, { arrive: () => void; outcome: Promise<void> }>();
-  const respond = (path: string, method: string): FetchResponse => {
-    if (path.endsWith('/sign-in'))
-      return new Response(JSON.stringify({ user: alex }), {
-        headers: { 'Set-Cookie': 'better-auth.session_token=alex.signature; Path=/; HttpOnly' },
-      });
-    if (path.endsWith('/get-session'))
-      return json({ user: alex, session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' } });
-    const groups = joined ? [cedarFlat, mapleHouse] : [cedarFlat];
-    if (path === '/api/groups') return json({ status: 200, data: groups });
-    // Home's figures say which Groups they cover, as Splitbook's do (#333): none here.
-    if (path === '/api/user/balances')
-      return json({ status: 200, data: { buckets: [], groups: [] } });
+  const respond = (path: string, method: string): FetchResponse | undefined => {
+    if (path.startsWith('/api/auth/')) return undefined;
     if (path === `/api/join/${code}` && method === 'POST') {
       joined = true;
       return json({ status: 201, data: { groupId: maple } }, 201);
@@ -78,101 +74,65 @@ function phone() {
         status: 200,
         data: { _id: maple, name: 'Maple House', category: 'home', memberCount: 1 },
       });
-    // Each Group Alex is in, with no Expenses yet.
-    const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
-    const found = groups.find((group) => group._id === id);
-    if (!found) return json({}, 404);
-    if (path === `/api/groups/${id}`) return json({ status: 200, data: found });
-    if (path === `/api/groups/${id}/expenses`)
-      return json({
-        status: 200,
-        data: {
-          expenses: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
-        },
-      });
-    if (path === `/api/groups/${id}/balances`)
-      return json({ status: 200, data: { byCurrency: [] } });
-    return json({}, 404);
+    // Membership and the empty reads come from this phone's world.
+    return undefined;
   };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
-      },
-      {
-        now: () => Date.parse(iso),
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity),
-          save: async (value) => {
-            identity = structuredClone(value);
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
-        pendingInvitation: {
-          load: async () => invitation,
-          save: async (value) => {
-            invitation = value;
-          },
-          clear: async () => {
-            invitation = null;
-          },
-        },
-        savedQueries: savedQueriesIn(disk),
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [{ clear: async () => disk.clear() }],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname,
-            method = init.method ?? 'GET',
-            request = `${method} ${path}`;
-          const held = holds.get(request);
-          holds.delete(request);
-          held?.arrive();
-          const reached = await held?.outcome.then(
-            () => network.online,
-            () => false,
-          );
-          if (reached === false || !network.online) {
-            sent.push(`${request} unreachable`);
-            throw new TypeError('Network request failed');
-          }
-          const response = respond(path, method);
-          sent.push(`${request} ${response.status}`);
-          return response;
-        },
-      },
+  backend.reply('*', '*', async ({ url, method }) => {
+    const path = url.pathname,
+      request = `${method} ${path}`;
+    const held = holds.get(request);
+    holds.delete(request);
+    held?.arrive();
+    const reached = await held?.outcome.then(
+      () => network.online,
+      () => false,
     );
+    if (reached === false || !network.online) throw new TypeError('Network request failed');
+    return respond(path, method);
+  });
+  // This suite observes completion order and status, unlike the shared request-start log.
+  const fetch: typeof backend.fetch = async (url, init) => {
+    const request = `${init.method ?? 'GET'} ${new URL(url).pathname}`;
+    try {
+      const response = await backend.fetch(url, init);
+      sent.push(`${request} ${response.status}`);
+      return response;
+    } catch (error) {
+      sent.push(`${request} unreachable`);
+      throw error;
+    }
+  };
+  const device = testPhone(
+    { ...backend, fetch },
+    {
+      now: Date.parse(iso),
+      purge: ['savedQueries'],
+      parts: {
+        newSubmissionKey: undefined,
+        expenseDrafts: undefined,
+        settlementAttempts: undefined,
+        draftRequests: undefined,
+        tagRequests: undefined,
+        groupCreations: undefined,
+        netInfo: undefined,
+        accountLocal: {
+          financialCleanup: undefined,
+          untrustedCopies: undefined,
+          signOutRecord: undefined,
+          cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
+        },
+      },
+    },
+  );
+  delete device.stores.savedQueries.retainGroups;
+  const disk = device.stores.savedQueries.records;
+  const create = () => device.open();
   return {
     network,
     sent,
     create,
     /** The invitation saved on this device. */
-    invitation: () => invitation,
+    invitation: () => device.stores.pendingInvitation.value,
     /** This device no longer keeps Alex's saved copy of `path`, as after a change removed it. */
     forget: (path: string) => void disk.delete(alex.id + path),
     /** The next request `METHOD /path` waits until it is answered, or can't reach Splitbook. */

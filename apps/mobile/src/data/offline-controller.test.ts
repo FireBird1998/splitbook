@@ -1,4 +1,7 @@
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import { testPhone } from '../test-utils/test-phone';
+import { expensePage, fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
+import type { SavedQueryRecords } from './saved-copy-budget';
 import { describe, expect, it, vi } from 'vitest';
 import {
   bodyFails,
@@ -11,7 +14,6 @@ import {
   type GatewayBody,
 } from '../test-utils/transport-faults';
 import type { MobileTimer } from './types';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 const accountId = 'a00000000000000000000001',
   groupId = 'b00000000000000000000001';
 const iso = '2026-09-28T12:00:00.000Z',
@@ -64,17 +66,11 @@ function fixture(
     extraGroups?: (typeof group)[];
   } = {},
 ) {
-  let offline = false,
-    revoked = false,
+  let revoked = false,
     deleted = false,
     created: typeof group | null = null,
     writes = 0,
-    cookie: string | null = null,
-    owner: string | null = null,
-    identity: unknown = null,
-    cleanup = false,
     sessionStatus = 200;
-  let activeUser = user;
   const device = {
     failRemoval: false,
     failJournalClear: false,
@@ -83,7 +79,6 @@ function fixture(
     holdGroupRead: null as Promise<void> | null,
   };
   let archived = false;
-  let financialCleanup: unknown = null;
   /** Replies with a status, and a body that defaults to an empty JSON object. */
   const errors = new Map<string, { status: number; body?: string }>();
   const failedPaths = new Set<string>();
@@ -93,277 +88,155 @@ function fixture(
   let gateway: { status: number; body: GatewayBody } | null = null;
   /** Replies that hang until their request is aborted, before or after the headers. */
   const hung = new Map<string, 'headers' | 'body'>();
-  const requests: string[] = [];
-  const cache = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>(),
-    creations = new Map<string, unknown>(),
-    attempts = new Map<string, unknown>();
-  const create = () =>
-    createMobileController(
+  const backend = fakeSplitbook();
+  backend.world.people.alex = user;
+  backend.world.people.sam = { ...user, id: 'a00000000000000000000002', name: 'Sam' };
+  Object.defineProperty(backend.world, 'groups', {
+    get: () => [group, ...(options.extraGroups ?? []), ...(created ? [created] : [])],
+  });
+  Object.defineProperty(backend.world.groupsByAccount, accountId, {
+    get: () => [
+      ...(revoked || archived ? [] : [group]),
+      ...(options.extraGroups ?? []),
+      ...(created ? [created] : []),
+    ],
+  });
+  backend.world.groupsByAccount[backend.world.people.sam.id] = [];
+  backend.world.home = { buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 12 }] };
+  const emptyReads = (id: string) => {
+    backend.world.expenses[id] = expensePage();
+    backend.world.balances[id] = { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] };
+    backend.world.activities[id] = [
       {
-        apiBaseUrl: 'http://localhost:4145',
-        authOrigin: 'http://localhost:4145',
-        developmentPersonaEnabled: true,
+        _id: 'd00000000000000000000001',
+        group: groupId,
+        type: 'group_created',
+        actor: { _id: accountId, name: 'Alex' },
+        metadata: {},
+        createdAt: iso,
       },
-      {
-        now: () => options.clock?.now ?? now,
-        timer: options.timer,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity),
-          save: async (value) => {
-            identity = structuredClone(value);
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
-        savedQueries: {
-          ...savedQueriesIn(cache),
-          usage: async (account: string) => {
-            await options.usageWait?.();
-            return [...cache.keys()]
-              .filter((key) => key.startsWith(account))
-              .map((key) => ({
-                path: key.slice(account.length),
-                bytes: options.rowSizes?.get(key.slice(account.length)) ?? 0,
-                lastUsed: options.rowUsed?.get(key.slice(account.length)) ?? 0,
-              }));
-          },
-          touch: async (account: string, path: string, time: number) => {
-            if (cache.has(account + path)) options.rowUsed?.set(path, time);
-          },
-          save: async (account: string, path: string, value: unknown) => {
-            cache.set(account + path, structuredClone(value));
-            options.rowUsed?.set(path, options.clock?.now ?? now);
-          },
-          remove: async (account: string, path: string) => {
-            options.removed?.push(path);
-            cache.delete(account + path);
-          },
-        },
-        settlementAttempts: {
-          list: async (account) =>
-            [...attempts]
-              .filter(([key]) => key.startsWith(account))
-              .map(([key, value]) => ({
-                groupId: key.slice(account.length),
-                value: structuredClone(value),
-              })),
-          load: async (account, group) => structuredClone(attempts.get(account + group) ?? null),
-          save: async (account, group, value) => {
-            attempts.set(account + group, structuredClone(value));
-          },
-          remove: async (account, group) => {
-            attempts.delete(account + group);
-          },
-          clear: async () => {
-            attempts.clear();
-          },
-        },
-        expenseDrafts: {
-          list: async (account) =>
-            [...drafts]
-              .filter(([key]) => key.startsWith(account))
-              .map(([key, value]) => ({
-                groupId: key.slice(account.length),
-                value: structuredClone(value),
-              })),
-          load: async (account, group) => structuredClone(drafts.get(account + group) ?? null),
-          save: async (account, group, value) => {
-            await device.holdDraftWrite;
-            drafts.set(account + group, structuredClone(value));
-          },
-          remove: async (account, group) => {
-            if (device.failRemoval) throw new Error('Device storage failed');
-            drafts.delete(account + group);
-          },
-          clear: async () => {
-            drafts.clear();
-          },
-        },
-        newSubmissionKey: () => 'native-group-key-0001',
-        groupCreations: {
-          load: async (account) => structuredClone(creations.get(account) ?? null),
-          save: async (account, value) => {
-            creations.set(account, structuredClone(value));
-          },
-          remove: async (account) => {
-            creations.delete(account);
-          },
-          clear: async () => {
-            creations.clear();
-          },
-        },
-        accountLocal: {
-          financialCleanup: {
-            load: async () => structuredClone(financialCleanup),
-            save: async (value) => {
-              if (device.failJournalSave) throw new Error('Cleanup journal unavailable');
-              financialCleanup = structuredClone(value);
-            },
-            clear: async () => {
-              if (device.failJournalClear) throw new Error('Cleanup journal unavailable');
-              financialCleanup = null;
+    ];
+  };
+  backend.world.groups.forEach((item) => emptyReads(item._id));
+  const requests = backend.sent({ query: false });
+  backend.reply('*', '*', async ({ url, init }) => {
+    if (gateway) return gatewayReply(gateway.status, gateway.body);
+    const path = new URL(url).pathname;
+    if (path === `/api/groups/${groupId}`) await device.holdGroupRead;
+    if (hung.has(path)) return hangUntilAborted(init, hung.get(path)!);
+    if (errors.has(path)) {
+      const { status, body } = errors.get(path)!;
+      return body === undefined ? Response.json({}, { status }) : new Response(body, { status });
+    }
+    if (failedPaths.has(path)) throw new Error('Partial network failure');
+    if (brokenBodies.has(path)) return bodyFails();
+    if (init.method !== 'GET' && !path.startsWith('/api/auth/')) writes += 1;
+    if (revoked && path.startsWith(`/api/groups/${groupId}`))
+      return Response.json({}, { status: 403 });
+    if (path.endsWith('/get-session') && sessionStatus !== 200)
+      return Response.json({}, { status: sessionStatus });
+    if (path.startsWith('/api/auth/')) return undefined;
+    if (path === '/api/groups' && init.method === 'POST') {
+      created = {
+        ...group,
+        _id: 'b00000000000000000000002',
+        name: JSON.parse(String(init.body)).name,
+      };
+      emptyReads(created._id);
+      return Response.json({ status: 201, data: created }, { status: 201 });
+    }
+    if (path === `/api/groups/${groupId}/expenses/${expenseId}`) {
+      if (init.method === 'DELETE') deleted = true;
+      return Response.json({ status: 200, data: { ...expense, isDeleted: deleted } });
+    }
+    if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST')
+      return Response.json(
+        { status: 201, data: { _id: 'e00000000000000000000002', group: groupId } },
+        { status: 201 },
+      );
+    return undefined;
+  });
+  const phone = testPhone(backend, {
+    origin: 'http://localhost:4145',
+    now: options.clock?.now ?? now,
+    newSubmissionKey: () => 'native-group-key-0001',
+    parts: {
+      now: () => options.clock?.now ?? now,
+      timer: options.timer,
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      netInfo: undefined,
+      accountLocal: {
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        stores: [
+          {
+            clear: async (): Promise<void> => {
+              phone.stores.savedQueries.records.clear();
+              phone.stores.offlineIdentity.value = null;
+              phone.stores.expenseDrafts.records.clear();
+              phone.stores.groupCreations.records.clear();
+              phone.stores.settlementAttempts.records.clear();
+              phone.stores.financialCleanup.value = null;
             },
           },
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          stores: [
-            {
-              clear: async () => {
-                cache.clear();
-                identity = null;
-                drafts.clear();
-                creations.clear();
-                attempts.clear();
-                financialCleanup = null;
-              },
-            },
-          ],
-        },
-        fetch: async (url, init) => {
-          requests.push(`${init.method ?? 'GET'} ${new URL(url).pathname}`);
-          if (offline) throw new Error('Offline');
-          if (gateway) return gatewayReply(gateway.status, gateway.body);
-          const path = new URL(url).pathname;
-          if (path === `/api/groups/${groupId}`) await device.holdGroupRead;
-          if (hung.has(path)) return hangUntilAborted(init, hung.get(path)!);
-          if (errors.has(path)) {
-            const { status, body } = errors.get(path)!;
-            return body === undefined
-              ? Response.json({}, { status })
-              : new Response(body, { status });
-          }
-          if (failedPaths.has(path)) throw new Error('Partial network failure');
-          if (brokenBodies.has(path)) return bodyFails();
-          if (init.method !== 'GET' && !path.startsWith('/api/auth/')) writes += 1;
-          if (revoked && path.startsWith(`/api/groups/${groupId}`))
-            return Response.json({}, { status: 403 });
-          if (path.endsWith('/sign-in')) {
-            activeUser = String(init.body).includes('sam')
-              ? { ...user, id: 'a00000000000000000000002', name: 'Sam' }
-              : user;
-            return new Response(JSON.stringify({ user: activeUser }), {
-              headers: {
-                'Set-Cookie': 'better-auth.session_token=alex.signature; Max-Age=2592000',
-              },
-            });
-          }
-          if (path.endsWith('/get-session') && sessionStatus !== 200)
-            return Response.json({}, { status: sessionStatus });
-          if (path.endsWith('/get-session'))
-            return Response.json({
-              user: activeUser,
-              session: { userId: activeUser.id, expiresAt: '2030-01-01T00:00:00.000Z' },
-            });
-          if (path === '/api/groups' && init.method === 'POST') {
-            created = {
-              ...group,
-              _id: 'b00000000000000000000002',
-              name: JSON.parse(String(init.body)).name,
-            };
-            return Response.json({ status: 201, data: created }, { status: 201 });
-          }
-          // A created Group opens through its own read (#189).
-          if (created && path === `/api/groups/${created._id}`)
-            return Response.json({ status: 200, data: created });
-          if (path === '/api/groups')
-            return Response.json({
-              status: 200,
-              // As on the real server, a Group created here is listed from then on.
-              data:
-                activeUser.id !== accountId
-                  ? []
-                  : [
-                      ...(revoked || archived ? [] : [group]),
-                      ...(options.extraGroups ?? []),
-                      ...(created ? [created] : []),
-                    ],
-            });
-          if (path === '/api/user/balances')
-            return Response.json({
-              status: 200,
-              data: { buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 12 }] },
-            });
-          const extra = options.extraGroups?.find((item) => path === `/api/groups/${item._id}`);
-          if (extra) return Response.json({ status: 200, data: extra });
-          if (path === `/api/groups/${groupId}`) return Response.json({ status: 200, data: group });
-          if (path === `/api/groups/${groupId}/expenses/${expenseId}`) {
-            if (init.method === 'DELETE') deleted = true;
-            return Response.json({ status: 200, data: { ...expense, isDeleted: deleted } });
-          }
-          if (path.endsWith('/balances'))
-            return Response.json({
-              status: 200,
-              data: { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] },
-            });
-          if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST')
-            return Response.json(
-              { status: 201, data: { _id: 'e00000000000000000000002', group: groupId } },
-              { status: 201 },
-            );
-          if (path.endsWith('/expenses'))
-            return Response.json({
-              status: 200,
-              data: {
-                expenses: [],
-                pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-                summary: {
-                  count: 0,
-                  totalsByCurrency: [],
-                  userOwes: 0,
-                  userGetsBack: 0,
-                  byMember: [],
-                },
-              },
-            });
-          if (path.endsWith('/activity'))
-            return Response.json({
-              status: 200,
-              data: {
-                activities: [
-                  {
-                    _id: 'd00000000000000000000001',
-                    group: groupId,
-                    type: 'group_created',
-                    actor: { _id: accountId, name: 'Alex' },
-                    metadata: {},
-                    createdAt: iso,
-                  },
-                ],
-                pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
-              },
-            });
-          if (path.endsWith('/sign-out')) return Response.json({ success: true });
-          throw new Error(`Unexpected fixture request ${init.method} ${path}`);
-        },
+        ],
       },
-    );
+    },
+  });
+  const cache = phone.stores.savedQueries.records,
+    drafts = phone.stores.expenseDrafts.records,
+    attempts = phone.stores.settlementAttempts.records;
+  const copies = phone.stores.savedQueries as typeof phone.stores.savedQueries & SavedQueryRecords;
+  delete copies.retainGroups;
+  copies.usage = async (account) => {
+    await options.usageWait?.();
+    return [...cache.keys()]
+      .filter((key) => key.startsWith(account))
+      .map((key) => ({
+        path: key.slice(account.length),
+        bytes: options.rowSizes?.get(key.slice(account.length)) ?? 0,
+        lastUsed: options.rowUsed?.get(key.slice(account.length)) ?? 0,
+      }));
+  };
+  copies.touch = async (account, path, time) => {
+    if (cache.has(account + path)) options.rowUsed?.set(path, time);
+  };
+  const save = copies.save,
+    remove = copies.remove;
+  copies.save = (account, path, value) => {
+    const writing = save(account, path, value);
+    options.rowUsed?.set(path, options.clock?.now ?? now);
+    return writing;
+  };
+  copies.remove = (account, path) => {
+    options.removed?.push(path);
+    return remove(account, path);
+  };
+  phone.stores.expenseDrafts.stallPersistently(
+    'save',
+    () => device.holdDraftWrite ?? Promise.resolve(),
+  );
+  phone.stores.expenseDrafts.failPersistently(
+    'remove',
+    new Error('Device storage failed'),
+    () => device.failRemoval,
+  );
+  phone.stores.financialCleanup.failPersistently(
+    'save',
+    new Error('Cleanup journal unavailable'),
+    () => device.failJournalSave,
+  );
+  phone.stores.financialCleanup.failPersistently(
+    'clear',
+    new Error('Cleanup journal unavailable'),
+    () => device.failJournalClear,
+  );
+  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts])
+    delete (store as AccountGroupRecordStore).keys;
+  const create = () => phone.open();
+
   return {
     create,
     device,
@@ -374,7 +247,10 @@ function fixture(
       revoked = false;
     },
     expireIdentity: () => {
-      identity = { user, session: { userId: accountId, expiresAt: '2020-01-01T00:00:00.000Z' } };
+      phone.stores.offlineIdentity.value = {
+        user,
+        session: { userId: accountId, expiresAt: '2020-01-01T00:00:00.000Z' },
+      };
     },
     expireSession: () => {
       sessionStatus = 401;
@@ -414,10 +290,10 @@ function fixture(
       revoked = true;
     },
     goOffline: () => {
-      offline = true;
+      backend.online = false;
     },
     goOnline: () => {
-      offline = false;
+      backend.online = true;
     },
   };
 }
