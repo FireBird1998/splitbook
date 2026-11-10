@@ -2,7 +2,6 @@ import { expenseReceipt } from '../test-utils/expense-receipt';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage, activityPage } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
 
 // #220: an Expense record and its history on declarative queries: the record's Group, the record
@@ -236,7 +235,6 @@ function fixture() {
   const connection = new Set<(state: ConnectionState) => void>();
   const phone = testPhone(backend, {
     newSubmissionKey: () => `expense-record-queries-${String(server.created + 1).padStart(4, '0')}`,
-    purge: ['savedQueries', 'expenseDrafts', 'untrustedCopies'],
     parts: {
       pendingInvitation: undefined,
       settlementAttempts: undefined,
@@ -251,10 +249,8 @@ function fixture() {
           return () => connection.delete(listener);
         },
       },
-      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
     },
   });
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
   const rows = phone.stores.savedQueries.records,
     drafts = phone.stores.expenseDrafts.records;
   // Stopped under #1075: MobileDependencies has no legacy financial-store read/write port.
