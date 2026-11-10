@@ -11,7 +11,7 @@ import { parseRateSuggestionResponse } from '@splitbook/shared/cross-currency-pa
 import { describe, expect, it, vi } from 'vitest';
 import { parseGroup, parseGroups, parseSession, parseSignIn } from '../data/dto';
 import { parseExpensePage, parseGroupBalances, parseHomeBalances } from '../data/financial-dto';
-import { fakeSplitbook, rateSuggestion } from './fake-splitbook';
+import { fakeSplitbook, rateSuggestion, expenseFixture } from './fake-splitbook';
 
 function faultTransport(server: ReturnType<typeof fakeSplitbook>) {
   const timers = manualTimer();
@@ -347,5 +347,31 @@ describe('fake Splitbook', () => {
       expenseCount: 1,
     });
     expect(server.unanswered).toEqual([]);
+  });
+  it('builds the common Expense row in the app reader’s wire shape', async () => {
+    const server = fakeSplitbook(),
+      group = server.world.groups[0]!;
+    const row = expenseFixture(group, 'b00000000000000000000009', 'Dinner');
+    const page = {
+      status: 200,
+      data: {
+        expenses: [row],
+        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        summary: {
+          count: 1,
+          totalsByCurrency: [{ currency: 'INR', totalAmount: 10 }],
+          userOwes: 0,
+          userGetsBack: 0,
+          byMember: [],
+        },
+      },
+    };
+    expect(parseExpensePage(page, group._id, 'INR').expenses[0]).toMatchObject({
+      id: 'b00000000000000000000009',
+      description: 'Dinner',
+      amount: 10,
+      amountMinor: 1000,
+      paidBy: [{ user: { id: 'a00000000000000000000001' }, amountMinor: 1000 }],
+    });
   });
 });
