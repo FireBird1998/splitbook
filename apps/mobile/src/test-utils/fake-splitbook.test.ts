@@ -10,7 +10,7 @@ import { parseRateSuggestionResponse } from '@splitbook/shared/cross-currency-pa
 import { describe, expect, it, vi } from 'vitest';
 import { parseGroup, parseGroups, parseSession, parseSignIn } from '../data/dto';
 import { parseExpensePage, parseGroupBalances, parseHomeBalances } from '../data/financial-dto';
-import { fakeSplitbook } from './fake-splitbook';
+import { fakeSplitbook, rateSuggestion } from './fake-splitbook';
 
 function faultTransport(server: ReturnType<typeof fakeSplitbook>) {
   const timers = manualTimer();
@@ -253,5 +253,63 @@ describe('fake Splitbook', () => {
     const headers = await server.fetch('http://local/body', {});
     expect(headers.status).toBe(200);
     await expect(headers.json()).rejects.toThrow('Network request failed');
+  });
+  it('reads payment-world figures, Debt rows, history and rates through the app readers', async () => {
+    const server = fakeSplitbook(),
+      id = server.world.groups[0]!._id;
+    const alex = server.world.groups[0]!.members[0]!.user,
+      sam = server.world.groups[0]!.members[1]!.user;
+    server.world.home = {
+      buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+      groups: [{ groupId: id, balances: [{ currency: 'INR', balance: -30 }] }],
+    };
+    server.world.balances[id] = {
+      byCurrency: [
+        {
+          currency: 'INR',
+          balances: [
+            { user: alex, balance: -30 },
+            { user: sam, balance: 30 },
+          ],
+          debts: [{ from: alex, to: sam, amount: 30 }],
+        },
+      ],
+    };
+    server.world.settlements[id] = [
+      {
+        _id: 'c00000000000000000000001',
+        group: id,
+        paidBy: alex,
+        paidTo: sam,
+        amount: 10,
+        amountMinor: 1000,
+        moneyVersion: 1,
+        currency: 'INR',
+        note: 'Cash',
+        createdAt: '2026-09-28T12:00:00Z',
+      },
+    ];
+    server.world.rates[id] = { 'EUR→INR': rateSuggestion('EUR', 'INR', '92.1') };
+    const signed = await server.fetch('http://local/api/auth/demo-persona/sign-in', {
+      method: 'POST',
+      body: '{"personaId":"alex"}',
+    });
+    const Cookie = signed.headers.get('Set-Cookie')!.split(';')[0];
+    const read = async (path: string) =>
+      (await server.fetch('http://local' + path, { headers: { Cookie } })).json();
+    expect(parseHomeBalances(await read('/api/user/balances'))).toMatchObject({
+      buckets: [{ youOwe: 30 }],
+      byGroup: { [id]: [{ balance: -30 }] },
+    });
+    expect(parseGroupBalances(await read(`/api/groups/${id}/balances`))[0]).toMatchObject({
+      debts: [{ amount: 30 }],
+      balances: [{ balance: -30 }, { balance: 30 }],
+    });
+    expect(
+      parseSettlementHistory(await read(`/api/groups/${id}/settlements`), id)[0],
+    ).toMatchObject({ amountMinor: 1000 });
+    expect(
+      parseRateSuggestionResponse(await read(`/api/groups/${id}/rates?from=EUR&to=INR`)),
+    ).toMatchObject({ suggestion: { rate: '92.1', source: 'frankfurter' } });
   });
 });
