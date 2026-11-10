@@ -853,3 +853,8 @@ it('refuses catch-all unanswered declarations', () => {
   expect(() => server.expectUnanswered('GET', '*')).toThrow('method and path');
   expect(() => server.expectUnanswered('GET', '/api/groups/*')).toThrow('method and path');
 });
+
+it.fails('reports a declared unanswered request that never happens', () => {
+  const server = fakeSplitbook();
+  server.expectUnanswered('GET', '/api/not-a-read');
+});
