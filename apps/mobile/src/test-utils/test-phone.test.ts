@@ -1,7 +1,7 @@
 import { savedQueriesIn } from './saved-queries';
 import { describe, expect, it, vi } from 'vitest';
 import { fakeSplitbook } from './fake-splitbook';
-import { testPhone } from './test-phone';
+import { testPhone, notificationNative } from './test-phone';
 
 describe('test phone', () => {
   it('reopens the app on the same session and stored payment without sending it', async () => {
@@ -526,4 +526,15 @@ it('keeps a Draft-request store’s separated rows and lists their Group ids',as
  expect([...phone.stores.draftRequests.records.keys()]).toEqual(['alex:maple']);
  expect(await phone.stores.draftRequests.load('alex','maple')).toEqual({request:'same-key'});
  expect(await phone.stores.draftRequests.list('alex')).toEqual([{groupId:'maple',value:{request:'same-key'}}]);
+});
+
+it('provides independent native notification controls with each phone’s installation and token',async()=>{
+ const first=notificationNative({installation:{id:'fictional-device',key:'fictional-proof'},token:'fictional-token'});
+ const second=notificationNative();
+ expect(await first.installation()).toEqual({id:'fictional-device',key:'fictional-proof'});
+ expect(await first.token()).toBe('fictional-token');
+ first.requestPermission.mockResolvedValueOnce('denied');
+ expect(await first.requestPermission()).toBe('denied');
+ expect(await second.requestPermission()).toBe('granted');
+ await first.clear();expect(first.clear).toHaveBeenCalledOnce();expect(second.clear).not.toHaveBeenCalled();
 });
