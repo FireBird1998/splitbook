@@ -1,4 +1,4 @@
-import { Refusal, refusalAnswer, refusalVocabulary } from '@splitbook/shared/refusals';
+import { Refusal, refusalAnswer, type RefusalCaller } from '@splitbook/shared/refusals';
 import { headers } from 'next/headers';
 import {
   DATABASE_UNAVAILABLE,
@@ -123,9 +123,9 @@ export function notFound(resource: string = 'Resource') {
 /**
  * Answer a thrown value, preserving the legacy answers during the service migration.
  */
-export function serverError(err?: unknown) {
+export function serverError(err?: unknown, caller?: RefusalCaller) {
   if (err instanceof Refusal) {
-    const answer = refusalAnswer(err);
+    const answer = refusalAnswer(err, caller);
     return NextResponse.json(answer, { status: answer.status });
   }
   if (err instanceof MoneyValidationError) {
@@ -162,10 +162,9 @@ export function serverError(err?: unknown) {
       'INVALID_ID',
       'ACCOUNT_CHANGED',
     ] as const;
-    if (err.name === 'VersionError') return serverError(new Refusal('STALE_REVISION'));
+    if (err.name === 'VersionError') return serverError(new Refusal('STALE_REVISION'), caller);
     if (legacyCodes.some((code) => code === err.message)) {
-      const answer = refusalVocabulary[err.message as (typeof legacyCodes)[number]];
-      return error(answer.words, answer.status, err.message);
+      return serverError(new Refusal(err.message as (typeof legacyCodes)[number]), caller);
     }
   }
 

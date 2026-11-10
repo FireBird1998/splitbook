@@ -489,6 +489,8 @@ export const refusalVocabulary = {
 } as const satisfies Record<string, Entry>;
 
 export type RefusalCode = keyof typeof refusalVocabulary;
+/** Temporary caller context for the existing code-less membership answers (#1086). */
+export type RefusalCaller = keyof typeof refusalVocabulary.FORBIDDEN.variants;
 type RequestRefusalCode = {
   [C in RefusalCode]: (typeof refusalVocabulary)[C] extends { words: unknown } ? C : never;
 }[RefusalCode];
@@ -543,11 +545,12 @@ export class Refusal<C extends RequestRefusalCode = RequestRefusalCode> extends 
 }
 
 /** The request refusal body serialized by serverError. */
-export function refusalAnswer(refusal: Refusal) {
+export function refusalAnswer(refusal: Refusal, caller?: RefusalCaller) {
   const entry = refusalVocabulary[refusal.code];
   const variants: Readonly<Record<string, Answer>> = entry.variants;
   const { data, code } = refusal;
-  const answer: Answer = data.variant ? variants[data.variant] : entry;
+  const answer: Answer =
+    (data.variant ? variants[data.variant] : caller ? variants[caller] : undefined) ?? entry;
   const words = typeof answer.words === 'function' ? answer.words(data) : answer.words;
   return {
     error: words,

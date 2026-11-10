@@ -116,3 +116,15 @@ it('uses only answers and codes recorded by the unchanged-main census', () => {
     recordedCodes.add(code);
   expect([...recordedCodes].sort()).toEqual(Object.keys(refusalVocabulary).sort());
 });
+
+it('keeps the membership caller’s FORBIDDEN answer for typed and legacy producers', async () => {
+  for (const cause of [new Refusal('FORBIDDEN'), new Error('FORBIDDEN')]) {
+    const answer = serverError(cause, 'membership');
+    expect(answer.status).toBe(403);
+    expect(await answer.text()).toBe('{"error":"Forbidden","status":403}');
+  }
+  const other = serverError(new Refusal('GROUP_ARCHIVED'), 'membership');
+  expect(await other.text()).toBe(
+    '{"error":"This Group was archived, so nothing more can be saved in it.","status":409,"code":"GROUP_ARCHIVED"}',
+  );
+});
