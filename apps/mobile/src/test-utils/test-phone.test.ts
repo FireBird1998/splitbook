@@ -519,3 +519,11 @@ it('can explicitly keep two runtimes on one phone until a normal restart dispose
   await restarted.restore();
   expect(restarted.getSnapshot().auth.user?.id).toBe('a00000000000000000000001');
 });
+
+it('keeps a Draft-request store’s separated rows and lists their Group ids',async()=>{
+ const phone=testPhone(fakeSplitbook(),{draftRequestSeparator:':'});
+ await phone.stores.draftRequests.save('alex','maple',{request:'same-key'});
+ expect([...phone.stores.draftRequests.records.keys()]).toEqual(['alex:maple']);
+ expect(await phone.stores.draftRequests.load('alex','maple')).toEqual({request:'same-key'});
+ expect(await phone.stores.draftRequests.list('alex')).toEqual([{groupId:'maple',value:{request:'same-key'}}]);
+});
