@@ -264,8 +264,19 @@ export function fakeSplitbook() {
     >,
   };
   const unanswered: string[] = [];
+  const expectedAbsences = new Set<string>();
+  const matchesAbsence = (expected: string, actual: string) =>
+    expected === actual || (!expected.includes('?') && expected === actual.split('?')[0]);
+  const expectUnanswered = (method: string, path: string) => {
+    if (!/^[A-Z]+$/.test(method) || !path.startsWith('/') || path.includes('*'))
+      throw new Error('Name an exact method and path for an expected unanswered request.');
+    expectedAbsences.add(`${method} ${path}`);
+  };
   onTestFinished(() => {
-    if (unanswered.length) throw new Error(`Unanswered requests: ${unanswered.join(' | ')}`);
+    const unexpected = unanswered.filter(
+      (actual) => ![...expectedAbsences].some((expected) => matchesAbsence(expected, actual)),
+    );
+    if (unexpected.length) throw new Error(`Unanswered requests: ${unexpected.join(' | ')}`);
   });
   const requests: FakeRequest[] = [];
   const sentViews = new Map<string, { query: boolean; method: boolean; rows: string[] }>();
@@ -612,6 +623,7 @@ export function fakeSplitbook() {
     requests,
     sent,
     unanswered,
+    expectUnanswered,
     reply,
     hold,
     fault(
