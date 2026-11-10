@@ -336,4 +336,12 @@ describe('test phone', () => {
     expect(server.online).toBe(true);
   });
 
+  it('can persistently refuse the native saved-copy retention step', async () => {
+    const store = testPhone(fakeSplitbook()).stores.savedQueries;
+    const stop = store.failPersistently('retainGroups', new Error('Cannot retain rows'));
+    await expect(store.retainGroups('alex',['maple'])).rejects.toThrow('Cannot retain rows');
+    stop();
+    await expect(store.retainGroups('alex',['maple'])).resolves.toBeUndefined();
+  });
+
 });
