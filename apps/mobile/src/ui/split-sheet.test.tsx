@@ -2,7 +2,6 @@ import { useSyncExternalStore } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { MobileController } from '../data/mobile-controller';
-import type { AccountGroupRecordStore } from '../data/account-record-storage';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import type { FetchResponse } from '../data/types';
@@ -96,9 +95,7 @@ function backend(record: Record<string, unknown> = exactExpense) {
   });
   const phone = testPhone(server, {
     now: Date.parse(iso),
-    recordSeparator: ':',
     newSubmissionKey: () => 'native-expense-test-0001',
-    purge: ['expenseDrafts'],
     parts: {
       savedQueries: undefined,
       offlineIdentity: undefined,
@@ -108,16 +105,8 @@ function backend(record: Record<string, unknown> = exactExpense) {
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
   const controller = phone.open();
   return { controller, writes };
 }
