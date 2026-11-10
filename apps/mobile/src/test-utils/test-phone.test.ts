@@ -360,34 +360,55 @@ describe('test phone', () => {
     await expect(store.retainGroups!('alex', ['maple'])).resolves.toBeUndefined();
   });
   it('stalls native operations while a device gate is active and can remove the stall', async () => {
-    const store=testPhone(fakeSplitbook()).stores.expenseDrafts;
-    let release!:()=>void;
-    let wait:Promise<void>|null=new Promise(done=>{release=done;});
-    const stop=store.stallPersistently('save',()=>wait);
-    let written=false;
-    const writing=store.save('alex','maple',{draft:'Dinner'}).then(()=>{written=true;});
+    const store = testPhone(fakeSplitbook()).stores.expenseDrafts;
+    let release!: () => void;
+    let wait: Promise<void> | null = new Promise((done) => {
+      release = done;
+    });
+    const stop = store.stallPersistently('save', () => wait);
+    let written = false;
+    const writing = store.save('alex', 'maple', { draft: 'Dinner' }).then(() => {
+      written = true;
+    });
     await Promise.resolve();
     expect(written).toBe(false);
     expect(store.records.size).toBe(0);
-    release();await writing;
-    wait=null;
-    await store.save('alex','maple',{draft:'Tea'});
-    expect(await store.load('alex','maple')).toEqual({draft:'Tea'});
-    wait=new Promise(()=>{});stop();
-    await store.save('alex','maple',{draft:'Taxi'});
-    expect(await store.load('alex','maple')).toEqual({draft:'Taxi'});
+    release();
+    await writing;
+    wait = null;
+    await store.save('alex', 'maple', { draft: 'Tea' });
+    expect(await store.load('alex', 'maple')).toEqual({ draft: 'Tea' });
+    wait = new Promise(() => {});
+    stop();
+    await store.save('alex', 'maple', { draft: 'Taxi' });
+    expect(await store.load('alex', 'maple')).toEqual({ draft: 'Taxi' });
   });
 
   it('exposes faults on a supplied saved-query adapter without replacing its storage', async () => {
-    const rows=new Map<string,unknown>(), adapter=savedQueriesIn(rows);
-    const phone=testPhone(fakeSplitbook(),{parts:{savedQueries:adapter}});
-    await phone.stores.savedQueries.save('alex','/api/group',{saved:1});
-    expect(await adapter.load('alex','/api/group')).toEqual({saved:1});
-    const stop=phone.stores.savedQueries.at('/api/group').failPersistently('remove',new Error('Disk full'));
-    await expect(phone.stores.savedQueries.remove('alex','/api/group')).rejects.toThrow('Disk full');
-    expect(await adapter.load('alex','/api/group')).toEqual({saved:1});
-    stop(); await phone.stores.savedQueries.remove('alex','/api/group');
-    expect(await adapter.load('alex','/api/group')).toBeNull();
+    const rows = new Map<string, unknown>(),
+      adapter = savedQueriesIn(rows);
+    const phone = testPhone(fakeSplitbook(), { parts: { savedQueries: adapter } });
+    await phone.stores.savedQueries.save('alex', '/api/group', { saved: 1 });
+    expect(await adapter.load('alex', '/api/group')).toEqual({ saved: 1 });
+    const stop = phone.stores.savedQueries
+      .at('/api/group')
+      .failPersistently('remove', new Error('Disk full'));
+    await expect(phone.stores.savedQueries.remove('alex', '/api/group')).rejects.toThrow(
+      'Disk full',
+    );
+    expect(await adapter.load('alex', '/api/group')).toEqual({ saved: 1 });
+    stop();
+    await phone.stores.savedQueries.remove('alex', '/api/group');
+    expect(await adapter.load('alex', '/api/group')).toBeNull();
+  });
+  it('lets an unblocked saved-row read answer on its native turn', async () => {
+    const store=testPhone(fakeSplitbook()).stores.savedQueries;
+    await store.save('alex','/api/group',{saved:1});
+    const answers:string[]=[];
+    const reading=store.load('alex','/api/group').then(value=>{answers.push('saved row');return value;});
+    await Promise.resolve();answers.push('next turn');
+    expect(answers).toEqual(['saved row','next turn']);
+    expect(await reading).toEqual({saved:1});
   });
 
 });
