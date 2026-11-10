@@ -233,6 +233,7 @@ function setup(
     stores: [
       ...new Set([
         ...suppliedAccount.stores,
+        ...(options.expenseDrafts ? [options.expenseDrafts] : []),
         native.stores.financialCleanup,
         native.stores.untrustedCopies,
       ]),
@@ -1509,21 +1510,10 @@ describe('native session and Group boundary', () => {
     /** Alex at the new-Group form, with the server keeping what each creation sends. */
     const creating = async () => {
       const sent: Array<Record<string, unknown>> = [];
-      const drafts = new Map<string, unknown>();
+      const store = memoryCredentials();
       const { controller } = setup({
-        expenseDrafts: {
-          keys: async () => [...drafts.keys()],
-          load: async (_accountId, id) => structuredClone(drafts.get(id) ?? null),
-          save: async (_accountId, id, value) => {
-            drafts.set(id, structuredClone(value));
-          },
-          remove: async (_accountId, id) => {
-            drafts.delete(id);
-          },
-          clear: async () => {
-            drafts.clear();
-          },
-        },
+        store,
+        expenseDrafts: store.kit.native.stores.expenseDrafts,
         intercept: (path, init) => {
           if (path === '/api/groups' && init.method === 'POST') {
             sent.push(JSON.parse(String(init.body)));
