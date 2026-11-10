@@ -184,4 +184,33 @@ describe('test phone', () => {
       { groupId: '/api/groups/maple', value: { copy: true } },
     ]);
   });
+  it('runs on the platform clock unless the test gives it one', async () => {
+    const server = fakeSplitbook(),
+      phone = testPhone(server);
+    const before = Date.now();
+    const app = phone.open();
+    await app.signIn('alex');
+    // No injected clock: `Date.now` is the platform's, as in a suite that never set `now`.
+    expect(vi.isMockFunction(Date.now)).toBe(false);
+    expect(phone.clock.now).toBeGreaterThanOrEqual(before);
+    expect(() => {
+      phone.clock.now += 60_000;
+    }).toThrow('Give the phone a `now`');
+  });
+
+  it('purges without a part the test took away', async () => {
+    const server = fakeSplitbook(),
+      phone = testPhone(server, { parts: { savedQueries: undefined, tagRequests: undefined } });
+    const app = phone.open();
+    await app.signIn('alex');
+    await phone.stores.expenseDrafts.save(
+      'a00000000000000000000001',
+      'b00000000000000000000001',
+      { kept: 'until sign-out' },
+    );
+    await app.signOut();
+    expect(app.getSnapshot().auth).toMatchObject({ status: 'signed-out', message: null });
+    expect(phone.stores.expenseDrafts.records.size).toBe(0);
+    expect(phone.stores.cleanupMarker.value).toBe(false);
+  });
 });
