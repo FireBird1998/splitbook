@@ -186,9 +186,10 @@ export function recordCreationPaths(recording: Recording) {
           recording.names.normalise({ before, committed, duplicate, ordinary, after }),
         ).toMatchSnapshot();
       } finally {
+        // Late requests must use the real transaction instead of creating a new held gate.
+        spy.mockRestore();
         for (const release of releases.values()) release();
         await Promise.allSettled([winner, ...(loser ? [loser] : [])]);
-        spy.mockRestore();
       }
     });
   }
