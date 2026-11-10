@@ -246,4 +246,14 @@ describe('test phone', () => {
     expect(phone.stores.settlementAttempts.records.size).toBe(0);
     expect(phone.stores.savedQueries.records.size).toBeGreaterThan(0);
   });
+  it('waits for a public snapshot condition, including one that is already true', async () => {
+    const { until } = await import('./test-phone');
+    const phone = testPhone(fakeSplitbook()),
+      app = phone.open();
+    const signedIn = until(app, (snapshot) => snapshot.auth.status === 'authenticated');
+    await app.signIn('alex');
+    await signedIn;
+    await until(app, (snapshot) => snapshot.auth.user?.name === 'Alex Rivera');
+    expect(app.getSnapshot().auth.status).toBe('authenticated');
+  });
 });
