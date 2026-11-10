@@ -457,10 +457,11 @@ function signedMoney(minor: number, currency: string): string {
   return withSign(minor < 0 ? '−' : '+', minorMoney(Math.abs(minor), currency));
 }
 
-const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
+/** "Sam Chen" → "Sam". */
+export const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 /** "€20.00": an amount the sheet names, in its currency's minor units. */
-const amountMoney = (minor: number, currency: string) =>
+export const amountMoney = (minor: number, currency: string) =>
   formatCurrency(toMajorAmount(Math.abs(minor), currency), currency);
 
 /** "rounded to the paisa", "in whole yen": how the amount paid is rounded. */

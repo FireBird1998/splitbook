@@ -5,33 +5,30 @@
  * code and the glossary call it a Settlement.
  */
 import { readAmountEntry, type AmountReading } from '@splitbook/shared/amount-entry';
-import { formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
+import { getCurrencyPrecision } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
 import {
   previewSettlement,
+  overpaymentMessage,
   suggestedSettlementMinor,
   type SettlementLedger,
   type SettlementPreview,
 } from '@splitbook/shared/settlement-preview';
 import { groupTabHref } from '@/components/groups/group-tabs';
+import { amountMoney as money, firstName } from '@splitbook/shared/cross-currency-payment';
+
+export { money, firstName };
 
 /** The server's limit on a Settlement's note. */
 export const NOTE_MAX_LENGTH = 500;
 
 export const RECORD_PAYMENT_FOOTNOTE = 'Records a payment made outside Splitbook. No money moves.';
 
-/** Money as the app shows it: "₹1,060.00". */
-export const money = (amountMinor: number, currency: string) =>
-  formatCurrency(toMajorAmount(Math.abs(amountMinor), currency), currency);
-
 /** What goes in the amount field for an exact amount: "1060.00", or "1060" in yen. */
 export function amountInputText(amountMinor: number, currency: string): string {
   return toMajorAmount(amountMinor, currency).toFixed(getCurrencyPrecision(currency));
 }
-
-/** "Sam Chen" → "Sam". */
-export const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 /**
  * Why this pair can't record a payment, or null when it can. Only the payer or the payee may
@@ -69,32 +66,6 @@ export function standing(afterMinor: number, currency: string, isViewer: boolean
   if (afterMinor > 0)
     return { words: isViewer ? 'get back' : 'gets back', amount: money(afterMinor, currency) };
   return { words: isViewer ? 'are settled up' : 'is settled up', amount: null };
-}
-
-/**
- * The overpayment warning, Android's wording: how much more than suggested, and where the
- * payer would stand afterwards in the Group (balances are simplified across the Group, so this
- * is the payer's overall position, not a debt between these two).
- */
-export function overpaymentMessage(
-  preview: SettlementPreview,
-  currency: string,
-  payer: { isViewer: boolean; name: string },
-  payeeName: string,
-): string {
-  const who = payer.isViewer ? 'you’d' : `${firstName(payer.name)} would`;
-  const after = preview.paidBy.afterMinor;
-  const position =
-    after > 0
-      ? `${who} be owed ${money(after, currency)}`
-      : after < 0
-        ? `${who} still owe ${money(after, currency)}`
-        : `${who} be settled up`;
-  const lead =
-    preview.suggestedMinor === 0
-      ? `No payment from ${payer.isViewer ? 'you' : firstName(payer.name)} to ${payeeName} is suggested.`
-      : `That’s ${money(preview.overpaidMinor, currency)} more than suggested.`;
-  return `${lead} Afterwards ${position} in this Group.`;
 }
 
 /** The figures behind the form: the Group's balances, in the Group's currency, once read. */
