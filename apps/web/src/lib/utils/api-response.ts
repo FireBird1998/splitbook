@@ -1,5 +1,5 @@
+import { Refusal, refusalAnswer, refusalVocabulary } from '@splitbook/shared/refusals';
 import { headers } from 'next/headers';
-import { GROUP_ARCHIVED_MESSAGE } from '@splitbook/shared/group-archive';
 import {
   DATABASE_UNAVAILABLE,
   DATABASE_UNAVAILABLE_MESSAGE,
@@ -8,12 +8,7 @@ import { NextResponse } from 'next/server';
 import type { ZodError } from 'zod';
 import { auth } from '@/lib/auth';
 import { MoneyValidationError, StoredMoneyError } from '@splitbook/shared/exact-money';
-import {
-  ACCOUNT_CHANGED,
-  ACCOUNT_CHANGED_STATUS,
-  EXPECTED_ACCOUNT_HEADER,
-} from '@/lib/expected-account';
-import { RECURRING_EXPENSES_OFF } from '@/lib/recurring-expenses-switch';
+import { ACCOUNT_CHANGED, EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
 import {
   AuthDatabaseWatch,
   DatabaseUnavailableError,
@@ -126,9 +121,13 @@ export function notFound(resource: string = 'Resource') {
 }
 
 /**
- * 500 Server Error response
+ * Answer a thrown value, preserving the legacy answers during the service migration.
  */
 export function serverError(err?: unknown) {
+  if (err instanceof Refusal) {
+    const answer = refusalAnswer(err);
+    return NextResponse.json(answer, { status: answer.status });
+  }
   if (err instanceof MoneyValidationError) {
     // A refusal about one input field names it, such as a split row's amount (#497).
     const field = err.field ? { field: err.field } : {};
@@ -146,37 +145,30 @@ export function serverError(err?: unknown) {
   if (err instanceof CurrencyNotListedError) return error(err.message, 404, err.code);
   if (err instanceof CurrencyIsMainError) return error(err.message, 409, err.code);
   if (err instanceof Error) {
-    const messages: Record<string, [string, number]> = {
-      FORBIDDEN: ['Forbidden', 403],
-      INVALID_IDEMPOTENCY_KEY: ['Invalid submission key', 422],
-      IDEMPOTENCY_CONFLICT: [
-        'This submission key was already used for different data. Start a new submission.',
-        409,
-      ],
-      STALE_REVISION: [
-        'This record changed while you were editing. Reload the latest version before saving.',
-        409,
-      ],
-      REVISION_REQUIRED: ['Reload this record before changing it.', 428],
-      CURRENCY_LOCKED: ['Currency cannot change after this Group has financial records.', 409],
-      GROUP_ARCHIVED: [GROUP_ARCHIVED_MESSAGE, 409],
-      [RECURRING_EXPENSES_OFF]: ['Recurring Expenses are turned off.', 409],
-      ACTIVITY_BACKLOG_FULL: [
-        'The audit feed is temporarily unavailable. Please retry later.',
-        503,
-      ],
-      INVALID_MONEY: ['Enter a positive amount with the currency’s supported precision.', 422],
-      INVALID_JSON: ['Invalid JSON body', 400],
-      INVALID_ID: ['Invalid id', 400],
-      [ACCOUNT_CHANGED]: [
-        'The signed-in account changed in another tab. Reload this page to continue.',
-        ACCOUNT_CHANGED_STATUS,
-      ],
-    };
-    if (err.name === 'VersionError')
-      return error(messages.STALE_REVISION[0], 409, 'STALE_REVISION');
-    if (messages[err.message]) return error(...messages[err.message], err.message);
+    // Only these plain messages had a central answer before migration. Other old errors keep
+    // their fallthrough until their area moves to Refusal.
+    const legacyCodes = [
+      'FORBIDDEN',
+      'INVALID_IDEMPOTENCY_KEY',
+      'IDEMPOTENCY_CONFLICT',
+      'STALE_REVISION',
+      'REVISION_REQUIRED',
+      'CURRENCY_LOCKED',
+      'GROUP_ARCHIVED',
+      'RECURRING_EXPENSES_OFF',
+      'ACTIVITY_BACKLOG_FULL',
+      'INVALID_MONEY',
+      'INVALID_JSON',
+      'INVALID_ID',
+      'ACCOUNT_CHANGED',
+    ] as const;
+    if (err.name === 'VersionError') return serverError(new Refusal('STALE_REVISION'));
+    if (legacyCodes.some((code) => code === err.message)) {
+      const answer = refusalVocabulary[err.message as (typeof legacyCodes)[number]];
+      return error(answer.words, answer.status, err.message);
+    }
   }
+
   // An operation that ran out of its time got no answer either: a save's transaction whose
   // connection kept dropping can end that way rather than on the dropped connection. Its retry
   // with the same Idempotency-Key or revision records it once (ADR 0004).

@@ -1,3 +1,4 @@
+import type { RefusalCode } from '@splitbook/shared/refusals';
 import { inGroupCurrencyOrder } from '@splitbook/shared/group-currencies';
 import type { AssistantAttribution } from '@splitbook/shared/draft-attribution';
 import { afterGroupCommit, withGroupMutation } from '@/lib/group-mutation';
@@ -64,7 +65,7 @@ import type {
 } from '@splitbook/shared/expense-tag-change';
 
 /** Why one Expense of a Tag change couldn't change, in member words, by the error that said so. */
-const tagChangeRefusals: Record<string, string> = {
+const tagChangeRefusals: Partial<Record<RefusalCode, string>> = {
   FORBIDDEN: 'You’re no longer a member of this Group.',
   GROUP_ARCHIVED: GROUP_ARCHIVED_MESSAGE,
   INVALID_TAG: 'The Tag isn’t active any more.',
@@ -700,13 +701,15 @@ export class ExpenseService {
             : error.message
           : '';
       if (code === 'STALE_REVISION') return { expenseId, outcome: 'changed-elsewhere' };
-      if (!tagChangeRefusals[code])
-        console.error('Expense Tag change failed:', { expenseId, error });
+      // The lookup also receives fault messages outside RefusalCode.
+      const words: Readonly<Record<string, string | undefined>> = tagChangeRefusals;
+      const reason = words[code];
+      if (!reason) console.error('Expense Tag change failed:', { expenseId, error });
       return {
         expenseId,
         outcome: 'refused',
-        ...(tagChangeRefusals[code] ? { code } : {}),
-        reason: tagChangeRefusals[code] ?? 'Splitbook couldn’t change this Expense.',
+        ...(reason ? { code } : {}),
+        reason: reason ?? 'Splitbook couldn’t change this Expense.',
       };
     }
   }

@@ -1,0 +1,162 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`records MCP’s empty and outage refusals through its exported handlers 1`] = `
+[
+  {
+    "body": "",
+    "hasCode": false,
+    "status": 404,
+  },
+  {
+    "body": "",
+    "hasCode": false,
+    "status": 405,
+  },
+  {
+    "body": "",
+    "hasCode": false,
+    "status": 404,
+  },
+]
+`;
+
+exports[`records MCP’s oversized request body, including its absent status and code fields 1`] = `
+{
+  "body": "{"error":"Request too large"}",
+  "hasCode": false,
+  "status": 413,
+}
+`;
+
+exports[`records dispatch authorization, invalid requests and a failed pass at HTTP 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Unauthorized","status":401}",
+      "hasCode": false,
+      "status": 401,
+    },
+    "state": "no authorization",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Invalid request","status":400}",
+      "hasCode": false,
+      "status": 400,
+    },
+    "state": "unexpected query",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Notification dispatch unavailable","status":503}",
+      "hasCode": false,
+      "status": 503,
+    },
+    "state": "dispatch failed",
+  },
+]
+`;
+
+exports[`records notification registration’s code-less refusals at HTTP 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Unauthorized","status":401}",
+      "hasCode": false,
+      "status": 401,
+    },
+    "state": "signed out",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Notifications are not available yet.","status":503}",
+      "hasCode": false,
+      "status": 503,
+    },
+    "state": "feature disabled",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Notification registration needs a device token.","status":400}",
+      "hasCode": false,
+      "status": 400,
+    },
+    "state": "token missing",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Unauthorized","status":401}",
+      "hasCode": false,
+      "status": 401,
+    },
+    "state": "session revoked",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "state": "installation key differs",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "state": "read installation key differs",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Notification settings changed. Retry.","status":409}",
+      "hasCode": false,
+      "status": 409,
+    },
+    "state": "revision differs",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Notification settings changed. Retry.","status":409}",
+      "hasCode": false,
+      "status": 409,
+    },
+    "state": "maintenance without a live binding",
+  },
+]
+`;
+
+exports[`records the rates cron’s authorization and failure answers through its handler 1`] = `
+[
+  {
+    "body": "{"error":"Unauthorized","status":401}",
+    "hasCode": false,
+    "status": 401,
+  },
+  {
+    "body": "{"error":"Rate refresh failed","status":500}",
+    "hasCode": false,
+    "status": 500,
+  },
+]
+`;
+
+exports[`records the repository’s MCP authorization and request-limit answers at HTTP 1`] = `
+[
+  {
+    "body": "{"error":"Origin not allowed"}",
+    "hasCode": false,
+    "status": 403,
+  },
+  {
+    "body": "{"error":"Connection is no longer authorized"}",
+    "hasCode": false,
+    "status": 403,
+  },
+  {
+    "body": "{"error":"Too many requests. Try again in a minute."}",
+    "hasCode": false,
+    "status": 429,
+  },
+]
+`;

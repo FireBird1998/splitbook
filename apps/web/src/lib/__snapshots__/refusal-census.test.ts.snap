@@ -1,0 +1,7057 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`records Group currency fields and an already-listed currency’s separate words 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"EUR is already one of this Group’s currencies.","status":422,"code":"INVALID_GROUP_CURRENCIES","field":["currency"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": [
+        "currency",
+      ],
+      "message": "EUR is already one of this Group’s currencies.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"EUR is listed twice.","status":422,"code":"INVALID_GROUP_CURRENCIES","field":["alternateCurrencies"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": [
+        "alternateCurrencies",
+      ],
+      "message": "EUR is listed twice.",
+      "name": "MoneyValidationError",
+    },
+  },
+]
+`;
+
+exports[`records a non-Trip Group’s direct summary refusal 1`] = `
+{
+  "body": "{"error":"Only a Trip has a Trip summary.","status":409,"code":"NOT_A_TRIP"}",
+  "hasCode": true,
+  "status": 409,
+}
+`;
+
+exports[`records each per-Expense Tag refusal through the bulk HTTP response 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"data":{"tagId":"a00000000000000000000002","results":[{"expenseId":"a00000000000000000000003","outcome":"refused","code":"FORBIDDEN","reason":"You’re no longer a member of this Group."}]},"status":200}",
+      "hasCode": false,
+      "status": 200,
+    },
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"data":{"tagId":"a00000000000000000000002","results":[{"expenseId":"a00000000000000000000003","outcome":"refused","code":"GROUP_ARCHIVED","reason":"This Group was archived, so nothing more can be saved in it."}]},"status":200}",
+      "hasCode": false,
+      "status": 200,
+    },
+    "thrown": {
+      "message": "GROUP_ARCHIVED",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"data":{"tagId":"a00000000000000000000002","results":[{"expenseId":"a00000000000000000000003","outcome":"refused","code":"INVALID_TAG","reason":"The Tag isn’t active any more."}]},"status":200}",
+      "hasCode": false,
+      "status": 200,
+    },
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"data":{"tagId":"a00000000000000000000002","results":[{"expenseId":"a00000000000000000000003","outcome":"refused","code":"ACTIVITY_BACKLOG_FULL","reason":"Splitbook couldn’t record this change just now. Try it again later."}]},"status":200}",
+      "hasCode": false,
+      "status": 200,
+    },
+    "thrown": {
+      "message": "ACTIVITY_BACKLOG_FULL",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"data":{"tagId":"a00000000000000000000002","results":[{"expenseId":"a00000000000000000000003","outcome":"refused","reason":"Splitbook couldn’t change this Expense."}]},"status":200}",
+      "hasCode": false,
+      "status": 200,
+    },
+    "thrown": {
+      "message": "UNKNOWN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`records optional Tag payloads and ignores their internal count message 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"This Tag is used by Expenses or recurring templates and cannot be deleted.","status":409,"code":"TAG_IN_USE","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]}}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "code": "TAG_IN_USE",
+      "existingTagId": undefined,
+      "message": "TAG_IN_USE:2:3",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Check the Tag name and submitted action, then try again.","status":400,"code":"INVALID_TAG_COMMAND"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "thrown": {
+      "code": "INVALID_TAG_COMMAND",
+      "existingTagId": undefined,
+      "message": "INVALID_TAG_COMMAND",
+      "name": "Error",
+      "snapshot": undefined,
+      "status": 400,
+    },
+  },
+]
+`;
+
+exports[`records query and command refusals before any database read 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Send a named IANA time zone, such as Asia/Kolkata.","status":400,"code":"INVALID_TIME_ZONE"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "path": "groups/[id]/insights",
+    "query": "",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Send a Month as YYYY-MM, such as 2026-09.","status":400,"code":"INVALID_MONTH"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "path": "groups/[id]/insights",
+    "query": "?tz=UTC&month=bad",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Compare with 1 to 12 earlier months.","status":400,"code":"INVALID_COMPARE"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "path": "groups/[id]/insights",
+    "query": "?tz=UTC&compare=99",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Send a currency code, such as INR.","status":400,"code":"INVALID_CURRENCY"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "path": "groups/[id]/insights",
+    "query": "?tz=UTC&currency=bad",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Send a named IANA time zone, such as Asia/Kolkata.","status":400,"code":"INVALID_TIME_ZONE"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "path": "groups/[id]/trip-summary",
+    "query": "",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Send a currency code, such as INR.","status":400,"code":"INVALID_CURRENCY"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "path": "groups/[id]/trip-summary",
+    "query": "?tz=UTC&currency=bad",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Send a named IANA time zone, such as Asia/Kolkata.","status":400,"code":"INVALID_TIME_ZONE"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "path": "user/spending",
+    "query": "",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Ask for 1 to 12 months of spending.","status":400,"code":"INVALID_MONTHS"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "path": "user/spending",
+    "query": "?tz=UTC&months=99",
+  },
+  {
+    "answer": {
+      "body": "{"error":"Search for at most 100 characters.","status":422,"code":"QUERY_TOO_LONG"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "path": "search",
+    "query": "?q=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  },
+]
+`;
+
+exports[`records stale database versions, unreachable databases and unknown thrown values 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"This record changed while you were editing. Reload the latest version before saving.","status":409,"code":"STALE_REVISION"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "message": "revision race",
+      "name": "VersionError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Couldn’t reach Splitbook. Try again.","status":503,"code":"DATABASE_UNAVAILABLE"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "beforeHandshake": false,
+      "errorLabelSet": Set {},
+      "message": "read ECONNRESET",
+      "name": "MongoNetworkError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "message": "bad JSON",
+      "name": "SyntaxError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "message": "unknown fault",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "value": null,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "value": undefined,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "value": "FORBIDDEN",
+    },
+  },
+]
+`;
+
+exports[`records the Connected assistant tools’ own words for every table entry 1`] = `
+[
+  {
+    "answer": {
+      "content": [
+        {
+          "text": "Request could not be completed. Fetch the current state before retrying; reuse the original creation key.",
+          "type": "text",
+        },
+      ],
+      "isError": true,
+    },
+    "thrown": {
+      "message": "BACKUP_ALL_TIME",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "content": [
+        {
+          "text": "You have 100 items waiting in this Group. Save or delete some before keeping more.",
+          "type": "text",
+        },
+      ],
+      "isError": true,
+    },
+    "thrown": {
+      "message": "DRAFT_GROUP_LIMIT",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "content": [
+        {
+          "text": "DRAFT_NOT_FOUND",
+          "type": "text",
+        },
+      ],
+      "isError": true,
+    },
+    "thrown": {
+      "message": "DRAFT_NOT_FOUND",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "content": [
+        {
+          "text": "FORBIDDEN",
+          "type": "text",
+        },
+      ],
+      "isError": true,
+    },
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "content": [
+        {
+          "text": "GROUP_ARCHIVED",
+          "type": "text",
+        },
+      ],
+      "isError": true,
+    },
+    "thrown": {
+      "message": "GROUP_ARCHIVED",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "content": [
+        {
+          "text": "Group not found",
+          "type": "text",
+        },
+      ],
+      "isError": true,
+    },
+    "thrown": {
+      "message": "GROUP_NOT_FOUND",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "content": [
+        {
+          "text": "IDEMPOTENCY_CONFLICT",
+          "type": "text",
+        },
+      ],
+      "isError": true,
+    },
+    "thrown": {
+      "message": "IDEMPOTENCY_CONFLICT",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "content": [
+        {
+          "text": "REVISION_REQUIRED",
+          "type": "text",
+        },
+      ],
+      "isError": true,
+    },
+    "thrown": {
+      "message": "REVISION_REQUIRED",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "content": [
+        {
+          "text": "STALE_REVISION",
+          "type": "text",
+        },
+      ],
+      "isError": true,
+    },
+    "thrown": {
+      "message": "STALE_REVISION",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/export/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "EXPORT_TOO_LARGE",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This export would have 12,345 rows, more than the 10,000 one download can hold. Pick fewer Groups or a shorter period.","status":413,"code":"EXPORT_TOO_LARGE"}",
+      "hasCode": true,
+      "status": 413,
+    },
+    "method": "GET",
+    "thrown": {
+      "limit": 10000,
+      "message": "EXPORT_TOO_LARGE",
+      "name": "ExportTooLargeError",
+      "rows": 12345,
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/activity/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/assistant-reach/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/assistant-rule/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "PUT",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/balances/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/currencies/[code]/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/currencies/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/drafts/[draftId]/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "PUT",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/drafts/review/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/drafts/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/drafts/save/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/expenses/[expenseId]/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Currency is not one of this Group’s currencies","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"All payers and split participants must be group members","status":422,"code":"INVALID_MEMBERS"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag must be an active group tag","status":422,"code":"INVALID_TAG"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/expenses/check-duplicate/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/expenses/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Currency is not one of this Group’s currencies","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"All payers and split participants must be group members","status":422,"code":"INVALID_MEMBERS"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVALID_MONEY_PRECISION",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag must be an active group tag","status":422,"code":"INVALID_TAG"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_MONEY_PRECISION",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/expenses/tag-change/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag must be an active group tag","status":422,"code":"INVALID_TAG"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/insights/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_COMPARE",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_CURRENCY",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_MONTH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_TIME_ZONE",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/invite/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"This person has already been invited","status":409}",
+      "hasCode": false,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "ALREADY_INVITED",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/invite-link/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/leave/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"You are the last member. Leaving will permanently delete this Group and its history. Confirm deletion to continue.","status":409,"code":"GROUP_DELETION_CONFIRMATION_REQUIRED"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "GROUP_DELETION_CONFIRMATION_REQUIRED",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Permanent Group deletion is unavailable here. You are still a member; no history was deleted.","status":409,"code":"GROUP_DELETION_UNAVAILABLE"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "GROUP_DELETION_UNAVAILABLE",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "LAST_ADMIN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Group changed while you were leaving. Try again.","status":409,"code":"LEAVE_CONFLICT"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "LEAVE_CONFLICT",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "OPEN_BALANCE",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "RECURRING_EXPENSE_PROBLEM",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Make someone else an admin before you leave.","status":409,"code":"LAST_ADMIN"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "admin": false,
+      "balances": [],
+      "code": "LAST_ADMIN",
+      "message": "LAST_ADMIN",
+      "name": "LeaveBlockedError",
+      "recurringExpenses": [],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Settle up before you leave: you owe ₹150.00 and are owed €12.50 in this Group.","status":409,"code":"OPEN_BALANCE","balances":[{"currency":"INR","amount":-150},{"currency":"EUR","amount":12.5}]}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "admin": false,
+      "balances": [
+        {
+          "amountMinor": -15000,
+          "currency": "INR",
+        },
+        {
+          "amountMinor": 1250,
+          "currency": "EUR",
+        },
+      ],
+      "code": "OPEN_BALANCE",
+      "message": "OPEN_BALANCE",
+      "name": "LeaveBlockedError",
+      "recurringExpenses": [],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Rent (recurring) still includes you. Ask an admin to remove you from it, then leave.","status":409,"code":"RECURRING_EXPENSE_PROBLEM","recurringExpenses":[{"id":"a00000000000000000000009","description":"Rent"}]}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "admin": false,
+      "balances": [],
+      "code": "RECURRING_EXPENSE_PROBLEM",
+      "message": "RECURRING_EXPENSE_PROBLEM",
+      "name": "LeaveBlockedError",
+      "recurringExpenses": [
+        {
+          "description": "Rent",
+          "id": "a00000000000000000000009",
+        },
+      ],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Rent (recurring) still includes you. Remove yourself from it, then leave.","status":409,"code":"RECURRING_EXPENSE_PROBLEM","recurringExpenses":[{"id":"a00000000000000000000009","description":"Rent"}]}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "admin": true,
+      "balances": [],
+      "code": "RECURRING_EXPENSE_PROBLEM",
+      "message": "RECURRING_EXPENSE_PROBLEM",
+      "name": "LeaveBlockedError",
+      "recurringExpenses": [
+        {
+          "description": "Rent",
+          "id": "a00000000000000000000009",
+        },
+      ],
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/members/[userId]/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Cannot demote the last admin. Promote another member first.","status":409}",
+      "hasCode": false,
+      "status": 409,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "LAST_ADMIN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "OPEN_BALANCE",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "REMOVAL_CONFLICT",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "SELF_REMOVE",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "balances": [
+        {
+          "amountMinor": -15000,
+          "currency": "INR",
+        },
+        {
+          "amountMinor": 1250,
+          "currency": "EUR",
+        },
+      ],
+      "code": "OPEN_BALANCE",
+      "memberName": "Priya Shah",
+      "message": "OPEN_BALANCE",
+      "name": "RemovalBlockedError",
+      "recurringExpenses": [],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "balances": [],
+      "code": "RECURRING_EXPENSE_PROBLEM",
+      "memberName": "Priya Shah",
+      "message": "RECURRING_EXPENSE_PROBLEM",
+      "name": "RemovalBlockedError",
+      "recurringExpenses": [
+        {
+          "description": "Rent",
+          "id": "a00000000000000000000009",
+        },
+      ],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Cannot remove the last admin.","status":409}",
+      "hasCode": false,
+      "status": 409,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "LAST_ADMIN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "OPEN_BALANCE",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Group changed while you were removing this member. Try again.","status":409,"code":"REMOVAL_CONFLICT"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "REMOVAL_CONFLICT",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"You cannot remove yourself. Use leave group instead.","status":400}",
+      "hasCode": false,
+      "status": 400,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "SELF_REMOVE",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Priya Shah owes ₹150.00 and is owed €12.50 in this Group. Settle up before removing them.","status":409,"code":"OPEN_BALANCE","balances":[{"currency":"INR","amount":-150},{"currency":"EUR","amount":12.5}]}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "balances": [
+        {
+          "amountMinor": -15000,
+          "currency": "INR",
+        },
+        {
+          "amountMinor": 1250,
+          "currency": "EUR",
+        },
+      ],
+      "code": "OPEN_BALANCE",
+      "memberName": "Priya Shah",
+      "message": "OPEN_BALANCE",
+      "name": "RemovalBlockedError",
+      "recurringExpenses": [],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Rent (recurring) still includes Priya Shah. Remove them from it before removing them from the Group.","status":409,"code":"RECURRING_EXPENSE_PROBLEM","recurringExpenses":[{"id":"a00000000000000000000009","description":"Rent"}]}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "balances": [],
+      "code": "RECURRING_EXPENSE_PROBLEM",
+      "memberName": "Priya Shah",
+      "message": "RECURRING_EXPENSE_PROBLEM",
+      "name": "RemovalBlockedError",
+      "recurringExpenses": [
+        {
+          "description": "Rent",
+          "id": "a00000000000000000000009",
+        },
+      ],
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/rates/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/recurring/[recurringId]/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Currency is not one of this Group’s currencies","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"All payers and split participants must be group members","status":422,"code":"INVALID_MEMBERS"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag must be an active group tag","status":422,"code":"INVALID_TAG"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"End date must be on or after the start date","status":422,"code":"INVALID_WINDOW"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "INVALID_WINDOW",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Currency is not one of this Group’s currencies","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"All payers and split participants must be group members","status":422,"code":"INVALID_MEMBERS"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag must be an active group tag","status":422,"code":"INVALID_TAG"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"End date must be on or after the start date","status":422,"code":"INVALID_WINDOW"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "INVALID_WINDOW",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/recurring/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Currency is not one of this Group’s currencies","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"All payers and split participants must be group members","status":422,"code":"INVALID_MEMBERS"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag must be an active group tag","status":422,"code":"INVALID_TAG"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"End date must be on or after the start date","status":422,"code":"INVALID_WINDOW"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVALID_WINDOW",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Recurring expenses are only available in Household groups","status":422,"code":"NOT_HOUSEHOLD"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "NOT_HOUSEHOLD",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_WINDOW",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "NOT_HOUSEHOLD",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403}",
+      "hasCode": false,
+      "status": 403,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/settlements/batch/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Currency is not one of this Group’s currencies","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Only the payer or recipient can record this payment","status":422,"code":"FORBIDDEN_SETTLEMENT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN_SETTLEMENT",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Invalid submission key","status":422,"code":"INVALID_IDEMPOTENCY_KEY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVALID_IDEMPOTENCY_KEY",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Both payer and recipient must be group members","status":422,"code":"INVALID_MEMBERS"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This pair no longer has a Debt or Suggested payment in one of these currencies. Reload before recording the payment.","status":422,"code":"NO_SETTLEMENT_DEBT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "NO_SETTLEMENT_DEBT",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Payer and recipient must be different people","status":422,"code":"SAME_PARTY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "SAME_PARTY",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Payments across several currencies need a transactional database. Nothing was recorded.","status":503,"code":"SETTLEMENT_TRANSACTIONS_REQUIRED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "SETTLEMENT_TRANSACTIONS_REQUIRED",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/settlements/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Currency is not one of this Group’s currencies","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Only the payer or recipient can record this settlement","status":422,"code":"FORBIDDEN_SETTLEMENT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN_SETTLEMENT",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Both payer and recipient must be group members","status":422,"code":"INVALID_MEMBERS"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Payer and recipient must be different people","status":422,"code":"SAME_PARTY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "SAME_PARTY",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN_SETTLEMENT",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "SAME_PARTY",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/tag-actions/[requestId]/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Reload Tag management before making this change.","status":428,"code":"TAG_PRECONDITION_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 428,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_PRECONDITION_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_PRECONDITION_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 428,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Check the Tag name and submitted action, then try again.","status":400,"code":"INVALID_TAG_COMMAND","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "INVALID_TAG_COMMAND",
+      "existingTagId": "existing-tag",
+      "message": "INVALID_TAG_COMMAND",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 400,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Only Group admins can manage Tags.","status":403,"code":"TAG_ADMIN_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_ADMIN_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_ADMIN_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 403,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag changes are temporarily unavailable. Try again later.","status":503,"code":"TAG_TRANSACTIONS_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_TRANSACTIONS_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_TRANSACTIONS_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 503,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag changed. Review its current state before applying your change.","status":409,"code":"TAG_CHANGED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_CHANGED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_CHANGED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A Tag with this name already exists. Archived Tags can be restored.","status":409,"code":"TAG_EXISTS","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_EXISTS",
+      "existingTagId": "existing-tag",
+      "message": "TAG_EXISTS",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Create or restore another Tag before removing the last active Tag.","status":409,"code":"LAST_ACTIVE_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "LAST_ACTIVE_TAG",
+      "existingTagId": "existing-tag",
+      "message": "LAST_ACTIVE_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This request was already used for another action.","status":409,"code":"REQUEST_KEY_REUSED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "REQUEST_KEY_REUSED",
+      "existingTagId": "existing-tag",
+      "message": "REQUEST_KEY_REUSED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag is used by Expenses or recurring templates and cannot be deleted.","status":409,"code":"TAG_IN_USE","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_IN_USE",
+      "existingTagId": "existing-tag",
+      "message": "TAG_IN_USE",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag has ambiguous historical references and cannot be renamed.","status":409,"code":"AMBIGUOUS_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "AMBIGUOUS_TAG",
+      "existingTagId": "existing-tag",
+      "message": "AMBIGUOUS_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/tag-actions/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Reload Tag management before making this change.","status":428,"code":"TAG_PRECONDITION_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 428,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_PRECONDITION_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_PRECONDITION_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 428,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Check the Tag name and submitted action, then try again.","status":400,"code":"INVALID_TAG_COMMAND","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "INVALID_TAG_COMMAND",
+      "existingTagId": "existing-tag",
+      "message": "INVALID_TAG_COMMAND",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 400,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Only Group admins can manage Tags.","status":403,"code":"TAG_ADMIN_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_ADMIN_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_ADMIN_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 403,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag changes are temporarily unavailable. Try again later.","status":503,"code":"TAG_TRANSACTIONS_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_TRANSACTIONS_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_TRANSACTIONS_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 503,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag changed. Review its current state before applying your change.","status":409,"code":"TAG_CHANGED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_CHANGED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_CHANGED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A Tag with this name already exists. Archived Tags can be restored.","status":409,"code":"TAG_EXISTS","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_EXISTS",
+      "existingTagId": "existing-tag",
+      "message": "TAG_EXISTS",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Create or restore another Tag before removing the last active Tag.","status":409,"code":"LAST_ACTIVE_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "LAST_ACTIVE_TAG",
+      "existingTagId": "existing-tag",
+      "message": "LAST_ACTIVE_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This request was already used for another action.","status":409,"code":"REQUEST_KEY_REUSED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "REQUEST_KEY_REUSED",
+      "existingTagId": "existing-tag",
+      "message": "REQUEST_KEY_REUSED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag is used by Expenses or recurring templates and cannot be deleted.","status":409,"code":"TAG_IN_USE","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "TAG_IN_USE",
+      "existingTagId": "existing-tag",
+      "message": "TAG_IN_USE",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag has ambiguous historical references and cannot be renamed.","status":409,"code":"AMBIGUOUS_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "GET",
+    "thrown": {
+      "code": "AMBIGUOUS_TAG",
+      "existingTagId": "existing-tag",
+      "message": "AMBIGUOUS_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Reload Tag management before making this change.","status":428,"code":"TAG_PRECONDITION_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 428,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_PRECONDITION_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_PRECONDITION_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 428,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Check the Tag name and submitted action, then try again.","status":400,"code":"INVALID_TAG_COMMAND","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "INVALID_TAG_COMMAND",
+      "existingTagId": "existing-tag",
+      "message": "INVALID_TAG_COMMAND",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 400,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Only Group admins can manage Tags.","status":403,"code":"TAG_ADMIN_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_ADMIN_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_ADMIN_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 403,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag changes are temporarily unavailable. Try again later.","status":503,"code":"TAG_TRANSACTIONS_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_TRANSACTIONS_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_TRANSACTIONS_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 503,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag changed. Review its current state before applying your change.","status":409,"code":"TAG_CHANGED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_CHANGED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_CHANGED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A Tag with this name already exists. Archived Tags can be restored.","status":409,"code":"TAG_EXISTS","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_EXISTS",
+      "existingTagId": "existing-tag",
+      "message": "TAG_EXISTS",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Create or restore another Tag before removing the last active Tag.","status":409,"code":"LAST_ACTIVE_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "LAST_ACTIVE_TAG",
+      "existingTagId": "existing-tag",
+      "message": "LAST_ACTIVE_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This request was already used for another action.","status":409,"code":"REQUEST_KEY_REUSED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "REQUEST_KEY_REUSED",
+      "existingTagId": "existing-tag",
+      "message": "REQUEST_KEY_REUSED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag is used by Expenses or recurring templates and cannot be deleted.","status":409,"code":"TAG_IN_USE","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_IN_USE",
+      "existingTagId": "existing-tag",
+      "message": "TAG_IN_USE",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag has ambiguous historical references and cannot be renamed.","status":409,"code":"AMBIGUOUS_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "AMBIGUOUS_TAG",
+      "existingTagId": "existing-tag",
+      "message": "AMBIGUOUS_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/tags/[tagId]/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Reload Tag management before making this change.","status":428,"code":"TAG_PRECONDITION_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 428,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "code": "TAG_PRECONDITION_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_PRECONDITION_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 428,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Check the Tag name and submitted action, then try again.","status":400,"code":"INVALID_TAG_COMMAND","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "code": "INVALID_TAG_COMMAND",
+      "existingTagId": "existing-tag",
+      "message": "INVALID_TAG_COMMAND",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 400,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Only Group admins can manage Tags.","status":403,"code":"TAG_ADMIN_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "code": "TAG_ADMIN_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_ADMIN_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 403,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag changes are temporarily unavailable. Try again later.","status":503,"code":"TAG_TRANSACTIONS_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "code": "TAG_TRANSACTIONS_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_TRANSACTIONS_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 503,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag changed. Review its current state before applying your change.","status":409,"code":"TAG_CHANGED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "code": "TAG_CHANGED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_CHANGED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A Tag with this name already exists. Archived Tags can be restored.","status":409,"code":"TAG_EXISTS","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "code": "TAG_EXISTS",
+      "existingTagId": "existing-tag",
+      "message": "TAG_EXISTS",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Create or restore another Tag before removing the last active Tag.","status":409,"code":"LAST_ACTIVE_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "code": "LAST_ACTIVE_TAG",
+      "existingTagId": "existing-tag",
+      "message": "LAST_ACTIVE_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This request was already used for another action.","status":409,"code":"REQUEST_KEY_REUSED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "code": "REQUEST_KEY_REUSED",
+      "existingTagId": "existing-tag",
+      "message": "REQUEST_KEY_REUSED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag is used by Expenses or recurring templates and cannot be deleted.","status":409,"code":"TAG_IN_USE","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "code": "TAG_IN_USE",
+      "existingTagId": "existing-tag",
+      "message": "TAG_IN_USE",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag has ambiguous historical references and cannot be renamed.","status":409,"code":"AMBIGUOUS_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "code": "AMBIGUOUS_TAG",
+      "existingTagId": "existing-tag",
+      "message": "AMBIGUOUS_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Reload Tag management before making this change.","status":428,"code":"TAG_PRECONDITION_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 428,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "code": "TAG_PRECONDITION_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_PRECONDITION_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 428,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Check the Tag name and submitted action, then try again.","status":400,"code":"INVALID_TAG_COMMAND","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "code": "INVALID_TAG_COMMAND",
+      "existingTagId": "existing-tag",
+      "message": "INVALID_TAG_COMMAND",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 400,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Only Group admins can manage Tags.","status":403,"code":"TAG_ADMIN_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "code": "TAG_ADMIN_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_ADMIN_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 403,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag changes are temporarily unavailable. Try again later.","status":503,"code":"TAG_TRANSACTIONS_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "code": "TAG_TRANSACTIONS_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_TRANSACTIONS_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 503,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag changed. Review its current state before applying your change.","status":409,"code":"TAG_CHANGED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "code": "TAG_CHANGED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_CHANGED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A Tag with this name already exists. Archived Tags can be restored.","status":409,"code":"TAG_EXISTS","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "code": "TAG_EXISTS",
+      "existingTagId": "existing-tag",
+      "message": "TAG_EXISTS",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Create or restore another Tag before removing the last active Tag.","status":409,"code":"LAST_ACTIVE_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "code": "LAST_ACTIVE_TAG",
+      "existingTagId": "existing-tag",
+      "message": "LAST_ACTIVE_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This request was already used for another action.","status":409,"code":"REQUEST_KEY_REUSED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "code": "REQUEST_KEY_REUSED",
+      "existingTagId": "existing-tag",
+      "message": "REQUEST_KEY_REUSED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag is used by Expenses or recurring templates and cannot be deleted.","status":409,"code":"TAG_IN_USE","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "code": "TAG_IN_USE",
+      "existingTagId": "existing-tag",
+      "message": "TAG_IN_USE",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag has ambiguous historical references and cannot be renamed.","status":409,"code":"AMBIGUOUS_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "DELETE",
+    "thrown": {
+      "code": "AMBIGUOUS_TAG",
+      "existingTagId": "existing-tag",
+      "message": "AMBIGUOUS_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/tags/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Reload Tag management before making this change.","status":428,"code":"TAG_PRECONDITION_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 428,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_PRECONDITION_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_PRECONDITION_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 428,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Check the Tag name and submitted action, then try again.","status":400,"code":"INVALID_TAG_COMMAND","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "INVALID_TAG_COMMAND",
+      "existingTagId": "existing-tag",
+      "message": "INVALID_TAG_COMMAND",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 400,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Only Group admins can manage Tags.","status":403,"code":"TAG_ADMIN_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_ADMIN_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_ADMIN_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 403,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag changes are temporarily unavailable. Try again later.","status":503,"code":"TAG_TRANSACTIONS_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_TRANSACTIONS_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_TRANSACTIONS_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 503,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag changed. Review its current state before applying your change.","status":409,"code":"TAG_CHANGED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_CHANGED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_CHANGED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A Tag with this name already exists. Archived Tags can be restored.","status":409,"code":"TAG_EXISTS","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_EXISTS",
+      "existingTagId": "existing-tag",
+      "message": "TAG_EXISTS",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Create or restore another Tag before removing the last active Tag.","status":409,"code":"LAST_ACTIVE_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "LAST_ACTIVE_TAG",
+      "existingTagId": "existing-tag",
+      "message": "LAST_ACTIVE_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This request was already used for another action.","status":409,"code":"REQUEST_KEY_REUSED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "REQUEST_KEY_REUSED",
+      "existingTagId": "existing-tag",
+      "message": "REQUEST_KEY_REUSED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag is used by Expenses or recurring templates and cannot be deleted.","status":409,"code":"TAG_IN_USE","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "TAG_IN_USE",
+      "existingTagId": "existing-tag",
+      "message": "TAG_IN_USE",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag has ambiguous historical references and cannot be renamed.","status":409,"code":"AMBIGUOUS_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "method": "POST",
+    "thrown": {
+      "code": "AMBIGUOUS_TAG",
+      "existingTagId": "existing-tag",
+      "message": "AMBIGUOUS_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/trip-summary/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_CURRENCY",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_TIME_ZONE",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "NOT_A_TRIP",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/invitations/[id]/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Invitation has expired","status":410}",
+      "hasCode": false,
+      "status": 410,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVITATION_EXPIRED",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Invitation is no longer pending","status":400}",
+      "hasCode": false,
+      "status": 400,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "INVITATION_NOT_PENDING",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/invitations/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/join/[code]/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "POST",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Couldn’t reach Splitbook. Try again.","status":503,"code":"DATABASE_UNAVAILABLE"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/search/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "QUERY_TOO_LONG",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/user/activity/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/user/assistant-groups/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/user/balances/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/user/profile/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/user/spending/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_MONTHS",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_TIME_ZONE",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/user/to-review/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records data-carrying classes at their existing answering seams 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "admin": false,
+      "balances": [],
+      "code": "LAST_ADMIN",
+      "message": "LAST_ADMIN",
+      "name": "LeaveBlockedError",
+      "recurringExpenses": [],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "admin": false,
+      "balances": [
+        {
+          "amountMinor": -15000,
+          "currency": "INR",
+        },
+        {
+          "amountMinor": 1250,
+          "currency": "EUR",
+        },
+      ],
+      "code": "OPEN_BALANCE",
+      "message": "OPEN_BALANCE",
+      "name": "LeaveBlockedError",
+      "recurringExpenses": [],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "admin": false,
+      "balances": [],
+      "code": "RECURRING_EXPENSE_PROBLEM",
+      "message": "RECURRING_EXPENSE_PROBLEM",
+      "name": "LeaveBlockedError",
+      "recurringExpenses": [
+        {
+          "description": "Rent",
+          "id": "a00000000000000000000009",
+        },
+      ],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "admin": true,
+      "balances": [],
+      "code": "RECURRING_EXPENSE_PROBLEM",
+      "message": "RECURRING_EXPENSE_PROBLEM",
+      "name": "LeaveBlockedError",
+      "recurringExpenses": [
+        {
+          "description": "Rent",
+          "id": "a00000000000000000000009",
+        },
+      ],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "balances": [
+        {
+          "amountMinor": -15000,
+          "currency": "INR",
+        },
+        {
+          "amountMinor": 1250,
+          "currency": "EUR",
+        },
+      ],
+      "code": "OPEN_BALANCE",
+      "memberName": "Priya Shah",
+      "message": "OPEN_BALANCE",
+      "name": "RemovalBlockedError",
+      "recurringExpenses": [],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "balances": [],
+      "code": "RECURRING_EXPENSE_PROBLEM",
+      "memberName": "Priya Shah",
+      "message": "RECURRING_EXPENSE_PROBLEM",
+      "name": "RemovalBlockedError",
+      "recurringExpenses": [
+        {
+          "description": "Rent",
+          "id": "a00000000000000000000009",
+        },
+      ],
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "thrown": {
+      "limit": 10000,
+      "message": "EXPORT_TOO_LARGE",
+      "name": "ExportTooLargeError",
+      "rows": 12345,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"EUR can’t be removed while Maple House uses it.","status":409,"code":"CURRENCY_IN_USE","use":{"expenses":{"count":2,"items":[]},"settlements":1,"toReview":{"yours":1,"others":0}}}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "code": "CURRENCY_IN_USE",
+      "message": "EUR can’t be removed while Maple House uses it.",
+      "name": "CurrencyInUseError",
+      "use": {
+        "expenses": {
+          "count": 2,
+          "items": [],
+        },
+        "settlements": 1,
+        "toReview": {
+          "others": 0,
+          "yours": 1,
+        },
+      },
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"EUR isn’t one of this Group’s extra currencies.","status":404,"code":"CURRENCY_NOT_LISTED"}",
+      "hasCode": true,
+      "status": 404,
+    },
+    "thrown": {
+      "code": "CURRENCY_NOT_LISTED",
+      "message": "EUR isn’t one of this Group’s extra currencies.",
+      "name": "CurrencyNotListedError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"INR is the main currency, so it can’t be removed.","status":409,"code":"CURRENCY_IS_MAIN"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "code": "CURRENCY_IS_MAIN",
+      "message": "INR is the main currency, so it can’t be removed.",
+      "name": "CurrencyIsMainError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Reload Tag management before making this change.","status":428,"code":"TAG_PRECONDITION_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 428,
+    },
+    "thrown": {
+      "code": "TAG_PRECONDITION_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_PRECONDITION_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 428,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Check the Tag name and submitted action, then try again.","status":400,"code":"INVALID_TAG_COMMAND","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "thrown": {
+      "code": "INVALID_TAG_COMMAND",
+      "existingTagId": "existing-tag",
+      "message": "INVALID_TAG_COMMAND",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 400,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Only Group admins can manage Tags.","status":403,"code":"TAG_ADMIN_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "thrown": {
+      "code": "TAG_ADMIN_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_ADMIN_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 403,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Tag changes are temporarily unavailable. Try again later.","status":503,"code":"TAG_TRANSACTIONS_REQUIRED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "code": "TAG_TRANSACTIONS_REQUIRED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_TRANSACTIONS_REQUIRED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 503,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag changed. Review its current state before applying your change.","status":409,"code":"TAG_CHANGED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "code": "TAG_CHANGED",
+      "existingTagId": "existing-tag",
+      "message": "TAG_CHANGED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A Tag with this name already exists. Archived Tags can be restored.","status":409,"code":"TAG_EXISTS","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "code": "TAG_EXISTS",
+      "existingTagId": "existing-tag",
+      "message": "TAG_EXISTS",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Create or restore another Tag before removing the last active Tag.","status":409,"code":"LAST_ACTIVE_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "code": "LAST_ACTIVE_TAG",
+      "existingTagId": "existing-tag",
+      "message": "LAST_ACTIVE_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This request was already used for another action.","status":409,"code":"REQUEST_KEY_REUSED","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "code": "REQUEST_KEY_REUSED",
+      "existingTagId": "existing-tag",
+      "message": "REQUEST_KEY_REUSED",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag is used by Expenses or recurring templates and cannot be deleted.","status":409,"code":"TAG_IN_USE","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "code": "TAG_IN_USE",
+      "existingTagId": "existing-tag",
+      "message": "TAG_IN_USE",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Tag has ambiguous historical references and cannot be renamed.","status":409,"code":"AMBIGUOUS_TAG","snapshot":{"canManage":true,"tags":[{"id":"tag","name":"Food","revision":2,"isArchived":false,"isDeleted":false}]},"existingTagId":"existing-tag"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "code": "AMBIGUOUS_TAG",
+      "existingTagId": "existing-tag",
+      "message": "AMBIGUOUS_TAG",
+      "name": "Error",
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "isArchived": false,
+            "isDeleted": false,
+            "name": "Food",
+            "revision": 2,
+          },
+        ],
+      },
+      "status": 409,
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records direct helpers including every resource name routes use 1`] = `
+[
+  {
+    "body": "{"error":"Unauthorized","status":401}",
+    "hasCode": false,
+    "status": 401,
+  },
+  {
+    "body": "{"error":"Forbidden","status":403}",
+    "hasCode": false,
+    "status": 403,
+  },
+  {
+    "body": "{"error":"Resource not found","status":404}",
+    "hasCode": false,
+    "status": 404,
+  },
+  {
+    "body": "{"error":"Invalid Group, Tag or request identity.","status":400,"code":"INVALID_TAG_COMMAND"}",
+    "hasCode": true,
+    "status": 400,
+  },
+  {
+    "body": "{"error":"Assistants not found","status":404}",
+    "hasCode": false,
+    "status": 404,
+  },
+  {
+    "body": "{"error":"Expense not found","status":404}",
+    "hasCode": false,
+    "status": 404,
+  },
+  {
+    "body": "{"error":"Group not found","status":404}",
+    "hasCode": false,
+    "status": 404,
+  },
+  {
+    "body": "{"error":"Invitation not found","status":404}",
+    "hasCode": false,
+    "status": 404,
+  },
+  {
+    "body": "{"error":"Invite link is invalid or expired not found","status":404}",
+    "hasCode": false,
+    "status": 404,
+  },
+  {
+    "body": "{"error":"Recurring expense not found","status":404}",
+    "hasCode": false,
+    "status": 404,
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records each plain code through the central and private Draft answering seams 1`] = `
+[
+  {
+    "central": {
+      "body": "{"error":"The signed-in account changed in another tab. Reload this page to continue.","status":419,"code":"ACCOUNT_CHANGED"}",
+      "hasCode": true,
+      "status": 419,
+    },
+    "draft": {
+      "body": "{"error":"The signed-in account changed in another tab. Reload this page to continue.","status":419,"code":"ACCOUNT_CHANGED"}",
+      "hasCode": true,
+      "status": 419,
+    },
+    "thrown": {
+      "message": "ACCOUNT_CHANGED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"The audit feed is temporarily unavailable. Please retry later.","status":503,"code":"ACTIVITY_BACKLOG_FULL"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "ACTIVITY_BACKLOG_FULL",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "ALREADY_INVITED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "BACKUP_ALL_TIME",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Currency cannot change after this Group has financial records.","status":409,"code":"CURRENCY_LOCKED"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "CURRENCY_LOCKED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "CURRENCY_MISMATCH",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Drafts are not enabled","status":404,"code":"DRAFTS_DISABLED"}",
+      "hasCode": true,
+      "status": 404,
+    },
+    "thrown": {
+      "message": "DRAFTS_DISABLED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"You have 100 items waiting in this Group. Save or delete some before keeping more.","status":409,"code":"DRAFT_GROUP_LIMIT"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "message": "DRAFT_GROUP_LIMIT",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft not found","status":404,"code":"DRAFT_NOT_FOUND"}",
+      "hasCode": true,
+      "status": 404,
+    },
+    "thrown": {
+      "message": "DRAFT_NOT_FOUND",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft changes are temporarily unavailable.","status":503,"code":"DRAFT_TRANSACTIONS_REQUIRED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "DRAFT_TRANSACTIONS_REQUIRED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "draft": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "FORBIDDEN_SETTLEMENT",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"This Group was archived, so nothing more can be saved in it.","status":409,"code":"GROUP_ARCHIVED"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "draft": {
+      "body": "{"error":"This Group was archived, so nothing more can be saved in it.","status":409,"code":"GROUP_ARCHIVED"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "message": "GROUP_ARCHIVED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "GROUP_DELETION_CHANGED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "GROUP_DELETION_CONFIRMATION_REQUIRED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "GROUP_DELETION_NOT_REQUESTED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "GROUP_DELETION_UNAVAILABLE",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "GROUP_NOT_FOUND",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"This submission key was already used for different data. Start a new submission.","status":409,"code":"IDEMPOTENCY_CONFLICT"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "draft": {
+      "body": "{"error":"This submission key was already used for different data. Start a new submission.","status":409,"code":"IDEMPOTENCY_CONFLICT"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "message": "IDEMPOTENCY_CONFLICT",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "INVALID_CURRENCY",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Invalid id","status":400,"code":"INVALID_ID"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "INVALID_ID",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Invalid submission key","status":422,"code":"INVALID_IDEMPOTENCY_KEY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "INVALID_IDEMPOTENCY_KEY",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Invalid JSON body","status":400,"code":"INVALID_JSON"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "INVALID_JSON",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "INVALID_MEMBERS",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Enter a positive amount with the currency’s supported precision.","status":422,"code":"INVALID_MONEY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "INVALID_MONEY",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "INVALID_REQUEST_FINGERPRINT",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "INVALID_TAG",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "INVALID_WINDOW",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "INVITATION_EXPIRED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "INVITATION_NOT_PENDING",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "LAST_ADMIN",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "LEAVE_CONFLICT",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "NOT_HOUSEHOLD",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "NO_SETTLEMENT_DEBT",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Recurring Expenses are turned off.","status":409,"code":"RECURRING_EXPENSES_OFF"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "RECURRING_EXPENSES_OFF",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "REMOVAL_CONFLICT",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Request too large","status":413,"code":"REQUEST_TOO_LARGE"}",
+      "hasCode": true,
+      "status": 413,
+    },
+    "thrown": {
+      "message": "REQUEST_TOO_LARGE",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Reload this record before changing it.","status":428,"code":"REVISION_REQUIRED"}",
+      "hasCode": true,
+      "status": 428,
+    },
+    "draft": {
+      "body": "{"error":"Reload this record before changing it.","status":428,"code":"REVISION_REQUIRED"}",
+      "hasCode": true,
+      "status": 428,
+    },
+    "thrown": {
+      "message": "REVISION_REQUIRED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "SAME_PARTY",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "SELF_REMOVE",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "draft": {
+      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
+      "hasCode": true,
+      "status": 503,
+    },
+    "thrown": {
+      "message": "SETTLEMENT_TRANSACTIONS_REQUIRED",
+      "name": "Error",
+    },
+  },
+  {
+    "central": {
+      "body": "{"error":"This record changed while you were editing. Reload the latest version before saving.","status":409,"code":"STALE_REVISION"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "draft": {
+      "body": "{"error":"This record changed while you were editing. Reload the latest version before saving.","status":409,"code":"STALE_REVISION"}",
+      "hasCode": true,
+      "status": 409,
+    },
+    "thrown": {
+      "message": "STALE_REVISION",
+      "name": "Error",
+    },
+  },
+]
+`;
+
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records every literal money wording, with and without its field 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Each participant may appear only once","status":422,"code":"DUPLICATE_PARTICIPANTS"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "lib/models/RecurringExpense.ts",
+    "thrown": {
+      "code": "DUPLICATE_PARTICIPANTS",
+      "field": undefined,
+      "message": "Each participant may appear only once",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Each participant may appear only once","status":422,"code":"DUPLICATE_PARTICIPANTS","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "lib/models/RecurringExpense.ts",
+    "thrown": {
+      "code": "DUPLICATE_PARTICIPANTS",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Each participant may appear only once",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Recurring allocations must equal the amount","status":422,"code":"UNBALANCED_TEMPLATE"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "lib/models/RecurringExpense.ts",
+    "thrown": {
+      "code": "UNBALANCED_TEMPLATE",
+      "field": undefined,
+      "message": "Recurring allocations must equal the amount",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Recurring allocations must equal the amount","status":422,"code":"UNBALANCED_TEMPLATE","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "lib/models/RecurringExpense.ts",
+    "thrown": {
+      "code": "UNBALANCED_TEMPLATE",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Recurring allocations must equal the amount",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"The lowest amount must not be more than the highest","status":422,"code":"INVALID_AMOUNT_RANGE"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "lib/services/expense.service.ts",
+    "thrown": {
+      "code": "INVALID_AMOUNT_RANGE",
+      "field": undefined,
+      "message": "The lowest amount must not be more than the highest",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"The lowest amount must not be more than the highest","status":422,"code":"INVALID_AMOUNT_RANGE","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "lib/services/expense.service.ts",
+    "thrown": {
+      "code": "INVALID_AMOUNT_RANGE",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "The lowest amount must not be more than the highest",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Ledger contributions do not balance","status":422,"code":"UNBALANCED_LEDGER"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debt-simplifier.ts",
+    "thrown": {
+      "code": "UNBALANCED_LEDGER",
+      "field": undefined,
+      "message": "Ledger contributions do not balance",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Ledger contributions do not balance","status":422,"code":"UNBALANCED_LEDGER","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debt-simplifier.ts",
+    "thrown": {
+      "code": "UNBALANCED_LEDGER",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Ledger contributions do not balance",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Different currencies cannot be added","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debt-simplifier.ts",
+    "thrown": {
+      "code": "CURRENCY_MISMATCH",
+      "field": undefined,
+      "message": "Different currencies cannot be added",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Different currencies cannot be added","status":422,"code":"CURRENCY_MISMATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debt-simplifier.ts",
+    "thrown": {
+      "code": "CURRENCY_MISMATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Different currencies cannot be added",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Different currencies cannot be added","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debt-simplifier.ts",
+    "thrown": {
+      "code": "CURRENCY_MISMATCH",
+      "field": undefined,
+      "message": "Different currencies cannot be added",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Different currencies cannot be added","status":422,"code":"CURRENCY_MISMATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debt-simplifier.ts",
+    "thrown": {
+      "code": "CURRENCY_MISMATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Different currencies cannot be added",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Ledger contributions do not balance","status":422,"code":"UNBALANCED_LEDGER"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debts-before-simplifying.ts",
+    "thrown": {
+      "code": "UNBALANCED_LEDGER",
+      "field": undefined,
+      "message": "Ledger contributions do not balance",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Ledger contributions do not balance","status":422,"code":"UNBALANCED_LEDGER","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debts-before-simplifying.ts",
+    "thrown": {
+      "code": "UNBALANCED_LEDGER",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Ledger contributions do not balance",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Unable to allocate exact Debts","status":422,"code":"UNBALANCED_LEDGER"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debts-before-simplifying.ts",
+    "thrown": {
+      "code": "UNBALANCED_LEDGER",
+      "field": undefined,
+      "message": "Unable to allocate exact Debts",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Unable to allocate exact Debts","status":422,"code":"UNBALANCED_LEDGER","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debts-before-simplifying.ts",
+    "thrown": {
+      "code": "UNBALANCED_LEDGER",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Unable to allocate exact Debts",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Different currencies cannot be added","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debts-before-simplifying.ts",
+    "thrown": {
+      "code": "CURRENCY_MISMATCH",
+      "field": undefined,
+      "message": "Different currencies cannot be added",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Different currencies cannot be added","status":422,"code":"CURRENCY_MISMATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "debts-before-simplifying.ts",
+    "thrown": {
+      "code": "CURRENCY_MISMATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Different currencies cannot be added",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Enter an amount for each person in the split","status":422,"code":"MISSING_SPLIT_AMOUNT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "MISSING_SPLIT_AMOUNT",
+      "field": undefined,
+      "message": "Enter an amount for each person in the split",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Enter an amount for each person in the split","status":422,"code":"MISSING_SPLIT_AMOUNT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "MISSING_SPLIT_AMOUNT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Enter an amount for each person in the split",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Amount is outside the supported exact range","status":422,"code":"UNSAFE_MONEY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "UNSAFE_MONEY",
+      "field": undefined,
+      "message": "Amount is outside the supported exact range",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Amount is outside the supported exact range","status":422,"code":"UNSAFE_MONEY","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "UNSAFE_MONEY",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Amount is outside the supported exact range",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Enter a valid decimal amount","status":422,"code":"INVALID_MONEY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY",
+      "field": undefined,
+      "message": "Enter a valid decimal amount",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Enter a valid decimal amount","status":422,"code":"INVALID_MONEY","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Enter a valid decimal amount",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Amount is outside the supported exact range","status":422,"code":"UNSAFE_MONEY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "UNSAFE_MONEY",
+      "field": undefined,
+      "message": "Amount is outside the supported exact range",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Amount is outside the supported exact range","status":422,"code":"UNSAFE_MONEY","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "UNSAFE_MONEY",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Amount is outside the supported exact range",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Amount cannot be represented by this client","status":422,"code":"UNSAFE_MONEY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "UNSAFE_MONEY",
+      "field": undefined,
+      "message": "Amount cannot be represented by this client",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Amount cannot be represented by this client","status":422,"code":"UNSAFE_MONEY","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "UNSAFE_MONEY",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Amount cannot be represented by this client",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored amounts disagree","status":422,"code":"MONEY_REPRESENTATION_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "MONEY_REPRESENTATION_MISMATCH",
+      "field": undefined,
+      "message": "Stored amounts disagree",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored amounts disagree","status":422,"code":"MONEY_REPRESENTATION_MISMATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "MONEY_REPRESENTATION_MISMATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Stored amounts disagree",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored money version is invalid","status":422,"code":"INVALID_MONEY_VERSION"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY_VERSION",
+      "field": undefined,
+      "message": "Stored money version is invalid",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored money version is invalid","status":422,"code":"INVALID_MONEY_VERSION","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY_VERSION",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Stored money version is invalid",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored amount is missing","status":422,"code":"INVALID_MONEY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY",
+      "field": undefined,
+      "message": "Stored amount is missing",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored amount is missing","status":422,"code":"INVALID_MONEY","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Stored amount is missing",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Each person can appear only once","status":422,"code":"DUPLICATE_PARTICIPANTS"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "DUPLICATE_PARTICIPANTS",
+      "field": undefined,
+      "message": "Each person can appear only once",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Each person can appear only once","status":422,"code":"DUPLICATE_PARTICIPANTS","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "DUPLICATE_PARTICIPANTS",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Each person can appear only once",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored amount must be positive","status":422,"code":"INVALID_MONEY_RANGE"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY_RANGE",
+      "field": undefined,
+      "message": "Stored amount must be positive",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored amount must be positive","status":422,"code":"INVALID_MONEY_RANGE","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY_RANGE",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Stored amount must be positive",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored participants are missing","status":422,"code":"EMPTY_PARTICIPANTS"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "EMPTY_PARTICIPANTS",
+      "field": undefined,
+      "message": "Stored participants are missing",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored participants are missing","status":422,"code":"EMPTY_PARTICIPANTS","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "EMPTY_PARTICIPANTS",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Stored participants are missing",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored allocations cannot be negative","status":422,"code":"INVALID_SPLIT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SPLIT",
+      "field": undefined,
+      "message": "Stored allocations cannot be negative",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored allocations cannot be negative","status":422,"code":"INVALID_SPLIT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SPLIT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Stored allocations cannot be negative",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored allocations do not equal the Expense amount","status":422,"code":"UNBALANCED_LEDGER"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "UNBALANCED_LEDGER",
+      "field": undefined,
+      "message": "Stored allocations do not equal the Expense amount",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Stored allocations do not equal the Expense amount","status":422,"code":"UNBALANCED_LEDGER","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "UNBALANCED_LEDGER",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Stored allocations do not equal the Expense amount",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A nonnegative amount and participants are required","status":422,"code":"INVALID_SPLIT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SPLIT",
+      "field": undefined,
+      "message": "A nonnegative amount and participants are required",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A nonnegative amount and participants are required","status":422,"code":"INVALID_SPLIT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SPLIT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "A nonnegative amount and participants are required",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Split amounts cannot be negative","status":422,"code":"INVALID_SPLIT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SPLIT",
+      "field": undefined,
+      "message": "Split amounts cannot be negative",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Split amounts cannot be negative","status":422,"code":"INVALID_SPLIT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SPLIT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Split amounts cannot be negative",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Split amounts must add up to the expense amount","status":422,"code":"SPLIT_TOTAL_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "SPLIT_TOTAL_MISMATCH",
+      "field": undefined,
+      "message": "Split amounts must add up to the expense amount",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Split amounts must add up to the expense amount","status":422,"code":"SPLIT_TOTAL_MISMATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "SPLIT_TOTAL_MISMATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Split amounts must add up to the expense amount",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Choose a valid split method","status":422,"code":"INVALID_SPLIT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SPLIT",
+      "field": undefined,
+      "message": "Choose a valid split method",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Choose a valid split method","status":422,"code":"INVALID_SPLIT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SPLIT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Choose a valid split method",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Percentages must be between 0 and 100","status":422,"code":"INVALID_PERCENTAGE"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_PERCENTAGE",
+      "field": undefined,
+      "message": "Percentages must be between 0 and 100",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Percentages must be between 0 and 100","status":422,"code":"INVALID_PERCENTAGE","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_PERCENTAGE",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Percentages must be between 0 and 100",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Shares must be whole numbers within the supported range","status":422,"code":"INVALID_SHARES"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SHARES",
+      "field": undefined,
+      "message": "Shares must be whole numbers within the supported range",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Shares must be whole numbers within the supported range","status":422,"code":"INVALID_SHARES","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SHARES",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Shares must be whole numbers within the supported range",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Shares cannot be negative","status":422,"code":"INVALID_SHARES"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SHARES",
+      "field": undefined,
+      "message": "Shares cannot be negative",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Shares cannot be negative","status":422,"code":"INVALID_SHARES","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SHARES",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Shares cannot be negative",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Total split weight must be positive","status":422,"code":"INVALID_SHARES"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SHARES",
+      "field": undefined,
+      "message": "Total split weight must be positive",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Total split weight must be positive","status":422,"code":"INVALID_SHARES","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_SHARES",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Total split weight must be positive",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Percentages must add up to 100","status":422,"code":"PERCENTAGE_TOTAL_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "PERCENTAGE_TOTAL_MISMATCH",
+      "field": undefined,
+      "message": "Percentages must add up to 100",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Percentages must add up to 100","status":422,"code":"PERCENTAGE_TOTAL_MISMATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "PERCENTAGE_TOTAL_MISMATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Percentages must add up to 100",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Amount must be positive and at most 10,000,000","status":422,"code":"INVALID_MONEY_RANGE"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY_RANGE",
+      "field": undefined,
+      "message": "Amount must be positive and at most 10,000,000",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Amount must be positive and at most 10,000,000","status":422,"code":"INVALID_MONEY_RANGE","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY_RANGE",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Amount must be positive and at most 10,000,000",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"At least one payer and participant are required","status":422,"code":"EMPTY_PARTICIPANTS"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "EMPTY_PARTICIPANTS",
+      "field": undefined,
+      "message": "At least one payer and participant are required",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"At least one payer and participant are required","status":422,"code":"EMPTY_PARTICIPANTS","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "EMPTY_PARTICIPANTS",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "At least one payer and participant are required",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Payer amounts cannot be negative","status":422,"code":"INVALID_PAYER_AMOUNT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_PAYER_AMOUNT",
+      "field": undefined,
+      "message": "Payer amounts cannot be negative",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Payer amounts cannot be negative","status":422,"code":"INVALID_PAYER_AMOUNT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_PAYER_AMOUNT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Payer amounts cannot be negative",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Payer amounts must add up to the expense amount","status":422,"code":"PAYER_TOTAL_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "PAYER_TOTAL_MISMATCH",
+      "field": undefined,
+      "message": "Payer amounts must add up to the expense amount",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Payer amounts must add up to the expense amount","status":422,"code":"PAYER_TOTAL_MISMATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "PAYER_TOTAL_MISMATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Payer amounts must add up to the expense amount",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Different currencies cannot be added","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "expense-summary.ts",
+    "thrown": {
+      "code": "CURRENCY_MISMATCH",
+      "field": undefined,
+      "message": "Different currencies cannot be added",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Different currencies cannot be added","status":422,"code":"CURRENCY_MISMATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "expense-summary.ts",
+    "thrown": {
+      "code": "CURRENCY_MISMATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Different currencies cannot be added",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Choose both people","status":422,"code":"INVALID_PARTY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "settlement-preview.ts",
+    "thrown": {
+      "code": "INVALID_PARTY",
+      "field": undefined,
+      "message": "Choose both people",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Choose both people","status":422,"code":"INVALID_PARTY","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "settlement-preview.ts",
+    "thrown": {
+      "code": "INVALID_PARTY",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Choose both people",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A payment needs two different people","status":422,"code":"SAME_PARTY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "settlement-preview.ts",
+    "thrown": {
+      "code": "SAME_PARTY",
+      "field": undefined,
+      "message": "A payment needs two different people",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A payment needs two different people","status":422,"code":"SAME_PARTY","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "settlement-preview.ts",
+    "thrown": {
+      "code": "SAME_PARTY",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "A payment needs two different people",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Enter a positive rate with at most 18 decimal places","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": undefined,
+      "message": "Enter a positive rate with at most 18 decimal places",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Enter a positive rate with at most 18 decimal places","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Enter a positive rate with at most 18 decimal places",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"The rate must be positive","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": undefined,
+      "message": "The rate must be positive",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"The rate must be positive","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "The rate must be positive",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Both amounts must be at least one minor unit","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": undefined,
+      "message": "Both amounts must be at least one minor unit",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Both amounts must be at least one minor unit","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Both amounts must be at least one minor unit",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"The rate is too small to represent","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": undefined,
+      "message": "The rate is too small to represent",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"The rate is too small to represent","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "The rate is too small to represent",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Choose two different currencies","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": undefined,
+      "message": "Choose two different currencies",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Choose two different currencies","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Choose two different currencies",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Enter exactly two of the cleared amount, paid amount and rate","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": undefined,
+      "message": "Enter exactly two of the cleared amount, paid amount and rate",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Enter exactly two of the cleared amount, paid amount and rate","status":422,"code":"INVALID_CROSS_CURRENCY_SETTLEMENT","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "cross-currency-settlement.ts",
+    "thrown": {
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Enter exactly two of the cleared amount, paid amount and rate",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Choose between 1 and 32 Debts","status":422,"code":"INVALID_SETTLEMENT_BATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "settlement-batch.ts",
+    "thrown": {
+      "code": "INVALID_SETTLEMENT_BATCH",
+      "field": undefined,
+      "message": "Choose between 1 and 32 Debts",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Choose between 1 and 32 Debts","status":422,"code":"INVALID_SETTLEMENT_BATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "settlement-batch.ts",
+    "thrown": {
+      "code": "INVALID_SETTLEMENT_BATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Choose between 1 and 32 Debts",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Choose each cleared currency once","status":422,"code":"INVALID_SETTLEMENT_BATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "settlement-batch.ts",
+    "thrown": {
+      "code": "INVALID_SETTLEMENT_BATCH",
+      "field": undefined,
+      "message": "Choose each cleared currency once",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Choose each cleared currency once","status":422,"code":"INVALID_SETTLEMENT_BATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "settlement-batch.ts",
+    "thrown": {
+      "code": "INVALID_SETTLEMENT_BATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Choose each cleared currency once",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Enter a rate for EUR","status":422,"code":"INVALID_SETTLEMENT_BATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "settlement-batch.ts",
+    "thrown": {
+      "code": "INVALID_SETTLEMENT_BATCH",
+      "field": undefined,
+      "message": "Enter a rate for EUR",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Enter a rate for EUR","status":422,"code":"INVALID_SETTLEMENT_BATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "settlement-batch.ts",
+    "thrown": {
+      "code": "INVALID_SETTLEMENT_BATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Enter a rate for EUR",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Amount supports at most 2 decimal places","status":422,"code":"INVALID_MONEY_PRECISION"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY_PRECISION",
+      "field": undefined,
+      "message": "Amount supports at most 2 decimal places",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Amount supports at most 2 decimal places","status":422,"code":"INVALID_MONEY_PRECISION","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "exact-money.ts",
+    "thrown": {
+      "code": "INVALID_MONEY_PRECISION",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Amount supports at most 2 decimal places",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"DEM isn’t a supported currency.","status":422,"code":"INVALID_GROUP_CURRENCIES"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "group-currencies.ts",
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": undefined,
+      "message": "DEM isn’t a supported currency.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"DEM isn’t a supported currency.","status":422,"code":"INVALID_GROUP_CURRENCIES","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "group-currencies.ts",
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "DEM isn’t a supported currency.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"INR is the main currency, so it can’t also be an extra currency.","status":422,"code":"INVALID_GROUP_CURRENCIES"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "group-currencies.ts",
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": undefined,
+      "message": "INR is the main currency, so it can’t also be an extra currency.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"INR is the main currency, so it can’t also be an extra currency.","status":422,"code":"INVALID_GROUP_CURRENCIES","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "group-currencies.ts",
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "INR is the main currency, so it can’t also be an extra currency.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"EUR is listed twice.","status":422,"code":"INVALID_GROUP_CURRENCIES"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "group-currencies.ts",
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": undefined,
+      "message": "EUR is listed twice.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"EUR is listed twice.","status":422,"code":"INVALID_GROUP_CURRENCIES","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "group-currencies.ts",
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "EUR is listed twice.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A Group can have at most 4 extra currencies.","status":422,"code":"INVALID_GROUP_CURRENCIES"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "group-currencies.ts",
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": undefined,
+      "message": "A Group can have at most 4 extra currencies.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"A Group can have at most 4 extra currencies.","status":422,"code":"INVALID_GROUP_CURRENCIES","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "group-currencies.ts",
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "A Group can have at most 4 extra currencies.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Add EUR to the Group’s currencies to restore it.","status":422,"code":"CURRENCY_MISMATCH"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "ledger-currency.ts",
+    "thrown": {
+      "code": "CURRENCY_MISMATCH",
+      "field": undefined,
+      "message": "Add EUR to the Group’s currencies to restore it.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Add EUR to the Group’s currencies to restore it.","status":422,"code":"CURRENCY_MISMATCH","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "ledger-currency.ts",
+    "thrown": {
+      "code": "CURRENCY_MISMATCH",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "Add EUR to the Group’s currencies to restore it.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Expense is in DEM, which Splitbook no longer supports. It can’t be changed, only deleted.","status":422,"code":"UNSUPPORTED_CURRENCY"}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "expense.service.ts",
+    "thrown": {
+      "code": "UNSUPPORTED_CURRENCY",
+      "field": undefined,
+      "message": "This Expense is in DEM, which Splitbook no longer supports. It can’t be changed, only deleted.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"This Expense is in DEM, which Splitbook no longer supports. It can’t be changed, only deleted.","status":422,"code":"UNSUPPORTED_CURRENCY","field":["splitBetween",0,"amount"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "origin": "expense.service.ts",
+    "thrown": {
+      "code": "UNSUPPORTED_CURRENCY",
+      "field": [
+        "splitBetween",
+        0,
+        "amount",
+      ],
+      "message": "This Expense is in DEM, which Splitbook no longer supports. It can’t be changed, only deleted.",
+      "name": "MoneyValidationError",
+    },
+  },
+]
+`;

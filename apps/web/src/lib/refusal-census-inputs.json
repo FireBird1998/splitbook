@@ -1,0 +1,430 @@
+{
+  "plainCodes": [
+    "ACCOUNT_CHANGED",
+    "ACTIVITY_BACKLOG_FULL",
+    "ALREADY_INVITED",
+    "BACKUP_ALL_TIME",
+    "CURRENCY_LOCKED",
+    "CURRENCY_MISMATCH",
+    "DRAFTS_DISABLED",
+    "DRAFT_GROUP_LIMIT",
+    "DRAFT_NOT_FOUND",
+    "DRAFT_TRANSACTIONS_REQUIRED",
+    "FORBIDDEN",
+    "FORBIDDEN_SETTLEMENT",
+    "GROUP_ARCHIVED",
+    "GROUP_DELETION_CHANGED",
+    "GROUP_DELETION_CONFIRMATION_REQUIRED",
+    "GROUP_DELETION_NOT_REQUESTED",
+    "GROUP_DELETION_UNAVAILABLE",
+    "GROUP_NOT_FOUND",
+    "IDEMPOTENCY_CONFLICT",
+    "INVALID_CURRENCY",
+    "INVALID_ID",
+    "INVALID_IDEMPOTENCY_KEY",
+    "INVALID_JSON",
+    "INVALID_MEMBERS",
+    "INVALID_MONEY",
+    "INVALID_REQUEST_FINGERPRINT",
+    "INVALID_TAG",
+    "INVALID_WINDOW",
+    "INVITATION_EXPIRED",
+    "INVITATION_NOT_PENDING",
+    "LAST_ADMIN",
+    "LEAVE_CONFLICT",
+    "NOT_HOUSEHOLD",
+    "NO_SETTLEMENT_DEBT",
+    "RECURRING_EXPENSES_OFF",
+    "REMOVAL_CONFLICT",
+    "REQUEST_TOO_LARGE",
+    "REVISION_REQUIRED",
+    "SAME_PARTY",
+    "SELF_REMOVE",
+    "SETTLEMENT_TRANSACTIONS_REQUIRED",
+    "STALE_REVISION"
+  ],
+  "moneyCases": [
+    {
+      "origin": "lib/models/RecurringExpense.ts",
+      "code": "DUPLICATE_PARTICIPANTS",
+      "message": "Each participant may appear only once"
+    },
+    {
+      "origin": "lib/models/RecurringExpense.ts",
+      "code": "UNBALANCED_TEMPLATE",
+      "message": "Recurring allocations must equal the amount"
+    },
+    {
+      "origin": "lib/services/expense.service.ts",
+      "code": "INVALID_AMOUNT_RANGE",
+      "message": "The lowest amount must not be more than the highest"
+    },
+    {
+      "origin": "debt-simplifier.ts",
+      "code": "UNBALANCED_LEDGER",
+      "message": "Ledger contributions do not balance"
+    },
+    {
+      "origin": "debt-simplifier.ts",
+      "code": "CURRENCY_MISMATCH",
+      "message": "Different currencies cannot be added"
+    },
+    {
+      "origin": "debt-simplifier.ts",
+      "code": "CURRENCY_MISMATCH",
+      "message": "Different currencies cannot be added"
+    },
+    {
+      "origin": "debts-before-simplifying.ts",
+      "code": "UNBALANCED_LEDGER",
+      "message": "Ledger contributions do not balance"
+    },
+    {
+      "origin": "debts-before-simplifying.ts",
+      "code": "UNBALANCED_LEDGER",
+      "message": "Unable to allocate exact Debts"
+    },
+    {
+      "origin": "debts-before-simplifying.ts",
+      "code": "CURRENCY_MISMATCH",
+      "message": "Different currencies cannot be added"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "MISSING_SPLIT_AMOUNT",
+      "message": "Enter an amount for each person in the split"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "UNSAFE_MONEY",
+      "message": "Amount is outside the supported exact range"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_MONEY",
+      "message": "Enter a valid decimal amount"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "UNSAFE_MONEY",
+      "message": "Amount is outside the supported exact range"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "UNSAFE_MONEY",
+      "message": "Amount cannot be represented by this client"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "MONEY_REPRESENTATION_MISMATCH",
+      "message": "Stored amounts disagree"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_MONEY_VERSION",
+      "message": "Stored money version is invalid"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_MONEY",
+      "message": "Stored amount is missing"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "DUPLICATE_PARTICIPANTS",
+      "message": "Each person can appear only once"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_MONEY_RANGE",
+      "message": "Stored amount must be positive"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "EMPTY_PARTICIPANTS",
+      "message": "Stored participants are missing"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_SPLIT",
+      "message": "Stored allocations cannot be negative"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "UNBALANCED_LEDGER",
+      "message": "Stored allocations do not equal the Expense amount"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_SPLIT",
+      "message": "A nonnegative amount and participants are required"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_SPLIT",
+      "message": "Split amounts cannot be negative"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "SPLIT_TOTAL_MISMATCH",
+      "message": "Split amounts must add up to the expense amount"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_SPLIT",
+      "message": "Choose a valid split method"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_PERCENTAGE",
+      "message": "Percentages must be between 0 and 100"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_SHARES",
+      "message": "Shares must be whole numbers within the supported range"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_SHARES",
+      "message": "Shares cannot be negative"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_SHARES",
+      "message": "Total split weight must be positive"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "PERCENTAGE_TOTAL_MISMATCH",
+      "message": "Percentages must add up to 100"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_MONEY_RANGE",
+      "message": "Amount must be positive and at most 10,000,000"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "EMPTY_PARTICIPANTS",
+      "message": "At least one payer and participant are required"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_PAYER_AMOUNT",
+      "message": "Payer amounts cannot be negative"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "PAYER_TOTAL_MISMATCH",
+      "message": "Payer amounts must add up to the expense amount"
+    },
+    {
+      "origin": "expense-summary.ts",
+      "code": "CURRENCY_MISMATCH",
+      "message": "Different currencies cannot be added"
+    },
+    {
+      "origin": "settlement-preview.ts",
+      "code": "INVALID_PARTY",
+      "message": "Choose both people"
+    },
+    {
+      "origin": "settlement-preview.ts",
+      "code": "SAME_PARTY",
+      "message": "A payment needs two different people"
+    },
+    {
+      "origin": "cross-currency-settlement.ts",
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "message": "Enter a positive rate with at most 18 decimal places"
+    },
+    {
+      "origin": "cross-currency-settlement.ts",
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "message": "The rate must be positive"
+    },
+    {
+      "origin": "cross-currency-settlement.ts",
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "message": "Both amounts must be at least one minor unit"
+    },
+    {
+      "origin": "cross-currency-settlement.ts",
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "message": "The rate is too small to represent"
+    },
+    {
+      "origin": "cross-currency-settlement.ts",
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "message": "Choose two different currencies"
+    },
+    {
+      "origin": "cross-currency-settlement.ts",
+      "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+      "message": "Enter exactly two of the cleared amount, paid amount and rate"
+    },
+    {
+      "origin": "settlement-batch.ts",
+      "code": "INVALID_SETTLEMENT_BATCH",
+      "message": "Choose between 1 and 32 Debts"
+    },
+    {
+      "origin": "settlement-batch.ts",
+      "code": "INVALID_SETTLEMENT_BATCH",
+      "message": "Choose each cleared currency once"
+    },
+    {
+      "origin": "settlement-batch.ts",
+      "code": "INVALID_SETTLEMENT_BATCH",
+      "message": "Enter a rate for EUR"
+    },
+    {
+      "origin": "exact-money.ts",
+      "code": "INVALID_MONEY_PRECISION",
+      "message": "Amount supports at most 2 decimal places"
+    },
+    {
+      "origin": "group-currencies.ts",
+      "code": "INVALID_GROUP_CURRENCIES",
+      "message": "DEM isn’t a supported currency."
+    },
+    {
+      "origin": "group-currencies.ts",
+      "code": "INVALID_GROUP_CURRENCIES",
+      "message": "INR is the main currency, so it can’t also be an extra currency."
+    },
+    {
+      "origin": "group-currencies.ts",
+      "code": "INVALID_GROUP_CURRENCIES",
+      "message": "EUR is listed twice."
+    },
+    {
+      "origin": "group-currencies.ts",
+      "code": "INVALID_GROUP_CURRENCIES",
+      "message": "A Group can have at most 4 extra currencies."
+    },
+    {
+      "origin": "ledger-currency.ts",
+      "code": "CURRENCY_MISMATCH",
+      "message": "Add EUR to the Group’s currencies to restore it."
+    },
+    {
+      "origin": "expense.service.ts",
+      "code": "UNSUPPORTED_CURRENCY",
+      "message": "This Expense is in DEM, which Splitbook no longer supports. It can’t be changed, only deleted."
+    }
+  ],
+  "routeCodes": {
+    "../app/api/export/route.ts": ["EXPORT_TOO_LARGE", "FORBIDDEN"],
+    "../app/api/groups/[id]/activity/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/assistant-reach/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/assistant-rule/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/balances/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/currencies/[code]/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/currencies/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/drafts/[draftId]/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/drafts/review/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/drafts/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/drafts/save/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/expenses/[expenseId]/route.ts": [
+      "CURRENCY_MISMATCH",
+      "FORBIDDEN",
+      "INVALID_MEMBERS",
+      "INVALID_TAG"
+    ],
+    "../app/api/groups/[id]/expenses/check-duplicate/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/expenses/route.ts": [
+      "CURRENCY_MISMATCH",
+      "FORBIDDEN",
+      "INVALID_MEMBERS",
+      "INVALID_MONEY_PRECISION",
+      "INVALID_TAG"
+    ],
+    "../app/api/groups/[id]/expenses/tag-change/route.ts": ["FORBIDDEN", "INVALID_TAG"],
+    "../app/api/groups/[id]/insights/route.ts": [
+      "FORBIDDEN",
+      "INVALID_COMPARE",
+      "INVALID_CURRENCY",
+      "INVALID_MONTH",
+      "INVALID_TIME_ZONE"
+    ],
+    "../app/api/groups/[id]/invite-link/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/invite/route.ts": ["ALREADY_INVITED", "FORBIDDEN"],
+    "../app/api/groups/[id]/leave/route.ts": [
+      "FORBIDDEN",
+      "GROUP_DELETION_CONFIRMATION_REQUIRED",
+      "GROUP_DELETION_UNAVAILABLE",
+      "LAST_ADMIN",
+      "LEAVE_CONFLICT",
+      "OPEN_BALANCE",
+      "RECURRING_EXPENSE_PROBLEM"
+    ],
+    "../app/api/groups/[id]/members/[userId]/route.ts": [
+      "FORBIDDEN",
+      "LAST_ADMIN",
+      "OPEN_BALANCE",
+      "REMOVAL_CONFLICT",
+      "SELF_REMOVE"
+    ],
+    "../app/api/groups/[id]/rates/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/recurring/[recurringId]/route.ts": [
+      "CURRENCY_MISMATCH",
+      "FORBIDDEN",
+      "INVALID_MEMBERS",
+      "INVALID_TAG",
+      "INVALID_WINDOW"
+    ],
+    "../app/api/groups/[id]/recurring/route.ts": [
+      "CURRENCY_MISMATCH",
+      "FORBIDDEN",
+      "INVALID_MEMBERS",
+      "INVALID_TAG",
+      "INVALID_WINDOW",
+      "NOT_HOUSEHOLD"
+    ],
+    "../app/api/groups/[id]/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/settlements/batch/route.ts": [
+      "CURRENCY_MISMATCH",
+      "FORBIDDEN",
+      "FORBIDDEN_SETTLEMENT",
+      "INVALID_IDEMPOTENCY_KEY",
+      "INVALID_MEMBERS",
+      "NO_SETTLEMENT_DEBT",
+      "SAME_PARTY",
+      "SETTLEMENT_TRANSACTIONS_REQUIRED"
+    ],
+    "../app/api/groups/[id]/settlements/route.ts": [
+      "CURRENCY_MISMATCH",
+      "FORBIDDEN",
+      "FORBIDDEN_SETTLEMENT",
+      "INVALID_MEMBERS",
+      "SAME_PARTY"
+    ],
+    "../app/api/groups/[id]/tag-actions/[requestId]/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/tag-actions/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/tags/[tagId]/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/tags/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/trip-summary/route.ts": [
+      "FORBIDDEN",
+      "INVALID_CURRENCY",
+      "INVALID_TIME_ZONE",
+      "NOT_A_TRIP"
+    ],
+    "../app/api/groups/route.ts": ["FORBIDDEN"],
+    "../app/api/invitations/[id]/route.ts": [
+      "FORBIDDEN",
+      "INVITATION_EXPIRED",
+      "INVITATION_NOT_PENDING"
+    ],
+    "../app/api/invitations/route.ts": ["FORBIDDEN"],
+    "../app/api/join/[code]/route.ts": ["FORBIDDEN"],
+    "../app/api/search/route.ts": ["FORBIDDEN", "QUERY_TOO_LONG"],
+    "../app/api/user/activity/route.ts": ["FORBIDDEN"],
+    "../app/api/user/assistant-groups/route.ts": ["FORBIDDEN"],
+    "../app/api/user/balances/route.ts": ["FORBIDDEN"],
+    "../app/api/user/profile/route.ts": ["FORBIDDEN"],
+    "../app/api/user/spending/route.ts": ["FORBIDDEN", "INVALID_MONTHS", "INVALID_TIME_ZONE"],
+    "../app/api/user/to-review/route.ts": ["FORBIDDEN"]
+  }
+}

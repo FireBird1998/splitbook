@@ -1,0 +1,698 @@
+[
+  {
+    "code": "FORBIDDEN",
+    "variant": "default",
+    "data": {},
+    "status": 403,
+    "body": "{\"error\":\"Forbidden\",\"status\":403,\"code\":\"FORBIDDEN\"}"
+  },
+  {
+    "code": "FORBIDDEN",
+    "variant": "membership",
+    "data": {
+      "variant": "membership"
+    },
+    "status": 403,
+    "body": "{\"error\":\"Forbidden\",\"status\":403}"
+  },
+  {
+    "code": "INVALID_IDEMPOTENCY_KEY",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Invalid submission key\",\"status\":422,\"code\":\"INVALID_IDEMPOTENCY_KEY\"}"
+  },
+  {
+    "code": "IDEMPOTENCY_CONFLICT",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This submission key was already used for different data. Start a new submission.\",\"status\":409,\"code\":\"IDEMPOTENCY_CONFLICT\"}"
+  },
+  {
+    "code": "STALE_REVISION",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This record changed while you were editing. Reload the latest version before saving.\",\"status\":409,\"code\":\"STALE_REVISION\"}"
+  },
+  {
+    "code": "REVISION_REQUIRED",
+    "variant": "default",
+    "data": {},
+    "status": 428,
+    "body": "{\"error\":\"Reload this record before changing it.\",\"status\":428,\"code\":\"REVISION_REQUIRED\"}"
+  },
+  {
+    "code": "CURRENCY_LOCKED",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"Currency cannot change after this Group has financial records.\",\"status\":409,\"code\":\"CURRENCY_LOCKED\"}"
+  },
+  {
+    "code": "GROUP_ARCHIVED",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This Group was archived, so nothing more can be saved in it.\",\"status\":409,\"code\":\"GROUP_ARCHIVED\"}"
+  },
+  {
+    "code": "RECURRING_EXPENSES_OFF",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"Recurring Expenses are turned off.\",\"status\":409,\"code\":\"RECURRING_EXPENSES_OFF\"}"
+  },
+  {
+    "code": "ACTIVITY_BACKLOG_FULL",
+    "variant": "default",
+    "data": {},
+    "status": 503,
+    "body": "{\"error\":\"The audit feed is temporarily unavailable. Please retry later.\",\"status\":503,\"code\":\"ACTIVITY_BACKLOG_FULL\"}"
+  },
+  {
+    "code": "INVALID_MONEY",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Enter a positive amount with the currency’s supported precision.\",\"status\":422,\"code\":\"INVALID_MONEY\"}"
+  },
+  {
+    "code": "INVALID_JSON",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Invalid JSON body\",\"status\":400,\"code\":\"INVALID_JSON\"}"
+  },
+  {
+    "code": "INVALID_ID",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Invalid id\",\"status\":400,\"code\":\"INVALID_ID\"}"
+  },
+  {
+    "code": "ACCOUNT_CHANGED",
+    "variant": "default",
+    "data": {},
+    "status": 419,
+    "body": "{\"error\":\"The signed-in account changed in another tab. Reload this page to continue.\",\"status\":419,\"code\":\"ACCOUNT_CHANGED\"}"
+  },
+  {
+    "code": "INVALID_MEMBERS",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Both payer and recipient must be group members\",\"status\":422,\"code\":\"INVALID_MEMBERS\"}"
+  },
+  {
+    "code": "INVALID_MEMBERS",
+    "variant": "expense",
+    "data": {
+      "variant": "expense"
+    },
+    "status": 422,
+    "body": "{\"error\":\"All payers and split participants must be group members\",\"status\":422,\"code\":\"INVALID_MEMBERS\"}"
+  },
+  {
+    "code": "SAME_PARTY",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Payer and recipient must be different people\",\"status\":422,\"code\":\"SAME_PARTY\"}"
+  },
+  {
+    "code": "FORBIDDEN_SETTLEMENT",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Only the payer or recipient can record this settlement\",\"status\":422,\"code\":\"FORBIDDEN_SETTLEMENT\"}"
+  },
+  {
+    "code": "FORBIDDEN_SETTLEMENT",
+    "variant": "payment",
+    "data": {
+      "variant": "payment"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Only the payer or recipient can record this payment\",\"status\":422,\"code\":\"FORBIDDEN_SETTLEMENT\"}"
+  },
+  {
+    "code": "CURRENCY_MISMATCH",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Currency is not one of this Group’s currencies\",\"status\":422,\"code\":\"CURRENCY_MISMATCH\"}"
+  },
+  {
+    "code": "NO_SETTLEMENT_DEBT",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"This pair no longer has a Debt or Suggested payment in one of these currencies. Reload before recording the payment.\",\"status\":422,\"code\":\"NO_SETTLEMENT_DEBT\"}"
+  },
+  {
+    "code": "INVALID_TAG",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Tag must be an active group tag\",\"status\":422,\"code\":\"INVALID_TAG\"}"
+  },
+  {
+    "code": "INVALID_WINDOW",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"End date must be on or after the start date\",\"status\":422,\"code\":\"INVALID_WINDOW\"}"
+  },
+  {
+    "code": "NOT_HOUSEHOLD",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Recurring expenses are only available in Household groups\",\"status\":422,\"code\":\"NOT_HOUSEHOLD\"}"
+  },
+  {
+    "code": "TAG_PRECONDITION_REQUIRED",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 428,
+    "body": "{\"error\":\"Reload Tag management before making this change.\",\"status\":428,\"code\":\"TAG_PRECONDITION_REQUIRED\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "INVALID_TAG_COMMAND",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 400,
+    "body": "{\"error\":\"Check the Tag name and submitted action, then try again.\",\"status\":400,\"code\":\"INVALID_TAG_COMMAND\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "INVALID_TAG_COMMAND",
+    "variant": "identity",
+    "data": {
+      "variant": "identity"
+    },
+    "status": 400,
+    "body": "{\"error\":\"Invalid Group, Tag or request identity.\",\"status\":400,\"code\":\"INVALID_TAG_COMMAND\"}"
+  },
+  {
+    "code": "TAG_ADMIN_REQUIRED",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 403,
+    "body": "{\"error\":\"Only Group admins can manage Tags.\",\"status\":403,\"code\":\"TAG_ADMIN_REQUIRED\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "TAG_TRANSACTIONS_REQUIRED",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 503,
+    "body": "{\"error\":\"Tag changes are temporarily unavailable. Try again later.\",\"status\":503,\"code\":\"TAG_TRANSACTIONS_REQUIRED\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "TAG_CHANGED",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"This Tag changed. Review its current state before applying your change.\",\"status\":409,\"code\":\"TAG_CHANGED\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "TAG_EXISTS",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"A Tag with this name already exists. Archived Tags can be restored.\",\"status\":409,\"code\":\"TAG_EXISTS\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "LAST_ACTIVE_TAG",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"Create or restore another Tag before removing the last active Tag.\",\"status\":409,\"code\":\"LAST_ACTIVE_TAG\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "REQUEST_KEY_REUSED",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"This request was already used for another action.\",\"status\":409,\"code\":\"REQUEST_KEY_REUSED\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "TAG_IN_USE",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"This Tag is used by Expenses or recurring templates and cannot be deleted.\",\"status\":409,\"code\":\"TAG_IN_USE\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "AMBIGUOUS_TAG",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"This Tag has ambiguous historical references and cannot be renamed.\",\"status\":409,\"code\":\"AMBIGUOUS_TAG\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "DRAFTS_DISABLED",
+    "variant": "default",
+    "data": {},
+    "status": 404,
+    "body": "{\"error\":\"Drafts are not enabled\",\"status\":404,\"code\":\"DRAFTS_DISABLED\"}"
+  },
+  {
+    "code": "REQUEST_TOO_LARGE",
+    "variant": "default",
+    "data": {},
+    "status": 413,
+    "body": "{\"error\":\"Request too large\",\"status\":413,\"code\":\"REQUEST_TOO_LARGE\"}"
+  },
+  {
+    "code": "DRAFT_GROUP_LIMIT",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"You have 100 items waiting in this Group. Save or delete some before keeping more.\",\"status\":409,\"code\":\"DRAFT_GROUP_LIMIT\"}"
+  },
+  {
+    "code": "DRAFT_NOT_FOUND",
+    "variant": "default",
+    "data": {},
+    "status": 404,
+    "body": "{\"error\":\"Draft not found\",\"status\":404,\"code\":\"DRAFT_NOT_FOUND\"}"
+  },
+  {
+    "code": "DRAFT_TRANSACTIONS_REQUIRED",
+    "variant": "default",
+    "data": {},
+    "status": 503,
+    "body": "{\"error\":\"Draft changes are temporarily unavailable.\",\"status\":503,\"code\":\"DRAFT_TRANSACTIONS_REQUIRED\"}"
+  },
+  {
+    "code": "LAST_ADMIN",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"Make someone else an admin before you leave.\",\"status\":409,\"code\":\"LAST_ADMIN\"}"
+  },
+  {
+    "code": "LAST_ADMIN",
+    "variant": "demotion",
+    "data": {
+      "variant": "demotion"
+    },
+    "status": 409,
+    "body": "{\"error\":\"Cannot demote the last admin. Promote another member first.\",\"status\":409}"
+  },
+  {
+    "code": "LAST_ADMIN",
+    "variant": "removal",
+    "data": {
+      "variant": "removal"
+    },
+    "status": 409,
+    "body": "{\"error\":\"Cannot remove the last admin.\",\"status\":409}"
+  },
+  {
+    "code": "SELF_REMOVE",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"You cannot remove yourself. Use leave group instead.\",\"status\":400}"
+  },
+  {
+    "code": "INVITATION_NOT_PENDING",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Invitation is no longer pending\",\"status\":400}"
+  },
+  {
+    "code": "INVITATION_EXPIRED",
+    "variant": "default",
+    "data": {},
+    "status": 410,
+    "body": "{\"error\":\"Invitation has expired\",\"status\":410}"
+  },
+  {
+    "code": "ALREADY_INVITED",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This person has already been invited\",\"status\":409}"
+  },
+  {
+    "code": "LEAVE_CONFLICT",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This Group changed while you were leaving. Try again.\",\"status\":409,\"code\":\"LEAVE_CONFLICT\"}"
+  },
+  {
+    "code": "REMOVAL_CONFLICT",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This Group changed while you were removing this member. Try again.\",\"status\":409,\"code\":\"REMOVAL_CONFLICT\"}"
+  },
+  {
+    "code": "GROUP_DELETION_CONFIRMATION_REQUIRED",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"You are the last member. Leaving will permanently delete this Group and its history. Confirm deletion to continue.\",\"status\":409,\"code\":\"GROUP_DELETION_CONFIRMATION_REQUIRED\"}"
+  },
+  {
+    "code": "GROUP_DELETION_UNAVAILABLE",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"Permanent Group deletion is unavailable here. You are still a member; no history was deleted.\",\"status\":409,\"code\":\"GROUP_DELETION_UNAVAILABLE\"}"
+  },
+  {
+    "code": "SETTLEMENT_TRANSACTIONS_REQUIRED",
+    "variant": "default",
+    "data": {},
+    "status": 503,
+    "body": "{\"error\":\"Payments across several currencies need a transactional database. Nothing was recorded.\",\"status\":503,\"code\":\"SETTLEMENT_TRANSACTIONS_REQUIRED\"}"
+  },
+  {
+    "code": "DATABASE_UNAVAILABLE",
+    "variant": "default",
+    "data": {},
+    "status": 503,
+    "body": "{\"error\":\"Couldn’t reach Splitbook. Try again.\",\"status\":503,\"code\":\"DATABASE_UNAVAILABLE\"}"
+  },
+  {
+    "code": "CURRENCY_IN_USE",
+    "variant": "default",
+    "data": {
+      "currency": "EUR",
+      "groupName": "Maple House",
+      "use": {
+        "expenses": {
+          "count": 2,
+          "items": []
+        },
+        "settlements": 1,
+        "toReview": {
+          "yours": 1,
+          "others": 0
+        }
+      }
+    },
+    "status": 409,
+    "body": "{\"error\":\"EUR can’t be removed while Maple House uses it.\",\"status\":409,\"code\":\"CURRENCY_IN_USE\",\"use\":{\"expenses\":{\"count\":2,\"items\":[]},\"settlements\":1,\"toReview\":{\"yours\":1,\"others\":0}}}"
+  },
+  {
+    "code": "CURRENCY_NOT_LISTED",
+    "variant": "default",
+    "data": {
+      "currency": "EUR"
+    },
+    "status": 404,
+    "body": "{\"error\":\"EUR isn’t one of this Group’s extra currencies.\",\"status\":404,\"code\":\"CURRENCY_NOT_LISTED\"}"
+  },
+  {
+    "code": "CURRENCY_IS_MAIN",
+    "variant": "default",
+    "data": {
+      "currency": "INR"
+    },
+    "status": 409,
+    "body": "{\"error\":\"INR is the main currency, so it can’t be removed.\",\"status\":409,\"code\":\"CURRENCY_IS_MAIN\"}"
+  },
+  {
+    "code": "EXPORT_TOO_LARGE",
+    "variant": "default",
+    "data": {
+      "rows": 12345,
+      "limit": 10000
+    },
+    "status": 413,
+    "body": "{\"error\":\"This export would have 12,345 rows, more than the 10,000 one download can hold. Pick fewer Groups or a shorter period.\",\"status\":413,\"code\":\"EXPORT_TOO_LARGE\"}"
+  },
+  {
+    "code": "OPEN_BALANCE",
+    "variant": "default",
+    "data": {
+      "balances": [
+        {
+          "currency": "INR",
+          "amountMinor": -15000
+        },
+        {
+          "currency": "EUR",
+          "amountMinor": 1250
+        }
+      ]
+    },
+    "status": 409,
+    "body": "{\"error\":\"Settle up before you leave: you owe ₹150.00 and are owed €12.50 in this Group.\",\"status\":409,\"code\":\"OPEN_BALANCE\",\"balances\":[{\"currency\":\"INR\",\"amount\":-150},{\"currency\":\"EUR\",\"amount\":12.5}]}"
+  },
+  {
+    "code": "OPEN_BALANCE",
+    "variant": "removal",
+    "data": {
+      "balances": [
+        {
+          "currency": "INR",
+          "amountMinor": -15000
+        },
+        {
+          "currency": "EUR",
+          "amountMinor": 1250
+        }
+      ],
+      "memberName": "Priya Shah",
+      "variant": "removal"
+    },
+    "status": 409,
+    "body": "{\"error\":\"Priya Shah owes ₹150.00 and is owed €12.50 in this Group. Settle up before removing them.\",\"status\":409,\"code\":\"OPEN_BALANCE\",\"balances\":[{\"currency\":\"INR\",\"amount\":-150},{\"currency\":\"EUR\",\"amount\":12.5}]}"
+  },
+  {
+    "code": "RECURRING_EXPENSE_PROBLEM",
+    "variant": "default",
+    "data": {
+      "recurringExpenses": [
+        {
+          "id": "a00000000000000000000009",
+          "description": "Rent"
+        }
+      ]
+    },
+    "status": 409,
+    "body": "{\"error\":\"Rent (recurring) still includes you. Ask an admin to remove you from it, then leave.\",\"status\":409,\"code\":\"RECURRING_EXPENSE_PROBLEM\",\"recurringExpenses\":[{\"id\":\"a00000000000000000000009\",\"description\":\"Rent\"}]}"
+  },
+  {
+    "code": "RECURRING_EXPENSE_PROBLEM",
+    "variant": "removal",
+    "data": {
+      "recurringExpenses": [
+        {
+          "id": "a00000000000000000000009",
+          "description": "Rent"
+        }
+      ],
+      "memberName": "Priya Shah",
+      "variant": "removal"
+    },
+    "status": 409,
+    "body": "{\"error\":\"Rent (recurring) still includes Priya Shah. Remove them from it before removing them from the Group.\",\"status\":409,\"code\":\"RECURRING_EXPENSE_PROBLEM\",\"recurringExpenses\":[{\"id\":\"a00000000000000000000009\",\"description\":\"Rent\"}]}"
+  },
+  {
+    "code": "INVALID_CURRENCY",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Send a currency code, such as INR.\",\"status\":400,\"code\":\"INVALID_CURRENCY\"}"
+  },
+  {
+    "code": "DRAFT_UNCONFIRMED",
+    "variant": "default",
+    "data": {},
+    "status": 503,
+    "body": "{\"error\":\"Draft request not confirmed. Reload before retrying; reuse the original creation request.\",\"status\":503,\"code\":\"DRAFT_UNCONFIRMED\"}"
+  },
+  {
+    "code": "INVALID_MONTH",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Send a Month as YYYY-MM, such as 2026-09.\",\"status\":400,\"code\":\"INVALID_MONTH\"}"
+  },
+  {
+    "code": "INVALID_COMPARE",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Compare with 1 to 12 earlier months.\",\"status\":400,\"code\":\"INVALID_COMPARE\"}"
+  },
+  {
+    "code": "INVALID_MONTHS",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Ask for 1 to 12 months of spending.\",\"status\":400,\"code\":\"INVALID_MONTHS\"}"
+  },
+  {
+    "code": "INVALID_TIME_ZONE",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Send a named IANA time zone, such as Asia/Kolkata.\",\"status\":400,\"code\":\"INVALID_TIME_ZONE\"}"
+  },
+  {
+    "code": "QUERY_TOO_LONG",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Search for at most 100 characters.\",\"status\":422,\"code\":\"QUERY_TOO_LONG\"}"
+  },
+  {
+    "code": "NOT_A_TRIP",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"Only a Trip has a Trip summary.\",\"status\":409,\"code\":\"NOT_A_TRIP\"}"
+  }
+]
