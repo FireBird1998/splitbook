@@ -428,18 +428,24 @@ describe('fake Splitbook', () => {
     ).toEqual([]);
     expect(server.unanswered).toEqual([]);
   });
-  it.each(['request', 'reply'] as const)('holds at the %s boundary and captures the answer at the matching moment', async (at) => {
-    const server = fakeSplitbook();
-    let value = 'before';
-    server.reply('GET', '/probe', () => Response.json({ value }));
-    const hold = server.hold('GET', /^\/probe/, { at });
-    const reading = server.fetch('http://local/probe?page=1', {});
-    await hold.arrived;
-    expect(server.requests.map(r=>r.path)).toEqual(['/probe?page=1']);
-    value = 'after';
-    hold.release();
-    expect(await (await reading).json()).toEqual({ value: at === 'request' ? 'after' : 'before' });
-    expect(await (await server.fetch('http://local/probe', {})).json()).toEqual({ value:'after' });
-  });
-
+  it.each(['request', 'reply'] as const)(
+    'holds at the %s boundary and captures the answer at the matching moment',
+    async (at) => {
+      const server = fakeSplitbook();
+      let value = 'before';
+      server.reply('GET', '/probe', () => Response.json({ value }));
+      const hold = server.hold('GET', /^\/probe/, { at });
+      const reading = server.fetch('http://local/probe?page=1', {});
+      await hold.arrived;
+      expect(server.requests.map((r) => r.path)).toEqual(['/probe?page=1']);
+      value = 'after';
+      hold.release();
+      expect(await (await reading).json()).toEqual({
+        value: at === 'request' ? 'after' : 'before',
+      });
+      expect(await (await server.fetch('http://local/probe', {})).json()).toEqual({
+        value: 'after',
+      });
+    },
+  );
 });
