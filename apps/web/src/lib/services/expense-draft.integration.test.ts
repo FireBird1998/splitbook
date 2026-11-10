@@ -252,7 +252,7 @@ describe('persistent private expense Drafts', () => {
     ]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter((r) => r.status === 'rejected')).toMatchObject([
-      { reason: new Error('STALE_REVISION') },
+      { reason: { message: 'STALE_REVISION' } },
     ]);
     await expect(drafts.discard(alice, groupId, row.id, 0)).rejects.toThrow('STALE_REVISION');
   });
