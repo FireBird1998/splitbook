@@ -1,0 +1,9 @@
+[
+  {
+    "code": "DRAFT_UNCONFIRMED",
+    "variant": "save",
+    "data": { "variant": "save" },
+    "status": 503,
+    "body": "{\"error\":\"Save not confirmed. Everything is still in To review. Check again to finish saving.\",\"status\":503,\"code\":\"DRAFT_UNCONFIRMED\"}"
+  }
+]

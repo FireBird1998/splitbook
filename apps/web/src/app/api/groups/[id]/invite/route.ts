@@ -36,9 +36,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const invitation = await invitationService.create(id, parsed.data.email, user.id!);
     return success(invitation, 201);
   } catch (err) {
-    if (err instanceof Error && err.message === 'ALREADY_INVITED') {
-      return error('This person has already been invited', 409);
-    }
     return serverError(err);
   }
 }

@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import Invitation from '@/lib/models/Invitation';
@@ -29,7 +30,7 @@ export class InvitationService {
     });
 
     if (existing) {
-      throw new Error('ALREADY_INVITED');
+      throw new Refusal('ALREADY_INVITED');
     }
 
     const token = crypto.randomBytes(16).toString('hex');
@@ -80,13 +81,13 @@ export class InvitationService {
     if (!invitationEmailMatches(invitation.invitedEmail, userEmail)) return null;
 
     if (invitation.status !== 'pending') {
-      throw new Error('INVITATION_NOT_PENDING');
+      throw new Refusal('INVITATION_NOT_PENDING');
     }
 
     if (new Date() > invitation.expiresAt) {
       invitation.status = 'expired';
       await withGroupMutation(String(invitation.group), async () => invitation.save());
-      throw new Error('INVITATION_EXPIRED');
+      throw new Refusal('INVITATION_EXPIRED');
     }
 
     // Update invitation status

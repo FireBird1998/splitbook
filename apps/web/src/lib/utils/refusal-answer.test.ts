@@ -45,14 +45,17 @@ describe('serverError answers typed refusals', () => {
 import cases from './refusal-vocabulary-answers.json';
 import { refusalVocabulary } from '@splitbook/shared/refusals';
 
-it.each(cases)('keeps $code / $variant byte for byte', async ({ code, data, status, body }) => {
-  vi.spyOn(console, 'error').mockImplementation(() => {});
-  const answer = serverError(
-    new Refusal(code as ConstructorParameters<typeof Refusal>[0], data as never),
-  );
-  expect(answer.status).toBe(status);
-  expect(await answer.text()).toBe(body);
-});
+it.each([...cases, ...draftAnswers])(
+  'keeps $code / $variant byte for byte',
+  async ({ code, data, status, body }) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const answer = serverError(
+      new Refusal(code as ConstructorParameters<typeof Refusal>[0], data as never),
+    );
+    expect(answer.status).toBe(status);
+    expect(await answer.text()).toBe(body);
+  },
+);
 it('has exactly the census codes and a recorded answer for every named variant', () => {
   expect(
     [
@@ -60,7 +63,9 @@ it('has exactly the census codes and a recorded answer for every named variant',
     ].sort(),
   ).toEqual(Object.keys(refusalVocabulary).sort());
   for (const [code, entry] of Object.entries(refusalVocabulary)) {
-    const covered = cases.filter((row) => row.code === code).map((row) => row.variant);
+    const covered = [...cases, ...draftAnswers]
+      .filter((row) => row.code === code)
+      .map((row) => row.variant);
     if ('words' in entry) expect(covered).toContain('default');
     else expect(entry.moneyWords).toBe('from-rule');
     for (const variant of Object.keys(entry.variants)) expect(covered, code).toContain(variant);
@@ -127,4 +132,15 @@ it('keeps the membership caller’s FORBIDDEN answer for typed and legacy produc
   expect(await other.text()).toBe(
     '{"error":"This Group was archived, so nothing more can be saved in it.","status":409,"code":"GROUP_ARCHIVED"}',
   );
+});
+
+import draftAnswers from '../refusal-census-draft-answers.json';
+it('answers an unconfirmed Draft save through the central answering seam', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  log.mockClear();
+  const answer = serverError(new Error('submitted private data'), 'draft-save');
+  expect(answer.status).toBe(503);
+  expect(await answer.text()).toBe(draftAnswers[0].body);
+  expect(log).not.toHaveBeenCalled();
+  log.mockRestore();
 });

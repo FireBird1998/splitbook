@@ -1,16 +1,15 @@
-import { NextResponse } from 'next/server';
+import { Refusal } from '@splitbook/shared/refusals';
 import { tagCommandSchema } from '@splitbook/shared/tag-management';
 import { z } from 'zod';
-import { TagManagementError } from '@/lib/services/tag-management.service';
-import { error, serverError } from '@/lib/utils/api-response';
+import { serverError } from '@/lib/utils/api-response';
 export const tagGroupIdSchema = z.string().regex(/^[a-f\d]{24}$/i);
 export const tagRequestIdSchema = z.string().uuid();
 export async function readTagCommand(req: Request) {
   const body: unknown = await req.json().catch(() => {
-    throw new TagManagementError('INVALID_TAG_COMMAND', 400);
+    throw new Refusal('INVALID_TAG_COMMAND');
   });
   if (!body || typeof body !== 'object' || !('requestId' in body))
-    throw new TagManagementError('TAG_PRECONDITION_REQUIRED', 428);
+    throw new Refusal('TAG_PRECONDITION_REQUIRED');
   if (
     'intent' in body &&
     body.intent &&
@@ -19,38 +18,16 @@ export async function readTagCommand(req: Request) {
     body.intent.action !== 'create' &&
     !('expectedRevision' in body.intent)
   )
-    throw new TagManagementError('TAG_PRECONDITION_REQUIRED', 428);
+    throw new Refusal('TAG_PRECONDITION_REQUIRED');
   const parsed = tagCommandSchema.safeParse(body);
-  if (!parsed.success) throw new TagManagementError('INVALID_TAG_COMMAND', 400);
+  if (!parsed.success) throw new Refusal('INVALID_TAG_COMMAND');
   return parsed.data;
 }
 export function tagError(err: unknown) {
-  if (!(err instanceof TagManagementError)) return serverError(err);
-  const messages: Record<string, string> = {
-    TAG_PRECONDITION_REQUIRED: 'Reload Tag management before making this change.',
-    INVALID_TAG_COMMAND: 'Check the Tag name and submitted action, then try again.',
-    TAG_ADMIN_REQUIRED: 'Only Group admins can manage Tags.',
-    TAG_TRANSACTIONS_REQUIRED: 'Tag changes are temporarily unavailable. Try again later.',
-    TAG_CHANGED: 'This Tag changed. Review its current state before applying your change.',
-    TAG_EXISTS: 'A Tag with this name already exists. Archived Tags can be restored.',
-    LAST_ACTIVE_TAG: 'Create or restore another Tag before removing the last active Tag.',
-    REQUEST_KEY_REUSED: 'This request was already used for another action.',
-    TAG_IN_USE: 'This Tag is used by Expenses or recurring templates and cannot be deleted.',
-    AMBIGUOUS_TAG: 'This Tag has ambiguous historical references and cannot be renamed.',
-  };
-  return NextResponse.json(
-    {
-      error: messages[err.code] ?? 'Tag action could not be completed.',
-      status: err.status,
-      code: err.code,
-      ...(err.snapshot ? { snapshot: err.snapshot } : {}),
-      ...(err.existingTagId ? { existingTagId: err.existingTagId } : {}),
-    },
-    { status: err.status },
-  );
+  return serverError(err);
 }
 export function invalidTagId() {
-  return error('Invalid Group, Tag or request identity.', 400, 'INVALID_TAG_COMMAND');
+  return serverError(new Refusal('INVALID_TAG_COMMAND', { variant: 'identity' }));
 }
 
 /** Older URLs keep their Group response, but cannot bypass command identity or reviewed state. */
@@ -64,7 +41,7 @@ export async function readLegacyTagCommand(
   try {
     body = text ? JSON.parse(text) : {};
   } catch {
-    throw new TagManagementError('INVALID_TAG_COMMAND', 400);
+    throw new Refusal('INVALID_TAG_COMMAND');
   }
   if (
     !body ||
@@ -72,7 +49,7 @@ export async function readLegacyTagCommand(
     !('requestId' in body) ||
     (action !== 'create' && !('expectedRevision' in body))
   )
-    throw new TagManagementError('TAG_PRECONDITION_REQUIRED', 428);
+    throw new Refusal('TAG_PRECONDITION_REQUIRED');
   const schema =
     action === 'create'
       ? z.object({ requestId: tagRequestIdSchema, name: z.string() }).strict()
@@ -88,7 +65,7 @@ export async function readLegacyTagCommand(
             .strict()
             .refine((value) => (value.name !== undefined) !== (value.isArchived !== undefined));
   const parsed = schema.safeParse(body);
-  if (!parsed.success) throw new TagManagementError('INVALID_TAG_COMMAND', 400);
+  if (!parsed.success) throw new Refusal('INVALID_TAG_COMMAND');
   const data = parsed.data;
   const intent =
     action === 'create' && 'name' in data
@@ -105,6 +82,6 @@ export async function readLegacyTagCommand(
               }
             : null;
   const command = tagCommandSchema.safeParse({ requestId: data.requestId, intent });
-  if (!command.success) throw new TagManagementError('INVALID_TAG_COMMAND', 400);
+  if (!command.success) throw new Refusal('INVALID_TAG_COMMAND');
   return command.data;
 }

@@ -5,7 +5,7 @@ import {
   DATABASE_UNAVAILABLE_MESSAGE,
 } from '@splitbook/shared/database-unavailable';
 import { NextResponse } from 'next/server';
-import type { ZodError } from 'zod';
+import { ZodError } from 'zod';
 import { auth } from '@/lib/auth';
 import { MoneyValidationError, StoredMoneyError } from '@splitbook/shared/exact-money';
 import { ACCOUNT_CHANGED, EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
@@ -13,6 +13,7 @@ import {
   AuthDatabaseWatch,
   DatabaseUnavailableError,
   isDatabaseNoAnswer,
+  isDatabaseUnreachable,
 } from '@/lib/mongodb-client';
 
 export interface AuthUser {
@@ -46,7 +47,7 @@ export async function getAuthUser(): Promise<AuthUser | null> {
   if (!session?.user?.id) return null;
   const expectedAccount = requestHeaders.get(EXPECTED_ACCOUNT_HEADER);
   if (expectedAccount !== null && expectedAccount !== session.user.id) {
-    throw new Error(ACCOUNT_CHANGED);
+    throw new Refusal(ACCOUNT_CHANGED);
   }
   const { id, name, email, image } = session.user;
   return { id, name, email, image: image ?? null };
@@ -60,7 +61,7 @@ export async function readJson(req: Request): Promise<unknown> {
   try {
     return await req.json();
   } catch (cause) {
-    if (cause instanceof SyntaxError) throw new Error('INVALID_JSON');
+    if (cause instanceof SyntaxError) throw new Refusal('INVALID_JSON');
     throw cause;
   }
 }
@@ -76,7 +77,7 @@ export async function routeIds<Params extends Record<string, string>>(
   params: Promise<Params>,
 ): Promise<Params> {
   const ids = await params;
-  if (!Object.values(ids).every((id) => OBJECT_ID.test(id))) throw new Error('INVALID_ID');
+  if (!Object.values(ids).every((id) => OBJECT_ID.test(id))) throw new Refusal('INVALID_ID');
   return ids;
 }
 
@@ -118,7 +119,40 @@ export function notFound(resource: string = 'Resource') {
 /**
  * Answer a thrown value, preserving the legacy answers during the service migration.
  */
-export function serverError(err?: unknown, caller?: RefusalCaller) {
+export type ServerErrorCaller = RefusalCaller | 'draft' | 'draft-save';
+
+export function serverError(err?: unknown, caller?: ServerErrorCaller): NextResponse {
+  if (caller === 'draft' || caller === 'draft-save') {
+    if (err instanceof ZodError) return validationError(err);
+    if (err instanceof SyntaxError) return serverError(new Refusal('INVALID_JSON'));
+    // Legacy inputs retain the private Draft seam's own classification. Unknown failures
+    // may contain submitted values, so they receive uncertainty words without being logged.
+    const draftCodes = [
+      'DRAFTS_DISABLED',
+      'REQUEST_TOO_LARGE',
+      'DRAFT_GROUP_LIMIT',
+      'DRAFT_NOT_FOUND',
+      'DRAFT_TRANSACTIONS_REQUIRED',
+    ] as const;
+    if (err instanceof Error && draftCodes.some((code) => code === err.message))
+      return serverError(new Refusal(err.message as (typeof draftCodes)[number]));
+    if (
+      err instanceof Error &&
+      [
+        'FORBIDDEN',
+        'GROUP_ARCHIVED',
+        'IDEMPOTENCY_CONFLICT',
+        'STALE_REVISION',
+        'REVISION_REQUIRED',
+        'ACCOUNT_CHANGED',
+      ].includes(err.message)
+    )
+      return serverError(err);
+    if (isDatabaseUnreachable(err)) return databaseUnavailable(err);
+    return serverError(
+      new Refusal('DRAFT_UNCONFIRMED', caller === 'draft-save' ? { variant: 'save' } : undefined),
+    );
+  }
   if (err instanceof Refusal) {
     const answer = refusalAnswer(err, caller);
     return NextResponse.json(answer, { status: answer.status });
@@ -194,7 +228,7 @@ function internalServerError() {
  * once with the route, the code and the ids that find the record, never member data. Anything
  * else answers as `serverError` does, so a read's own bad input is still refused.
  */
-export function failedRead(err: unknown, req: Request) {
+export function failedRead(err: unknown, req: Request, caller?: RefusalCaller) {
   if (err instanceof StoredMoneyError) {
     console.error('Stored data fault:', {
       route: `${req.method} ${new URL(req.url).pathname}`,
@@ -203,7 +237,7 @@ export function failedRead(err: unknown, req: Request) {
     });
     return internalServerError();
   }
-  return serverError(err);
+  return serverError(err, caller);
 }
 
 /**

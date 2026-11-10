@@ -140,3 +140,18 @@ it.each([
   expect(refuse).toThrow(Refusal);
   expect(refuse).toThrow(code);
 });
+
+it('keeps the payment caller’s authorization wording on its refusal', () => {
+  let cause: unknown;
+  try {
+    assertSettlementAuthorization('other', 'payer', 'payee', 'payment');
+  } catch (error) {
+    cause = error;
+  }
+  expect(cause).toBeInstanceOf(Refusal);
+  expect(refusalAnswer(cause as Refusal)).toEqual({
+    error: 'Only the payer or recipient can record this payment',
+    status: 422,
+    code: 'FORBIDDEN_SETTLEMENT',
+  });
+});

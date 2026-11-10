@@ -1,6 +1,7 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { forbidden, redirect } from 'next/navigation';
 import { getAuthUser } from '@/lib/utils/api-response';
-import { exportService, ExportTooLargeError } from '@/lib/services/export.service';
+import { exportService } from '@/lib/services/export.service';
 import StatementView from '@/components/statement/StatementView';
 import { parseStatementQuery } from '@splitbook/shared/statement-request';
 import type { Statement } from '@splitbook/shared/statement';
@@ -39,9 +40,9 @@ export default async function StatementPage({
       { wholeTrip: options.wholeTrip },
     );
   } catch (error) {
-    if (error instanceof Error && error.message === 'FORBIDDEN') forbidden();
+    if (error instanceof Refusal && error.code === 'FORBIDDEN') forbidden();
     if (error instanceof RangeError) failure = 'Choose a valid period and time zone.';
-    else if (error instanceof ExportTooLargeError)
+    else if (error instanceof Refusal && error.code === 'EXPORT_TOO_LARGE')
       failure = 'This statement is too large to prepare. Export fewer records as CSV.';
     else throw error;
   }

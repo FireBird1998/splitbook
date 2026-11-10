@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import connectDB from '@/lib/db';
 import { supportsGroupTransactions, withGroupMutation } from '@/lib/group-mutation';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
@@ -51,13 +52,13 @@ export async function createSettlementBatch(
   const authorize = async () => {
     const group = await Group.findById(groupId);
     if (!group || !group.members.some((member) => String(member.user) === userId))
-      throw new Error('FORBIDDEN');
+      throw new Refusal('FORBIDDEN');
     assertSettlementMembers(
       new Set(group.members.map((member) => String(member.user))),
       paidBy,
       data.paidTo,
     );
-    assertSettlementAuthorization(userId, paidBy, data.paidTo);
+    assertSettlementAuthorization(userId, paidBy, data.paidTo, 'payment');
     return group;
   };
   await authorize();
@@ -69,6 +70,7 @@ export async function createSettlementBatch(
     }).select('+creationRequest +batchSettlementIds');
     if (!first) return null;
     assertCreateReplay(first.creationRequest!, command);
+    // A matching batch receipt carries the ids committed atomically with it.
     if (!first.batchSettlementIds?.length) throw new Error('IDEMPOTENCY_CONFLICT');
     const saved = await Settlement.find({
       group: groupId,
@@ -93,12 +95,12 @@ export async function createSettlementBatch(
   const existing = await replay();
   if (existing) return respond(existing);
   // Unlike a single legacy save, a batch can never fall back to non-transactional writes.
-  if (!(await supportsGroupTransactions())) throw new Error('SETTLEMENT_TRANSACTIONS_REQUIRED');
+  if (!(await supportsGroupTransactions())) throw new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED');
   const ids = rows.map(() => new Types.ObjectId());
   const saved = await withGroupMutation(
     groupId,
     async (session) => {
-      if (!session) throw new Error('SETTLEMENT_TRANSACTIONS_REQUIRED');
+      if (!session) throw new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED');
       const committedGroup = await authorize();
       // A competing request may have committed while this one waited on the Group fence.
       const concurrent = await replay();

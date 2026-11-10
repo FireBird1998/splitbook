@@ -114,7 +114,16 @@ describe('stable Tag identity', () => {
     const { groupId, tagId } = await household();
     const expense = await expenseService.create(groupId, { ...expenseInput, tagId }, alice);
     await Expense.updateOne({ _id: expense._id }, { $set: { isDeleted: true } });
-    await expect(groupService.deleteTag(groupId, tagId, alice)).rejects.toThrow('TAG_IN_USE:1:0');
+    await expect(groupService.deleteTag(groupId, tagId, alice)).rejects.toMatchObject({
+      code: 'TAG_IN_USE',
+      message: 'TAG_IN_USE',
+      data: {
+        snapshot: {
+          canManage: true,
+          tags: expect.arrayContaining([expect.objectContaining({ id: tagId })]),
+        },
+      },
+    });
     const second = await household();
     const template = await recurringExpenseService.create(
       second.groupId,
@@ -122,8 +131,17 @@ describe('stable Tag identity', () => {
       alice,
     );
     await RecurringExpense.updateOne({ _id: template!._id }, { $set: { isPaused: true } });
-    await expect(groupService.deleteTag(second.groupId, second.tagId, alice)).rejects.toThrow(
-      'TAG_IN_USE:0:1',
+    await expect(groupService.deleteTag(second.groupId, second.tagId, alice)).rejects.toMatchObject(
+      {
+        code: 'TAG_IN_USE',
+        message: 'TAG_IN_USE',
+        data: {
+          snapshot: {
+            canManage: true,
+            tags: expect.arrayContaining([expect.objectContaining({ id: second.tagId })]),
+          },
+        },
+      },
     );
   });
 

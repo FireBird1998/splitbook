@@ -36,11 +36,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return success({ message: 'Invitation declined' });
     }
   } catch (err) {
-    if (err instanceof Error) {
-      if (err.message === 'INVITATION_NOT_PENDING')
-        return error('Invitation is no longer pending', 400);
-      if (err.message === 'INVITATION_EXPIRED') return error('Invitation has expired', 410);
-    }
     return serverError(err);
   }
 }

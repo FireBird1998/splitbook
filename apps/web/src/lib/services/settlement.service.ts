@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
@@ -41,7 +42,7 @@ export class SettlementService {
     const memberIds = new Set(group.members.map((member) => member.user.toString()));
     const paidBy = data.paidBy || userId;
 
-    if (!memberIds.has(userId)) throw new Error('FORBIDDEN');
+    if (!memberIds.has(userId)) throw new Refusal('FORBIDDEN');
 
     assertSettlementMembers(memberIds, paidBy, data.paidTo);
     assertSettlementAuthorization(userId, paidBy, data.paidTo);
@@ -58,6 +59,7 @@ export class SettlementService {
       }),
     );
     const amountMinor = parseAmountMinor(data.amount, data.currency);
+    // Admitted requests already passed positive-amount and exact-money validation.
     if (amountMinor <= 0) throw new Error('INVALID_MONEY');
     const command = {
       ...data,
@@ -82,7 +84,7 @@ export class SettlementService {
       ]);
     }
     // A retry of a payment recorded before the archive is confirmed above; nothing new is (#578).
-    if (group.isArchived) throw new Error('GROUP_ARCHIVED');
+    if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
     const settlementId = new Types.ObjectId();
     const names = await User.find({ _id: { $in: [paidBy, data.paidTo] } })
       .select('name')

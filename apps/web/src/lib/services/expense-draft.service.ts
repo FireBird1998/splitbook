@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import 'server-only';
 import {
   isGroupCurrency,
@@ -78,7 +79,7 @@ function attribution(actor: DraftActor): DraftAttribution {
 
 const indexes = new WeakMap<object, Promise<unknown>>();
 async function collection() {
-  if (process.env.PERSISTENT_DRAFTS_ENABLED !== 'true') throw new Error('DRAFTS_DISABLED');
+  if (process.env.PERSISTENT_DRAFTS_ENABLED !== 'true') throw new Refusal('DRAFTS_DISABLED');
   await connectDB();
   const db = mongoose.connection.db!;
   const drafts = db.collection<DraftRecord>('expensedrafts');
@@ -137,7 +138,7 @@ async function requireMembership(
       { _id: scope.owner, draftDeletionPending: { $ne: true } },
       { session, projection: { _id: 1 } },
     );
-  if (!account) throw new Error('FORBIDDEN');
+  if (!account) throw new Refusal('FORBIDDEN');
   const filter = reach ? assistantGroupFilter({ memberId: scope.owner, ...reach }) : null;
   const group = await mongoose.connection
     .db!.collection('groups')
@@ -150,8 +151,11 @@ async function requireMembership(
         projection: { _id: 1, defaultCurrency: 1, alternateCurrencies: 1, isArchived: 1 },
       },
     );
-  if (!group) throw new Error(reach ? 'GROUP_NOT_FOUND' : 'FORBIDDEN');
-  if (refuseArchived && group.isArchived) throw new Error('GROUP_ARCHIVED');
+  if (!group) {
+    if (reach) throw new Error('GROUP_NOT_FOUND');
+    throw new Refusal('FORBIDDEN');
+  }
+  if (refuseArchived && group.isArchived) throw new Refusal('GROUP_ARCHIVED');
   return {
     defaultCurrency: group.defaultCurrency as string,
     alternateCurrencies: normaliseExtraCurrencies(group.defaultCurrency, group.alternateCurrencies),
@@ -244,9 +248,9 @@ async function mutate<T>(
   await actor.authorize?.();
   await requireMembership(scope, undefined, refuseArchived, assistantReach(actor));
   // No count-then-insert fallback: it would violate the per-member cap under concurrency.
-  if (!(await supportsGroupTransactions())) throw new Error('DRAFT_TRANSACTIONS_REQUIRED');
+  if (!(await supportsGroupTransactions())) throw new Refusal('DRAFT_TRANSACTIONS_REQUIRED');
   return withGroupMutation(String(scope.group), async (session) => {
-    if (!session) throw new Error('DRAFT_TRANSACTIONS_REQUIRED');
+    if (!session) throw new Refusal('DRAFT_TRANSACTIONS_REQUIRED');
     await actor.authorize?.();
     const account = await mongoose.connection
       .db!.collection('users')
@@ -255,7 +259,7 @@ async function mutate<T>(
         { $inc: { draftMutationSequence: 1 } },
         { session },
       );
-    if (!account.matchedCount) throw new Error('FORBIDDEN');
+    if (!account.matchedCount) throw new Refusal('FORBIDDEN');
     // Checked again inside the transaction, so an archive that commits first stops the write.
     const groupCurrencies = await requireMembership(
       scope,
@@ -313,11 +317,11 @@ async function reviewDraft(
     { ...scope, _id: new mongoose.Types.ObjectId(draftObjectId.parse(draftId)), state: 'active' },
     { session },
   );
-  if (!record) throw new Error('DRAFT_NOT_FOUND');
+  if (!record) throw new Refusal('DRAFT_NOT_FOUND');
   const group = await Group.findById(groupId)
     .session(session ?? null)
     .lean();
-  if (!group) throw new Error('FORBIDDEN');
+  if (!group) throw new Refusal('FORBIDDEN');
   const values = withGroupCurrency(record.values, group.defaultCurrency);
   const { problems, allocation } = reviewValues(record, group);
   const duplicates: DraftReview['duplicates'] = [];
@@ -395,7 +399,7 @@ export const expenseDraftService = {
       },
       { projection: { _id: 1 } },
     );
-    if (!account) throw new Error('FORBIDDEN');
+    if (!account) throw new Refusal('FORBIDDEN');
     const groups = await Group.find({ 'members.user': owner, deletionRequestedAt: null })
       .sort({ name: 1, _id: 1 })
       .lean();
@@ -474,7 +478,7 @@ export const expenseDraftService = {
   },
   async save(actor: DraftActor, groupId: string, input: unknown): Promise<DraftSaveOutcome[]> {
     // An MCP actor is never permitted to convert a Draft, even if accidentally wired here.
-    if (actor.authorize) throw new Error('FORBIDDEN');
+    if (actor.authorize) throw new Refusal('FORBIDDEN');
     const command = saveExpenseDraftsSchema.parse(input);
     const drafts = await collection();
     await ensureLedgerWriteIndexes();
@@ -490,7 +494,7 @@ export const expenseDraftService = {
     if (group?.isArchived) {
       const ids = command.drafts.map((item) => new mongoose.Types.ObjectId(item.id));
       const saved = await drafts.countDocuments({ ...scope, _id: { $in: ids }, state: 'saved' });
-      if (saved < ids.length) throw new Error('GROUP_ARCHIVED');
+      if (saved < ids.length) throw new Refusal('GROUP_ARCHIVED');
     }
     const outcomes: DraftSaveOutcome[] = [];
     for (const item of command.drafts) {
@@ -503,13 +507,13 @@ export const expenseDraftService = {
               { ...scope, _id: new mongoose.Types.ObjectId(item.id) },
               { session },
             );
-            if (!record) throw new Error('DRAFT_NOT_FOUND');
+            if (!record) throw new Refusal('DRAFT_NOT_FOUND');
             if (record.state === 'saved') {
               if (record.revision !== item.revision + 1 || record.savedReview !== item.review)
-                throw new Error('STALE_REVISION');
+                throw new Refusal('STALE_REVISION');
               return record.expenseId!;
             }
-            if (record.state !== 'active') throw new Error('DRAFT_NOT_FOUND');
+            if (record.state !== 'active') throw new Refusal('DRAFT_NOT_FOUND');
             assertExpectedRevision(record.revision, item.revision);
             const current = await reviewDraft(actor, groupId, item.id, session);
             if (current.review !== item.review)
@@ -604,13 +608,13 @@ export const expenseDraftService = {
           replay.length !== command.drafts.length ||
           replay.some((row) => row.requestFingerprint !== requestFingerprint)
         )
-          throw new Error('IDEMPOTENCY_CONFLICT');
+          throw new Refusal('IDEMPOTENCY_CONFLICT');
         // A discarded item's content is gone; its minimal receipt prevents resurrection.
         return replay.map((record) => present(record, currencies));
       }
       const count = await drafts.countDocuments({ ...scope, state: 'active' }, { session });
       if (count + command.drafts.length > ACTIVE_DRAFTS_PER_MEMBER)
-        throw new Error('DRAFT_GROUP_LIMIT');
+        throw new Refusal('DRAFT_GROUP_LIMIT');
       const now = new Date();
       const records: DraftRecord[] = command.drafts.map((values, itemIndex) => ({
         _id: new mongoose.Types.ObjectId(),
@@ -642,10 +646,10 @@ export const expenseDraftService = {
     const _id = new mongoose.Types.ObjectId(draftObjectId.parse(draftId));
     return prepare(actor, groupId, async (drafts, scope, session, currencies) => {
       const record = await drafts.findOne({ ...scope, _id, state: 'active' }, { session });
-      if (!record) throw new Error('DRAFT_NOT_FOUND');
+      if (!record) throw new Refusal('DRAFT_NOT_FOUND');
       assertExpectedRevision(record.revision, revision);
       // Unlike older trusted service calls, Draft mutations always require a revision.
-      if (revision === undefined) throw new Error('REVISION_REQUIRED');
+      if (revision === undefined) throw new Refusal('REVISION_REQUIRED');
       const updatedAt = new Date();
       const changedBy = attribution(actor);
       await drafts.updateOne(
@@ -667,13 +671,13 @@ export const expenseDraftService = {
     const _id = new mongoose.Types.ObjectId(draftObjectId.parse(draftId));
     return mutate(actor, groupId, async (drafts, scope, session) => {
       const record = await drafts.findOne({ ...scope, _id }, { session });
-      if (!record) throw new Error('DRAFT_NOT_FOUND');
-      if (revision === undefined) throw new Error('REVISION_REQUIRED');
+      if (!record) throw new Refusal('DRAFT_NOT_FOUND');
+      if (revision === undefined) throw new Refusal('REVISION_REQUIRED');
       if (record.state === 'discarded') {
         assertExpectedRevision(record.revision - 1, revision);
         return present(record);
       }
-      if (record.state !== 'active') throw new Error('STALE_REVISION');
+      if (record.state !== 'active') throw new Refusal('STALE_REVISION');
       assertExpectedRevision(record.revision, revision);
       const updatedAt = new Date();
       const changedBy = attribution(actor);

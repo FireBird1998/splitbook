@@ -1,3 +1,4 @@
+import type { TagSnapshot } from '@splitbook/shared/tag-management';
 /** Frozen legacy input values for the immutable main census. Production uses Refusal. */
 import { Refusal } from '@splitbook/shared/refusals';
 import type { ExtraCurrencyUse } from '@splitbook/shared/group-currency-settings';
@@ -93,6 +94,28 @@ class CurrencyIsMainError extends Error {
   }
 }
 
+export class ExportTooLargeError extends Error {
+  constructor(
+    readonly rows: number,
+    readonly limit: number,
+  ) {
+    super('EXPORT_TOO_LARGE');
+    this.name = 'ExportTooLargeError';
+  }
+}
+
+export class TagManagementError extends Error {
+  constructor(
+    readonly code: ConstructorParameters<typeof Refusal>[0],
+    readonly status: number,
+    readonly snapshot?: TagSnapshot,
+    readonly existingTagId?: string,
+    message?: string,
+  ) {
+    super(message ?? code);
+  }
+}
+
 const currentCurrencies = new WeakMap<Error, Refusal>();
 
 export function currencyInUseCase(currency: string, groupName: string, use: ExtraCurrencyUse) {
@@ -121,8 +144,20 @@ export function currentCause(
     | 'expense'
     | 'recurring'
     | 'recurring-create'
-    | 'tag-change',
+    | 'tag-change'
+    | 'payment'
+    | 'settlement'
+    | 'tag'
+    | 'export'
+    | 'invitation',
 ): Error {
+  if (caller === 'export' && cause instanceof ExportTooLargeError)
+    return new Refusal('EXPORT_TOO_LARGE', { rows: cause.rows, limit: cause.limit });
+  if (caller === 'tag' && cause instanceof TagManagementError)
+    return new Refusal(cause.code, {
+      snapshot: cause.snapshot,
+      existingTagId: cause.existingTagId,
+    });
   const currency = currentCurrencies.get(cause);
   if (currency) return currency;
   if (caller === 'leave' && cause instanceof LeaveBlockedError) {
@@ -148,6 +183,13 @@ export function currentCause(
   }
   if (cause.constructor === Error) {
     const code = cause.message;
+    if (
+      caller === 'invitation' &&
+      (code === 'ALREADY_INVITED' ||
+        code === 'INVITATION_NOT_PENDING' ||
+        code === 'INVITATION_EXPIRED')
+    )
+      return new Refusal(code);
     if (caller === 'expense' || caller === 'recurring' || caller === 'recurring-create') {
       if (code === 'INVALID_MEMBERS') return new Refusal(code, { variant: 'expense' });
       if (code === 'INVALID_TAG' || code === 'CURRENCY_MISMATCH') return new Refusal(code);
@@ -155,6 +197,18 @@ export function currentCause(
       if (caller === 'recurring-create' && code === 'NOT_HOUSEHOLD') return new Refusal(code);
     }
     if (caller === 'tag-change' && code === 'INVALID_TAG') return new Refusal(code);
+    if (caller === 'payment' || caller === 'settlement') {
+      if (code === 'FORBIDDEN_SETTLEMENT')
+        return new Refusal(code, caller === 'payment' ? { variant: 'payment' } : undefined);
+      if (
+        code === 'INVALID_MEMBERS' ||
+        code === 'SAME_PARTY' ||
+        code === 'CURRENCY_MISMATCH' ||
+        code === 'NO_SETTLEMENT_DEBT' ||
+        code === 'SETTLEMENT_TRANSACTIONS_REQUIRED'
+      )
+        return new Refusal(code);
+    }
 
     if (code === 'LAST_ADMIN' && (caller === 'demotion' || caller === 'removal'))
       return new Refusal(code, { variant: caller });

@@ -1,3 +1,4 @@
+import { DRAFT_SAVE_UNCONFIRMED_MESSAGE } from './draft-responses';
 import { GROUP_ARCHIVED_MESSAGE } from './group-archive';
 import { DATABASE_UNAVAILABLE_MESSAGE } from './database-unavailable';
 import { DRAFT_GROUP_LIMIT_MESSAGE } from './validators/expense-draft';
@@ -123,7 +124,9 @@ export const refusalVocabulary = {
     words:
       'Draft request not confirmed. Reload before retrying; reuse the original creation request.',
     includeCode: true,
-    variants: {},
+    variants: {
+      save: { status: 503, words: DRAFT_SAVE_UNCONFIRMED_MESSAGE, includeCode: true },
+    },
   },
   DRAFTS_DISABLED: {
     status: 404,
