@@ -10,6 +10,9 @@ import {
   assertCreateReplay,
   createRequestMetadata,
   makePendingActivity,
+  ledgerNotificationContext,
+  expenseChangeAlertsEnabled,
+  paymentAlertsEnabled,
   type ICreationRequest,
   type IPendingActivity,
   type NotificationKind,
@@ -27,7 +30,11 @@ interface RecordingEntry<T> {
   activity: {
     type: ActivityType;
     metadata: Record<string, unknown>;
-    alert: { kind: NotificationKind; involved: readonly string[]; switch: 'always' };
+    alert: {
+      kind: NotificationKind;
+      involved: readonly string[];
+      switch: 'always' | 'payments' | 'expense-changes';
+    };
   };
 }
 export interface LedgerRecording<T extends LedgerRecord> {
@@ -91,6 +98,18 @@ export async function recordLedger<T extends LedgerRecord>(description: LedgerRe
           actorId,
           entry.activity.metadata,
         );
+        const alert = entry.activity.alert;
+        const capture =
+          alert.switch === 'always' ||
+          (alert.switch === 'payments' ? paymentAlertsEnabled() : expenseChangeAlertsEnabled());
+        if (capture)
+          event.notificationContext = ledgerNotificationContext(
+            event,
+            alert.kind,
+            { groupId, recordId: String(entry.document._id) },
+            alert.involved,
+            new Set(group.members.map((member) => String(member.user))),
+          );
         result.push(
           await model.create({
             ...entry.document,

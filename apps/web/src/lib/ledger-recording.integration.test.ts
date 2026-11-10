@@ -26,7 +26,10 @@ beforeEach(async () => {
   });
   groupId = String(group._id);
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 afterAll(db.teardown);
 
 // A minimal Expense description, independent of either production creation service.
@@ -101,26 +104,41 @@ describe('ledger recording', () => {
     expect(String((await record(key))[0]._id)).toBe(String(saved._id));
   });
   it.each(['always', 'payments', 'expense-changes'] as const)(
-    'captures just the involved current members except the actor (%s)', async (alertSwitch) => {
+    'captures just the involved current members except the actor (%s)',
+    async (alertSwitch) => {
       vi.stubEnv('ANDROID_NOTIFICATION_PAYMENTS_ENABLED', 'true');
       vi.stubEnv('ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED', 'true');
       const [saved] = await record(randomUUID(), {}, alertSwitch);
       const event = await Activity.findOne({ 'metadata.expenseId': String(saved._id) })
-        .select('+notificationContext').lean();
+        .select('+notificationContext')
+        .lean();
       expect(event!.notificationContext).toEqual({
-        version: 2, eventId: String(event!._id), kind: 'expense_added', groupId,
-        recordId: String(saved._id), occurredAt: event!.createdAt, recipientIds: [bob],
+        version: 2,
+        eventId: String(event!._id),
+        kind: 'expense_added',
+        groupId,
+        recordId: String(saved._id),
+        occurredAt: event!.createdAt,
+        recipientIds: [bob],
       });
     },
   );
   it.each(['payments', 'expense-changes'] as const)(
-    'captures no context when its %s switch is off, even if the other switch is on', async (alertSwitch) => {
-      vi.stubEnv('ANDROID_NOTIFICATION_PAYMENTS_ENABLED', alertSwitch === 'payments' ? 'false' : 'true');
-      vi.stubEnv('ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED', alertSwitch === 'expense-changes' ? 'false' : 'true');
+    'captures no context when its %s switch is off, even if the other switch is on',
+    async (alertSwitch) => {
+      vi.stubEnv(
+        'ANDROID_NOTIFICATION_PAYMENTS_ENABLED',
+        alertSwitch === 'payments' ? 'false' : 'true',
+      );
+      vi.stubEnv(
+        'ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED',
+        alertSwitch === 'expense-changes' ? 'false' : 'true',
+      );
       await record(randomUUID(), {}, alertSwitch);
-      const event = await Activity.findOne({ type: 'expense_added' }).select('+notificationContext').lean();
+      const event = await Activity.findOne({ type: 'expense_added' })
+        .select('+notificationContext')
+        .lean();
       expect(event!.notificationContext).toBeUndefined();
     },
   );
-
 });
