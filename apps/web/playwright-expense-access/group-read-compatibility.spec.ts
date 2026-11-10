@@ -264,3 +264,21 @@ test('Group detail authorization precedes recurring generation and repeated auth
   }
   expect(await count()).toBe(1);
 });
+
+test('a failed Expense read prevents HTTP caching (#1043)', async ({ ledger }) => {
+  const filter = { _id: new ObjectId(ledger.expenseB) };
+  const stored = await withDatabase((db) => db.collection('expenses').findOne(filter));
+  if (!stored) throw new Error('Expected an Expense in the isolated fixture');
+  await withDatabase((db) =>
+    db.collection('expenses').updateOne(filter, { $set: { amountMinor: -1 } }),
+  );
+  try {
+    const response = await ledger.sam.get(`/api/groups/${ledger.groupB}/expenses`);
+    expect(response.status()).toBe(500);
+    expect(response.headers()['cache-control']).toBe('private, no-store');
+  } finally {
+    await withDatabase((db) =>
+      db.collection('expenses').updateOne(filter, { $set: { amountMinor: stored.amountMinor } }),
+    );
+  }
+});

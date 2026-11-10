@@ -3,15 +3,21 @@ import { defineConfig } from '@playwright/test';
 /**
  * HTTP specs (#476): no browser page, no direct database writes, no account-wide reads and
  * nothing about Sam's profile. Each test works only on the Groups its ledger fixture makes,
- * by id, so they run in parallel beside the browser specs, against the same isolated app and
+ * by id (the cache policy spec checks only status and headers on the Groups list), so they run in parallel beside the browser specs, against the same isolated app and
  * database as the rest of the run. These HTTP specs stay serial: ledger-money reads Sam's
  * balances across all his Groups; ledger-creation-replay and group-read-compatibility write
  * legacy states straight into the database; trip-summary-read checks Sam's name, which
  * profile-settings changes while it runs.
  */
-const HTTP_SPECS = ['delete', 'edit-restore', 'export', 'insights-read', 'read', 'statement'].map(
-  (name) => `${name}.spec.ts`,
-);
+const HTTP_SPECS = [
+  'api-cache-control',
+  'delete',
+  'edit-restore',
+  'export',
+  'insights-read',
+  'read',
+  'statement',
+].map((name) => `${name}.spec.ts`);
 
 export default defineConfig({
   testDir: './playwright-expense-access',
