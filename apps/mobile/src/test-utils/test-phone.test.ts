@@ -302,4 +302,24 @@ describe('test phone', () => {
     expect(await store.load('alex','/api/group')).toEqual({saved:1});
   });
 
+  it('delays native reads while the device is slow and can remove that delay', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = testPhone(fakeSplitbook()).stores.savedQueries;
+      await store.save('alex','/api/group',{saved:1});
+      let delay = 50;
+      const stop = store.delayPersistently('load',()=>delay);
+      let answered = false;
+      const reading = store.load('alex','/api/group').then(value=>{answered=true;return value;});
+      await vi.advanceTimersByTimeAsync(49);
+      expect(answered).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await reading).toEqual({saved:1});
+      delay = 0;
+      expect(await store.load('alex','/api/group')).toEqual({saved:1});
+      delay = 50; stop();
+      expect(await store.load('alex','/api/group')).toEqual({saved:1});
+    } finally { vi.useRealTimers(); }
+  });
+
 });
