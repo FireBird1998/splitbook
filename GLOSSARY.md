@@ -44,6 +44,9 @@ _Avoid_: alternate currency, secondary currency, foreign currency
 Server data stored on a member's device so a Group can be shown offline. It always shows when it was last verified and is never treated as current.
 _Avoid_: cache (in product copy), offline data, local data
 
+**Expense entry**:
+What a member has typed for an Expense, before it is read.
+
 **Draft**:
 Unfinished information for an Expense, Settlement or Group that has not been applied. An Expense Draft may be prepared by a member or their Connected assistant and retained for later review; a Draft never changes the ledger.
 _Avoid_: pending Expense, unsaved Expense, local Expense
