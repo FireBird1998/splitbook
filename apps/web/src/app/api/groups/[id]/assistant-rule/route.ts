@@ -2,7 +2,6 @@ import {
   getAuthUser,
   unauthorized,
   success,
-  forbidden,
   serverError,
   validationError,
   readJson,
@@ -23,7 +22,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     return success(await groupService.setAssistantRule(id, parsed.data.rule, user.id!));
   } catch (err) {
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    return serverError(err);
+    return serverError(err, 'membership');
   }
 }

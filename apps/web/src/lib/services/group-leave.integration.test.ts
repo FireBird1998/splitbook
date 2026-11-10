@@ -13,7 +13,8 @@ import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import Activity from '@/lib/models/Activity';
 import RecurringExpense from '@/lib/models/RecurringExpense';
-import { groupService, LeaveBlockedError } from '@/lib/services/group.service';
+import { groupService } from '@/lib/services/group.service';
+import { Refusal } from '@splitbook/shared/refusals';
 import { expenseService } from '@/lib/services/expense.service';
 import { settlementService } from '@/lib/services/settlement.service';
 import { balanceService } from '@/lib/services/balance.service';
@@ -97,8 +98,8 @@ async function blockedCode(action: Promise<unknown>) {
     () => null,
     (error: unknown) => error,
   );
-  expect(caught).toBeInstanceOf(LeaveBlockedError);
-  return caught as LeaveBlockedError;
+  expect(caught).toBeInstanceOf(Refusal);
+  return caught as Refusal;
 }
 
 describe('leaving a Group', () => {
@@ -145,7 +146,7 @@ describe('leaving a Group', () => {
     const blocked = await blockedCode(groupService.leave(groupId, bob));
 
     expect(blocked.code).toBe('OPEN_BALANCE');
-    expect(blocked.balances).toEqual([
+    expect(blocked.data.balances).toEqual([
       { currency: 'EUR', amountMinor: 1250 },
       { currency: 'INR', amountMinor: -10000 },
     ]);
@@ -186,8 +187,8 @@ describe('leaving a Group', () => {
 
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
     const refused = results.find((result) => result.status === 'rejected') as PromiseRejectedResult;
-    expect(refused.reason).toBeInstanceOf(LeaveBlockedError);
-    expect((refused.reason as LeaveBlockedError).code).toBe('LAST_ADMIN');
+    expect(refused.reason).toBeInstanceOf(Refusal);
+    expect((refused.reason as Refusal).code).toBe('LAST_ADMIN');
     const stored = await Group.findById(groupId).lean();
     expect(stored!.members.filter((member) => member.role === 'admin')).toHaveLength(1);
   });
@@ -343,7 +344,7 @@ describe('leaving a Household with a recurring Expense due', () => {
     const blocked = await blockedCode(groupService.leave(groupId, bob));
 
     expect(blocked.code).toBe('OPEN_BALANCE');
-    expect(blocked.balances).toEqual([{ currency: 'INR', amountMinor: -1000000 }]);
+    expect(blocked.data.balances).toEqual([{ currency: 'INR', amountMinor: -1000000 }]);
     expect(await memberIds(groupId)).toEqual([alice, bob, carol].sort());
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
     expect(await Activity.countDocuments({ group: groupId, type: 'member_left' })).toBe(0);
@@ -398,7 +399,7 @@ describe('leaving a Household with a recurring Expense due', () => {
 
     // Trying again adds this month's Rent once and finds the member owing it.
     const blocked = await blockedCode(groupService.leave(groupId, bob));
-    expect(blocked.balances).toEqual([{ currency: 'INR', amountMinor: -1000000 }]);
+    expect(blocked.data.balances).toEqual([{ currency: 'INR', amountMinor: -1000000 }]);
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
   });
 
@@ -431,7 +432,7 @@ describe('leaving a Household with a recurring Expense due', () => {
     // Trying again finds this month's Rent already added, moves the marker and
     // finds the member owing it, without a second Rent.
     const blocked = await blockedCode(groupService.leave(groupId, bob));
-    expect(blocked.balances).toEqual([{ currency: 'INR', amountMinor: -1000000 }]);
+    expect(blocked.data.balances).toEqual([{ currency: 'INR', amountMinor: -1000000 }]);
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
   });
 
@@ -444,7 +445,7 @@ describe('leaving a Household with a recurring Expense due', () => {
     const blocked = await blockedCode(groupService.leave(groupId, bob));
 
     expect(blocked.code).toBe('RECURRING_EXPENSE_PROBLEM');
-    expect(blocked.recurringExpenses).toEqual([{ id: templateId, description: 'Rent' }]);
+    expect(blocked.data.recurringExpenses).toEqual([{ id: templateId, description: 'Rent' }]);
     expect(await memberIds(groupId)).toEqual([alice, bob, carol].sort());
     expect(await Activity.countDocuments({ group: groupId, type: 'member_left' })).toBe(0);
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
@@ -454,7 +455,7 @@ describe('leaving a Household with a recurring Expense due', () => {
     await groupService.updateTag(groupId, rentTagId, { isArchived: false }, alice);
     const owing = await blockedCode(groupService.leave(groupId, bob));
     expect(owing.code).toBe('OPEN_BALANCE');
-    expect(owing.balances).toEqual([{ currency: 'INR', amountMinor: -1000000 }]);
+    expect(owing.data.balances).toEqual([{ currency: 'INR', amountMinor: -1000000 }]);
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
     await settlementService.create(groupId, { paidTo: alice, amount: 10000, currency: 'INR' }, bob);
     await expect(groupService.leave(groupId, bob)).resolves.toEqual({ archived: false });

@@ -25,8 +25,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     return success(result, 201);
   } catch (err) {
-    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
-    return serverError(err);
+    return serverError(err, 'membership');
   }
 }
 

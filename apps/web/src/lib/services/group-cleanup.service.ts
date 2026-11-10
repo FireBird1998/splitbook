@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 import mongoose from 'mongoose';
 import { createHash } from 'node:crypto';
 import connectDB from '@/lib/db';
@@ -64,7 +65,7 @@ export async function requestGroupDeletion(
   groupId: string,
   actorId: string,
 ): Promise<GroupDeletionResult> {
-  if (!(await supportsGroupTransactions())) throw new Error('GROUP_DELETION_UNAVAILABLE');
+  if (!(await supportsGroupTransactions())) throw new Refusal('GROUP_DELETION_UNAVAILABLE');
   const db = mongoose.connection.db!;
   const id = new mongoose.Types.ObjectId(groupId);
   await ensureGroupDeletionIndexes();
@@ -89,7 +90,7 @@ export async function requestGroupDeletion(
         },
         { session },
       );
-      if (!claimed.matchedCount) throw new Error('LEAVE_CONFLICT');
+      if (!claimed.matchedCount) throw new Refusal('LEAVE_CONFLICT');
       await db
         .collection<DeletionRequest>('groupdeletions')
         .insertOne(
@@ -111,7 +112,7 @@ export async function resumeGroupDeletion(
   maxDurationMs = 2_000,
 ): Promise<GroupDeletionResult> {
   const deadline = Date.now() + Math.min(2_000, Math.max(1, maxDurationMs));
-  if (!(await supportsGroupTransactions(deadline))) throw new Error('GROUP_DELETION_UNAVAILABLE');
+  if (!(await supportsGroupTransactions(deadline))) throw new Refusal('GROUP_DELETION_UNAVAILABLE');
   const db = mongoose.connection.db!;
   const id = new mongoose.Types.ObjectId(groupId);
   const requests = db.collection<DeletionRequest>('groupdeletions');
@@ -242,7 +243,7 @@ export async function applyOrphanGroupManifest(
   )
     throw new Error('Manifest target does not match the explicit environment/database');
   if (options.apply && !(await supportsGroupTransactions()))
-    throw new Error('GROUP_DELETION_UNAVAILABLE');
+    throw new Refusal('GROUP_DELETION_UNAVAILABLE');
   const fingerprint = createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
   const outcomes: Array<{
     groupId: string;

@@ -1,3 +1,4 @@
+import { Refusal } from '@splitbook/shared/refusals';
 /**
  * A Group's currency settings (#721, spec #710). Any member adds an extra currency, up to 4; only
  * an admin removes one, and only while no Expense, Settlement or To review item uses it. Activity
@@ -6,11 +7,6 @@
 import mongoose, { type ClientSession } from 'mongoose';
 import connectDB from '@/lib/db';
 import { withGroupMutation } from '@/lib/group-mutation';
-import {
-  CurrencyInUseError,
-  CurrencyIsMainError,
-  CurrencyNotListedError,
-} from '@/lib/group-currency-refusals';
 import Activity from '@/lib/models/Activity';
 import Expense from '@/lib/models/Expense';
 import Group, { type IGroupDocument } from '@/lib/models/Group';
@@ -184,14 +180,15 @@ export async function refuseCurrenciesInUse(
 ) {
   for (const code of removed) {
     const use = await currencyUse(group._id, code, viewerId, session);
-    if (isCurrencyInUse(use)) throw new CurrencyInUseError(code, group.name, use);
+    if (isCurrencyInUse(use))
+      throw new Refusal('CURRENCY_IN_USE', { currency: code, groupName: group.name, use });
   }
 }
 
 /** The Group, read in the current mutation; a member who isn't in it is refused. */
 async function memberGroup(groupId: string, userId: string, session: ClientSession | null) {
   const group = await Group.findById(groupId).session(session).lean<GroupRecord>();
-  if (!group || !isMember(group, userId)) throw new Error('FORBIDDEN');
+  if (!group || !isMember(group, userId)) throw new Refusal('FORBIDDEN');
   return group;
 }
 
@@ -247,10 +244,10 @@ export const groupCurrencyService = {
     await connectDB();
     await withGroupMutation(groupId, async (session) => {
       const group = await memberGroup(groupId, actorId, session ?? null);
-      if (!isAdmin(group, actorId)) throw new Error('FORBIDDEN');
+      if (!isAdmin(group, actorId)) throw new Refusal('FORBIDDEN');
       const listed = extrasOf(group);
-      if (currency === group.defaultCurrency) throw new CurrencyIsMainError(currency);
-      if (!listed.includes(currency)) throw new CurrencyNotListedError(currency);
+      if (currency === group.defaultCurrency) throw new Refusal('CURRENCY_IS_MAIN', { currency });
+      if (!listed.includes(currency)) throw new Refusal('CURRENCY_NOT_LISTED', { currency });
       await refuseCurrenciesInUse(group, [currency], actorId, session ?? null);
       const next = listed.filter((code) => code !== currency);
       await saveList(group, actorId, { old: listed, new: next }, session ?? null);
