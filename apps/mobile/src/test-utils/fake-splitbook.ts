@@ -310,6 +310,9 @@ export function fakeSplitbook() {
     expired: false,
     signInStatus: 200,
     signOutStatus: 200,
+    bootstrap: {environment:'staging',googleWebClientId:'123-test.apps.googleusercontent.com'} as unknown,
+    expiresAt: '2030-01-01T00:00:00Z',
+    secureCookies: false,
     rotate: false,
     cookie: (persona: PersonaId, sequence: number) => `better-auth.session_token=${persona}-${sequence}.signature`,
     issue(persona: PersonaId, cookie?: string): string {
@@ -357,6 +360,7 @@ export function fakeSplitbook() {
         const answer = await entry.answer(request);
         if (answer !== undefined) return answer;
       }
+      if(url.pathname === '/.well-known/splitbook-mobile.json') return Response.json(auth.bootstrap);
       const readPaths = [
         '/api/auth/get-session',
         '/api/groups',
@@ -377,6 +381,7 @@ export function fakeSplitbook() {
       ];
       const writePaths = [
         '/api/auth/demo-persona/sign-in',
+        '/api/auth/sign-in/social',
         '/api/auth/sign-out',
         '/api/groups',
         ...world.groups.flatMap((g) =>
@@ -390,14 +395,16 @@ export function fakeSplitbook() {
         unanswered.push(`${method} ${request.path}`);
         return Response.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 });
       }
-      if (url.pathname === '/api/auth/demo-persona/sign-in' && method === 'POST') {
+      if ((url.pathname === '/api/auth/demo-persona/sign-in' || url.pathname === '/api/auth/sign-in/social') && method === 'POST') {
         if (auth.signInStatus !== 200) return Response.json({}, {status:auth.signInStatus});
-        const persona = JSON.parse(String(init.body)).personaId as PersonaId;
+        const persona = (url.pathname.endsWith('/social')
+          ? (String(init.body).includes('sam') ? 'sam' : 'alex')
+          : JSON.parse(String(init.body)).personaId) as PersonaId;
         const user = world.people[persona];
-        const cookie = auth.issue(persona);
+        const cookie = auth.issue(persona, auth.secureCookies ? '__Secure-' + auth.cookie(persona, ++issued) : undefined);
         return Response.json(
           { user },
-          { headers: { 'Set-Cookie': `${cookie}; Max-Age=2592000; Path=/; HttpOnly` } },
+          { headers: { 'Set-Cookie': `${cookie}; Max-Age=2592000; Path=/; HttpOnly${auth.secureCookies ? '; Secure' : ''}` } },
         );
       }
       const cookie = new Headers(init.headers).get('Cookie') ?? '';
@@ -412,7 +419,7 @@ export function fakeSplitbook() {
       if (url.pathname === '/api/auth/get-session')
         return Response.json({
           user,
-          session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' },
+          session: { userId: user.id, expiresAt: auth.expiresAt },
         });
       const answer = (data: unknown) => Response.json({ status: 200, data });
       if (method === 'GET') {

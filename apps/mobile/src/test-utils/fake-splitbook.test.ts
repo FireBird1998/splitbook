@@ -679,6 +679,7 @@ it('refuses sign-in and revoke without silently changing the server session', as
 it('checks the native Google backend and exchanges either persona’s identity for a secure session', async () => {
   const server = fakeSplitbook();
   server.auth.bootstrap = {environment:'staging',googleWebClientId:'test-client'};
+  server.auth.secureCookies=true;
   const marker = await server.fetch('https://staging.splitbook.test/.well-known/splitbook-mobile.json', {});
   expect(await marker.json()).toEqual({environment:'staging',googleWebClientId:'test-client'});
   const signed = await server.fetch('https://staging.splitbook.test/api/auth/sign-in/social', {
