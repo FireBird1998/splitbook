@@ -76,7 +76,7 @@ it.each([
     checkRefusalSources([file(source, 'apps/web/src/app/api/example/route.ts')]),
   ).toMatchObject([{ message: expect.stringContaining('serverError(cause)') }]);
 });
-it('follows a caught value into a route helper but leaves schema issues and the answering boundary alone', () => {
+it('follows a caught value into a route helper but leaves schema issues alone', () => {
   expect(
     checkRefusalSources([
       file(
@@ -95,10 +95,6 @@ it('follows a caught value into a route helper but leaves schema issues and the 
         "const issue = {message:'SOME_CODE'}; if (issue.message === 'SOME_CODE') return;",
         'apps/web/src/app/api/example/route.ts',
       ),
-      file(
-        "export function serverError(cause: unknown) { if ((cause as Error).message === 'SOME_CODE') return; }",
-        'apps/web/src/lib/utils/api-response.ts',
-      ),
     ]),
   ).toEqual([]);
 });
@@ -113,6 +109,37 @@ it('finds a destructured Promise rejection message', () => {
     checkRefusalSources([
       file(
         "promise.catch(({message: text}) => text === 'SOME_CODE');",
+        'apps/web/src/app/api/example/route.ts',
+      ),
+    ]),
+  ).toHaveLength(1);
+});
+it.each([
+  "const codes = {denied: 'SOME_CODE'}; throw new Error(codes.denied);",
+  "const {denied} = {denied: 'SOME_CODE'}; throw new Error(denied);",
+  "const {Fault} = {Fault: Error}; throw new Fault('SOME_CODE');",
+])('finds property and destructured aliases (%s)', (source) => {
+  expect(checkRefusalSources([file(source)])).toHaveLength(1);
+});
+it('follows conditional caught-value and message aliases', () => {
+  expect(
+    checkRefusalSources([
+      file(
+        "try {} catch (cause) { const err = flag ? cause : cause; const text = flag ? err.message : err.message; if (text === 'SOME_CODE') return; }",
+        'apps/web/src/app/api/example/route.ts',
+      ),
+    ]),
+  ).toHaveLength(1);
+});
+it('enforces the contract inside the central answering function too', () => {
+  expect(
+    checkRefusalSources([
+      file(
+        "export function serverError(cause: Error) { if(cause.message === 'SOME_CODE') return; }",
+        'apps/web/src/lib/utils/api-response.ts',
+      ),
+      file(
+        "import {serverError} from '@/lib/utils/api-response';",
         'apps/web/src/app/api/example/route.ts',
       ),
     ]),

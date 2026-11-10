@@ -120,7 +120,7 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
       const cause = new Error(code);
       census.push({
         thrown: thrown(cause),
-        central: await recorded(response.serverError(cause)),
+        central: await recorded(response.serverError(currentCause(cause))),
         draft: await recorded(draftError(currentCause(cause, 'draft'))),
       });
     }

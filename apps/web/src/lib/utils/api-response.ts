@@ -124,7 +124,7 @@ export function notFound(resource: string = 'Resource') {
 }
 
 /**
- * Answer a thrown value, preserving the legacy answers during the service migration.
+ * Answer a thrown value through the refusal vocabulary or the fault policy.
  */
 export function serverError(err?: unknown, caller?: RefusalCaller): NextResponse {
   if (err instanceof Refusal) {
@@ -139,29 +139,8 @@ export function serverError(err?: unknown, caller?: RefusalCaller): NextResponse
       { status: 422 },
     );
   }
-  if (err instanceof Error) {
-    // Only these plain messages had a central answer before migration. Other old errors keep
-    // their fallthrough until their area moves to Refusal.
-    const legacyCodes = [
-      'FORBIDDEN',
-      'INVALID_IDEMPOTENCY_KEY',
-      'IDEMPOTENCY_CONFLICT',
-      'STALE_REVISION',
-      'REVISION_REQUIRED',
-      'CURRENCY_LOCKED',
-      'GROUP_ARCHIVED',
-      'RECURRING_EXPENSES_OFF',
-      'ACTIVITY_BACKLOG_FULL',
-      'INVALID_MONEY',
-      'INVALID_JSON',
-      'INVALID_ID',
-      'ACCOUNT_CHANGED',
-    ] as const;
-    if (err.name === 'VersionError') return serverError(new Refusal('STALE_REVISION'), caller);
-    if (legacyCodes.some((code) => code === err.message)) {
-      return serverError(new Refusal(err.message as (typeof legacyCodes)[number]), caller);
-    }
-  }
+  if (err instanceof Error && err.name === 'VersionError')
+    return serverError(new Refusal('STALE_REVISION'), caller);
 
   // An operation that ran out of its time got no answer either: a save's transaction whose
   // connection kept dropping can end that way rather than on the dropped connection. Its retry

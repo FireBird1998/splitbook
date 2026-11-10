@@ -200,6 +200,25 @@ export function currentCause(
   }
   if (cause.constructor === Error) {
     const code = cause.message;
+    // The completed migration raises these original central refusals as typed values.
+    const central = [
+      'FORBIDDEN',
+      'INVALID_IDEMPOTENCY_KEY',
+      'IDEMPOTENCY_CONFLICT',
+      'STALE_REVISION',
+      'REVISION_REQUIRED',
+      'CURRENCY_LOCKED',
+      'GROUP_ARCHIVED',
+      'RECURRING_EXPENSES_OFF',
+      'ACTIVITY_BACKLOG_FULL',
+      'INVALID_MONEY',
+      'INVALID_JSON',
+      'INVALID_ID',
+      'ACCOUNT_CHANGED',
+    ] as const;
+    const centralCode = central.find((candidate) => candidate === code);
+    if (caller !== 'draft' && centralCode) return new Refusal(centralCode);
+
     if (
       caller === 'invitation' &&
       (code === 'ALREADY_INVITED' ||

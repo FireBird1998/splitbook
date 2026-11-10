@@ -1,3 +1,7 @@
+import { mongo } from 'mongoose';
+import { MoneyValidationError } from '@splitbook/shared/exact-money';
+import { Refusal } from '@splitbook/shared/refusals';
+import { draftError } from './draft-response';
 import { expect, it, vi } from 'vitest';
 import { auth } from '@/lib/auth';
 import { POST as create } from '@/app/api/groups/[id]/drafts/route';
@@ -30,10 +34,6 @@ it.each([
   log.mockRestore();
 });
 
-import { mongo } from 'mongoose';
-import { MoneyValidationError } from '@splitbook/shared/exact-money';
-import { Refusal } from '@splitbook/shared/refusals';
-
 it.each([
   Object.assign(new Error('revision race'), { name: 'VersionError' }),
   new MoneyValidationError('INVALID_MONEY', 'Private amount problem', ['amount']),
@@ -52,7 +52,6 @@ it.each([
   log.mockRestore();
 });
 
-import { draftError } from './draft-response';
 it('answers a typed refusal by kind without a positive code list', async () => {
   const response = draftError(new Refusal('EXPORT_TOO_LARGE', { rows: 3, limit: 2 }));
   expect(response.status).toBe(413);

@@ -35,13 +35,13 @@ describe('serverError', () => {
   });
 
   it('answers a service access denial as 403 rather than a server failure', async () => {
-    const response = serverError(new Error('FORBIDDEN'));
+    const response = serverError(new Refusal('FORBIDDEN'));
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: 'Forbidden', code: 'FORBIDDEN', status: 403 });
   });
 
   it('answers recurring Expenses being switched off as 409 RECURRING_EXPENSES_OFF', async () => {
-    const response = serverError(new Error('RECURRING_EXPENSES_OFF'));
+    const response = serverError(new Refusal('RECURRING_EXPENSES_OFF'));
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       error: 'Recurring Expenses are turned off.',
@@ -126,7 +126,7 @@ describe('routeIds (#539)', () => {
       await expect(refused, id).rejects.toThrow('INVALID_ID');
       await expect(refused, id).rejects.toBeInstanceOf(Refusal);
     }
-    const response = serverError(new Error('INVALID_ID'));
+    const response = serverError(new Refusal('INVALID_ID'));
     expect(await response.json()).toEqual({ error: 'Invalid id', status: 400, code: 'INVALID_ID' });
   });
 });

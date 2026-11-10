@@ -245,8 +245,8 @@ The unit tests drive each command's public function (`up`, `down`, `gate`, `chec
 Caught-message dispatch in HTTP routes and their imported adapters must use
 `serverError(cause)`, with typed `Refusal.code` available for a family's policy.
 Domain services, models and MCP protocol result policies keep their own boundaries.
-The central answering function retains the compatibility dispatch while the
-migration closes. Tests and fixtures are excluded.
+The same check covers the central answering function. Tests and fixtures are
+excluded.
 
 The twelve retained sites and their reasons live in
 `src/refusal-exceptions.ts`. Each exception matches its file, enclosing function,

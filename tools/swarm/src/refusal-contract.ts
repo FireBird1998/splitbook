@@ -69,13 +69,6 @@ function isCallable(node: ts.Node): node is Callable {
     ts.isMethodDeclaration(node)
   );
 }
-function answeringBoundary(node: ts.Node) {
-  return (
-    isCallable(node) &&
-    node.name?.getText() === 'serverError' &&
-    node.getSourceFile().fileName === '/apps/web/src/lib/utils/api-response.ts'
-  );
-}
 
 function owner(node: ts.Node): string {
   for (let parent = node.parent; parent; parent = parent.parent) {
@@ -147,17 +140,43 @@ export function checkRefusalSources(
     roots.add(found);
     return true;
   }
+  function catchBinding(name: ts.BindingName) {
+    if (ts.isIdentifier(name)) addRoot(name, caught);
+    else
+      for (const item of name.elements) {
+        if (ts.isBindingElement(item) && (item.propertyName ?? item.name).getText() === 'message')
+          addRoot(item.name, messages);
+      }
+  }
+  // Resolve the value behind a declaration, including a destructured object property.
+  function initializers(declaration: ts.Declaration): ts.Expression[] {
+    if (
+      (ts.isVariableDeclaration(declaration) ||
+        ts.isEnumMember(declaration) ||
+        ts.isPropertyAssignment(declaration)) &&
+      declaration.initializer
+    )
+      return [declaration.initializer];
+    if (ts.isBindingElement(declaration)) {
+      const binding = declaration.parent.parent;
+      if (ts.isVariableDeclaration(binding) && binding.initializer) {
+        const key = (declaration.propertyName ?? declaration.name)
+          .getText()
+          .replace(/^['"]|['"]$/g, '');
+        const property = checker.getPropertyOfType(
+          checker.getTypeAtLocation(binding.initializer),
+          key,
+        );
+        return (property?.declarations ?? []).flatMap(initializers);
+      }
+    }
+    return [];
+  }
   for (const node of nodes) {
     if (ts.isCatchClause(node) && node.variableDeclaration) {
-      const name = node.variableDeclaration.name;
-      if (ts.isIdentifier(name)) addRoot(name, caught);
-      else
-        for (const item of name.elements) {
-          if (ts.isBindingElement(item) && (item.propertyName ?? item.name).getText() === 'message')
-            addRoot(item.name, messages);
-        }
+      catchBinding(node.variableDeclaration.name);
     }
-    if (isCallable(node) && !answeringBoundary(node))
+    if (isCallable(node))
       for (const parameter of node.parameters) {
         if (parameter.type && /(?:Error|Refusal)(?:<.*>)?$/.test(parameter.type.getText()))
           addRoot(parameter.name, caught);
@@ -169,21 +188,10 @@ export function checkRefusalSources(
     if (!ts.isCallExpression(node)) continue;
     if (ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'catch') {
       const callback = node.arguments[0] && callable(node.arguments[0]);
-      if (callback?.parameters[0]) {
-        const name = callback.parameters[0].name;
-        if (ts.isIdentifier(name)) addRoot(name, caught);
-        else
-          for (const item of name.elements) {
-            if (
-              ts.isBindingElement(item) &&
-              (item.propertyName ?? item.name).getText() === 'message'
-            )
-              addRoot(item.name, messages);
-          }
-      }
+      if (callback?.parameters[0]) catchBinding(callback.parameters[0].name);
     }
     const target = callable(node.expression);
-    if (!target || answeringBoundary(target)) continue;
+    if (!target) continue;
     for (const [index, parameter] of target.parameters.entries()) {
       const name = symbol(parameter.name);
       const argument = node.arguments[index];
@@ -213,11 +221,7 @@ export function checkRefusalSources(
     const next = new Set(seen).add(found);
     const inputs = [...(parameterInputs.get(found) ?? []), ...(assignments.get(found) ?? [])];
     for (const declaration of found.declarations ?? []) {
-      if (
-        (ts.isVariableDeclaration(declaration) || ts.isEnumMember(declaration)) &&
-        declaration.initializer
-      )
-        inputs.push(declaration.initializer);
+      inputs.push(...initializers(declaration));
       if (ts.isParameter(declaration)) {
         const fn = declaration.parent;
         const call = fn.parent;
@@ -253,16 +257,13 @@ export function checkRefusalSources(
       [...(assignments.get(found) ?? []), ...(parameterInputs.get(found) ?? [])].some((input) =>
         nativeError(input, next),
       ) ||
-      (found.declarations ?? []).some(
-        (declaration) =>
-          ts.isVariableDeclaration(declaration) &&
-          !!declaration.initializer &&
-          nativeError(declaration.initializer, next),
-      )
+      (found.declarations ?? []).flatMap(initializers).some((input) => nativeError(input, next))
     );
   }
   function origin(node: ts.Node, kind: 'error' | 'message', seen = new Set<ts.Symbol>()): boolean {
     node = expression(node);
+    if (ts.isConditionalExpression(node))
+      return origin(node.whenTrue, kind, seen) || origin(node.whenFalse, kind, seen);
     if (
       kind === 'message' &&
       ((ts.isPropertyAccessExpression(node) && node.name.text === 'message') ||
@@ -372,10 +373,6 @@ export function checkRefusalSources(
       }
     }
     if (!helpers.has(node.getSourceFile().fileName)) continue;
-    let boundary = false;
-    for (let parent: ts.Node | undefined = node; parent; parent = parent.parent)
-      if (answeringBoundary(parent)) boundary = true;
-    if (boundary) continue;
     let compared: ts.Node[] = [];
     if (
       ts.isBinaryExpression(node) &&
