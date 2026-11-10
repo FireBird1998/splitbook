@@ -81,12 +81,9 @@ describe('fake Splitbook', () => {
     const id = server.world.groups[0]!._id,
       base = `/api/groups/${id}`;
     expect(parseSettlementHistory(await call(base + '/settlements'), id)).toEqual([]);
-    expect(
-      parseRateSuggestionResponse(await call(base + '/rates?from=EUR&to=INR'), {
-        from: 'EUR',
-        to: 'INR',
-      }),
-    ).toMatchObject({ suggestion: null });
+    expect(parseRateSuggestionResponse(await call(base + '/rates?from=EUR&to=INR'))).toMatchObject({
+      suggestion: null,
+    });
     const before = structuredClone(server.world);
     expect(
       parseCreatedGroup(

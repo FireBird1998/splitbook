@@ -1,3 +1,4 @@
+import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { FetchResponse, MobileFetch, PersonaId, SessionUser } from '../data/types';
 
 /** The personas and ids most controller suites use. Each fake gets its own mutable world. */
@@ -68,6 +69,62 @@ export function expensePage(expenses: unknown[] = [], page = 1) {
   };
 }
 
+/** Populate a recorded payment from its request, without applying anything to a ledger. */
+export function recordedSettlement(
+  body: Record<string, unknown>,
+  group: WireGroup,
+  creator = group.members[0]!.user,
+) {
+  return {
+    _id: 'c00000000000000000000001',
+    group: group._id,
+    createdBy: creator,
+    ...body,
+    paidBy: group.members.find((m) => m.user._id === body.paidBy)?.user,
+    paidTo: group.members.find((m) => m.user._id === body.paidTo)?.user,
+    amountMinor: parseAmountMinor(body.amount as number, body.currency as string),
+    moneyVersion: 1,
+    createdAt: group.updatedAt,
+    updatedAt: group.updatedAt,
+  };
+}
+export function recordedBatch(
+  body: {
+    paidBy: string;
+    paidTo: string;
+    paidCurrency: string;
+    settlements: Record<string, unknown>[];
+  },
+  group: WireGroup,
+  creator = group.members[0]!.user,
+) {
+  const settlements = body.settlements.map((row, index) => ({
+    ...recordedSettlement(
+      {
+        paidBy: body.paidBy,
+        paidTo: body.paidTo,
+        note: '',
+        ...row,
+        ...(row.amountPaidMinor === undefined ? {} : { paidCurrency: body.paidCurrency }),
+      },
+      group,
+      creator,
+    ),
+    _id: `c${String(index + 1).padStart(23, '0')}`,
+    pairDebtBeforeMinor: -parseAmountMinor(row.amount as number, row.currency as string),
+    pairDebtAfterMinor: 0,
+  }));
+  return {
+    paidCurrency: body.paidCurrency,
+    totalPaidMinor: settlements.reduce(
+      (sum, row) =>
+        sum + ((row as { amountPaidMinor?: number }).amountPaidMinor ?? row.amountMinor),
+      0,
+    ),
+    settlements,
+  };
+}
+
 export interface FakeRequest {
   url: URL;
   method: string;
@@ -86,6 +143,8 @@ export function fakeSplitbook() {
     home: { buckets: [] as unknown[] },
     balances: { [group._id]: { byCurrency: [] } } as Record<string, unknown>,
     expenses: { [group._id]: expensePage() },
+    settlements: { [group._id]: [] as unknown[] },
+    rates: { [group._id]: {} } as Record<string, Record<string, unknown>>,
   };
   const unanswered: string[] = [];
   const requests: FakeRequest[] = [];
@@ -145,12 +204,62 @@ export function fakeSplitbook() {
         session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' },
       });
     const answer = (data: unknown) => Response.json({ status: 200, data });
+    if (url.pathname === '/api/groups' && method === 'POST') {
+      const body = request.body!;
+      return Response.json(
+        {
+          status: 201,
+          data: groupFixture({
+            ...body,
+            _id: 'b00000000000000000000009',
+            createdBy: user.id,
+            members: [
+              {
+                user: { _id: user.id, name: user.name, email: user.email, image: user.image },
+                role: 'admin',
+                joinedAt: iso,
+              },
+            ],
+          }),
+        },
+        { status: 201 },
+      );
+    }
     if (url.pathname === '/api/groups')
       return answer(world.groups.filter((g) => g.members.some((m) => m.user._id === user.id)));
     if (url.pathname === '/api/user/balances') return answer(world.home);
     const found = world.groups.find((g) => url.pathname.startsWith(`/api/groups/${g._id}`));
-    if (found && method === 'GET') {
+    if (found) {
       const base = `/api/groups/${found._id}`;
+      if (url.pathname === base + '/settlements' && method === 'POST')
+        return Response.json(
+          {
+            status: 201,
+            data: recordedSettlement(request.body!, found, { _id: user.id, name: user.name }),
+          },
+          { status: 201 },
+        );
+      if (url.pathname === base + '/settlements/batch' && method === 'POST')
+        return Response.json(
+          {
+            status: 201,
+            data: recordedBatch(request.body as Parameters<typeof recordedBatch>[0], found, {
+              _id: user.id,
+              name: user.name,
+            }),
+          },
+          { status: 201 },
+        );
+      if (method !== 'GET') {
+        unanswered.push(`${method} ${request.path}`);
+        return Response.json({ code: 'NOT_FOUND' }, { status: 404 });
+      }
+      if (url.pathname === base + '/settlements') return answer(world.settlements[found._id]);
+      if (url.pathname === base + '/rates') {
+        const pair = `${url.searchParams.get('from')}→${url.searchParams.get('to')}`;
+        const suggestion = world.rates[found._id]?.[pair] ?? null;
+        return answer(suggestion ? { suggestion } : { suggestion: null, reason: 'unavailable' });
+      }
       if (url.pathname === base) return answer(found);
       if (url.pathname === base + '/balances') return answer(world.balances[found._id]);
       if (url.pathname === base + '/expenses') return answer(world.expenses[found._id]);
