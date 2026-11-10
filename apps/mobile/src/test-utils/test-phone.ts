@@ -28,11 +28,11 @@ function faultable<T extends object>(store: T) {
     operation: StoreOperation;
     path?: string;
     when: () => boolean;
-    action: () => Promise<void>;
+    action: () => Promise<void> | null;
   }>();
   const persist = (
     operation: StoreOperation,
-    action: () => Promise<void>,
+    action: () => Promise<void> | null,
     when: () => boolean,
     path?: string,
   ) => {
@@ -59,8 +59,10 @@ function faultable<T extends object>(store: T) {
             rule.operation === operation &&
             (rule.path === undefined || rule.path === args[1]) &&
             rule.when()
-          )
-            await rule.action();
+          ) {
+            const waiting = rule.action();
+            if (waiting) await waiting;
+          }
         const queue = next.get(operation);
         const index =
           queue?.findIndex((step) => step.path === undefined || step.path === args[1]) ?? -1;
@@ -87,6 +89,9 @@ function faultable<T extends object>(store: T) {
         () => milliseconds() > 0,
         path,
       );
+    },
+    stallPersistently(operation: StoreOperation, waiting: () => Promise<void> | null) {
+      return persist(operation, waiting, () => true, path);
     },
     stallNext(operation: StoreOperation, until: Promise<void>) {
       enqueue(operation, () => until, path);
