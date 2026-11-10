@@ -308,6 +308,7 @@ export const reactNative = {
 /** `@react-native-community/netinfo`: its listeners hear `emitConnection`. */
 export const netInfo = {
   default: {
+    configure: () => undefined,
     addEventListener: (listener: (state: { isConnected: boolean | null }) => void) =>
       listen(connectionListeners, listener).remove,
   },

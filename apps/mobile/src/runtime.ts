@@ -18,6 +18,9 @@ import { SEPARATOR } from '@splitbook/shared/separator';
 import { decodeStoredSession } from './data/cookies';
 import type { NotificationAccess } from './data/notification-receipt';
 
+// Android normally uses native reachability; the library's HTTP fallback must not cache either.
+NetInfo.configure({ reachabilityHeaders: { 'Cache-Control': 'no-store' } });
+
 const config = mobileConfig(
   {
     mode: process.env.EXPO_PUBLIC_APP_ENV,
