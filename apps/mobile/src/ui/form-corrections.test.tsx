@@ -40,20 +40,40 @@ function backend() {
   const server = fakeSplitbook();
   server.world.people.sam = sam;
   server.world.groups = [group];
-  server.world.balances[groupId] = { byCurrency: [{ currency: 'INR',
-    balances: [
-      { user: { _id: sam.id, name: 'Sam' }, balance: -30 },
-      { user: { _id: alexId, name: 'Alex' }, balance: 30 },
-    ], debts: [{ from: { _id: sam.id, name: 'Sam' }, to: { _id: alexId, name: 'Alex' }, amount: 30 }],
-  }] };
+  server.world.balances[groupId] = {
+    byCurrency: [
+      {
+        currency: 'INR',
+        balances: [
+          { user: { _id: sam.id, name: 'Sam' }, balance: -30 },
+          { user: { _id: alexId, name: 'Alex' }, balance: 30 },
+        ],
+        debts: [
+          { from: { _id: sam.id, name: 'Sam' }, to: { _id: alexId, name: 'Alex' }, amount: 30 },
+        ],
+      },
+    ],
+  };
   // Preserve this file's old server exactly: its create reply is still a Household even when
   // the form sent a Trip, and its Expense-list request answers 404. These are fixture defects,
   // not the shared fake's defaults; correcting them belongs outside this move (#1063).
   server.reply('GET', `/api/groups/${groupId}/expenses`, () => json({}, 404));
-  server.reply('POST', '/api/groups', ({ body }) => json({ status: 201, data: {
-    ...group, _id: 'b00000000000000000000009', name: body!.name,
-    members: [{ user: { _id: sam.id, name: 'Sam', email: sam.email }, role: 'admin', joinedAt: iso }],
-  } }, 201));
+  server.reply('POST', '/api/groups', ({ body }) =>
+    json(
+      {
+        status: 201,
+        data: {
+          ...group,
+          _id: 'b00000000000000000000009',
+          name: body!.name,
+          members: [
+            { user: { _id: sam.id, name: 'Sam', email: sam.email }, role: 'admin', joinedAt: iso },
+          ],
+        },
+      },
+      201,
+    ),
+  );
   const writes: string[] = [];
   let holdWrites: Promise<void> | null = null;
   server.reply('*', '*', async ({ method, url }) => {
@@ -63,8 +83,17 @@ function backend() {
     }
     return undefined;
   });
-  const phone = testPhone(server, { now: Date.parse(iso), newSubmissionKey: () => 'payment-attempt-0001' });
-  return { controller: phone.open(), writes, hold(until: Promise<void>) { holdWrites = until; } };
+  const phone = testPhone(server, {
+    now: Date.parse(iso),
+    newSubmissionKey: () => 'payment-attempt-0001',
+  });
+  return {
+    controller: phone.open(),
+    writes,
+    hold(until: Promise<void>) {
+      holdWrites = until;
+    },
+  };
 }
 
 interface NodeMock {
