@@ -277,6 +277,11 @@ export function fakeSplitbook() {
       (actual) => ![...expectedAbsences].some((expected) => matchesAbsence(expected, actual)),
     );
     if (unexpected.length) throw new Error(`Unanswered requests: ${unexpected.join(' | ')}`);
+    const unused = [...expectedAbsences].filter(
+      (expected) => !unanswered.some((actual) => matchesAbsence(expected, actual)),
+    );
+    if (unused.length)
+      throw new Error(`Expected unanswered requests were not sent: ${unused.join(' | ')}`);
   });
   const requests: FakeRequest[] = [];
   const sentViews = new Map<string, { query: boolean; method: boolean; rows: string[] }>();
