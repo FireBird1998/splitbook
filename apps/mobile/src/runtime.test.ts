@@ -94,6 +94,21 @@ describe('runtime storage wiring', () => {
     );
   });
 
+  it('reports a failed HTTP-store deletion to the existing account cleanup boundary (#1060)', async () => {
+    const { Directory } = await import('expo-file-system');
+    const { httpResponseStore } = await import('./http-response-store');
+    const path = join(wired.cache, 'http-cache');
+    mkdirSync(path);
+    writeFileSync(join(path, 'purge-probe'), 'Fictional account response');
+    const failure = vi.spyOn(Directory.prototype, 'delete').mockImplementationOnce(() => {
+      throw new Error('Fictional filesystem failure');
+    });
+    await expect(httpResponseStore.clear()).rejects.toThrow('Fictional filesystem failure');
+    expect(existsSync(join(path, 'purge-probe'))).toBe(true);
+    failure.mockRestore();
+    await httpResponseStore.clear();
+  });
+
   it('asks for no HTTP caching when NetInfo needs its reachability probe (#1060)', () => {
     expect(wired.reachability).toMatchObject({
       reachabilityHeaders: { 'Cache-Control': 'no-store' },

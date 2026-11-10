@@ -150,6 +150,7 @@ export const controller = createMobileController(controllerConfig, {
       clear: () => SecureStore.deleteItemAsync(ownerKey),
     },
     stores: [
+      httpResponseStore,
       tagRequests,
       draftRequests,
       expenseDrafts,
