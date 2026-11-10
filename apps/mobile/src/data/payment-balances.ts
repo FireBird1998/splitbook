@@ -23,7 +23,11 @@ export function paymentBalances(balances: readonly GroupCurrencyBalance[]) {
 
 /**
  * A single payment's shared preview. The sheet keeps the suggestion it opened with; Record
- * omits that override to check the Balances it just read. Both compare exact minor units.
+ * omits it to check against the Balances it just read. Both compare exact minor units.
+ *
+ * Only this pair's rows are read, so another person's row that can't be read never decides the
+ * payment. The sheet never throws for a Debt: its suggestion was read when it opened. Record
+ * throws when this pair's own Debt can't be read, and so records nothing.
  */
 export function paymentPreview(
   balances: readonly GroupCurrencyBalance[],
@@ -31,15 +35,24 @@ export function paymentPreview(
   suggestedMinor?: number,
 ) {
   const [read] = paymentBalances(balances.filter(({ currency }) => currency === payment.currency));
-  let positionsKnown = read?.balances.some(({ user }) => user._id === payment.paidBy) ?? false;
+  const own = (read?.balances ?? []).filter(({ user }) =>
+    [payment.paidBy, payment.paidTo].includes(user._id),
+  );
+  const debts =
+    suggestedMinor === undefined
+      ? (read?.debts ?? []).filter(
+          ({ from, to }) => from._id === payment.paidBy && to._id === payment.paidTo,
+        )
+      : [];
+  let positionsKnown = own.some(({ user }) => user._id === payment.paidBy);
   let ledger;
   try {
-    ledger = settlementLedgerFromRead(read ?? {}, payment.currency);
+    ledger = settlementLedgerFromRead({ balances: own, debts }, payment.currency);
   } catch (error) {
     if (!(error instanceof MoneyValidationError)) throw error;
-    // Debts still decide the extra amount and tick. No caller may state a position made from
-    // an unreadable balance as if it were zero; invalid Debts still fail this second read.
-    ledger = settlementLedgerFromRead({ ...read, balances: [] }, payment.currency);
+    // The Debt still decides the extra amount and the tick. No caller may state a position made
+    // from a balance that can't be read as if it were zero.
+    ledger = settlementLedgerFromRead({ balances: [], debts }, payment.currency);
     positionsKnown = false;
   }
   if (suggestedMinor !== undefined)
