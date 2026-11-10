@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage, activityPage } from '../test-utils/fake-splitbook';
-import type { AccountGroupRecordStore } from './account-record-storage';
 
 // Fictional people and Groups only.
 const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
@@ -90,8 +89,6 @@ function setup(served: Record<string, unknown> = record) {
   });
   const phone = testPhone(server, {
     now: new Date(2026, 8, 27, 12).getTime(),
-    recordSeparator: ':',
-    purge: [],
     parts: {
       newSubmissionKey: undefined,
       savedQueries: undefined,
@@ -102,16 +99,8 @@ function setup(served: Record<string, unknown> = record) {
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).list;
-  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
   const controller = phone.open(),
     drafts = phone.stores.expenseDrafts.records;
   /** The Group's Activity pages read since the last call; a record reads its own apart. */
