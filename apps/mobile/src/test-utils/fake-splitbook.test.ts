@@ -229,4 +229,17 @@ describe('fake Splitbook', () => {
     ).toBe(200);
     expect(server.requests).toHaveLength(2);
   });
+  it('keeps live sent views with or without queries without losing the complete request log', async () => {
+    const server = fakeSplitbook(),
+      sent = server.sent(),
+      paths = server.sent({ query: false });
+    await server.fetch('http://local/probe?page=1', {});
+    expect(sent).toEqual(['GET /probe?page=1']);
+    expect(paths).toEqual(['GET /probe']);
+    sent.length = 0;
+    await server.fetch('http://local/probe?page=2', { method: 'POST', body: '{"value":2}' });
+    expect(sent).toEqual(['POST /probe?page=2']);
+    expect(paths).toEqual(['GET /probe', 'POST /probe']);
+    expect(server.requests.map((r) => r.path)).toEqual(['/probe?page=1', '/probe?page=2']);
+  });
 });
