@@ -63,6 +63,42 @@ configs in `apps/web`, `apps/mobile` and `packages/shared` run every test in UTC
 machine's zone. Set `TZ` to run another zone, for example `TZ=Pacific/Kiritimati pnpm test:unit`.
 Each package's `src/test-time-zone.test.ts` names the zone the run resolved to.
 
+## Android test phone and fake Splitbook
+
+`src/test-utils/test-phone.ts` owns the in-memory phone; `fake-splitbook.ts` answers HTTP.
+The Settle up controller and form-correction suites use them. A test can start on the default
+world, then state only what differs:
+
+```ts
+import { testPhone } from './test-utils/test-phone';
+import { fakeSplitbook } from './test-utils/fake-splitbook';
+
+it('opens the default Group', async () => {
+  const server = fakeSplitbook();
+  const phone = testPhone(server);
+  const app = phone.open();
+  await app.signIn('alex');
+  await app.openGroup(server.world.groups[0]!._id);
+  expect(app.getSnapshot().detail.data?.name).toBe('Maple House');
+  phone.dispose();
+});
+```
+
+Change `server.world` for subsequent reads. `server.reply(method, path, request => response,
+{ once: true })` replaces the next answer; omit `once` for every matching request. The callback
+can return `undefined` to use the normal answer, including after awaiting a held reply.
+Successful writes return a reply built from the request and leave the world alone.
+`server.requests` keeps method, path (with query), headers and body in order;
+`server.unanswered` lists requests answered with the fallback 404.
+
+`phone.open()` again restarts on the same stores. Inspect `phone.stores`, or use
+`phone.connect(false)` and `phone.connect(true)`. A phone runs on the platform clock unless the
+test gives it one (`testPhone(server, { now })`); then `phone.clock.now` moves it. Each store offers
+`failNext('save')`, `stallNext('save', promise)` and `holdNext('save')` (wait for `arrived`, then
+`release()`). Use `server.fault` for the shared transport faults. Controllers are flow-monitored
+by default. The existing ceilings command and gate also check `directControllerTestFiles` in
+`src/test-utils/test-phone.ceilings.json`; new tests must use the phone instead of increasing it.
+
 ## Shared domain tests and the coverage gate
 
 `packages/shared` holds the money, split, balance, date and To review modules both clients use

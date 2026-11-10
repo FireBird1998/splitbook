@@ -3,8 +3,10 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { visibleFieldErrors } from '../data/field-feedback';
 import { groupFields } from '../data/group-draft';
-import { createMobileController, type MobileController } from '../data/mobile-controller';
-import type { FetchResponse, MobileFetch } from '../data/types';
+import type { MobileController } from '../data/mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { FetchResponse } from '../data/types';
 import { GroupCreateForm } from './group-workflows';
 import { RecordPaymentSheet, recordPaymentFootnote } from './record-payment-sheet';
 
@@ -35,154 +37,58 @@ const group = {
 const json = (data: unknown, status = 200): FetchResponse => Response.json(data, { status });
 
 function backend() {
-  const writes: string[] = [];
-  let holdWrites: Promise<void> | null = null;
-  const fetch: MobileFetch = async (url, init) => {
-    const path = new URL(url).pathname;
-    const method = init.method ?? 'GET';
-    if (method !== 'GET' && path.startsWith('/api/groups')) {
-      writes.push(`${method} ${path}`);
-      await holdWrites;
-    }
-    if (path.endsWith('/sign-in'))
-      return new Response(JSON.stringify({ user: sam }), {
-        headers: { 'Set-Cookie': 'better-auth.session_token=sam.signature; Max-Age=2592000' },
-      });
-    if (path.endsWith('/get-session'))
-      return json({ user: sam, session: { userId: sam.id, expiresAt: '2030-01-01T00:00:00Z' } });
-    if (path === '/api/groups' && method === 'POST') {
-      const body = JSON.parse(String(init.body));
-      return json(
-        {
-          status: 201,
-          data: {
-            ...group,
-            _id: 'b00000000000000000000009',
-            name: body.name,
-            members: [
-              {
-                user: { _id: sam.id, name: 'Sam', email: sam.email },
-                role: 'admin',
-                joinedAt: iso,
-              },
-            ],
-          },
-        },
-        201,
-      );
-    }
-    if (path === '/api/groups') return json({ status: 200, data: [group] });
-    if (path === `/api/groups/${groupId}`) return json({ status: 200, data: group });
-    if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
-    if (path.endsWith('/balances'))
-      return json({
-        status: 200,
+  const server = fakeSplitbook();
+  server.world.people.sam = sam;
+  server.world.groups = [group];
+  server.world.balances[groupId] = {
+    byCurrency: [
+      {
+        currency: 'INR',
+        balances: [
+          { user: { _id: sam.id, name: 'Sam' }, balance: -30 },
+          { user: { _id: alexId, name: 'Alex' }, balance: 30 },
+        ],
+        debts: [
+          { from: { _id: sam.id, name: 'Sam' }, to: { _id: alexId, name: 'Alex' }, amount: 30 },
+        ],
+      },
+    ],
+  };
+  // Preserve this file's old server exactly: its create reply is still a Household even when
+  // the form sent a Trip, and its Expense-list request answers 404. These are fixture defects,
+  // not the shared fake's defaults; correcting them belongs outside this move (#1063).
+  server.reply('GET', `/api/groups/${groupId}/expenses`, () => json({}, 404));
+  server.reply('POST', '/api/groups', ({ body }) =>
+    json(
+      {
+        status: 201,
         data: {
-          byCurrency: [
-            {
-              currency: 'INR',
-              balances: [
-                { user: { _id: sam.id, name: 'Sam' }, balance: -30 },
-                { user: { _id: alexId, name: 'Alex' }, balance: 30 },
-              ],
-              debts: [
-                {
-                  from: { _id: sam.id, name: 'Sam' },
-                  to: { _id: alexId, name: 'Alex' },
-                  amount: 30,
-                },
-              ],
-            },
+          ...group,
+          _id: 'b00000000000000000000009',
+          name: body!.name,
+          members: [
+            { user: { _id: sam.id, name: 'Sam', email: sam.email }, role: 'admin', joinedAt: iso },
           ],
         },
-      });
-    if (path.endsWith('/settlements') && method === 'POST') {
-      const body = JSON.parse(String(init.body));
-      return json(
-        {
-          status: 201,
-          data: {
-            _id: 'c00000000000000000000001',
-            group: groupId,
-            paidBy: { _id: sam.id, name: 'Sam' },
-            paidTo: { _id: alexId, name: 'Alex' },
-            amount: body.amount,
-            amountMinor: Math.round(body.amount * 100),
-            moneyVersion: 1,
-            currency: 'INR',
-            note: body.note ?? '',
-            createdAt: iso,
-          },
-        },
-        201,
-      );
-    }
-    if (path.endsWith('/settlements')) return json({ status: 200, data: [] });
-    return json({}, 404);
-  };
-  let cookie: string | null = null,
-    owner: string | null = null;
-  const attempts = new Map<string, unknown>();
-  const store = {
-    load: async (account: string, id: string) =>
-      structuredClone(attempts.get(account + id) ?? null),
-    save: async (account: string, id: string, value: unknown) => {
-      attempts.set(account + id, structuredClone(value));
-    },
-    remove: async (account: string, id: string) => {
-      attempts.delete(account + id);
-    },
-    clear: async () => attempts.clear(),
-  };
-  const creations = new Map<string, unknown>();
-  const groupCreations = {
-    load: async (account: string) => structuredClone(creations.get(account) ?? null),
-    save: async (account: string, value: unknown) => {
-      creations.set(account, structuredClone(value));
-    },
-    remove: async (account: string) => {
-      creations.delete(account);
-    },
-    clear: async () => creations.clear(),
-  };
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
-    },
-    {
-      fetch,
-      now: () => Date.parse(iso),
-      newSubmissionKey: () => 'payment-attempt-0001',
-      settlementAttempts: store,
-      groupCreations,
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
       },
-      accountLocal: {
-        owner: {
-          load: async () => owner,
-          save: async (value) => {
-            owner = value;
-          },
-          clear: async () => {
-            owner = null;
-          },
-        },
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [store, groupCreations],
-      },
-    },
+      201,
+    ),
   );
+  const writes: string[] = [];
+  let holdWrites: Promise<void> | null = null;
+  server.reply('*', '*', async ({ method, url }) => {
+    if (method !== 'GET' && url.pathname.startsWith('/api/groups')) {
+      writes.push(`${method} ${url.pathname}`);
+      await holdWrites;
+    }
+    return undefined;
+  });
+  const phone = testPhone(server, {
+    now: Date.parse(iso),
+    newSubmissionKey: () => 'payment-attempt-0001',
+  });
   return {
-    controller,
+    controller: phone.open(),
     writes,
     hold(until: Promise<void>) {
       holdWrites = until;
