@@ -61,3 +61,10 @@ it('uses payment words for the default payer-or-recipient refusal', async () => 
   expect(response.status).toBe(422);
   expect(await response.text()).toBe('{"error":"Only the payer or recipient can record this payment","status":422,"code":"FORBIDDEN_SETTLEMENT"}');
 });
+it.each(['GROUP_DELETION_NOT_REQUESTED', 'GROUP_DELETION_CHANGED'] as const)(
+  'answers %s as a Group conflict', async (code) => {
+    const response = serverError(new Refusal(code));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({error:'This Group changed. Reload and try again.',status:409,code});
+  },
+);

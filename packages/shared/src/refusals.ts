@@ -135,6 +135,16 @@ export const refusalVocabulary = {
   },
   FORBIDDEN: { status: 403, words: 'Forbidden', variants: {} },
   GROUP_ARCHIVED: { status: 409, words: GROUP_ARCHIVED_MESSAGE, variants: {} },
+  GROUP_DELETION_CHANGED: {
+    status: 409,
+    words: 'This Group changed. Reload and try again.',
+    variants: {},
+  },
+  GROUP_DELETION_NOT_REQUESTED: {
+    status: 409,
+    words: 'This Group changed. Reload and try again.',
+    variants: {},
+  },
   GROUP_DELETION_CONFIRMATION_REQUIRED: {
     status: 409,
     words:

@@ -215,6 +215,8 @@ export function currentCause(
       'INVALID_JSON',
       'INVALID_ID',
       'ACCOUNT_CHANGED',
+      'GROUP_DELETION_NOT_REQUESTED',
+      'GROUP_DELETION_CHANGED',
     ] as const;
     const centralCode = central.find((candidate) => candidate === code);
     if (caller !== 'draft' && centralCode) return new Refusal(centralCode);

@@ -49,27 +49,6 @@ export const refusalExceptions = [
       'The trusted backup command must cover all time. This fault is retained for the owner in #1086.',
   },
   {
-    path: 'apps/web/src/lib/services/group-cleanup.service.ts',
-    code: 'GROUP_DELETION_NOT_REQUESTED',
-    when: '!request',
-    within: 'resumeGroupDeletion',
-    reason: 'A cleanup worker must hold the deletion request it claims.',
-  },
-  {
-    path: 'apps/web/src/lib/services/group-cleanup.service.ts',
-    code: 'GROUP_DELETION_CHANGED',
-    when: '!group.matchedCount',
-    within: 'resumeGroupDeletion',
-    reason: 'Cleanup must still own the reviewed, fenced Group and its dependent records.',
-  },
-  {
-    path: 'apps/web/src/lib/services/group-cleanup.service.ts',
-    code: 'GROUP_DELETION_CHANGED',
-    when: 'await db.collection(name).findOne({ group: id }, { session, projection: { _id: 1 } })',
-    within: 'resumeGroupDeletion',
-    reason: 'Cleanup must still own the reviewed, fenced Group and its dependent records.',
-  },
-  {
     path: 'apps/web/src/lib/services/settlement-batch.service.ts',
     code: 'IDEMPOTENCY_CONFLICT',
     when: '!first.batchSettlementIds?.length',
