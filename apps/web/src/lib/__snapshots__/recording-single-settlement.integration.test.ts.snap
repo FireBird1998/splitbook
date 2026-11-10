@@ -1,0 +1,2950 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`single-settlement record of recordings > Activity fails after the commit, then feed 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "first": {
+    "body": {
+      "data": {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "paidTo": {
+          "_id": "<member-b>",
+          "name": "Sam Chen",
+        },
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+      "status": 201,
+    },
+    "status": 201,
+  },
+  "pending": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [
+          {
+            "_id": "<event-1>",
+            "actor": "<member-a>",
+            "group": "<group-1>",
+            "metadata": {
+              "amount": 30,
+              "currency": "INR",
+              "paidBy": "<member-a>",
+              "paidByName": "Alex Rivera",
+              "paidTo": "<member-b>",
+              "paidToName": "Sam Chen",
+              "settlementId": "<settlement-1>",
+            },
+            "notificationContext": {
+              "eventId": "<event-1>",
+              "groupId": "<group-1>",
+              "kind": "settlement_recorded",
+              "occurredAt": "2026-11-11T12:00:00.000Z",
+              "recipientIds": [
+                "<member-b>",
+              ],
+              "recordId": "<settlement-1>",
+              "version": 2,
+            },
+            "occurredAt": "2026-11-11T12:00:00.000Z",
+            "type": "settlement_recorded",
+          },
+        ],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "recovered": {
+    "body": {
+      "data": {
+        "activities": [
+          {
+            "__v": 0,
+            "_id": "<event-1>",
+            "actor": {
+              "_id": "<member-a>",
+              "name": "Alex Rivera",
+            },
+            "createdAt": "2026-11-11T12:00:00.000Z",
+            "group": "<group-1>",
+            "metadata": {
+              "amount": 30,
+              "currency": "INR",
+              "paidBy": "<member-a>",
+              "paidByName": "Alex Rivera",
+              "paidTo": "<member-b>",
+              "paidToName": "Sam Chen",
+              "settlementId": "<settlement-1>",
+            },
+            "type": "settlement_recorded",
+          },
+        ],
+        "pagination": {
+          "limit": 20,
+          "page": 1,
+          "total": 1,
+          "totalPages": 1,
+        },
+      },
+      "status": 200,
+    },
+    "status": 200,
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > Activity fails after the commit, then retry 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "first": {
+    "body": {
+      "data": {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "paidTo": {
+          "_id": "<member-b>",
+          "name": "Sam Chen",
+        },
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+      "status": 201,
+    },
+    "status": 201,
+  },
+  "pending": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [
+          {
+            "_id": "<event-1>",
+            "actor": "<member-a>",
+            "group": "<group-1>",
+            "metadata": {
+              "amount": 30,
+              "currency": "INR",
+              "paidBy": "<member-a>",
+              "paidByName": "Alex Rivera",
+              "paidTo": "<member-b>",
+              "paidToName": "Sam Chen",
+              "settlementId": "<settlement-1>",
+            },
+            "notificationContext": {
+              "eventId": "<event-1>",
+              "groupId": "<group-1>",
+              "kind": "settlement_recorded",
+              "occurredAt": "2026-11-11T12:00:00.000Z",
+              "recipientIds": [
+                "<member-b>",
+              ],
+              "recordId": "<settlement-1>",
+              "version": 2,
+            },
+            "occurredAt": "2026-11-11T12:00:00.000Z",
+            "type": "settlement_recorded",
+          },
+        ],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "recovered": {
+    "body": {
+      "data": {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "paidTo": {
+          "_id": "<member-b>",
+          "name": "Sam Chen",
+        },
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+      "status": 201,
+    },
+    "status": 201,
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > a historical currency removed before commit follows the writer’s currency rule 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:01.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "EUR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:01.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "currency": "EUR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Historical Debt",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-b>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:01.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "EUR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:01.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:01.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "EUR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "paidTo": {
+          "_id": "<member-b>",
+          "name": "Sam Chen",
+        },
+        "updatedAt": "2026-11-11T12:00:01.000Z",
+      },
+      "status": 201,
+    },
+    "status": 201,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [
+      {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "currency": "EUR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Historical Debt",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-b>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": "<member-a>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Food",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > a paying currency removed before the financial commit refuses the recording 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "code": "CURRENCY_MISMATCH",
+      "error": "Currency is not one of this Group’s currencies",
+      "status": 422,
+    },
+    "status": 422,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > a real standalone database keeps its own transaction requirement 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "paidTo": {
+          "_id": "<member-b>",
+          "name": "Sam Chen",
+        },
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+      "status": 201,
+    },
+    "status": 201,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > actor is no longer a member before the request 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
+    },
+    "status": 403,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > actor leaves between the checks and the commit 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "paidTo": {
+          "_id": "<member-b>",
+          "name": "Sam Chen",
+        },
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+      "status": 201,
+    },
+    "status": 201,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > archive commits after the checks and before the recording fence 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": true,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "code": "GROUP_ARCHIVED",
+      "error": "This Group was archived, so nothing more can be saved in it.",
+      "status": 409,
+    },
+    "status": 409,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > changed command under the original retry identity 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": [
+    {
+      "body": {
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:00.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:00.000Z",
+        },
+        "status": 201,
+      },
+      "status": 201,
+    },
+    {
+      "body": {
+        "code": "IDEMPOTENCY_CONFLICT",
+        "error": "This submission key was already used for different data. Start a new submission.",
+        "status": 409,
+      },
+      "status": 409,
+    },
+  ],
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > first save in an archived Group 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": true,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "code": "GROUP_ARCHIVED",
+      "error": "This Group was archived, so nothing more can be saved in it.",
+      "status": 409,
+    },
+    "status": 409,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": true,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > first save, Expense alerts off, Payment alerts off 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "paidTo": {
+          "_id": "<member-b>",
+          "name": "Sam Chen",
+        },
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+      "status": 201,
+    },
+    "status": 201,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > first save, Expense alerts off, Payment alerts on 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "paidTo": {
+          "_id": "<member-b>",
+          "name": "Sam Chen",
+        },
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+      "status": 201,
+    },
+    "status": 201,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > first save, Expense alerts on, Payment alerts off 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "paidTo": {
+          "_id": "<member-b>",
+          "name": "Sam Chen",
+        },
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+      "status": 201,
+    },
+    "status": 201,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > first save, Expense alerts on, Payment alerts on 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "paidTo": {
+          "_id": "<member-b>",
+          "name": "Sam Chen",
+        },
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+      "status": 201,
+    },
+    "status": 201,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > named person is no longer a member before the request 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "code": "INVALID_MEMBERS",
+      "error": "Both payer and recipient must be group members",
+      "status": 422,
+    },
+    "status": 422,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > named person leaves between the checks and the commit 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "data": {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "paidTo": {
+          "_id": "<member-b>",
+          "name": "Sam Chen",
+        },
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+      "status": 201,
+    },
+    "status": 201,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > retry after the Group is archived 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": true,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": [
+    {
+      "body": {
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:00.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:00.000Z",
+        },
+        "status": 201,
+      },
+      "status": 201,
+    },
+    {
+      "body": {
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:00.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:00.000Z",
+        },
+        "status": 201,
+      },
+      "status": 201,
+    },
+  ],
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > retry after the actor leaves following the first recording 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": [
+    {
+      "body": {
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:00.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:00.000Z",
+        },
+        "status": 201,
+      },
+      "status": 201,
+    },
+    {
+      "body": {
+        "code": "FORBIDDEN",
+        "error": "Forbidden",
+        "status": 403,
+      },
+      "status": 403,
+    },
+  ],
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > retry after the named person leaves following the first recording 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": [
+    {
+      "body": {
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:00.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:00.000Z",
+        },
+        "status": 201,
+      },
+      "status": 201,
+    },
+    {
+      "body": {
+        "code": "INVALID_MEMBERS",
+        "error": "Both payer and recipient must be group members",
+        "status": 422,
+      },
+      "status": 422,
+    },
+  ],
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > same command and retry identity twice 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": [
+    {
+      "body": {
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:00.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:00.000Z",
+        },
+        "status": 201,
+      },
+      "status": 201,
+    },
+    {
+      "body": {
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:00.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:00.000Z",
+        },
+        "status": 201,
+      },
+      "status": 201,
+    },
+  ],
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > the Group vanishes after route admission and before the service reads it 1`] = `
+{
+  "after": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": null,
+    "settlements": [],
+    "templates": [],
+  },
+  "answers": {
+    "body": {
+      "error": "Internal server error",
+      "status": 500,
+    },
+    "status": 500,
+  },
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > two requests race with the same retry identity 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:01.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:01.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:01.000Z",
+        "createdBy": "<member-a>",
+        "creationRequest": {
+          "fingerprint": "<digest-1>",
+          "fingerprintVersion": 1,
+          "key": "recording-submission-0001",
+        },
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:01.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": [
+    {
+      "body": {
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:01.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:01.000Z",
+        },
+        "status": 201,
+      },
+      "status": 201,
+    },
+    {
+      "body": {
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:01.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:01.000Z",
+        },
+        "status": 201,
+      },
+      "status": 201,
+    },
+  ],
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
+
+exports[`single-settlement record of recordings > two saves without a submission key are two recordings 1`] = `
+{
+  "after": {
+    "activities": [
+      {
+        "__v": 0,
+        "_id": "<event-1>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-1>",
+        },
+        "notificationContext": {
+          "eventId": "<event-1>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-1>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+      {
+        "__v": 0,
+        "_id": "<event-2>",
+        "actor": "<member-a>",
+        "createdAt": "2026-11-11T12:00:01.000Z",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 30,
+          "currency": "INR",
+          "paidBy": "<member-a>",
+          "paidByName": "Alex Rivera",
+          "paidTo": "<member-b>",
+          "paidToName": "Sam Chen",
+          "settlementId": "<settlement-2>",
+        },
+        "notificationContext": {
+          "eventId": "<event-2>",
+          "groupId": "<group-1>",
+          "kind": "settlement_recorded",
+          "occurredAt": "2026-11-11T12:00:01.000Z",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<settlement-2>",
+          "version": 2,
+        },
+        "type": "settlement_recorded",
+      },
+    ],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": true,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [
+      {
+        "__v": 0,
+        "_id": "<settlement-1>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:00.000Z",
+      },
+      {
+        "__v": 0,
+        "_id": "<settlement-2>",
+        "amount": 30,
+        "amountMinor": 3000,
+        "createdAt": "2026-11-11T12:00:01.000Z",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "group": "<group-1>",
+        "moneyVersion": 1,
+        "note": "Recorded payment",
+        "paidBy": "<member-a>",
+        "paidTo": "<member-b>",
+        "pendingActivity": [],
+        "updatedAt": "2026-11-11T12:00:01.000Z",
+      },
+    ],
+    "templates": [],
+  },
+  "answers": [
+    {
+      "body": {
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:00.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:00.000Z",
+        },
+        "status": 201,
+      },
+      "status": 201,
+    },
+    {
+      "body": {
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-2>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:01.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:01.000Z",
+        },
+        "status": 201,
+      },
+      "status": 201,
+    },
+  ],
+  "before": {
+    "activities": [],
+    "drafts": [],
+    "expenses": [],
+    "group": {
+      "alternateCurrencies": [
+        "EUR",
+        "USD",
+      ],
+      "currencyLocked": false,
+      "defaultCurrency": "INR",
+      "isArchived": false,
+      "members": [
+        "<member-a>",
+        "<member-b>",
+        "<member-c>",
+      ],
+    },
+    "settlements": [],
+    "templates": [],
+  },
+}
+`;
