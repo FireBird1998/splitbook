@@ -36,6 +36,7 @@ const buckets = [
   { currency: 'EUR', debts: [{ from: alex, to: sam, amount: 20 }] },
 ];
 const ORDER = ['INR', 'EUR', 'JPY'];
+const MEMBERS = [ALEX, SAM, PRIYA];
 
 const frankfurter: RateSuggestion = {
   rate: '92.1',
@@ -53,7 +54,7 @@ const twoDebts = [
 
 describe('settleAllOffers', () => {
   it('offers one payment to each person the member owes in two currencies or more, in the Group’s order', () => {
-    expect(settleAllOffers(buckets, ALEX, ORDER)).toEqual([
+    expect(settleAllOffers(buckets, ALEX, ORDER, MEMBERS)).toEqual([
       {
         paidBy: ALEX,
         paidTo: SAM,
@@ -69,7 +70,7 @@ describe('settleAllOffers', () => {
       { currency: 'INR', debts: [{ from: sam, to: alex, amount: 500 }] },
       { currency: 'EUR', debts: [{ from: sam, to: alex, amount: 12.5 }] },
     ];
-    expect(settleAllOffers(owed, ALEX, ORDER)).toEqual([
+    expect(settleAllOffers(owed, ALEX, ORDER, MEMBERS)).toEqual([
       {
         paidBy: SAM,
         paidTo: ALEX,
@@ -82,11 +83,11 @@ describe('settleAllOffers', () => {
       },
     ]);
     // Priya owes Sam in one currency only, and Alex isn't one of them.
-    expect(settleAllOffers(buckets, PRIYA, ORDER)).toEqual([]);
+    expect(settleAllOffers(buckets, PRIYA, ORDER, MEMBERS)).toEqual([]);
   });
 
   it('words the offer and the sheet as the board does', () => {
-    const [offer] = settleAllOffers(buckets, ALEX, ORDER);
+    const [offer] = settleAllOffers(buckets, ALEX, ORDER, MEMBERS);
     expect(settleAllWords(offer)).toEqual({
       lead: 'You owe Sam Chen in 2\u00a0currencies',
       amounts: '₹1,480.00 and €20.00',
@@ -106,6 +107,7 @@ describe('settleAllOffers', () => {
       ],
       ALEX,
       ORDER,
+      MEMBERS,
     );
     expect(settleAllWords(owed)).toMatchObject({
       lead: 'Sam Chen owes you in 3\u00a0currencies',
@@ -278,12 +280,12 @@ describe('settleAllPayCurrencies', () => {
 
 describe('settleAllDebtsBetween', () => {
   it('reads every Debt one person owes another, in the Group’s order, as Record checks them', () => {
-    expect(settleAllDebtsBetween(buckets, ALEX, SAM, ORDER)).toEqual(twoDebts);
+    expect(settleAllDebtsBetween(buckets, ALEX, SAM, ORDER, MEMBERS)).toEqual(twoDebts);
     // One way only: what Sam owes Alex is a Debt of its own.
-    expect(settleAllDebtsBetween(buckets, SAM, ALEX, ORDER)).toEqual([
+    expect(settleAllDebtsBetween(buckets, SAM, ALEX, ORDER, MEMBERS)).toEqual([
       { currency: 'JPY', amountMinor: 8400 },
     ]);
-    expect(settleAllDebtsBetween(buckets, PRIYA, ALEX, ORDER)).toEqual([]);
+    expect(settleAllDebtsBetween(buckets, PRIYA, ALEX, ORDER, MEMBERS)).toEqual([]);
   });
 });
 
@@ -330,10 +332,10 @@ describe('a currency Splitbook no longer supports (#812)', () => {
       ...buckets,
       { currency: 'DEM', debts: [{ from: alex, to: sam, amount: 40 }] },
     ];
-    expect(settleAllOffers(withMarks, ALEX, ORDER)).toEqual([
+    expect(settleAllOffers(withMarks, ALEX, ORDER, MEMBERS)).toEqual([
       expect.objectContaining({ paidBy: ALEX, paidTo: SAM, debts: twoDebts }),
     ]);
-    expect(settleAllDebtsBetween(withMarks, ALEX, SAM, ORDER)).toEqual(twoDebts);
+    expect(settleAllDebtsBetween(withMarks, ALEX, SAM, ORDER, MEMBERS)).toEqual(twoDebts);
   });
 });
 

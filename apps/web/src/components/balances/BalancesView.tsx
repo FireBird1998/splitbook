@@ -299,7 +299,8 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
 
   // Settle up (#734): one payment for every Debt between the member and someone else, when
   // they're in two currencies or more, paid in one of those the Group lists.
-  const offers = read ? settleAllOffers(buckets, userId, currencies) : [];
+  const memberIds = group.members.map(({ user }) => user._id);
+  const offers = read ? settleAllOffers(buckets, userId, currencies, memberIds) : [];
   const listed = groupCurrencies(group);
   const settlingOffer = settling
     ? (offers.find(
@@ -721,6 +722,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
               settling.paidBy,
               settling.paidTo,
               currencies,
+              memberIds,
             );
           }}
           onClose={() => setSettling(null)}

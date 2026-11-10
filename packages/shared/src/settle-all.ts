@@ -65,10 +65,16 @@ export function settleAllOffers(
   buckets: readonly SuggestedPayments[],
   viewerId: string,
   currencies: readonly string[],
+  memberIds: readonly string[],
 ): SettleAllOffer[] {
   const offers = new Map<string, SettleAllOffer>();
   for (const { currency, debt, amountMinor } of suggested(buckets, currencies)) {
-    if (!canRecordSettlement(viewerId, debt.from._id, debt.to._id)) continue;
+    if (
+      !memberIds.includes(debt.from._id) ||
+      !memberIds.includes(debt.to._id) ||
+      !canRecordSettlement(viewerId, debt.from._id, debt.to._id)
+    )
+      continue;
     const key = `${debt.from._id}:${debt.to._id}`;
     const youPay = debt.from._id === viewerId;
     const offer = offers.get(key) ?? {
@@ -93,7 +99,9 @@ export function settleAllDebtsBetween(
   paidBy: string,
   paidTo: string,
   currencies: readonly string[],
+  memberIds: readonly string[],
 ): SettleAllDebt[] {
+  if (!memberIds.includes(paidBy) || !memberIds.includes(paidTo)) return [];
   return suggested(buckets, currencies)
     .filter(({ debt }) => debt.from._id === paidBy && debt.to._id === paidTo)
     .map(({ currency, amountMinor }) => ({ currency, amountMinor }));
@@ -245,12 +253,13 @@ export function readSettleAll({
     const { state, custom } = rates[currency] ?? { state: { status: 'loading' }, custom: null };
     const suggestion = state.status === 'ready' ? state.suggestion : null;
     const unknown = { currency, debtMinor, paidMinor: null, rate: null, kind: null, suggestion };
+    if (state.status === 'loading') {
+      waiting ??= `Getting the suggested rate for ${currency}…`;
+      return unknown;
+    }
     const typed = custom?.trim() ? custom.trim() : suggestion && suggestedRateText(suggestion.rate);
     if (!typed) {
-      waiting ??=
-        state.status === 'loading'
-          ? `Getting the suggested rate for ${currency}…`
-          : enterRateFor(currency);
+      waiting ??= enterRateFor(currency);
       return unknown;
     }
     const pair = { currency, paidCurrency };
