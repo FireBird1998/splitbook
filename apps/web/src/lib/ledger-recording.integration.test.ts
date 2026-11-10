@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
+import { withGroupMutation } from './group-mutation';
 import { Refusal } from '@splitbook/shared/refusals';
 import { recordLedger, type LedgerRecording } from './ledger-recording';
 import Expense, { type IExpenseDocument } from './models/Expense';
@@ -33,7 +34,11 @@ afterEach(() => {
 afterAll(db.teardown);
 
 // A minimal Expense description, independent of either production creation service.
-function record(key = randomUUID(), overrides: Partial<LedgerRecording<IExpenseDocument>> = {}) {
+function record(
+  key = randomUUID(),
+  overrides: Partial<LedgerRecording<IExpenseDocument>> = {},
+  alertSwitch: 'always' | 'payments' | 'expense-changes' = 'always',
+) {
   return recordLedger({
     groupId,
     actorId: alice,
@@ -64,7 +69,11 @@ function record(key = randomUUID(), overrides: Partial<LedgerRecording<IExpenseD
           activity: {
             type: 'expense_added',
             metadata: { expenseId: String(id), description: 'A record' },
-            alert: { kind: 'expense_added', involved: [alice, bob, bob, carol], switch: 'always' },
+            alert: {
+              kind: 'expense_added',
+              involved: [alice, bob, bob, carol],
+              switch: alertSwitch,
+            },
           },
         },
       ];
@@ -141,4 +150,28 @@ describe('ledger recording', () => {
       expect(event!.notificationContext).toBeUndefined();
     },
   );
+  it('publishes only after the outermost commit, including a nested retry', async () => {
+    const key = randomUUID();
+    await withGroupMutation(groupId, async () => {
+      const [saved] = await record(key);
+      const [replayed] = await record(key);
+      expect(String(saved._id)).toBe(String(replayed._id));
+      expect(await Activity.countDocuments({ type: 'expense_added' })).toBe(0);
+      expect(
+        (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity,
+      ).toHaveLength(1);
+    });
+    expect(await Activity.countDocuments({ type: 'expense_added' })).toBe(1);
+    expect((await Expense.findOne().select('+pendingActivity'))!.pendingActivity).toHaveLength(0);
+  });
+  it('publishes nothing when the outer mutation rolls back', async () => {
+    await expect(
+      withGroupMutation(groupId, async () => {
+        await record();
+        throw new Error('outer write failed');
+      }),
+    ).rejects.toThrow('outer write failed');
+    expect(await Expense.countDocuments()).toBe(0);
+    expect(await Activity.countDocuments()).toBe(0);
+  });
 });
