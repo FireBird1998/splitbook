@@ -310,6 +310,7 @@ export function fakeSplitbook() {
     issuedTo: new Map<string, SessionUser>(),
     expired: false,
     signInStatus: 200,
+    sessionPresent: true,
     signOutStatus: 200,
     bootstrap: {environment:'staging',googleWebClientId:'123-test.apps.googleusercontent.com'} as unknown,
     expiresAt: '2030-01-01T00:00:00Z',
@@ -424,10 +425,10 @@ export function fakeSplitbook() {
       if (!user || auth.expired)
         return Response.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 });
       if (url.pathname === '/api/auth/get-session')
-        return Response.json({
+        return Response.json(auth.sessionPresent ? {
           user,
           session: { userId: user.id, expiresAt: auth.expiresAt },
-        });
+        } : null);
       const answer = (data: unknown) => Response.json({ status: 200, data });
       if (method === 'GET') {
         const page = world.pages[queryKey(request.path)] ?? world.pages[url.pathname];
