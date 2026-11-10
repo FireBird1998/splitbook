@@ -48,7 +48,7 @@ A changed or missing Group deletion request answers `409`,
 The notification-registration `503` "Notifications are not available yet."
 still carries no code, pending the owner's decision about Android. Adding the
 proposed `NOTIFICATIONS_UNAVAILABLE` changes Android Settings from its offline
-state to its server-error state. The handoff requires holding that change.
+state to its error state. The handoff requires holding that change.
 The two existing invitation schema answers below and dispatch's `400`
 "Invalid request" also retain their bodies pending scope clarification.
 Better Auth and MCP keep their own protocol answers.
