@@ -3,8 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 // The real runtime wiring, with only the native modules and the controller replaced.
 const wired = vi.hoisted(() => {
   (globalThis as { __DEV__?: boolean }).__DEV__ = true;
-  return { dependencies: undefined as Record<string, unknown> | undefined };
+  return {
+    dependencies: undefined as Record<string, unknown> | undefined,
+    reachability: undefined as Record<string, unknown> | undefined,
+  };
 });
+vi.mock('@react-native-community/netinfo', () => ({
+  default: {
+    configure: (options: Record<string, unknown>) => {
+      wired.reachability = options;
+    },
+  },
+}));
 vi.mock('./data', () => ({
   createMobileController: (_config: unknown, dependencies: Record<string, unknown>) => {
     wired.dependencies = dependencies;
@@ -23,6 +33,12 @@ vi.mock('expo/fetch', () => ({ fetch: vi.fn() }));
 await import('./runtime');
 
 describe('runtime storage wiring', () => {
+  it('asks for no HTTP caching when NetInfo needs its reachability probe (#1060)', () => {
+    expect(wired.reachability).toMatchObject({
+      reachabilityHeaders: { 'Cache-Control': 'no-store' },
+    });
+  });
+
   it.each([
     'expenseDrafts',
     'settlementAttempts',
