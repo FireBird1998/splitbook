@@ -460,3 +460,17 @@ it('keeps a payment store’s separated native keys independently of Draft keys'
   await phone.stores.expenseDrafts.save('alex','maple',{draft:1});
   expect([...phone.stores.expenseDrafts.records.keys()]).toEqual(['alexmaple']);
 });
+
+it('observes completed credential writes separately from a held or failed write', async () => {
+  const phone=testPhone(fakeSplitbook());
+  const store=phone.stores.credentials;
+  store.value='seeded';
+  expect(store.writes).toEqual([]);
+  store.failNext('save');
+  await expect(store.save('failed')).rejects.toThrow();
+  const held=store.holdNext('save');
+  const saving=store.save('confirmed');await held.arrived;
+  expect(store.writes).toEqual([]);
+  held.release();await saving;
+  expect(store.writes).toEqual(['confirmed']);
+});
