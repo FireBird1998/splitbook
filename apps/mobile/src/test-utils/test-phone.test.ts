@@ -8,21 +8,37 @@ describe('test phone', () => {
     const phone = testPhone(server);
     const first = phone.open();
     await first.signIn('alex');
+    const body =
+      '{"paidBy":"a00000000000000000000001","paidTo":"a00000000000000000000002","amount":30,"currency":"INR","note":"Cash"}';
     await phone.stores.settlementAttempts.save(
       'a00000000000000000000001',
       'b00000000000000000000001',
-      { untouched: 'fictional payment' },
+      {
+        version: 1,
+        accountId: 'a00000000000000000000001',
+        groupId: 'b00000000000000000000001',
+        key: 'original-payment-key',
+        body,
+      },
     );
     const second = phone.open();
     await second.restore();
+    await second.openSettlements('b00000000000000000000001');
     expect(second).not.toBe(first);
     expect(second.getSnapshot().auth.user?.name).toBe('Alex Rivera');
+    expect(second.getSnapshot().settlement).toMatchObject({
+      status: 'uncertain',
+      attempt: { key: 'original-payment-key', body },
+    });
     expect(
       await phone.stores.settlementAttempts.load(
         'a00000000000000000000001',
         'b00000000000000000000001',
       ),
-    ).toEqual({ untouched: 'fictional payment' });
+    ).toMatchObject({ key: 'original-payment-key', body });
+    expect(
+      server.requests.filter((r) => r.method === 'POST' && r.path.includes('/settlements')),
+    ).toEqual([]);
     phone.dispose();
   });
   it('fails, stalls and holds a store write without changing what was stored until release', async () => {
@@ -80,6 +96,7 @@ describe('test phone', () => {
       phone.stores.groupCreations,
     ];
     for (const store of rowStores) store.records.set(id + '/fictional', { private: true });
+    await phone.stores.pendingInvitation.save('abc123ab');
     await phone.stores.financialCleanup.save({ accountId: id, groupIds: [] });
     await phone.stores.untrustedCopies.save({ accountId: id, scopes: {} });
     await app.signOut();
@@ -90,6 +107,7 @@ describe('test phone', () => {
       phone.stores.offlineIdentity,
     ])
       expect(store.value).toBeNull();
+    expect(phone.stores.pendingInvitation.value).toBeNull();
     expect(phone.stores.credentials.value).toBeNull();
     expect(phone.stores.owner.value).toBeNull();
     expect(phone.stores.cleanupMarker.value).toBe(false);

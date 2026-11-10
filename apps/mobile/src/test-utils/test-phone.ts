@@ -1,3 +1,4 @@
+import { onTestFinished } from 'vitest';
 import { createCheckedMobileController } from './flow-monitor';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { MobileDependencies } from '../data/types';
@@ -65,9 +66,30 @@ function cell<T>(initial: T) {
     },
   });
 }
-function records() {
+function records(savedQueries = false) {
   const rows = new Map<string, unknown>();
-  return faultable({ records: rows, ...savedQueriesIn(rows) });
+  const adapter = savedQueriesIn(rows);
+  // Saved-query helpers intentionally find API paths only. Native Draft/payment stores also
+  // list plain Group ids, which is how Home discovers recovery copies after a restart.
+  return faultable({
+    records: rows,
+    ...adapter,
+    list: async (account: string) =>
+      savedQueries
+        ? adapter.list!(account)
+        : [...rows]
+            .filter(([key]) => key.startsWith(account))
+            .map(([key, value]) => ({
+              groupId: key.slice(account.length),
+              value: structuredClone(value),
+            })),
+    keys: async (account: string) =>
+      savedQueries
+        ? adapter.keys!(account)
+        : [...rows.keys()]
+            .filter((key) => key.startsWith(account))
+            .map((key) => key.slice(account.length)),
+  });
 }
 
 /** A phone owns its stores; reopening replaces only the app, never the phone's contents. */
@@ -97,7 +119,7 @@ export function testPhone(
     untrustedCopies: cell<unknown>(null),
     offlineIdentity: cell<unknown>(null),
     pendingInvitation: cell<string | null>(null),
-    savedQueries: records(),
+    savedQueries: records(true),
     expenseDrafts: records(),
     settlementAttempts: records(),
     draftRequests: records(),
@@ -165,7 +187,7 @@ export function testPhone(
       stores.untrustedCopies,
     ],
   };
-  return {
+  const phone = {
     stores,
     clock,
     connect(value: boolean) {
@@ -194,4 +216,6 @@ export function testPhone(
       active = undefined;
     },
   };
+  onTestFinished(phone.dispose);
+  return phone;
 }
