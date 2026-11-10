@@ -3,10 +3,56 @@ import { createMobileController, type MobileController } from '../data/mobile-co
 import type { MobileDependencies } from '../data/types';
 import { savedQueriesIn } from './saved-queries';
 
+type StoreOperation = 'load' | 'save' | 'remove' | 'clear' | 'list' | 'keys' | 'mark';
+
+/** Faults stop at the native storage boundary, before its atomic read or write. */
+function faultable<T extends object>(store: T) {
+  const next = new Map<string, (() => Promise<void>)[]>();
+  const enqueue = (operation: StoreOperation, action: () => Promise<void>) => {
+    const queue = next.get(operation) ?? [];
+    queue.push(action);
+    next.set(operation, queue);
+  };
+  for (const [operation, value] of Object.entries(store)) {
+    if (typeof value !== 'function') continue;
+    const call = value as (...args: unknown[]) => unknown;
+    Object.defineProperty(store, operation, {
+      enumerable: true,
+      configurable: true,
+      value: async (...args: unknown[]) => {
+        await next.get(operation)?.shift()?.();
+        return call.apply(store, args);
+      },
+    });
+  }
+  return Object.assign(store, {
+    failNext(operation: StoreOperation, error = new Error('Fictional device storage failure')) {
+      enqueue(operation, () => Promise.reject(error));
+    },
+    stallNext(operation: StoreOperation, until: Promise<void>) {
+      enqueue(operation, () => until);
+    },
+    holdNext(operation: StoreOperation) {
+      let arrive!: () => void, release!: () => void;
+      const arrived = new Promise<void>((done) => {
+        arrive = done;
+      });
+      const released = new Promise<void>((done) => {
+        release = done;
+      });
+      enqueue(operation, () => {
+        arrive();
+        return released;
+      });
+      return { arrived, release };
+    },
+  });
+}
+
 /** Native cells clone at the boundary, as the persisted adapters do. */
 function cell<T>(initial: T) {
   let value = structuredClone(initial);
-  return {
+  return faultable({
     get value() {
       return structuredClone(value);
     },
@@ -17,11 +63,11 @@ function cell<T>(initial: T) {
     clear: async () => {
       value = structuredClone(initial);
     },
-  };
+  });
 }
 function records() {
   const rows = new Map<string, unknown>();
-  return { records: rows, ...savedQueriesIn(rows) };
+  return faultable({ records: rows, ...savedQueriesIn(rows) });
 }
 
 /** A phone owns its stores; reopening replaces only the app, never the phone's contents. */
@@ -60,7 +106,7 @@ export function testPhone(
     tagRequests: records(),
     groupCreations: (() => {
       const rows = new Map<string, unknown>();
-      return {
+      return faultable({
         records: rows,
         load: async (account: string) => structuredClone(rows.get(account) ?? null),
         save: async (account: string, value: unknown) => {
@@ -72,7 +118,7 @@ export function testPhone(
         clear: async () => {
           rows.clear();
         },
-      };
+      });
     })(),
   };
   const clock = { now: options.now ?? Date.now() };
