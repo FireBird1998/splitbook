@@ -35,3 +35,25 @@ describe('the server refusal vocabulary', () => {
     );
   });
 });
+
+it('rejects unknown codes, caller-supplied words and missing required data at compile time', () => {
+  const invalidCalls = () => {
+    // @ts-expect-error A code that nothing refuses with is outside the vocabulary.
+    new Refusal('FORBIDEN');
+    // @ts-expect-error Currency refusals carry the currency, Group and usage.
+    new Refusal('CURRENCY_IN_USE');
+    // @ts-expect-error The vocabulary owns the status and words.
+    new Refusal('FORBIDDEN', { status: 403, words: 'Forbidden' });
+    // @ts-expect-error The batch wording belongs to the payment refusal.
+    new Refusal('FORBIDDEN', { variant: 'settlementBatch' });
+    // @ts-expect-error The refused Tag change carries its current snapshot.
+    new Refusal('TAG_CHANGED');
+    // @ts-expect-error A removal's words name the member.
+    new Refusal('OPEN_BALANCE', { balances: [], variant: 'membersRemove' });
+    // @ts-expect-error Restoring an unlisted currency names that currency.
+    new Refusal('CURRENCY_MISMATCH', { variant: 'restoredCurrency' });
+    // @ts-expect-error A per-Expense refusal identifies the Expense and destination Tag.
+    new Refusal('FORBIDDEN', { variant: 'expenseTagChange' });
+  };
+  expect(invalidCalls).toBeTypeOf('function');
+});

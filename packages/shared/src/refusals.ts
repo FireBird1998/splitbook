@@ -1,3 +1,6 @@
+import { GROUP_ARCHIVED_MESSAGE } from './group-archive';
+import { DATABASE_UNAVAILABLE_MESSAGE } from './database-unavailable';
+import { DRAFT_GROUP_LIMIT_MESSAGE } from './validators/expense-draft';
 import { formatCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
 import { extraCurrenciesProblem } from './group-currencies';
@@ -17,6 +20,8 @@ interface BrokenRecurringExpense {
 /** Inputs to the vocabulary's words. Status and words are never supplied by a service. */
 interface RefusalContext {
   variant?: string;
+  tagId?: string;
+  expenseId?: string;
   field?: ReadonlyArray<string | number>;
   snapshot?: TagSnapshot;
   existingTagId?: string;
@@ -34,6 +39,7 @@ interface RefusalContext {
   extraCurrencies?: string[];
 }
 interface Answer {
+  delivery?: 'expenseTagChange';
   status: number;
   words: string | ((data: RefusalContext) => string);
   includeCode: boolean;
@@ -55,7 +61,14 @@ export const refusalVocabulary = {
     status: 503,
     words: 'The audit feed is temporarily unavailable. Please retry later.',
     includeCode: true,
-    variants: {},
+    variants: {
+      expenseTagChange: {
+        status: 200,
+        words: 'Splitbook couldn’t record this change just now. Try it again later.',
+        includeCode: true,
+        delivery: 'expenseTagChange',
+      },
+    },
   },
   ALREADY_INVITED: {
     status: 409,
@@ -100,24 +113,25 @@ export const refusalVocabulary = {
     words: 'Currency is not one of this Group’s currencies',
     includeCode: true,
     variants: {
-      debt_simplifier_ts_Different_currencies_cannot_be_added: {
+      debtSimplifierDifferentCurrenciesCannotBeAdded: {
         status: 422,
         words: 'Different currencies cannot be added',
         includeCode: true,
       },
-      debts_before_simplifying_ts_Different_currencies_cannot_be_added: {
+      debtsBeforeSimplifyingDifferentCurrenciesCannotBeAdded: {
         status: 422,
         words: 'Different currencies cannot be added',
         includeCode: true,
       },
-      expense_summary_ts_Different_currencies_cannot_be_added: {
+      expenseSummaryDifferentCurrenciesCannotBeAdded: {
         status: 422,
         words: 'Different currencies cannot be added',
         includeCode: true,
       },
-      ledger_currency_ts_Add_EUR_to_the_Group_s_currencies_to_restore_it: {
+      restoredCurrency: {
         status: 422,
-        words: 'Add EUR to the Group’s currencies to restore it.',
+        words: (data: RefusalContext) =>
+          `Add ${data.currency} to the Group’s currencies to restore it.`,
         includeCode: true,
       },
     },
@@ -130,7 +144,7 @@ export const refusalVocabulary = {
   },
   DATABASE_UNAVAILABLE: {
     status: 503,
-    words: 'Couldn’t reach Splitbook. Try again.',
+    words: DATABASE_UNAVAILABLE_MESSAGE,
     includeCode: true,
     variants: {},
   },
@@ -142,7 +156,7 @@ export const refusalVocabulary = {
   },
   DRAFT_GROUP_LIMIT: {
     status: 409,
-    words: 'You have 100 items waiting in this Group. Save or delete some before keeping more.',
+    words: DRAFT_GROUP_LIMIT_MESSAGE,
     includeCode: true,
     variants: {},
   },
@@ -158,7 +172,7 @@ export const refusalVocabulary = {
     words: 'Each participant may appear only once',
     includeCode: true,
     variants: {
-      exact_money_ts_Each_person_can_appear_only_once: {
+      exactMoneyEachPersonCanAppearOnlyOnce: {
         status: 422,
         words: 'Each person can appear only once',
         includeCode: true,
@@ -170,7 +184,7 @@ export const refusalVocabulary = {
     words: 'Stored participants are missing',
     includeCode: true,
     variants: {
-      exact_money_ts_At_least_one_payer_and_participant_are_required: {
+      exactMoneyAtLeastOnePayerAndParticipantAreRequired: {
         status: 422,
         words: 'At least one payer and participant are required',
         includeCode: true,
@@ -189,6 +203,13 @@ export const refusalVocabulary = {
     words: 'Forbidden',
     includeCode: true,
     variants: {
+      expenseTagChange: {
+        status: 200,
+        words: 'You’re no longer a member of this Group.',
+        includeCode: true,
+        delivery: 'expenseTagChange',
+      },
+
       legacyRoute: { status: 403, words: 'Forbidden', includeCode: false },
     },
   },
@@ -206,9 +227,16 @@ export const refusalVocabulary = {
   },
   GROUP_ARCHIVED: {
     status: 409,
-    words: 'This Group was archived, so nothing more can be saved in it.',
+    words: GROUP_ARCHIVED_MESSAGE,
     includeCode: true,
-    variants: {},
+    variants: {
+      expenseTagChange: {
+        status: 200,
+        words: GROUP_ARCHIVED_MESSAGE,
+        includeCode: true,
+        delivery: 'expenseTagChange',
+      },
+    },
   },
   GROUP_DELETION_CHANGED: {
     status: 500,
@@ -259,27 +287,27 @@ export const refusalVocabulary = {
     words: 'Enter a positive rate with at most 18 decimal places',
     includeCode: true,
     variants: {
-      cross_currency_settlement_ts_The_rate_must_be_positive: {
+      crossCurrencySettlementTheRateMustBePositive: {
         status: 422,
         words: 'The rate must be positive',
         includeCode: true,
       },
-      cross_currency_settlement_ts_Both_amounts_must_be_at_least_one_minor_unit: {
+      crossCurrencySettlementBothAmountsMustBeAtLeastOneMinorUnit: {
         status: 422,
         words: 'Both amounts must be at least one minor unit',
         includeCode: true,
       },
-      cross_currency_settlement_ts_The_rate_is_too_small_to_represent: {
+      crossCurrencySettlementTheRateIsTooSmallToRepresent: {
         status: 422,
         words: 'The rate is too small to represent',
         includeCode: true,
       },
-      cross_currency_settlement_ts_Choose_two_different_currencies: {
+      crossCurrencySettlementChooseTwoDifferentCurrencies: {
         status: 422,
         words: 'Choose two different currencies',
         includeCode: true,
       },
-      cross_currency_settlement_ts_Enter_exactly_two_of_the_cleared_amount_paid_amount_and_rate: {
+      crossCurrencySettlementEnterExactlyTwoOfTheClearedAmountPaidAmountAndRate: {
         status: 422,
         words: 'Enter exactly two of the cleared amount, paid amount and rate',
         includeCode: true,
@@ -304,19 +332,10 @@ export const refusalVocabulary = {
       extraCurrenciesProblem(data.mainCurrency!, data.extraCurrencies!)!,
     includeCode: true,
     variants: {
-      group_currencies_ts_INR_is_the_main_currency_so_it_can_t_also_be_an_extra_currency: {
+      alreadyListed: {
         status: 422,
-        words: 'INR is the main currency, so it can’t also be an extra currency.',
-        includeCode: true,
-      },
-      group_currencies_ts_EUR_is_listed_twice: {
-        status: 422,
-        words: 'EUR is listed twice.',
-        includeCode: true,
-      },
-      group_currencies_ts_A_Group_can_have_at_most_4_extra_currencies: {
-        status: 422,
-        words: 'A Group can have at most 4 extra currencies.',
+        words: (data: RefusalContext) =>
+          `${data.currency} is already one of this Group’s currencies.`,
         includeCode: true,
       },
     },
@@ -361,12 +380,12 @@ export const refusalVocabulary = {
     words: 'Enter a positive amount with the currency’s supported precision.',
     includeCode: true,
     variants: {
-      exact_money_ts_Enter_a_valid_decimal_amount: {
+      exactMoneyEnterAValidDecimalAmount: {
         status: 422,
         words: 'Enter a valid decimal amount',
         includeCode: true,
       },
-      exact_money_ts_Stored_amount_is_missing: {
+      exactMoneyStoredAmountIsMissing: {
         status: 422,
         words: 'Stored amount is missing',
         includeCode: true,
@@ -384,7 +403,7 @@ export const refusalVocabulary = {
     words: 'Stored amount must be positive',
     includeCode: true,
     variants: {
-      exact_money_ts_Amount_must_be_positive_and_at_most_10_000_000: {
+      exactMoneyAmountMustBePositiveAndAtMost10000000: {
         status: 422,
         words: 'Amount must be positive and at most 10,000,000',
         includeCode: true,
@@ -421,14 +440,14 @@ export const refusalVocabulary = {
     words: 'Choose between 1 and 32 Debts',
     includeCode: true,
     variants: {
-      settlement_batch_ts_Choose_each_cleared_currency_once: {
+      settlementBatchChooseEachClearedCurrencyOnce: {
         status: 422,
         words: 'Choose each cleared currency once',
         includeCode: true,
       },
-      settlement_batch_ts_Enter_a_rate_for_EUR: {
+      missingRate: {
         status: 422,
-        words: 'Enter a rate for EUR',
+        words: (data: RefusalContext) => `Enter a rate for ${data.currency}`,
         includeCode: true,
       },
     },
@@ -438,12 +457,12 @@ export const refusalVocabulary = {
     words: 'Shares must be whole numbers within the supported range',
     includeCode: true,
     variants: {
-      exact_money_ts_Shares_cannot_be_negative: {
+      exactMoneySharesCannotBeNegative: {
         status: 422,
         words: 'Shares cannot be negative',
         includeCode: true,
       },
-      exact_money_ts_Total_split_weight_must_be_positive: {
+      exactMoneyTotalSplitWeightMustBePositive: {
         status: 422,
         words: 'Total split weight must be positive',
         includeCode: true,
@@ -455,17 +474,17 @@ export const refusalVocabulary = {
     words: 'Stored allocations cannot be negative',
     includeCode: true,
     variants: {
-      exact_money_ts_A_nonnegative_amount_and_participants_are_required: {
+      exactMoneyANonnegativeAmountAndParticipantsAreRequired: {
         status: 422,
         words: 'A nonnegative amount and participants are required',
         includeCode: true,
       },
-      exact_money_ts_Split_amounts_cannot_be_negative: {
+      exactMoneySplitAmountsCannotBeNegative: {
         status: 422,
         words: 'Split amounts cannot be negative',
         includeCode: true,
       },
-      exact_money_ts_Choose_a_valid_split_method: {
+      exactMoneyChooseAValidSplitMethod: {
         status: 422,
         words: 'Choose a valid split method',
         includeCode: true,
@@ -476,7 +495,14 @@ export const refusalVocabulary = {
     status: 422,
     words: 'Tag must be an active group tag',
     includeCode: true,
-    variants: {},
+    variants: {
+      expenseTagChange: {
+        status: 200,
+        words: 'The Tag isn’t active any more.',
+        includeCode: true,
+        delivery: 'expenseTagChange',
+      },
+    },
   },
   INVALID_TAG_COMMAND: {
     status: 400,
@@ -626,7 +652,7 @@ export const refusalVocabulary = {
     words: 'Payer and recipient must be different people',
     includeCode: true,
     variants: {
-      settlement_preview_ts_A_payment_needs_two_different_people: {
+      settlementPreviewAPaymentNeedsTwoDifferentPeople: {
         status: 422,
         words: 'A payment needs two different people',
         includeCode: true,
@@ -699,12 +725,12 @@ export const refusalVocabulary = {
     words: 'Ledger contributions do not balance',
     includeCode: true,
     variants: {
-      debts_before_simplifying_ts_Unable_to_allocate_exact_Debts: {
+      debtsBeforeSimplifyingUnableToAllocateExactDebts: {
         status: 422,
         words: 'Unable to allocate exact Debts',
         includeCode: true,
       },
-      exact_money_ts_Stored_allocations_do_not_equal_the_Expense_amount: {
+      exactMoneyStoredAllocationsDoNotEqualTheExpenseAmount: {
         status: 422,
         words: 'Stored allocations do not equal the Expense amount',
         includeCode: true,
@@ -722,7 +748,7 @@ export const refusalVocabulary = {
     words: 'Amount is outside the supported exact range',
     includeCode: true,
     variants: {
-      exact_money_ts_Amount_cannot_be_represented_by_this_client: {
+      exactMoneyAmountCannotBeRepresentedByThisClient: {
         status: 422,
         words: 'Amount cannot be represented by this client',
         includeCode: true,
@@ -740,6 +766,13 @@ export const refusalVocabulary = {
 export type RefusalCode = keyof typeof refusalVocabulary;
 
 type RequiredData = {
+  TAG_ADMIN_REQUIRED: { snapshot: TagSnapshot };
+  TAG_CHANGED: { snapshot: TagSnapshot };
+  TAG_EXISTS: { snapshot: TagSnapshot; existingTagId: string };
+  LAST_ACTIVE_TAG: { snapshot: TagSnapshot };
+  REQUEST_KEY_REUSED: { snapshot: TagSnapshot };
+  TAG_IN_USE: { snapshot: TagSnapshot };
+  AMBIGUOUS_TAG: { snapshot: TagSnapshot };
   CURRENCY_IN_USE: { currency: string; groupName: string; use: ExtraCurrencyUse };
   CURRENCY_NOT_LISTED: { currency: string };
   CURRENCY_IS_MAIN: { currency: string };
@@ -750,14 +783,33 @@ type RequiredData = {
   INVALID_GROUP_CURRENCIES: { mainCurrency: string; extraCurrencies: string[] };
   INVALID_MONEY_PRECISION: { digits: number };
 };
-export type RefusalData<C extends RefusalCode> = (C extends keyof RequiredData
-  ? RequiredData[C]
-  : {}) & {
-  variant?: Extract<keyof (typeof refusalVocabulary)[C]['variants'], string>;
+type Data<C extends RefusalCode> = C extends keyof RequiredData ? RequiredData[C] : object;
+type Variant<C extends RefusalCode> = Extract<
+  keyof (typeof refusalVocabulary)[C]['variants'],
+  string
+>;
+type VariantData<C extends RefusalCode> = {
+  [V in Variant<C>]: { variant: V } & (V extends 'alreadyListed'
+    ? { currency: string }
+    : Data<C> &
+        (V extends 'expenseTagChange'
+          ? { tagId: string; expenseId: string }
+          : C extends 'OPEN_BALANCE' | 'RECURRING_EXPENSE_PROBLEM'
+            ? V extends 'membersRemove'
+              ? { memberName: string }
+              : object
+            : V extends 'restoredCurrency' | 'missingRate'
+              ? { currency: string }
+              : object));
+}[Variant<C>];
+export type RefusalData<C extends RefusalCode> = (
+  | (Data<C> & { variant?: never })
+  | VariantData<C>
+) & {
+  currency?: string;
   field?: ReadonlyArray<string | number>;
   snapshot?: TagSnapshot;
   existingTagId?: string;
-  memberName?: string;
 };
 
 /** One service call. The Error message remains its code during the incremental migration. */
@@ -765,7 +817,7 @@ export class Refusal<C extends RefusalCode = RefusalCode> extends Error {
   readonly data: RefusalContext;
   constructor(
     readonly code: C,
-    ...payload: {} extends RefusalData<C> ? [data?: RefusalData<C>] : [data: RefusalData<C>]
+    ...payload: object extends RefusalData<C> ? [data?: RefusalData<C>] : [data: RefusalData<C>]
   ) {
     super(code);
     this.name = 'Refusal';
@@ -778,8 +830,16 @@ export function refusalAnswer(refusal: Refusal) {
   const entry = refusalVocabulary[refusal.code];
   const variants: Readonly<Record<string, Answer>> = entry.variants;
   const { data, code } = refusal;
-  const answer = data.variant ? variants[data.variant] : entry;
+  const answer: Answer = data.variant ? variants[data.variant] : entry;
   const words = typeof answer.words === 'function' ? answer.words(data) : answer.words;
+  if (answer.delivery === 'expenseTagChange')
+    return {
+      data: {
+        tagId: data.tagId,
+        results: [{ expenseId: data.expenseId, outcome: 'refused', code, reason: words }],
+      },
+      status: answer.status,
+    };
   return {
     error: words,
     status: answer.status,

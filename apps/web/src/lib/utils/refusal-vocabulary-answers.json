@@ -1,0 +1,1170 @@
+[
+  {
+    "code": "FORBIDDEN",
+    "variant": "default",
+    "data": {},
+    "status": 403,
+    "body": "{\"error\":\"Forbidden\",\"status\":403,\"code\":\"FORBIDDEN\"}"
+  },
+  {
+    "code": "FORBIDDEN",
+    "variant": "legacyRoute",
+    "data": {
+      "variant": "legacyRoute"
+    },
+    "status": 403,
+    "body": "{\"error\":\"Forbidden\",\"status\":403}"
+  },
+  {
+    "code": "INVALID_IDEMPOTENCY_KEY",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Invalid submission key\",\"status\":422,\"code\":\"INVALID_IDEMPOTENCY_KEY\"}"
+  },
+  {
+    "code": "IDEMPOTENCY_CONFLICT",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This submission key was already used for different data. Start a new submission.\",\"status\":409,\"code\":\"IDEMPOTENCY_CONFLICT\"}"
+  },
+  {
+    "code": "STALE_REVISION",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This record changed while you were editing. Reload the latest version before saving.\",\"status\":409,\"code\":\"STALE_REVISION\"}"
+  },
+  {
+    "code": "REVISION_REQUIRED",
+    "variant": "default",
+    "data": {},
+    "status": 428,
+    "body": "{\"error\":\"Reload this record before changing it.\",\"status\":428,\"code\":\"REVISION_REQUIRED\"}"
+  },
+  {
+    "code": "CURRENCY_LOCKED",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"Currency cannot change after this Group has financial records.\",\"status\":409,\"code\":\"CURRENCY_LOCKED\"}"
+  },
+  {
+    "code": "GROUP_ARCHIVED",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This Group was archived, so nothing more can be saved in it.\",\"status\":409,\"code\":\"GROUP_ARCHIVED\"}"
+  },
+  {
+    "code": "RECURRING_EXPENSES_OFF",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"Recurring Expenses are turned off.\",\"status\":409,\"code\":\"RECURRING_EXPENSES_OFF\"}"
+  },
+  {
+    "code": "ACTIVITY_BACKLOG_FULL",
+    "variant": "default",
+    "data": {},
+    "status": 503,
+    "body": "{\"error\":\"The audit feed is temporarily unavailable. Please retry later.\",\"status\":503,\"code\":\"ACTIVITY_BACKLOG_FULL\"}"
+  },
+  {
+    "code": "INVALID_MONEY",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Enter a positive amount with the currency’s supported precision.\",\"status\":422,\"code\":\"INVALID_MONEY\"}"
+  },
+  {
+    "code": "INVALID_MONEY",
+    "variant": "exactMoneyEnterAValidDecimalAmount",
+    "data": {
+      "variant": "exactMoneyEnterAValidDecimalAmount"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Enter a valid decimal amount\",\"status\":422,\"code\":\"INVALID_MONEY\"}"
+  },
+  {
+    "code": "INVALID_MONEY",
+    "variant": "exactMoneyStoredAmountIsMissing",
+    "data": {
+      "variant": "exactMoneyStoredAmountIsMissing"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Stored amount is missing\",\"status\":422,\"code\":\"INVALID_MONEY\"}"
+  },
+  {
+    "code": "INVALID_JSON",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Invalid JSON body\",\"status\":400,\"code\":\"INVALID_JSON\"}"
+  },
+  {
+    "code": "INVALID_ID",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Invalid id\",\"status\":400,\"code\":\"INVALID_ID\"}"
+  },
+  {
+    "code": "ACCOUNT_CHANGED",
+    "variant": "default",
+    "data": {},
+    "status": 419,
+    "body": "{\"error\":\"The signed-in account changed in another tab. Reload this page to continue.\",\"status\":419,\"code\":\"ACCOUNT_CHANGED\"}"
+  },
+  {
+    "code": "INVALID_MEMBERS",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Both payer and recipient must be group members\",\"status\":422,\"code\":\"INVALID_MEMBERS\"}"
+  },
+  {
+    "code": "INVALID_MEMBERS",
+    "variant": "expenses",
+    "data": {
+      "variant": "expenses"
+    },
+    "status": 422,
+    "body": "{\"error\":\"All payers and split participants must be group members\",\"status\":422,\"code\":\"INVALID_MEMBERS\"}"
+  },
+  {
+    "code": "INVALID_MEMBERS",
+    "variant": "expenseEdit",
+    "data": {
+      "variant": "expenseEdit"
+    },
+    "status": 422,
+    "body": "{\"error\":\"All payers and split participants must be group members\",\"status\":422,\"code\":\"INVALID_MEMBERS\"}"
+  },
+  {
+    "code": "INVALID_MEMBERS",
+    "variant": "recurring",
+    "data": {
+      "variant": "recurring"
+    },
+    "status": 422,
+    "body": "{\"error\":\"All payers and split participants must be group members\",\"status\":422,\"code\":\"INVALID_MEMBERS\"}"
+  },
+  {
+    "code": "INVALID_MEMBERS",
+    "variant": "recurringEdit",
+    "data": {
+      "variant": "recurringEdit"
+    },
+    "status": 422,
+    "body": "{\"error\":\"All payers and split participants must be group members\",\"status\":422,\"code\":\"INVALID_MEMBERS\"}"
+  },
+  {
+    "code": "SAME_PARTY",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Payer and recipient must be different people\",\"status\":422,\"code\":\"SAME_PARTY\"}"
+  },
+  {
+    "code": "SAME_PARTY",
+    "variant": "settlementPreviewAPaymentNeedsTwoDifferentPeople",
+    "data": {
+      "variant": "settlementPreviewAPaymentNeedsTwoDifferentPeople"
+    },
+    "status": 422,
+    "body": "{\"error\":\"A payment needs two different people\",\"status\":422,\"code\":\"SAME_PARTY\"}"
+  },
+  {
+    "code": "FORBIDDEN_SETTLEMENT",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Only the payer or recipient can record this settlement\",\"status\":422,\"code\":\"FORBIDDEN_SETTLEMENT\"}"
+  },
+  {
+    "code": "FORBIDDEN_SETTLEMENT",
+    "variant": "settlementBatch",
+    "data": {
+      "variant": "settlementBatch"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Only the payer or recipient can record this payment\",\"status\":422,\"code\":\"FORBIDDEN_SETTLEMENT\"}"
+  },
+  {
+    "code": "CURRENCY_MISMATCH",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Currency is not one of this Group’s currencies\",\"status\":422,\"code\":\"CURRENCY_MISMATCH\"}"
+  },
+  {
+    "code": "CURRENCY_MISMATCH",
+    "variant": "debtSimplifierDifferentCurrenciesCannotBeAdded",
+    "data": {
+      "variant": "debtSimplifierDifferentCurrenciesCannotBeAdded"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Different currencies cannot be added\",\"status\":422,\"code\":\"CURRENCY_MISMATCH\"}"
+  },
+  {
+    "code": "CURRENCY_MISMATCH",
+    "variant": "debtsBeforeSimplifyingDifferentCurrenciesCannotBeAdded",
+    "data": {
+      "variant": "debtsBeforeSimplifyingDifferentCurrenciesCannotBeAdded"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Different currencies cannot be added\",\"status\":422,\"code\":\"CURRENCY_MISMATCH\"}"
+  },
+  {
+    "code": "CURRENCY_MISMATCH",
+    "variant": "expenseSummaryDifferentCurrenciesCannotBeAdded",
+    "data": {
+      "variant": "expenseSummaryDifferentCurrenciesCannotBeAdded"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Different currencies cannot be added\",\"status\":422,\"code\":\"CURRENCY_MISMATCH\"}"
+  },
+  {
+    "code": "CURRENCY_MISMATCH",
+    "variant": "restoredCurrency",
+    "data": {
+      "variant": "restoredCurrency",
+      "currency": "EUR"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Add EUR to the Group’s currencies to restore it.\",\"status\":422,\"code\":\"CURRENCY_MISMATCH\"}"
+  },
+  {
+    "code": "NO_SETTLEMENT_DEBT",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"This pair no longer has a Debt or Suggested payment in one of these currencies. Reload before recording the payment.\",\"status\":422,\"code\":\"NO_SETTLEMENT_DEBT\"}"
+  },
+  {
+    "code": "INVALID_TAG",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Tag must be an active group tag\",\"status\":422,\"code\":\"INVALID_TAG\"}"
+  },
+  {
+    "code": "INVALID_WINDOW",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"End date must be on or after the start date\",\"status\":422,\"code\":\"INVALID_WINDOW\"}"
+  },
+  {
+    "code": "NOT_HOUSEHOLD",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Recurring expenses are only available in Household groups\",\"status\":422,\"code\":\"NOT_HOUSEHOLD\"}"
+  },
+  {
+    "code": "TAG_PRECONDITION_REQUIRED",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 428,
+    "body": "{\"error\":\"Reload Tag management before making this change.\",\"status\":428,\"code\":\"TAG_PRECONDITION_REQUIRED\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "INVALID_TAG_COMMAND",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 400,
+    "body": "{\"error\":\"Check the Tag name and submitted action, then try again.\",\"status\":400,\"code\":\"INVALID_TAG_COMMAND\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "INVALID_TAG_COMMAND",
+    "variant": "invalidIdentity",
+    "data": {
+      "variant": "invalidIdentity"
+    },
+    "status": 400,
+    "body": "{\"error\":\"Invalid Group, Tag or request identity.\",\"status\":400,\"code\":\"INVALID_TAG_COMMAND\"}"
+  },
+  {
+    "code": "TAG_ADMIN_REQUIRED",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 403,
+    "body": "{\"error\":\"Only Group admins can manage Tags.\",\"status\":403,\"code\":\"TAG_ADMIN_REQUIRED\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "TAG_TRANSACTIONS_REQUIRED",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 503,
+    "body": "{\"error\":\"Tag changes are temporarily unavailable. Try again later.\",\"status\":503,\"code\":\"TAG_TRANSACTIONS_REQUIRED\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "TAG_CHANGED",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"This Tag changed. Review its current state before applying your change.\",\"status\":409,\"code\":\"TAG_CHANGED\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "TAG_EXISTS",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"A Tag with this name already exists. Archived Tags can be restored.\",\"status\":409,\"code\":\"TAG_EXISTS\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "LAST_ACTIVE_TAG",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"Create or restore another Tag before removing the last active Tag.\",\"status\":409,\"code\":\"LAST_ACTIVE_TAG\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "REQUEST_KEY_REUSED",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"This request was already used for another action.\",\"status\":409,\"code\":\"REQUEST_KEY_REUSED\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "TAG_IN_USE",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"This Tag is used by Expenses or recurring templates and cannot be deleted.\",\"status\":409,\"code\":\"TAG_IN_USE\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "AMBIGUOUS_TAG",
+    "variant": "default",
+    "data": {
+      "snapshot": {
+        "canManage": true,
+        "tags": [
+          {
+            "id": "tag",
+            "name": "Food",
+            "revision": 2,
+            "isArchived": false,
+            "isDeleted": false
+          }
+        ]
+      },
+      "existingTagId": "existing-tag"
+    },
+    "status": 409,
+    "body": "{\"error\":\"This Tag has ambiguous historical references and cannot be renamed.\",\"status\":409,\"code\":\"AMBIGUOUS_TAG\",\"snapshot\":{\"canManage\":true,\"tags\":[{\"id\":\"tag\",\"name\":\"Food\",\"revision\":2,\"isArchived\":false,\"isDeleted\":false}]},\"existingTagId\":\"existing-tag\"}"
+  },
+  {
+    "code": "DUPLICATE_PARTICIPANTS",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Each participant may appear only once\",\"status\":422,\"code\":\"DUPLICATE_PARTICIPANTS\"}"
+  },
+  {
+    "code": "DUPLICATE_PARTICIPANTS",
+    "variant": "exactMoneyEachPersonCanAppearOnlyOnce",
+    "data": {
+      "variant": "exactMoneyEachPersonCanAppearOnlyOnce"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Each person can appear only once\",\"status\":422,\"code\":\"DUPLICATE_PARTICIPANTS\"}"
+  },
+  {
+    "code": "UNBALANCED_TEMPLATE",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Recurring allocations must equal the amount\",\"status\":422,\"code\":\"UNBALANCED_TEMPLATE\"}"
+  },
+  {
+    "code": "INVALID_AMOUNT_RANGE",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"The lowest amount must not be more than the highest\",\"status\":422,\"code\":\"INVALID_AMOUNT_RANGE\"}"
+  },
+  {
+    "code": "UNBALANCED_LEDGER",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Ledger contributions do not balance\",\"status\":422,\"code\":\"UNBALANCED_LEDGER\"}"
+  },
+  {
+    "code": "UNBALANCED_LEDGER",
+    "variant": "debtsBeforeSimplifyingUnableToAllocateExactDebts",
+    "data": {
+      "variant": "debtsBeforeSimplifyingUnableToAllocateExactDebts"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Unable to allocate exact Debts\",\"status\":422,\"code\":\"UNBALANCED_LEDGER\"}"
+  },
+  {
+    "code": "UNBALANCED_LEDGER",
+    "variant": "exactMoneyStoredAllocationsDoNotEqualTheExpenseAmount",
+    "data": {
+      "variant": "exactMoneyStoredAllocationsDoNotEqualTheExpenseAmount"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Stored allocations do not equal the Expense amount\",\"status\":422,\"code\":\"UNBALANCED_LEDGER\"}"
+  },
+  {
+    "code": "MISSING_SPLIT_AMOUNT",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Enter an amount for each person in the split\",\"status\":422,\"code\":\"MISSING_SPLIT_AMOUNT\"}"
+  },
+  {
+    "code": "UNSAFE_MONEY",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Amount is outside the supported exact range\",\"status\":422,\"code\":\"UNSAFE_MONEY\"}"
+  },
+  {
+    "code": "UNSAFE_MONEY",
+    "variant": "exactMoneyAmountCannotBeRepresentedByThisClient",
+    "data": {
+      "variant": "exactMoneyAmountCannotBeRepresentedByThisClient"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Amount cannot be represented by this client\",\"status\":422,\"code\":\"UNSAFE_MONEY\"}"
+  },
+  {
+    "code": "MONEY_REPRESENTATION_MISMATCH",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Stored amounts disagree\",\"status\":422,\"code\":\"MONEY_REPRESENTATION_MISMATCH\"}"
+  },
+  {
+    "code": "INVALID_MONEY_VERSION",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Stored money version is invalid\",\"status\":422,\"code\":\"INVALID_MONEY_VERSION\"}"
+  },
+  {
+    "code": "INVALID_MONEY_RANGE",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Stored amount must be positive\",\"status\":422,\"code\":\"INVALID_MONEY_RANGE\"}"
+  },
+  {
+    "code": "INVALID_MONEY_RANGE",
+    "variant": "exactMoneyAmountMustBePositiveAndAtMost10000000",
+    "data": {
+      "variant": "exactMoneyAmountMustBePositiveAndAtMost10000000"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Amount must be positive and at most 10,000,000\",\"status\":422,\"code\":\"INVALID_MONEY_RANGE\"}"
+  },
+  {
+    "code": "EMPTY_PARTICIPANTS",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Stored participants are missing\",\"status\":422,\"code\":\"EMPTY_PARTICIPANTS\"}"
+  },
+  {
+    "code": "EMPTY_PARTICIPANTS",
+    "variant": "exactMoneyAtLeastOnePayerAndParticipantAreRequired",
+    "data": {
+      "variant": "exactMoneyAtLeastOnePayerAndParticipantAreRequired"
+    },
+    "status": 422,
+    "body": "{\"error\":\"At least one payer and participant are required\",\"status\":422,\"code\":\"EMPTY_PARTICIPANTS\"}"
+  },
+  {
+    "code": "INVALID_SPLIT",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Stored allocations cannot be negative\",\"status\":422,\"code\":\"INVALID_SPLIT\"}"
+  },
+  {
+    "code": "INVALID_SPLIT",
+    "variant": "exactMoneyANonnegativeAmountAndParticipantsAreRequired",
+    "data": {
+      "variant": "exactMoneyANonnegativeAmountAndParticipantsAreRequired"
+    },
+    "status": 422,
+    "body": "{\"error\":\"A nonnegative amount and participants are required\",\"status\":422,\"code\":\"INVALID_SPLIT\"}"
+  },
+  {
+    "code": "INVALID_SPLIT",
+    "variant": "exactMoneySplitAmountsCannotBeNegative",
+    "data": {
+      "variant": "exactMoneySplitAmountsCannotBeNegative"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Split amounts cannot be negative\",\"status\":422,\"code\":\"INVALID_SPLIT\"}"
+  },
+  {
+    "code": "INVALID_SPLIT",
+    "variant": "exactMoneyChooseAValidSplitMethod",
+    "data": {
+      "variant": "exactMoneyChooseAValidSplitMethod"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Choose a valid split method\",\"status\":422,\"code\":\"INVALID_SPLIT\"}"
+  },
+  {
+    "code": "SPLIT_TOTAL_MISMATCH",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Split amounts must add up to the expense amount\",\"status\":422,\"code\":\"SPLIT_TOTAL_MISMATCH\"}"
+  },
+  {
+    "code": "INVALID_PERCENTAGE",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Percentages must be between 0 and 100\",\"status\":422,\"code\":\"INVALID_PERCENTAGE\"}"
+  },
+  {
+    "code": "INVALID_SHARES",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Shares must be whole numbers within the supported range\",\"status\":422,\"code\":\"INVALID_SHARES\"}"
+  },
+  {
+    "code": "INVALID_SHARES",
+    "variant": "exactMoneySharesCannotBeNegative",
+    "data": {
+      "variant": "exactMoneySharesCannotBeNegative"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Shares cannot be negative\",\"status\":422,\"code\":\"INVALID_SHARES\"}"
+  },
+  {
+    "code": "INVALID_SHARES",
+    "variant": "exactMoneyTotalSplitWeightMustBePositive",
+    "data": {
+      "variant": "exactMoneyTotalSplitWeightMustBePositive"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Total split weight must be positive\",\"status\":422,\"code\":\"INVALID_SHARES\"}"
+  },
+  {
+    "code": "PERCENTAGE_TOTAL_MISMATCH",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Percentages must add up to 100\",\"status\":422,\"code\":\"PERCENTAGE_TOTAL_MISMATCH\"}"
+  },
+  {
+    "code": "INVALID_PAYER_AMOUNT",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Payer amounts cannot be negative\",\"status\":422,\"code\":\"INVALID_PAYER_AMOUNT\"}"
+  },
+  {
+    "code": "PAYER_TOTAL_MISMATCH",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Payer amounts must add up to the expense amount\",\"status\":422,\"code\":\"PAYER_TOTAL_MISMATCH\"}"
+  },
+  {
+    "code": "INVALID_PARTY",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Choose both people\",\"status\":422,\"code\":\"INVALID_PARTY\"}"
+  },
+  {
+    "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Enter a positive rate with at most 18 decimal places\",\"status\":422,\"code\":\"INVALID_CROSS_CURRENCY_SETTLEMENT\"}"
+  },
+  {
+    "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+    "variant": "crossCurrencySettlementTheRateMustBePositive",
+    "data": {
+      "variant": "crossCurrencySettlementTheRateMustBePositive"
+    },
+    "status": 422,
+    "body": "{\"error\":\"The rate must be positive\",\"status\":422,\"code\":\"INVALID_CROSS_CURRENCY_SETTLEMENT\"}"
+  },
+  {
+    "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+    "variant": "crossCurrencySettlementBothAmountsMustBeAtLeastOneMinorUnit",
+    "data": {
+      "variant": "crossCurrencySettlementBothAmountsMustBeAtLeastOneMinorUnit"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Both amounts must be at least one minor unit\",\"status\":422,\"code\":\"INVALID_CROSS_CURRENCY_SETTLEMENT\"}"
+  },
+  {
+    "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+    "variant": "crossCurrencySettlementTheRateIsTooSmallToRepresent",
+    "data": {
+      "variant": "crossCurrencySettlementTheRateIsTooSmallToRepresent"
+    },
+    "status": 422,
+    "body": "{\"error\":\"The rate is too small to represent\",\"status\":422,\"code\":\"INVALID_CROSS_CURRENCY_SETTLEMENT\"}"
+  },
+  {
+    "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+    "variant": "crossCurrencySettlementChooseTwoDifferentCurrencies",
+    "data": {
+      "variant": "crossCurrencySettlementChooseTwoDifferentCurrencies"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Choose two different currencies\",\"status\":422,\"code\":\"INVALID_CROSS_CURRENCY_SETTLEMENT\"}"
+  },
+  {
+    "code": "INVALID_CROSS_CURRENCY_SETTLEMENT",
+    "variant": "crossCurrencySettlementEnterExactlyTwoOfTheClearedAmountPaidAmountAndRate",
+    "data": {
+      "variant": "crossCurrencySettlementEnterExactlyTwoOfTheClearedAmountPaidAmountAndRate"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Enter exactly two of the cleared amount, paid amount and rate\",\"status\":422,\"code\":\"INVALID_CROSS_CURRENCY_SETTLEMENT\"}"
+  },
+  {
+    "code": "INVALID_SETTLEMENT_BATCH",
+    "variant": "default",
+    "data": {},
+    "status": 422,
+    "body": "{\"error\":\"Choose between 1 and 32 Debts\",\"status\":422,\"code\":\"INVALID_SETTLEMENT_BATCH\"}"
+  },
+  {
+    "code": "INVALID_SETTLEMENT_BATCH",
+    "variant": "settlementBatchChooseEachClearedCurrencyOnce",
+    "data": {
+      "variant": "settlementBatchChooseEachClearedCurrencyOnce"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Choose each cleared currency once\",\"status\":422,\"code\":\"INVALID_SETTLEMENT_BATCH\"}"
+  },
+  {
+    "code": "INVALID_SETTLEMENT_BATCH",
+    "variant": "missingRate",
+    "data": {
+      "variant": "missingRate",
+      "currency": "EUR"
+    },
+    "status": 422,
+    "body": "{\"error\":\"Enter a rate for EUR\",\"status\":422,\"code\":\"INVALID_SETTLEMENT_BATCH\"}"
+  },
+  {
+    "code": "INVALID_MONEY_PRECISION",
+    "variant": "default",
+    "data": {
+      "digits": 2
+    },
+    "status": 422,
+    "body": "{\"error\":\"Amount supports at most 2 decimal places\",\"status\":422,\"code\":\"INVALID_MONEY_PRECISION\"}"
+  },
+  {
+    "code": "INVALID_GROUP_CURRENCIES",
+    "variant": "default",
+    "data": {
+      "mainCurrency": "INR",
+      "extraCurrencies": ["DEM"]
+    },
+    "status": 422,
+    "body": "{\"error\":\"DEM isn’t a supported currency.\",\"status\":422,\"code\":\"INVALID_GROUP_CURRENCIES\"}"
+  },
+  {
+    "code": "UNSUPPORTED_CURRENCY",
+    "variant": "default",
+    "data": {
+      "currency": "DEM"
+    },
+    "status": 422,
+    "body": "{\"error\":\"This Expense is in DEM, which Splitbook no longer supports. It can’t be changed, only deleted.\",\"status\":422,\"code\":\"UNSUPPORTED_CURRENCY\"}"
+  },
+  {
+    "code": "DRAFTS_DISABLED",
+    "variant": "default",
+    "data": {},
+    "status": 404,
+    "body": "{\"error\":\"Drafts are not enabled\",\"status\":404,\"code\":\"DRAFTS_DISABLED\"}"
+  },
+  {
+    "code": "REQUEST_TOO_LARGE",
+    "variant": "default",
+    "data": {},
+    "status": 413,
+    "body": "{\"error\":\"Request too large\",\"status\":413,\"code\":\"REQUEST_TOO_LARGE\"}"
+  },
+  {
+    "code": "DRAFT_GROUP_LIMIT",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"You have 100 items waiting in this Group. Save or delete some before keeping more.\",\"status\":409,\"code\":\"DRAFT_GROUP_LIMIT\"}"
+  },
+  {
+    "code": "DRAFT_NOT_FOUND",
+    "variant": "default",
+    "data": {},
+    "status": 404,
+    "body": "{\"error\":\"Draft not found\",\"status\":404,\"code\":\"DRAFT_NOT_FOUND\"}"
+  },
+  {
+    "code": "DRAFT_TRANSACTIONS_REQUIRED",
+    "variant": "default",
+    "data": {},
+    "status": 503,
+    "body": "{\"error\":\"Draft changes are temporarily unavailable.\",\"status\":503,\"code\":\"DRAFT_TRANSACTIONS_REQUIRED\"}"
+  },
+  {
+    "code": "LAST_ADMIN",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"Make someone else an admin before you leave.\",\"status\":409,\"code\":\"LAST_ADMIN\"}"
+  },
+  {
+    "code": "LAST_ADMIN",
+    "variant": "membersDemote",
+    "data": {
+      "variant": "membersDemote"
+    },
+    "status": 409,
+    "body": "{\"error\":\"Cannot demote the last admin. Promote another member first.\",\"status\":409}"
+  },
+  {
+    "code": "LAST_ADMIN",
+    "variant": "membersRemove",
+    "data": {
+      "variant": "membersRemove"
+    },
+    "status": 409,
+    "body": "{\"error\":\"Cannot remove the last admin.\",\"status\":409}"
+  },
+  {
+    "code": "SELF_REMOVE",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"You cannot remove yourself. Use leave group instead.\",\"status\":400}"
+  },
+  {
+    "code": "INVITATION_NOT_PENDING",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Invitation is no longer pending\",\"status\":400}"
+  },
+  {
+    "code": "INVITATION_EXPIRED",
+    "variant": "default",
+    "data": {},
+    "status": 410,
+    "body": "{\"error\":\"Invitation has expired\",\"status\":410}"
+  },
+  {
+    "code": "ALREADY_INVITED",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This person has already been invited\",\"status\":409}"
+  },
+  {
+    "code": "LEAVE_CONFLICT",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This Group changed while you were leaving. Try again.\",\"status\":409,\"code\":\"LEAVE_CONFLICT\"}"
+  },
+  {
+    "code": "REMOVAL_CONFLICT",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This Group changed while you were removing this member. Try again.\",\"status\":409,\"code\":\"REMOVAL_CONFLICT\"}"
+  },
+  {
+    "code": "GROUP_DELETION_CONFIRMATION_REQUIRED",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"You are the last member. Leaving will permanently delete this Group and its history. Confirm deletion to continue.\",\"status\":409,\"code\":\"GROUP_DELETION_CONFIRMATION_REQUIRED\"}"
+  },
+  {
+    "code": "GROUP_DELETION_UNAVAILABLE",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"Permanent Group deletion is unavailable here. You are still a member; no history was deleted.\",\"status\":409,\"code\":\"GROUP_DELETION_UNAVAILABLE\"}"
+  },
+  {
+    "code": "SETTLEMENT_TRANSACTIONS_REQUIRED",
+    "variant": "default",
+    "data": {},
+    "status": 503,
+    "body": "{\"error\":\"Payments across several currencies need a transactional database. Nothing was recorded.\",\"status\":503,\"code\":\"SETTLEMENT_TRANSACTIONS_REQUIRED\"}"
+  },
+  {
+    "code": "GROUP_NOT_FOUND",
+    "variant": "default",
+    "data": {},
+    "status": 500,
+    "body": "{\"error\":\"Internal server error\",\"status\":500}"
+  },
+  {
+    "code": "DATABASE_UNAVAILABLE",
+    "variant": "default",
+    "data": {},
+    "status": 503,
+    "body": "{\"error\":\"Couldn’t reach Splitbook. Try again.\",\"status\":503,\"code\":\"DATABASE_UNAVAILABLE\"}"
+  },
+  {
+    "code": "BACKUP_ALL_TIME",
+    "variant": "default",
+    "data": {},
+    "status": 500,
+    "body": "{\"error\":\"Internal server error\",\"status\":500}"
+  },
+  {
+    "code": "GROUP_DELETION_CHANGED",
+    "variant": "default",
+    "data": {},
+    "status": 500,
+    "body": "{\"error\":\"Internal server error\",\"status\":500}"
+  },
+  {
+    "code": "GROUP_DELETION_NOT_REQUESTED",
+    "variant": "default",
+    "data": {},
+    "status": 500,
+    "body": "{\"error\":\"Internal server error\",\"status\":500}"
+  },
+  {
+    "code": "INVALID_CURRENCY",
+    "variant": "default",
+    "data": {},
+    "status": 500,
+    "body": "{\"error\":\"Internal server error\",\"status\":500}"
+  },
+  {
+    "code": "INVALID_CURRENCY",
+    "variant": "insightsQuery",
+    "data": {
+      "variant": "insightsQuery"
+    },
+    "status": 400,
+    "body": "{\"error\":\"Send a currency code, such as INR.\",\"status\":400,\"code\":\"INVALID_CURRENCY\"}"
+  },
+  {
+    "code": "INVALID_REQUEST_FINGERPRINT",
+    "variant": "default",
+    "data": {},
+    "status": 500,
+    "body": "{\"error\":\"Internal server error\",\"status\":500}"
+  },
+  {
+    "code": "CURRENCY_IN_USE",
+    "variant": "default",
+    "data": {
+      "currency": "EUR",
+      "groupName": "Maple House",
+      "use": {
+        "expenses": {
+          "count": 2,
+          "items": []
+        },
+        "settlements": 1,
+        "toReview": {
+          "yours": 1,
+          "others": 0
+        }
+      }
+    },
+    "status": 409,
+    "body": "{\"error\":\"EUR can’t be removed while Maple House uses it.\",\"status\":409,\"code\":\"CURRENCY_IN_USE\",\"use\":{\"expenses\":{\"count\":2,\"items\":[]},\"settlements\":1,\"toReview\":{\"yours\":1,\"others\":0}}}"
+  },
+  {
+    "code": "CURRENCY_NOT_LISTED",
+    "variant": "default",
+    "data": {
+      "currency": "EUR"
+    },
+    "status": 404,
+    "body": "{\"error\":\"EUR isn’t one of this Group’s extra currencies.\",\"status\":404,\"code\":\"CURRENCY_NOT_LISTED\"}"
+  },
+  {
+    "code": "CURRENCY_IS_MAIN",
+    "variant": "default",
+    "data": {
+      "currency": "INR"
+    },
+    "status": 409,
+    "body": "{\"error\":\"INR is the main currency, so it can’t be removed.\",\"status\":409,\"code\":\"CURRENCY_IS_MAIN\"}"
+  },
+  {
+    "code": "EXPORT_TOO_LARGE",
+    "variant": "default",
+    "data": {
+      "rows": 12345,
+      "limit": 10000
+    },
+    "status": 413,
+    "body": "{\"error\":\"This export would have 12,345 rows, more than the 10,000 one download can hold. Pick fewer Groups or a shorter period.\",\"status\":413,\"code\":\"EXPORT_TOO_LARGE\"}"
+  },
+  {
+    "code": "OPEN_BALANCE",
+    "variant": "default",
+    "data": {
+      "balances": [
+        {
+          "currency": "INR",
+          "amountMinor": -15000
+        },
+        {
+          "currency": "EUR",
+          "amountMinor": 1250
+        }
+      ]
+    },
+    "status": 409,
+    "body": "{\"error\":\"Settle up before you leave: you owe ₹150.00 and are owed €12.50 in this Group.\",\"status\":409,\"code\":\"OPEN_BALANCE\",\"balances\":[{\"currency\":\"INR\",\"amount\":-150},{\"currency\":\"EUR\",\"amount\":12.5}]}"
+  },
+  {
+    "code": "OPEN_BALANCE",
+    "variant": "membersRemove",
+    "data": {
+      "balances": [
+        {
+          "currency": "INR",
+          "amountMinor": -15000
+        },
+        {
+          "currency": "EUR",
+          "amountMinor": 1250
+        }
+      ],
+      "memberName": "Priya Shah",
+      "variant": "membersRemove"
+    },
+    "status": 409,
+    "body": "{\"error\":\"Priya Shah owes ₹150.00 and is owed €12.50 in this Group. Settle up before removing them.\",\"status\":409,\"code\":\"OPEN_BALANCE\",\"balances\":[{\"currency\":\"INR\",\"amount\":-150},{\"currency\":\"EUR\",\"amount\":12.5}]}"
+  },
+  {
+    "code": "RECURRING_EXPENSE_PROBLEM",
+    "variant": "default",
+    "data": {
+      "recurringExpenses": [
+        {
+          "id": "a00000000000000000000009",
+          "description": "Rent"
+        }
+      ]
+    },
+    "status": 409,
+    "body": "{\"error\":\"Rent (recurring) still includes you. Ask an admin to remove you from it, then leave.\",\"status\":409,\"code\":\"RECURRING_EXPENSE_PROBLEM\",\"recurringExpenses\":[{\"id\":\"a00000000000000000000009\",\"description\":\"Rent\"}]}"
+  },
+  {
+    "code": "RECURRING_EXPENSE_PROBLEM",
+    "variant": "membersRemove",
+    "data": {
+      "recurringExpenses": [
+        {
+          "id": "a00000000000000000000009",
+          "description": "Rent"
+        }
+      ],
+      "memberName": "Priya Shah",
+      "variant": "membersRemove"
+    },
+    "status": 409,
+    "body": "{\"error\":\"Rent (recurring) still includes Priya Shah. Remove them from it before removing them from the Group.\",\"status\":409,\"code\":\"RECURRING_EXPENSE_PROBLEM\",\"recurringExpenses\":[{\"id\":\"a00000000000000000000009\",\"description\":\"Rent\"}]}"
+  },
+  {
+    "code": "FORBIDDEN",
+    "variant": "expenseTagChange",
+    "data": {
+      "variant": "expenseTagChange",
+      "tagId": "a00000000000000000000002",
+      "expenseId": "a00000000000000000000003"
+    },
+    "status": 200,
+    "body": "{\"data\":{\"tagId\":\"a00000000000000000000002\",\"results\":[{\"expenseId\":\"a00000000000000000000003\",\"outcome\":\"refused\",\"code\":\"FORBIDDEN\",\"reason\":\"You’re no longer a member of this Group.\"}]},\"status\":200}"
+  },
+  {
+    "code": "GROUP_ARCHIVED",
+    "variant": "expenseTagChange",
+    "data": {
+      "variant": "expenseTagChange",
+      "tagId": "a00000000000000000000002",
+      "expenseId": "a00000000000000000000003"
+    },
+    "status": 200,
+    "body": "{\"data\":{\"tagId\":\"a00000000000000000000002\",\"results\":[{\"expenseId\":\"a00000000000000000000003\",\"outcome\":\"refused\",\"code\":\"GROUP_ARCHIVED\",\"reason\":\"This Group was archived, so nothing more can be saved in it.\"}]},\"status\":200}"
+  },
+  {
+    "code": "INVALID_TAG",
+    "variant": "expenseTagChange",
+    "data": {
+      "variant": "expenseTagChange",
+      "tagId": "a00000000000000000000002",
+      "expenseId": "a00000000000000000000003"
+    },
+    "status": 200,
+    "body": "{\"data\":{\"tagId\":\"a00000000000000000000002\",\"results\":[{\"expenseId\":\"a00000000000000000000003\",\"outcome\":\"refused\",\"code\":\"INVALID_TAG\",\"reason\":\"The Tag isn’t active any more.\"}]},\"status\":200}"
+  },
+  {
+    "code": "ACTIVITY_BACKLOG_FULL",
+    "variant": "expenseTagChange",
+    "data": {
+      "variant": "expenseTagChange",
+      "tagId": "a00000000000000000000002",
+      "expenseId": "a00000000000000000000003"
+    },
+    "status": 200,
+    "body": "{\"data\":{\"tagId\":\"a00000000000000000000002\",\"results\":[{\"expenseId\":\"a00000000000000000000003\",\"outcome\":\"refused\",\"code\":\"ACTIVITY_BACKLOG_FULL\",\"reason\":\"Splitbook couldn’t record this change just now. Try it again later.\"}]},\"status\":200}"
+  },
+  {
+    "code": "INVALID_GROUP_CURRENCIES",
+    "variant": "alreadyListed",
+    "data": {
+      "variant": "alreadyListed",
+      "currency": "EUR",
+      "field": ["currency"]
+    },
+    "status": 422,
+    "body": "{\"error\":\"EUR is already one of this Group’s currencies.\",\"status\":422,\"code\":\"INVALID_GROUP_CURRENCIES\",\"field\":[\"currency\"]}"
+  }
+]
