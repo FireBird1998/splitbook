@@ -61,7 +61,11 @@ describe('proxy rules', () => {
     expect(response.status).toBe(401);
     expect(response.headers.get('location')).toBeNull();
     expect(response.headers.get('content-type')).toContain('application/json');
-    await expect(response.json()).resolves.toEqual({ error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' });
+    await expect(response.json()).resolves.toEqual({
+      error: 'Unauthorized',
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
   });
 
   it('allows anonymous GET invite previews so the join page can render', () => {
@@ -92,7 +96,11 @@ describe('proxy rules', () => {
       const response = decide('/api/notifications/device', false, method);
       expect(response.status).toBe(401);
       expect(response.headers.get('cache-control')).toBe('private, no-store');
-      expect(await response.json()).toEqual({ error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' });
+      expect(await response.json()).toEqual({
+        error: 'Unauthorized',
+        status: 401,
+        code: 'UNAUTHORIZED',
+      });
     }
   });
 
@@ -101,7 +109,11 @@ describe('proxy rules', () => {
     for (const method of ['GET', 'PUT', 'PATCH', 'DELETE']) {
       const response = decide('/api/notifications/dispatch', false, method);
       expect(response.status).toBe(401);
-      expect(await response.json()).toEqual({ error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' });
+      expect(await response.json()).toEqual({
+        error: 'Unauthorized',
+        status: 401,
+        code: 'UNAUTHORIZED',
+      });
     }
     expect(decide('/api/notifications/dispatch/other', false, 'POST').status).toBe(401);
     expect(decide('/api/notifications', false, 'POST').status).toBe(401);

@@ -49,8 +49,16 @@ it.each([
   },
 );
 it.each([
-  ['NOTIFICATION_SETTINGS_CHANGED', 409, '{"error":"Notification settings changed. Retry.","status":409,"code":"NOTIFICATION_SETTINGS_CHANGED"}'],
-  ['NOTIFICATION_TOKEN_REQUIRED', 400, '{"error":"Notification registration needs a device token.","status":400,"code":"NOTIFICATION_TOKEN_REQUIRED"}'],
+  [
+    'NOTIFICATION_SETTINGS_CHANGED',
+    409,
+    '{"error":"Notification settings changed. Retry.","status":409,"code":"NOTIFICATION_SETTINGS_CHANGED"}',
+  ],
+  [
+    'NOTIFICATION_TOKEN_REQUIRED',
+    400,
+    '{"error":"Notification registration needs a device token.","status":400,"code":"NOTIFICATION_TOKEN_REQUIRED"}',
+  ],
 ] as const)('answers %s with its existing words and status', async (code, status, body) => {
   const response = serverError(new Refusal(code));
   expect(response.status).toBe(status);
@@ -59,12 +67,19 @@ it.each([
 it('uses payment words for the default payer-or-recipient refusal', async () => {
   const response = serverError(new Refusal('FORBIDDEN_SETTLEMENT'));
   expect(response.status).toBe(422);
-  expect(await response.text()).toBe('{"error":"Only the payer or recipient can record this payment","status":422,"code":"FORBIDDEN_SETTLEMENT"}');
+  expect(await response.text()).toBe(
+    '{"error":"Only the payer or recipient can record this payment","status":422,"code":"FORBIDDEN_SETTLEMENT"}',
+  );
 });
 it.each(['GROUP_DELETION_NOT_REQUESTED', 'GROUP_DELETION_CHANGED'] as const)(
-  'answers %s as a Group conflict', async (code) => {
+  'answers %s as a Group conflict',
+  async (code) => {
     const response = serverError(new Refusal(code));
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({error:'This Group changed. Reload and try again.',status:409,code});
+    expect(await response.json()).toEqual({
+      error: 'This Group changed. Reload and try again.',
+      status: 409,
+      code,
+    });
   },
 );

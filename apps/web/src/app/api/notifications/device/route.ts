@@ -248,8 +248,7 @@ export async function POST(req: Request) {
         const payments =
           body.enabled && (enabling ? true : (body.payments ?? prior?.payments ?? true));
         const token = body.token ?? prior?.token;
-        if (body.enabled && !token)
-          return refusal(new Refusal('NOTIFICATION_TOKEN_REQUIRED'));
+        if (body.enabled && !token) return refusal(new Refusal('NOTIFICATION_TOKEN_REQUIRED'));
         const now = new Date();
         const activate =
           enabling || (expenseUpdates && !prior?.expenseUpdates) || (payments && !prior?.payments);

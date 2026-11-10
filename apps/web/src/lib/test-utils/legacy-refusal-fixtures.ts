@@ -236,8 +236,7 @@ export function currentCause(
     }
     if (caller === 'tag-change' && code === 'INVALID_TAG') return new Refusal(code);
     if (caller === 'payment' || caller === 'settlement') {
-      if (code === 'FORBIDDEN_SETTLEMENT')
-        return new Refusal(code);
+      if (code === 'FORBIDDEN_SETTLEMENT') return new Refusal(code);
       if (
         code === 'INVALID_MEMBERS' ||
         code === 'SAME_PARTY' ||
