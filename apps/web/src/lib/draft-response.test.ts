@@ -38,7 +38,6 @@ it.each([
   Object.assign(new Error('revision race'), { name: 'VersionError' }),
   new MoneyValidationError('INVALID_MONEY', 'Private amount problem', ['amount']),
   new mongo.MongoOperationTimeoutError('operation timed out'),
-  new Refusal('INVALID_TAG'),
 ])('keeps an unclassified Draft save failure uncertain (%s)', async (cause) => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {});
   log.mockClear();
@@ -53,9 +52,9 @@ it.each([
 });
 
 it('answers a typed refusal by kind without a positive code list', async () => {
-  const response = draftError(new Refusal('EXPORT_TOO_LARGE', { rows: 3, limit: 2 }));
-  expect(response.status).toBe(413);
+  const response = draftError(new Refusal('DRAFT_GROUP_LIMIT'));
+  expect(response.status).toBe(409);
   expect(await response.text()).toBe(
-    '{"error":"This export would have 3 rows, more than the 2 one download can hold. Pick fewer Groups or a shorter period.","status":413,"code":"EXPORT_TOO_LARGE"}',
+    '{"error":"You have 100\u00a0items waiting in this Group. Save or delete some before keeping more.","status":409,"code":"DRAFT_GROUP_LIMIT"}',
   );
 });

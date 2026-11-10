@@ -1,5 +1,6 @@
 import inputs from './refusal-census-inputs.json';
 import draftAnswers from './refusal-census-draft-answers.json';
+import vocabularyAnswers from './utils/refusal-vocabulary-answers.json';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
@@ -121,7 +122,12 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
       census.push({
         thrown: thrown(cause),
         central: await recorded(response.serverError(currentCause(cause))),
-        draft: await recorded(draftError(currentCause(cause, 'draft'))),
+        // These cross-family injections cannot reach the Draft HTTP answering policy.
+        ...(inputs.unreachableDraftCodes.includes(code)
+          ? {}
+          : {
+              draft: await recorded(draftError(currentCause(cause, 'draft'))),
+            }),
       });
     }
     expect(census).toMatchSnapshot();
@@ -245,6 +251,7 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
 it('covers every literal producer, route table entry and message comparison', () => {
   const covered = new Set([
     ...draftAnswers.map(({ code }) => code),
+    ...vocabularyAnswers.map(({ code }) => code),
     ...plainCodes,
     ...moneyCases.map(({ code }) => code),
     ...tagCodes,

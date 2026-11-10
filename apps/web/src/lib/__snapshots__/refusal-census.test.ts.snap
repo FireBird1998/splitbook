@@ -472,8 +472,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "GET",
@@ -537,8 +537,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
 [
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "PUT",
@@ -571,8 +571,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
 [
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "DELETE",
@@ -588,8 +588,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
 [
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "GET",
@@ -600,8 +600,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "POST",
@@ -721,8 +721,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "GET",
@@ -769,8 +769,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "PATCH",
@@ -817,8 +817,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "DELETE",
@@ -1000,8 +1000,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
 [
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "POST",
@@ -1094,8 +1094,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
 [
   {
     "answer": {
-      "body": "{"error":"This person has already been invited","status":409}",
-      "hasCode": false,
+      "body": "{"error":"This person has already been invited","status":409,"code":"ALREADY_INVITED"}",
+      "hasCode": true,
       "status": 409,
     },
     "method": "POST",
@@ -1123,8 +1123,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
 [
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "POST",
@@ -1152,8 +1152,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
 [
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "POST",
@@ -1324,8 +1324,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
 [
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "PATCH",
@@ -1336,8 +1336,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Cannot demote the last admin. Promote another member first.","status":409}",
-      "hasCode": false,
+      "body": "{"error":"Cannot demote the last admin. Promote another member first.","status":409,"code":"LAST_ADMIN"}",
+      "hasCode": true,
       "status": 409,
     },
     "method": "PATCH",
@@ -1430,8 +1430,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "DELETE",
@@ -1442,8 +1442,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Cannot remove the last admin.","status":409}",
-      "hasCode": false,
+      "body": "{"error":"Cannot remove the last admin.","status":409,"code":"LAST_ADMIN"}",
+      "hasCode": true,
       "status": 409,
     },
     "method": "DELETE",
@@ -1478,8 +1478,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"You cannot remove yourself. Use leave group instead.","status":400}",
-      "hasCode": false,
+      "body": "{"error":"You cannot remove yourself. Use leave group instead.","status":400,"code":"SELF_REMOVE"}",
+      "hasCode": true,
       "status": 400,
     },
     "method": "DELETE",
@@ -1570,8 +1570,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "PATCH",
@@ -1630,8 +1630,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "DELETE",
@@ -1695,8 +1695,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "POST",
@@ -1844,8 +1844,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "PATCH",
@@ -1856,8 +1856,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "method": "DELETE",
@@ -1998,7 +1998,7 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Only the payer or recipient can record this settlement","status":422,"code":"FORBIDDEN_SETTLEMENT"}",
+      "body": "{"error":"Only the payer or recipient can record this payment","status":422,"code":"FORBIDDEN_SETTLEMENT"}",
       "hasCode": true,
       "status": 422,
     },
@@ -3905,8 +3905,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Invitation has expired","status":410}",
-      "hasCode": false,
+      "body": "{"error":"Invitation has expired","status":410,"code":"INVITATION_EXPIRED"}",
+      "hasCode": true,
       "status": 410,
     },
     "method": "POST",
@@ -3917,8 +3917,8 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Invitation is no longer pending","status":400}",
-      "hasCode": false,
+      "body": "{"error":"Invitation is no longer pending","status":400,"code":"INVITATION_NOT_PENDING"}",
+      "hasCode": true,
       "status": 400,
     },
     "method": "POST",
@@ -4594,18 +4594,18 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
 exports[`refusal census, recorded on main before the vocabulary (#1079) > records direct helpers including every resource name routes use 1`] = `
 [
   {
-    "body": "{"error":"Unauthorized","status":401}",
-    "hasCode": false,
+    "body": "{"error":"Unauthorized","status":401,"code":"UNAUTHORIZED"}",
+    "hasCode": true,
     "status": 401,
   },
   {
-    "body": "{"error":"Forbidden","status":403}",
-    "hasCode": false,
+    "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+    "hasCode": true,
     "status": 403,
   },
   {
-    "body": "{"error":"Resource not found","status":404}",
-    "hasCode": false,
+    "body": "{"error":"Resource not found","status":404,"code":"NOT_FOUND"}",
+    "hasCode": true,
     "status": 404,
   },
   {
@@ -4614,33 +4614,33 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
     "status": 400,
   },
   {
-    "body": "{"error":"Assistants not found","status":404}",
-    "hasCode": false,
+    "body": "{"error":"Assistants not found","status":404,"code":"NOT_FOUND"}",
+    "hasCode": true,
     "status": 404,
   },
   {
-    "body": "{"error":"Expense not found","status":404}",
-    "hasCode": false,
+    "body": "{"error":"Expense not found","status":404,"code":"NOT_FOUND"}",
+    "hasCode": true,
     "status": 404,
   },
   {
-    "body": "{"error":"Group not found","status":404}",
-    "hasCode": false,
+    "body": "{"error":"Group not found","status":404,"code":"NOT_FOUND"}",
+    "hasCode": true,
     "status": 404,
   },
   {
-    "body": "{"error":"Invitation not found","status":404}",
-    "hasCode": false,
+    "body": "{"error":"Invitation not found","status":404,"code":"NOT_FOUND"}",
+    "hasCode": true,
     "status": 404,
   },
   {
-    "body": "{"error":"Invite link is invalid or expired not found","status":404}",
-    "hasCode": false,
+    "body": "{"error":"Invite link is invalid or expired not found","status":404,"code":"NOT_FOUND"}",
+    "hasCode": true,
     "status": 404,
   },
   {
-    "body": "{"error":"Recurring expense not found","status":404}",
-    "hasCode": false,
+    "body": "{"error":"Recurring expense not found","status":404,"code":"NOT_FOUND"}",
+    "hasCode": true,
     "status": 404,
   },
 ]
@@ -4670,11 +4670,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": true,
       "status": 503,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "ACTIVITY_BACKLOG_FULL",
       "name": "Error",
@@ -4685,11 +4680,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "body": "{"error":"Internal server error","status":500}",
       "hasCode": false,
       "status": 500,
-    },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
     },
     "thrown": {
       "message": "ALREADY_INVITED",
@@ -4718,11 +4708,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": true,
       "status": 409,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "CURRENCY_LOCKED",
       "name": "Error",
@@ -4733,11 +4718,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "body": "{"error":"Internal server error","status":500}",
       "hasCode": false,
       "status": 500,
-    },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
     },
     "thrown": {
       "message": "CURRENCY_MISMATCH",
@@ -4830,11 +4810,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": false,
       "status": 500,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "FORBIDDEN_SETTLEMENT",
       "name": "Error",
@@ -4858,9 +4833,9 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "central": {
-      "body": "{"error":"Internal server error","status":500}",
-      "hasCode": false,
-      "status": 500,
+      "body": "{"error":"This Group changed. Reload and try again.","status":409,"code":"GROUP_DELETION_CHANGED"}",
+      "hasCode": true,
+      "status": 409,
     },
     "draft": {
       "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
@@ -4878,11 +4853,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": false,
       "status": 500,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "GROUP_DELETION_CONFIRMATION_REQUIRED",
       "name": "Error",
@@ -4890,9 +4860,9 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "central": {
-      "body": "{"error":"Internal server error","status":500}",
-      "hasCode": false,
-      "status": 500,
+      "body": "{"error":"This Group changed. Reload and try again.","status":409,"code":"GROUP_DELETION_NOT_REQUESTED"}",
+      "hasCode": true,
+      "status": 409,
     },
     "draft": {
       "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
@@ -4909,11 +4879,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "body": "{"error":"Internal server error","status":500}",
       "hasCode": false,
       "status": 500,
-    },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
     },
     "thrown": {
       "message": "GROUP_DELETION_UNAVAILABLE",
@@ -4974,11 +4939,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": true,
       "status": 400,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "INVALID_ID",
       "name": "Error",
@@ -4989,11 +4949,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "body": "{"error":"Invalid submission key","status":422,"code":"INVALID_IDEMPOTENCY_KEY"}",
       "hasCode": true,
       "status": 422,
-    },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
     },
     "thrown": {
       "message": "INVALID_IDEMPOTENCY_KEY",
@@ -5006,11 +4961,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": true,
       "status": 400,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "INVALID_JSON",
       "name": "Error",
@@ -5021,11 +4971,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "body": "{"error":"Internal server error","status":500}",
       "hasCode": false,
       "status": 500,
-    },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
     },
     "thrown": {
       "message": "INVALID_MEMBERS",
@@ -5070,11 +5015,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": false,
       "status": 500,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "INVALID_TAG",
       "name": "Error",
@@ -5085,11 +5025,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "body": "{"error":"Internal server error","status":500}",
       "hasCode": false,
       "status": 500,
-    },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
     },
     "thrown": {
       "message": "INVALID_WINDOW",
@@ -5102,11 +5037,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": false,
       "status": 500,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "INVITATION_EXPIRED",
       "name": "Error",
@@ -5117,11 +5047,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "body": "{"error":"Internal server error","status":500}",
       "hasCode": false,
       "status": 500,
-    },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
     },
     "thrown": {
       "message": "INVITATION_NOT_PENDING",
@@ -5134,11 +5059,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": false,
       "status": 500,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "LAST_ADMIN",
       "name": "Error",
@@ -5149,11 +5069,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "body": "{"error":"Internal server error","status":500}",
       "hasCode": false,
       "status": 500,
-    },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
     },
     "thrown": {
       "message": "LEAVE_CONFLICT",
@@ -5166,11 +5081,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": false,
       "status": 500,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "NOT_HOUSEHOLD",
       "name": "Error",
@@ -5181,11 +5091,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "body": "{"error":"Internal server error","status":500}",
       "hasCode": false,
       "status": 500,
-    },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
     },
     "thrown": {
       "message": "NO_SETTLEMENT_DEBT",
@@ -5198,11 +5103,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": true,
       "status": 409,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "RECURRING_EXPENSES_OFF",
       "name": "Error",
@@ -5213,11 +5113,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "body": "{"error":"Internal server error","status":500}",
       "hasCode": false,
       "status": 500,
-    },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
     },
     "thrown": {
       "message": "REMOVAL_CONFLICT",
@@ -5262,11 +5157,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": false,
       "status": 500,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "SAME_PARTY",
       "name": "Error",
@@ -5278,11 +5168,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "hasCode": false,
       "status": 500,
     },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
-    },
     "thrown": {
       "message": "SELF_REMOVE",
       "name": "Error",
@@ -5293,11 +5178,6 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
       "body": "{"error":"Internal server error","status":500}",
       "hasCode": false,
       "status": 500,
-    },
-    "draft": {
-      "body": "{"error":"Draft request not confirmed. Reload before retrying; reuse the original creation request.","status":503,"code":"DRAFT_UNCONFIRMED"}",
-      "hasCode": true,
-      "status": 503,
     },
     "thrown": {
       "message": "SETTLEMENT_TRANSACTIONS_REQUIRED",
