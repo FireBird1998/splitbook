@@ -9,7 +9,6 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeStoredSession } from './data/cookies';
 import type { MobileController } from './data/mobile-controller';
-import type { AccountGroupRecordStore } from './data/account-record-storage';
 import { testPhone } from './test-utils/test-phone';
 import { fakeSplitbook } from './test-utils/fake-splitbook';
 import type { FetchResponse } from './data/types';
@@ -587,21 +586,13 @@ function device() {
   });
   const phone = testPhone(server, {
     now: new Date(2026, 8, 27, 10, 42).getTime(),
-    recordSeparator: ':',
-    settlementSeparator: ':',
     newSubmissionKey: () => 'app-states-test-0001',
-    purge: ['savedQueries', 'settlementAttempts'],
     parts: {
       pendingInvitation: undefined,
       draftRequests: undefined,
       tagRequests: undefined,
       groupCreations: undefined,
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
   const clock = phone.clock,
@@ -621,10 +612,6 @@ function device() {
     new Error('The device storage is unreadable'),
     () => storage.failDraftRead,
   );
-  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts]) {
-    delete (store as AccountGroupRecordStore).keys;
-    delete (store as AccountGroupRecordStore).list;
-  }
   const controller = () => phone.open();
   // The complete fake log includes failed offline attempts, like the original transport.
   const logged = server.sent();
