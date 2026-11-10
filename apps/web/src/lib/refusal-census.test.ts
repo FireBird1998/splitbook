@@ -120,8 +120,8 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
       const cause = new Error(code);
       census.push({
         thrown: thrown(cause),
-        central: await recorded(response.serverError(cause)),
-        draft: await recorded(draftError(cause)),
+        central: await recorded(response.serverError(currentCause(cause))),
+        draft: await recorded(draftError(currentCause(cause, 'draft'))),
       });
     }
     expect(census).toMatchSnapshot();
@@ -226,7 +226,8 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
           continue;
         for (const cause of causes) {
           const caller =
-            migratedCallers[path]?.[method] ?? (text.includes('tagError') ? 'tag' : undefined);
+            migratedCallers[path]?.[method] ??
+            (text.includes('tagError') ? 'tag' : text.includes('draftError') ? 'draft' : undefined);
           vi.mocked(auth.api.getSession).mockRejectedValue(currentCause(cause, caller));
           const answer = await handler(new Request('http://localhost/api/census', { method }), {
             params: Promise.resolve({ id: 'a00000000000000000000001' }),

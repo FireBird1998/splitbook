@@ -491,6 +491,28 @@ export const refusalVocabulary = {
   UNSUPPORTED_CURRENCY: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
 } as const satisfies Record<string, Entry>;
 
+/** Direct HTTP helper templates have no machine code today. They do not extend RefusalCode. */
+export const directRefusalVocabulary = {
+  unauthorized: { status: 401, words: 'Unauthorized', includeCode: false },
+  forbidden: refusalVocabulary.FORBIDDEN.variants.membership,
+  notFound: {
+    status: 404,
+    words: (resource: string) => `${resource} not found`,
+    includeCode: false,
+  },
+} as const;
+
+export function directRefusalAnswer(
+  helper: keyof typeof directRefusalVocabulary,
+  resource = 'Resource',
+) {
+  const entry = directRefusalVocabulary[helper];
+  return {
+    error: typeof entry.words === 'function' ? entry.words(resource) : entry.words,
+    status: entry.status,
+  };
+}
+
 export type RefusalCode = keyof typeof refusalVocabulary;
 /** Temporary caller context for the existing code-less membership answers (#1086). */
 export type RefusalCaller = keyof typeof refusalVocabulary.FORBIDDEN.variants;

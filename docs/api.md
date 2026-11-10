@@ -4,18 +4,144 @@ All endpoints return JSON. Auth required unless marked 🔓 (public).
 
 Responses under `/api/` carry `Cache-Control: private, no-store` to prevent browsers, phones and shared caches from storing them.
 
-Standard response format:
+Successful responses use `{ "data": { ... }, "status": 200 }` unless the route
+states its own success format.
+
+## Error contract
+
+A request refusal has `{ error, status, code?, …data }`. `error` is the words
+shown to the member, `status` matches the HTTP status, and `code`, when present,
+is the stable machine-readable refusal code. Clients match `code` to select
+behaviour. The vocabulary in `packages/shared/src/refusals.ts` supplies statuses
+and words. Services throw `new Refusal(code, data?)`, and HTTP routes hand a
+caught value to `serverError(cause)`. The Draft family applies its private policy
+through `draftError` below. A `Refusal` remains an `Error` with its code as its
+`message` for existing callers.
 
 ```json
-// Success
-{ "data": { ... }, "status": 200 }
-
-// Error
-{ "error": "Human-readable message", "status": 400 }
+{
+  "error": "This record changed while you were editing. Reload the latest version before saving.",
+  "status": 409,
+  "code": "STALE_REVISION"
+}
 ```
 
-Helpers in `src/lib/utils/api-response.ts` produce this shape. Many errors add a
-`code`, and the Tag routes add the current Tags too (see [Tags](#tags)).
+Some answers carry no code **today**. The direct `unauthorized()`, `forbidden()`
+and `notFound(resource)` helpers answer `401` with `Unauthorized`, `403` with
+`Forbidden`, and `404` with `<resource> not found`. Their vocabulary templates
+are marked `includeCode: false` outside the exported `RefusalCode` type.
+The code-less refusal entries today are `ALREADY_INVITED`, `INVITATION_EXPIRED`,
+`INVITATION_NOT_PENDING`, `SELF_REMOVE`, the membership answer for `FORBIDDEN`,
+and the demotion and removal answers for `LAST_ADMIN`. The list below includes
+these codes so the inventory includes each refusal even while those answers
+omit the field. #1086 reserves the decisions about giving these answers a code.
+
+Some refusals add data. Money rules supply their own words and, when present,
+a `field` path. A schema refusal supplies `details` with issue paths and
+messages. Tag commands can carry the current Tag `snapshot` and an
+`existingTagId`. Currency removal can carry a `use` summary. Leaving a Group or
+removing a member can carry `balances` with major-unit `amount` and `currency`,
+or `recurringExpenses` with `id` and `description`. Route sections describe when
+each field is present. Bulk Tag-change item outcomes inside a successful `200`
+answer and Connected assistant tool results keep their own result protocols.
+
+### Codes and statuses
+
+This list includes the money codes whose words come from the rule that refused.
+A test compares every code and all of its statuses with the vocabulary.
+
+<!-- refusal-codes:start -->
+
+| Code                                   | HTTP status |
+| -------------------------------------- | ----------- |
+| `ACCOUNT_CHANGED`                      | 419         |
+| `ACTIVITY_BACKLOG_FULL`                | 503         |
+| `ALREADY_INVITED`                      | 409         |
+| `AMBIGUOUS_TAG`                        | 409         |
+| `CURRENCY_IN_USE`                      | 409         |
+| `CURRENCY_IS_MAIN`                     | 409         |
+| `CURRENCY_LOCKED`                      | 409         |
+| `CURRENCY_MISMATCH`                    | 422         |
+| `CURRENCY_NOT_LISTED`                  | 404         |
+| `DATABASE_UNAVAILABLE`                 | 503         |
+| `DRAFT_GROUP_LIMIT`                    | 409         |
+| `DRAFT_NOT_FOUND`                      | 404         |
+| `DRAFT_TRANSACTIONS_REQUIRED`          | 503         |
+| `DRAFT_UNCONFIRMED`                    | 503         |
+| `DRAFTS_DISABLED`                      | 404         |
+| `DUPLICATE_PARTICIPANTS`               | 422         |
+| `EMPTY_PARTICIPANTS`                   | 422         |
+| `EXPORT_TOO_LARGE`                     | 413         |
+| `FORBIDDEN`                            | 403         |
+| `FORBIDDEN_SETTLEMENT`                 | 422         |
+| `GROUP_ARCHIVED`                       | 409         |
+| `GROUP_DELETION_CONFIRMATION_REQUIRED` | 409         |
+| `GROUP_DELETION_UNAVAILABLE`           | 409         |
+| `IDEMPOTENCY_CONFLICT`                 | 409         |
+| `INVALID_AMOUNT_RANGE`                 | 422         |
+| `INVALID_COMPARE`                      | 400         |
+| `INVALID_CROSS_CURRENCY_SETTLEMENT`    | 422         |
+| `INVALID_CURRENCY`                     | 400         |
+| `INVALID_GROUP_CURRENCIES`             | 422         |
+| `INVALID_ID`                           | 400         |
+| `INVALID_IDEMPOTENCY_KEY`              | 422         |
+| `INVALID_JSON`                         | 400         |
+| `INVALID_MEMBERS`                      | 422         |
+| `INVALID_MONEY`                        | 422         |
+| `INVALID_MONEY_PRECISION`              | 422         |
+| `INVALID_MONEY_RANGE`                  | 422         |
+| `INVALID_MONEY_VERSION`                | 422         |
+| `INVALID_MONTH`                        | 400         |
+| `INVALID_MONTHS`                       | 400         |
+| `INVALID_PARTY`                        | 422         |
+| `INVALID_PAYER_AMOUNT`                 | 422         |
+| `INVALID_PERCENTAGE`                   | 422         |
+| `INVALID_SETTLEMENT_BATCH`             | 422         |
+| `INVALID_SHARES`                       | 422         |
+| `INVALID_SPLIT`                        | 422         |
+| `INVALID_TAG`                          | 422         |
+| `INVALID_TAG_COMMAND`                  | 400         |
+| `INVALID_TIME_ZONE`                    | 400         |
+| `INVALID_WINDOW`                       | 422         |
+| `INVITATION_EXPIRED`                   | 410         |
+| `INVITATION_NOT_PENDING`               | 400         |
+| `LAST_ACTIVE_TAG`                      | 409         |
+| `LAST_ADMIN`                           | 409         |
+| `LEAVE_CONFLICT`                       | 409         |
+| `MISSING_SPLIT_AMOUNT`                 | 422         |
+| `MONEY_REPRESENTATION_MISMATCH`        | 422         |
+| `NO_SETTLEMENT_DEBT`                   | 422         |
+| `NOT_A_TRIP`                           | 409         |
+| `NOT_HOUSEHOLD`                        | 422         |
+| `OPEN_BALANCE`                         | 409         |
+| `PAYER_TOTAL_MISMATCH`                 | 422         |
+| `PERCENTAGE_TOTAL_MISMATCH`            | 422         |
+| `QUERY_TOO_LONG`                       | 422         |
+| `RECURRING_EXPENSE_PROBLEM`            | 409         |
+| `RECURRING_EXPENSES_OFF`               | 409         |
+| `REMOVAL_CONFLICT`                     | 409         |
+| `REQUEST_KEY_REUSED`                   | 409         |
+| `REQUEST_TOO_LARGE`                    | 413         |
+| `REVISION_REQUIRED`                    | 428         |
+| `SAME_PARTY`                           | 422         |
+| `SELF_REMOVE`                          | 400         |
+| `SETTLEMENT_TRANSACTIONS_REQUIRED`     | 503         |
+| `SPLIT_TOTAL_MISMATCH`                 | 422         |
+| `STALE_REVISION`                       | 409         |
+| `TAG_ADMIN_REQUIRED`                   | 403         |
+| `TAG_CHANGED`                          | 409         |
+| `TAG_EXISTS`                           | 409         |
+| `TAG_IN_USE`                           | 409         |
+| `TAG_PRECONDITION_REQUIRED`            | 428         |
+| `TAG_TRANSACTIONS_REQUIRED`            | 503         |
+| `UNBALANCED_LEDGER`                    | 422         |
+| `UNBALANCED_TEMPLATE`                  | 422         |
+| `UNSAFE_MONEY`                         | 422         |
+| `UNSUPPORTED_CURRENCY`                 | 422         |
+
+<!-- refusal-codes:end -->
+
+### Validation and money
 
 A body or query the route's schema refuses answers **422** `VALIDATION_ERROR`,
 with each problem in `details` as `{ path, message }`, the shape the Draft APIs
@@ -37,6 +163,8 @@ Two routes refuse with a message of their own instead: an invite's email
 (`Invalid email address`) and an invitation's action (`Invalid action`), both
 **422** without `details`. Tag commands answer **400** `INVALID_TAG_COMMAND`.
 
+### Authentication and faults
+
 **Unauthenticated `/api/*` requests get `401` JSON, never a redirect.** Route
 protection lives in `src/proxy.ts` (rules in `src/lib/auth/proxy-rules.ts`); for
 API paths without a session cookie it answers `{ "error": "Unauthorized", "status": 401 }`,
@@ -56,6 +184,8 @@ can't use is one such fault, never the request's (#547). The Draft routes answer
 an id that isn't one with `422` `VALIDATION_ERROR`, and the Tag routes answer
 both with `400` `INVALID_TAG_COMMAND`.
 
+### Unreachable database
+
 **A database Splitbook can't reach answers `503` `DATABASE_UNAVAILABLE` (#826).**
 Before a request opens a connection on a pool that went idle, the server pings
 the database, and tries once more 1 s later if it gets no answer, so a blip of
@@ -72,12 +202,39 @@ same words with Try again; Android shows them as Splitbook's own error, never as
 being offline. `apps/web/src/app/api/database-unavailable.integration.test.ts`
 pins each against a database it interrupts.
 
+### Draft uncertainty
+
 **A Draft request the server can't confirm answers `503` `DRAFT_UNCONFIRMED`, in
 its own words (#861).** A To review save (`POST /api/groups/[id]/drafts/save`)
 says "Save not confirmed. Everything is still in To review. Check again to finish
 saving."; a Draft's creation keeps its own "Draft request not confirmed. Reload
 before retrying; reuse the original creation request.". Either keeps the Drafts,
 and the same request sent again records once (ADR 0008).
+
+`draftError` answers schema failures as validation, invalid JSON as
+`INVALID_JSON`, a typed refusal as itself, and an unreachable database as
+`DATABASE_UNAVAILABLE`. Every other thrown value answers with the creation or
+save uncertainty words above and is never logged, since it may hold submitted
+values. This includes plain `GROUP_NOT_FOUND`, money errors, version errors and
+raw timeouts.
+
+Today the family also keeps the recorded uncertainty answer for these typed
+refusals, pending the owner's #1086 decisions. The named `hiddenDraftRefusals`
+set beside `draftError` records this exception.
+
+`ACTIVITY_BACKLOG_FULL`, `ALREADY_INVITED`, `CURRENCY_LOCKED`,
+`CURRENCY_MISMATCH`, `FORBIDDEN_SETTLEMENT`,
+`GROUP_DELETION_CONFIRMATION_REQUIRED`, `GROUP_DELETION_UNAVAILABLE`,
+`INVALID_ID`, `INVALID_IDEMPOTENCY_KEY`, `INVALID_JSON`, `INVALID_MEMBERS`,
+`INVALID_TAG`, `INVALID_WINDOW`, `INVITATION_EXPIRED`, `INVITATION_NOT_PENDING`,
+`LAST_ADMIN`, `LEAVE_CONFLICT`, `NOT_HOUSEHOLD`, `NO_SETTLEMENT_DEBT`,
+`RECURRING_EXPENSES_OFF`, `REMOVAL_CONFLICT`, `SAME_PARTY`, `SELF_REMOVE`,
+`SETTLEMENT_TRANSACTIONS_REQUIRED`.
+
+A parsed `SyntaxError` still answers `INVALID_JSON`. The exception above
+preserves the recorded answer for an explicitly thrown typed `INVALID_JSON`.
+
+## Group writes
 
 **An archived Group takes no more changes (#578).** Once an admin archives a
 Group (`DELETE /api/groups/[id]`), every write to its ledger answers **409**
@@ -784,7 +941,7 @@ A command without `requestId`, or a change without `expectedRevision`, answers
 the Tag is checked, and changes nothing. Any other field, or a body that doesn't
 match, answers **400** `INVALID_TAG_COMMAND`.
 
-**Refusals** carry `error`, `status` and `code`, and every `409` and
+Tag refusals use the [error contract](#error-contract). Every `409` and
 `TAG_ADMIN_REQUIRED` also carries the current `snapshot`, so the client can
 show what changed:
 
@@ -1040,7 +1197,7 @@ Reads check stored Expenses too. When an Expense's stored allocations don't
 equal its amount (`assertStoredExpenseMoney`), or a Group's contributions don't
 net to zero (`simplifyDebtsMinor`), the Expense list, balances, spending,
 insights, trip summaries and export answer **500** with the standard
-server-error body (#547). The fault is in stored data, not in the request, so
+[server-error body](#authentication-and-faults) (#547). The fault is in stored data, not in the request, so
 the server logs it once with the route, the code (`UNBALANCED_LEDGER`, or
 another stored-money code) and the ids that find the record (its Group, Expense
 or payment) as far as they are known, never member data. An edit of such an Expense still refuses with **422** and the code.
@@ -1258,7 +1415,7 @@ Group until it is repaired or they are taken out of it (#257, see
 `RECURRING_EXPENSES_ENABLED` switch, on only when it is `true`. While it is off:
 
 - POST, PATCH (edit, pause or resume) and DELETE answer **409**
-  `{ "error": "Recurring Expenses are turned off.", "code": "RECURRING_EXPENSES_OFF" }`
+  `{ "error": "Recurring Expenses are turned off.", "status": 409, "code": "RECURRING_EXPENSES_OFF" }`
   to any signed-in caller, before the body or the caller's role is checked, and
   change nothing. A signed-out caller still gets 401.
 - GET answers a member with an empty list (`{ "data": [] }`), not a refusal, so a
@@ -2111,7 +2268,7 @@ exactly. The shared path, query key (scope `search`) and decoder are `searchPath
 
 The Export page's download (#317). It answers with a file: one CSV, a zip when
 there are several, or with `format=json` one JSON backup of every chosen Group
-(#318). Refusals and failures use the standard JSON error shape.
+(#318). Refusals and failures use the [error contract](#error-contract).
 
 An Expense in a currency Splitbook no longer supports is exported as stored, never
 converted (#820; see the Expenses read).

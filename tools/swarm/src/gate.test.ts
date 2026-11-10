@@ -66,6 +66,7 @@ describe('gate', () => {
       ['lint', 'pass'],
       ['typecheck', 'pass'],
       ['format check', 'pass'],
+      ['refusal contract', 'pass'],
       ['unit tests', 'pass'],
       ['ceilings', 'skip'],
       ['backend', 'pass'],
@@ -78,6 +79,7 @@ describe('gate', () => {
       'pnpm lint',
       'pnpm typecheck',
       'pnpm format:check',
+      'pnpm check:refusals',
       'pnpm --recursive --workspace-concurrency=1 test:unit',
       'node seed.mjs',
       'node start.mjs',
@@ -412,4 +414,12 @@ describe('gate', () => {
       detail: expect.stringMatching(/interrupted/),
     });
   });
+});
+
+it('fails the gate when the refusal contract fails', async () => {
+  const fake = world();
+  fake.exitCodes = (launch) => (launch.args.includes('check:refusals') ? 1 : 0);
+  const verdict = await runGate(fake, { root: worktree() });
+  expect(verdict.verdict).toBe('fail');
+  expect(step(verdict, 'refusal contract')?.status).toBe('fail');
 });

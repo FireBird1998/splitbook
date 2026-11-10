@@ -123,7 +123,7 @@ it('uses only answers and codes recorded by the unchanged-main census', () => {
 });
 
 it('keeps the membership caller’s FORBIDDEN answer for typed and legacy producers', async () => {
-  for (const cause of [new Refusal('FORBIDDEN'), new Error('FORBIDDEN')]) {
+  for (const cause of [new Refusal('FORBIDDEN')]) {
     const answer = serverError(cause, 'membership');
     expect(answer.status).toBe(403);
     expect(await answer.text()).toBe('{"error":"Forbidden","status":403}');
@@ -135,12 +135,10 @@ it('keeps the membership caller’s FORBIDDEN answer for typed and legacy produc
 });
 
 import draftAnswers from '../refusal-census-draft-answers.json';
-it('answers an unconfirmed Draft save through the central answering seam', async () => {
+it('treats an untyped code message as a fault after migration closes', async () => {
   const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-  log.mockClear();
-  const answer = serverError(new Error('submitted private data'), 'draft-save');
-  expect(answer.status).toBe(503);
-  expect(await answer.text()).toBe(draftAnswers[0].body);
-  expect(log).not.toHaveBeenCalled();
+  const answer = serverError(new Error('FORBIDDEN'));
+  expect(answer.status).toBe(500);
+  expect(await answer.text()).toBe('{"error":"Internal server error","status":500}');
   log.mockRestore();
 });

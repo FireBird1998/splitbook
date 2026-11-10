@@ -19,7 +19,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "mobile": "pnpm -C apps/mobile",
-    "swarm": "node tools/swarm/bin/swarm.mjs"
+    "swarm": "node tools/swarm/bin/swarm.mjs",
+    "check:refusals": "node tools/swarm/bin/check-refusals.mjs"
   },
   "devDependencies": {
     "prettier": "^3.8.1"

@@ -2,7 +2,7 @@
  * The gate: every check a ticket needs, run in this worktree, with one verdict.
  *
  * 1. the install check, so a stale install never shows up as failing tests;
- * 2. lint, typecheck and the format check (the root scripts CI runs);
+ * 2. lint, typecheck, format and the refusal contract (the root scripts CI runs);
  * 3. unit tests, never the web integration tests, with vitest workers capped;
  * 4. the ceiling comparison with the base commit, through #206's script;
  * 5. every `verify:*` script, one after another, against a backend the gate starts for its run.
@@ -55,6 +55,7 @@ const timeouts = {
   lint: '15 minutes',
   typecheck: '15 minutes',
   format: '5 minutes',
+  refusals: '2 minutes',
   unit: '20 minutes',
   ceilings: '5 minutes',
   verifier: '10 minutes',
@@ -290,7 +291,16 @@ const gateUnlocked = (
       });
       if (!install.ok) {
         return yield* skip(
-          ['lint', 'typecheck', 'format check', 'unit tests', 'ceilings', 'backend', ...verifiers],
+          [
+            'lint',
+            'typecheck',
+            'format check',
+            'refusal contract',
+            'unit tests',
+            'ceilings',
+            'backend',
+            ...verifiers,
+          ],
           'skipped: the install check failed',
         );
       }
@@ -298,6 +308,11 @@ const gateUnlocked = (
       yield* runCommand({ name: 'lint', args: ['lint'], timeout: timeouts.lint });
       yield* runCommand({ name: 'typecheck', args: ['typecheck'], timeout: timeouts.typecheck });
       yield* runCommand({ name: 'format check', args: ['format:check'], timeout: timeouts.format });
+      yield* runCommand({
+        name: 'refusal contract',
+        args: ['check:refusals'],
+        timeout: timeouts.refusals,
+      });
       // `pnpm test:unit` package by package, so the cap is the gate's total.
       yield* runCommand({
         name: 'unit tests',

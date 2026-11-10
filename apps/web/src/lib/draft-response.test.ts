@@ -1,3 +1,7 @@
+import { mongo } from 'mongoose';
+import { MoneyValidationError } from '@splitbook/shared/exact-money';
+import { Refusal } from '@splitbook/shared/refusals';
+import { draftError } from './draft-response';
 import { expect, it, vi } from 'vitest';
 import { auth } from '@/lib/auth';
 import { POST as create } from '@/app/api/groups/[id]/drafts/route';
@@ -30,10 +34,6 @@ it.each([
   log.mockRestore();
 });
 
-import { mongo } from 'mongoose';
-import { MoneyValidationError } from '@splitbook/shared/exact-money';
-import { Refusal } from '@splitbook/shared/refusals';
-
 it.each([
   Object.assign(new Error('revision race'), { name: 'VersionError' }),
   new MoneyValidationError('INVALID_MONEY', 'Private amount problem', ['amount']),
@@ -50,4 +50,12 @@ it.each([
   expect(await answer.text()).toBe(savedAnswers[0].body);
   expect(log).not.toHaveBeenCalled();
   log.mockRestore();
+});
+
+it('answers a typed refusal by kind without a positive code list', async () => {
+  const response = draftError(new Refusal('EXPORT_TOO_LARGE', { rows: 3, limit: 2 }));
+  expect(response.status).toBe(413);
+  expect(await response.text()).toBe(
+    '{"error":"This export would have 3 rows, more than the 2 one download can hold. Pick fewer Groups or a shorter period.","status":413,"code":"EXPORT_TOO_LARGE"}',
+  );
 });

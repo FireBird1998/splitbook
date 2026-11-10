@@ -1,11 +1,16 @@
-import { Refusal, refusalAnswer, type RefusalCaller } from '@splitbook/shared/refusals';
+import {
+  Refusal,
+  refusalAnswer,
+  directRefusalAnswer,
+  type RefusalCaller,
+} from '@splitbook/shared/refusals';
 import { headers } from 'next/headers';
 import {
   DATABASE_UNAVAILABLE,
   DATABASE_UNAVAILABLE_MESSAGE,
 } from '@splitbook/shared/database-unavailable';
 import { NextResponse } from 'next/server';
-import { ZodError } from 'zod';
+import type { ZodError } from 'zod';
 import { auth } from '@/lib/auth';
 import { MoneyValidationError, StoredMoneyError } from '@splitbook/shared/exact-money';
 import { ACCOUNT_CHANGED, EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
@@ -13,7 +18,6 @@ import {
   AuthDatabaseWatch,
   DatabaseUnavailableError,
   isDatabaseNoAnswer,
-  isDatabaseUnreachable,
 } from '@/lib/mongodb-client';
 
 export interface AuthUser {
@@ -99,60 +103,30 @@ export function error(message: string, status: number = 400, code?: string) {
  * 401 Unauthorized response
  */
 export function unauthorized() {
-  return NextResponse.json({ error: 'Unauthorized', status: 401 }, { status: 401 });
+  const answer = directRefusalAnswer('unauthorized');
+  return NextResponse.json(answer, { status: answer.status });
 }
 
 /**
  * 403 Forbidden response
  */
 export function forbidden() {
-  return NextResponse.json({ error: 'Forbidden', status: 403 }, { status: 403 });
+  const answer = directRefusalAnswer('forbidden');
+  return NextResponse.json(answer, { status: answer.status });
 }
 
 /**
  * 404 Not Found response
  */
 export function notFound(resource: string = 'Resource') {
-  return NextResponse.json({ error: `${resource} not found`, status: 404 }, { status: 404 });
+  const answer = directRefusalAnswer('notFound', resource);
+  return NextResponse.json(answer, { status: answer.status });
 }
 
 /**
- * Answer a thrown value, preserving the legacy answers during the service migration.
+ * Answer a thrown value through the refusal vocabulary or the fault policy.
  */
-export type ServerErrorCaller = RefusalCaller | 'draft' | 'draft-save';
-
-export function serverError(err?: unknown, caller?: ServerErrorCaller): NextResponse {
-  if (caller === 'draft' || caller === 'draft-save') {
-    if (err instanceof ZodError) return validationError(err);
-    if (err instanceof SyntaxError) return serverError(new Refusal('INVALID_JSON'));
-    // Legacy inputs retain the private Draft seam's own classification. Unknown failures
-    // may contain submitted values, so they receive uncertainty words without being logged.
-    const draftCodes = [
-      'DRAFTS_DISABLED',
-      'REQUEST_TOO_LARGE',
-      'DRAFT_GROUP_LIMIT',
-      'DRAFT_NOT_FOUND',
-      'DRAFT_TRANSACTIONS_REQUIRED',
-    ] as const;
-    if (err instanceof Error && draftCodes.some((code) => code === err.message))
-      return serverError(new Refusal(err.message as (typeof draftCodes)[number]));
-    if (
-      err instanceof Error &&
-      [
-        'FORBIDDEN',
-        'GROUP_ARCHIVED',
-        'IDEMPOTENCY_CONFLICT',
-        'STALE_REVISION',
-        'REVISION_REQUIRED',
-        'ACCOUNT_CHANGED',
-      ].includes(err.message)
-    )
-      return serverError(err);
-    if (isDatabaseUnreachable(err)) return databaseUnavailable(err);
-    return serverError(
-      new Refusal('DRAFT_UNCONFIRMED', caller === 'draft-save' ? { variant: 'save' } : undefined),
-    );
-  }
+export function serverError(err?: unknown, caller?: RefusalCaller): NextResponse {
   if (err instanceof Refusal) {
     const answer = refusalAnswer(err, caller);
     return NextResponse.json(answer, { status: answer.status });
@@ -165,29 +139,8 @@ export function serverError(err?: unknown, caller?: ServerErrorCaller): NextResp
       { status: 422 },
     );
   }
-  if (err instanceof Error) {
-    // Only these plain messages had a central answer before migration. Other old errors keep
-    // their fallthrough until their area moves to Refusal.
-    const legacyCodes = [
-      'FORBIDDEN',
-      'INVALID_IDEMPOTENCY_KEY',
-      'IDEMPOTENCY_CONFLICT',
-      'STALE_REVISION',
-      'REVISION_REQUIRED',
-      'CURRENCY_LOCKED',
-      'GROUP_ARCHIVED',
-      'RECURRING_EXPENSES_OFF',
-      'ACTIVITY_BACKLOG_FULL',
-      'INVALID_MONEY',
-      'INVALID_JSON',
-      'INVALID_ID',
-      'ACCOUNT_CHANGED',
-    ] as const;
-    if (err.name === 'VersionError') return serverError(new Refusal('STALE_REVISION'), caller);
-    if (legacyCodes.some((code) => code === err.message)) {
-      return serverError(new Refusal(err.message as (typeof legacyCodes)[number]), caller);
-    }
-  }
+  if (err instanceof Error && err.name === 'VersionError')
+    return serverError(new Refusal('STALE_REVISION'), caller);
 
   // An operation that ran out of its time got no answer either: a save's transaction whose
   // connection kept dropping can end that way rather than on the dropped connection. Its retry
