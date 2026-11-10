@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // The real runtime wiring, with only the native modules and the controller replaced.
@@ -77,6 +77,21 @@ describe('runtime storage wiring', () => {
     const request = wired.dependencies!.fetch as typeof fetch;
     const response = await request('http://127.0.0.1:4138/api/auth/get-session');
     expect(await response.json()).toEqual({ user: null });
+  });
+
+  it('purges the HTTP response store with the account and quietly accepts an absent store (#1060)', async () => {
+    const { httpResponseStore } = await import('./http-response-store');
+    const local = wired.dependencies!.accountLocal as { stores: { clear(): Promise<void> }[] };
+    expect(local.stores).toContain(httpResponseStore);
+    const path = join(wired.cache, 'http-cache');
+    mkdirSync(path);
+    writeFileSync(join(path, 'purge-probe'), 'Fictional account response');
+    await httpResponseStore.clear();
+    expect(existsSync(path)).toBe(false);
+    await expect(httpResponseStore.clear()).resolves.toBeUndefined();
+    expect(readFileSync(join(wired.cache, 'bundled-font.ttf'), 'utf8')).toBe(
+      'Keep the bundled asset',
+    );
   });
 
   it('asks for no HTTP caching when NetInfo needs its reachability probe (#1060)', () => {
