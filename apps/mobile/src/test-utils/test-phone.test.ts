@@ -130,4 +130,40 @@ describe('test phone', () => {
     expect(app.getSnapshot().offline.active).toBe(false);
     phone.dispose();
   });
+  it('can replace one native part without rebuilding the phone and still revokes a refused sign-in', async () => {
+    const server = fakeSplitbook();
+    const phone = testPhone(server, {
+      parts: {
+        credentials: {
+          load: async () => null,
+          save: async () => {
+            throw new Error('Fictional secure storage failure');
+          },
+          clear: async () => undefined,
+        },
+      },
+    });
+    const app = phone.open();
+    await app.signIn('alex');
+    expect(app.getSnapshot().auth.user).toBeNull();
+    expect(app.getSnapshot().auth.message).toBe(
+      'Could not safely save your session. Please try signing in again.',
+    );
+    expect(
+      server.requests.filter((r) => r.method === 'POST' && r.path === '/api/auth/sign-out'),
+    ).toHaveLength(1);
+    phone.dispose();
+  });
+  it('lists native account/Group records as well as path-keyed saved copies', async () => {
+    const phone = testPhone(fakeSplitbook());
+    await phone.stores.settlementAttempts.save('alex', 'maple', { key: 'payment-key' });
+    await phone.stores.savedQueries.save('alex', '/api/groups/maple', { copy: true });
+    expect(await phone.stores.settlementAttempts.list('alex')).toEqual([
+      { groupId: 'maple', value: { key: 'payment-key' } },
+    ]);
+    expect(await phone.stores.settlementAttempts.keys('alex')).toEqual(['maple']);
+    expect(await phone.stores.savedQueries.list('alex')).toEqual([
+      { groupId: '/api/groups/maple', value: { copy: true } },
+    ]);
+  });
 });
