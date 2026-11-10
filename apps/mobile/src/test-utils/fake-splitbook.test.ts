@@ -451,14 +451,16 @@ describe('fake Splitbook', () => {
   it('loses a held reply after the request was taken, without returning its captured response', async () => {
     const server = fakeSplitbook();
     let accepted = 0;
-    server.reply('POST', '/probe', () => { accepted++; return Response.json({ accepted }); });
+    server.reply('POST', '/probe', () => {
+      accepted++;
+      return Response.json({ accepted });
+    });
     const held = server.hold('POST', '/probe');
-    const reading = server.fetch('http://local/probe', { method:'POST', body:'{}' });
+    const reading = server.fetch('http://local/probe', { method: 'POST', body: '{}' });
     await held.arrived;
     expect(accepted).toBe(1);
     held.release('lost-reply');
     await expect(reading).rejects.toThrow('Network request failed');
     expect(server.requests).toHaveLength(1);
   });
-
 });

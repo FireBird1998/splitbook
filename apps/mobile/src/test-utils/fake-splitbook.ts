@@ -265,15 +265,20 @@ export function fakeSplitbook() {
     path: string | RegExp,
     { at = 'reply' }: { at?: 'request' | 'reply' } = {},
   ) => {
-    let arrive!: () => void, release!: () => void;
+    let arrive!: () => void, release!: () => void, lose!: (error: Error) => void;
     const arrived = new Promise<void>((done) => {
       arrive = done;
     });
-    const wait = new Promise<void>((done) => {
+    const wait = new Promise<void>((done, reject) => {
       release = done;
+      lose = reject;
     });
     holds.push({ method, path, at, arrive, wait });
-    return { arrived, release };
+    return {
+      arrived,
+      release: (fault?: 'lost-reply') =>
+        fault ? lose(new TypeError('Network request failed')) : release(),
+    };
   };
   const sessions = new Map<string, PersonaId>();
   let issued = 0,
