@@ -236,10 +236,8 @@ function fixture(options: { groups?: boolean; extras?: string[] } = {}) {
     },
   });
   delete native.stores.savedQueries.retainGroups;
-  const drafts = native.stores.expenseDrafts,
-    requests = native.stores.draftRequests;
+  const drafts = native.stores.expenseDrafts;
   drafts.stallPersistently('list', () => deviceHeld ?? Promise.resolve());
-  native.stores.groupCreations.clear = async () => {};
   const makeController = () => {
     const controller = native.open();
     controllers.push(controller);
