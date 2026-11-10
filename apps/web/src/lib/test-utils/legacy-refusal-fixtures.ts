@@ -215,6 +215,8 @@ export function currentCause(
       'INVALID_JSON',
       'INVALID_ID',
       'ACCOUNT_CHANGED',
+      'GROUP_DELETION_NOT_REQUESTED',
+      'GROUP_DELETION_CHANGED',
     ] as const;
     const centralCode = central.find((candidate) => candidate === code);
     if (caller !== 'draft' && centralCode) return new Refusal(centralCode);
@@ -234,8 +236,7 @@ export function currentCause(
     }
     if (caller === 'tag-change' && code === 'INVALID_TAG') return new Refusal(code);
     if (caller === 'payment' || caller === 'settlement') {
-      if (code === 'FORBIDDEN_SETTLEMENT')
-        return new Refusal(code, caller === 'payment' ? { variant: 'payment' } : undefined);
+      if (code === 'FORBIDDEN_SETTLEMENT') return new Refusal(code);
       if (
         code === 'INVALID_MEMBERS' ||
         code === 'SAME_PARTY' ||

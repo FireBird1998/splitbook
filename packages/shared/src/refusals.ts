@@ -19,6 +19,7 @@ interface BrokenRecurringExpense {
 /** Inputs to the vocabulary's words. Status and words are never supplied by a service. */
 interface RefusalContext {
   variant?: string;
+  resource?: string;
   snapshot?: TagSnapshot;
   existingTagId?: string;
   currency?: string;
@@ -34,9 +35,8 @@ interface RefusalContext {
 interface Answer {
   status: number;
   words: string | ((data: RefusalContext) => string);
-  includeCode: boolean;
 }
-type Entry = { status: number; includeCode: boolean; variants: Record<string, Answer> } & (
+type Entry = { status: number; variants: Record<string, Answer> } & (
   | { words: Answer['words']; moneyWords?: 'from-rule' }
   | { moneyWords: 'from-rule'; words?: never }
 );
@@ -46,481 +46,412 @@ export const refusalVocabulary = {
   ACCOUNT_CHANGED: {
     status: 419,
     words: 'The signed-in account changed in another tab. Reload this page to continue.',
-    includeCode: true,
     variants: {},
   },
   ACTIVITY_BACKLOG_FULL: {
     status: 503,
     words: 'The audit feed is temporarily unavailable. Please retry later.',
-    includeCode: true,
     variants: {},
   },
   ALREADY_INVITED: {
     status: 409,
     words: 'This person has already been invited',
-    includeCode: false,
     variants: {},
   },
   AMBIGUOUS_TAG: {
     status: 409,
     words: 'This Tag has ambiguous historical references and cannot be renamed.',
-    includeCode: true,
     variants: {},
   },
   CURRENCY_IN_USE: {
     status: 409,
     words: (data: RefusalContext) =>
       `${data.currency} can’t be removed while ${data.groupName} uses it.`,
-    includeCode: true,
     variants: {},
   },
   CURRENCY_IS_MAIN: {
     status: 409,
     words: (data: RefusalContext) =>
       `${data.currency} is the main currency, so it can’t be removed.`,
-    includeCode: true,
     variants: {},
   },
   CURRENCY_LOCKED: {
     status: 409,
     words: 'Currency cannot change after this Group has financial records.',
-    includeCode: true,
     variants: {},
   },
   CURRENCY_MISMATCH: {
     status: 422,
     words: 'Currency is not one of this Group’s currencies',
-    includeCode: true,
     moneyWords: 'from-rule',
     variants: {},
   },
   CURRENCY_NOT_LISTED: {
     status: 404,
     words: (data: RefusalContext) => `${data.currency} isn’t one of this Group’s extra currencies.`,
-    includeCode: true,
     variants: {},
   },
   DATABASE_UNAVAILABLE: {
     status: 503,
     words: DATABASE_UNAVAILABLE_MESSAGE,
-    includeCode: true,
     variants: {},
   },
   DRAFT_GROUP_LIMIT: {
     status: 409,
     words: DRAFT_GROUP_LIMIT_MESSAGE,
-    includeCode: true,
     variants: {},
   },
-  DRAFT_NOT_FOUND: { status: 404, words: 'Draft not found', includeCode: true, variants: {} },
+  DRAFT_NOT_FOUND: { status: 404, words: 'Draft not found', variants: {} },
   DRAFT_TRANSACTIONS_REQUIRED: {
     status: 503,
     words: 'Draft changes are temporarily unavailable.',
-    includeCode: true,
     variants: {},
   },
   DRAFT_UNCONFIRMED: {
     status: 503,
     words:
       'Draft request not confirmed. Reload before retrying; reuse the original creation request.',
-    includeCode: true,
     variants: {
-      save: { status: 503, words: DRAFT_SAVE_UNCONFIRMED_MESSAGE, includeCode: true },
+      save: { status: 503, words: DRAFT_SAVE_UNCONFIRMED_MESSAGE },
     },
   },
   DRAFTS_DISABLED: {
     status: 404,
     words: 'Drafts are not enabled',
-    includeCode: true,
     variants: {},
   },
-  DUPLICATE_PARTICIPANTS: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
-  EMPTY_PARTICIPANTS: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  DUPLICATE_PARTICIPANTS: { status: 422, moneyWords: 'from-rule', variants: {} },
+  EMPTY_PARTICIPANTS: { status: 422, moneyWords: 'from-rule', variants: {} },
   EXPORT_TOO_LARGE: {
     status: 413,
     words: (data: RefusalContext) =>
       `This export would have ${data.rows!.toLocaleString('en-US')} rows, more than the ${data.limit!.toLocaleString('en-US')} one download can hold. Pick fewer Groups or a shorter period.`,
-    includeCode: true,
     variants: {},
   },
   FORBIDDEN_SETTLEMENT: {
     status: 422,
-    words: 'Only the payer or recipient can record this settlement',
-    includeCode: true,
-    variants: {
-      payment: {
-        status: 422,
-        words: 'Only the payer or recipient can record this payment',
-        includeCode: true,
-      },
-    },
+    words: 'Only the payer or recipient can record this payment',
+    variants: {},
   },
-  FORBIDDEN: {
-    status: 403,
-    words: 'Forbidden',
-    includeCode: true,
-    variants: { membership: { status: 403, words: 'Forbidden', includeCode: false } },
+  FORBIDDEN: { status: 403, words: 'Forbidden', variants: {} },
+  GROUP_ARCHIVED: { status: 409, words: GROUP_ARCHIVED_MESSAGE, variants: {} },
+  GROUP_DELETION_CHANGED: {
+    status: 409,
+    words: 'This Group changed. Reload and try again.',
+    variants: {},
   },
-  GROUP_ARCHIVED: { status: 409, words: GROUP_ARCHIVED_MESSAGE, includeCode: true, variants: {} },
+  GROUP_DELETION_NOT_REQUESTED: {
+    status: 409,
+    words: 'This Group changed. Reload and try again.',
+    variants: {},
+  },
   GROUP_DELETION_CONFIRMATION_REQUIRED: {
     status: 409,
     words:
       'You are the last member. Leaving will permanently delete this Group and its history. Confirm deletion to continue.',
-    includeCode: true,
     variants: {},
   },
   GROUP_DELETION_UNAVAILABLE: {
     status: 409,
     words:
       'Permanent Group deletion is unavailable here. You are still a member; no history was deleted.',
-    includeCode: true,
     variants: {},
   },
   IDEMPOTENCY_CONFLICT: {
     status: 409,
     words: 'This submission key was already used for different data. Start a new submission.',
-    includeCode: true,
     variants: {},
   },
-  INVALID_AMOUNT_RANGE: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  INVALID_AMOUNT_RANGE: { status: 422, moneyWords: 'from-rule', variants: {} },
   INVALID_COMPARE: {
     status: 400,
     words: 'Compare with 1 to 12 earlier months.',
-    includeCode: true,
     variants: {},
   },
   INVALID_CROSS_CURRENCY_SETTLEMENT: {
     status: 422,
     moneyWords: 'from-rule',
-    includeCode: true,
     variants: {},
   },
   INVALID_CURRENCY: {
     status: 400,
     words: 'Send a currency code, such as INR.',
-    includeCode: true,
     variants: {},
   },
   INVALID_GROUP_CURRENCIES: {
     status: 422,
     moneyWords: 'from-rule',
-    includeCode: true,
     variants: {},
   },
-  INVALID_ID: { status: 400, words: 'Invalid id', includeCode: true, variants: {} },
+  INVALID_ID: { status: 400, words: 'Invalid id', variants: {} },
   INVALID_IDEMPOTENCY_KEY: {
     status: 422,
     words: 'Invalid submission key',
-    includeCode: true,
     variants: {},
   },
-  INVALID_JSON: { status: 400, words: 'Invalid JSON body', includeCode: true, variants: {} },
+  INVALID_JSON: { status: 400, words: 'Invalid JSON body', variants: {} },
   INVALID_MEMBERS: {
     status: 422,
     words: 'Both payer and recipient must be group members',
-    includeCode: true,
     variants: {
       expense: {
         status: 422,
         words: 'All payers and split participants must be group members',
-        includeCode: true,
       },
     },
   },
   INVALID_MONEY_PRECISION: {
     status: 422,
     moneyWords: 'from-rule',
-    includeCode: true,
     variants: {},
   },
-  INVALID_MONEY_RANGE: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
-  INVALID_MONEY_VERSION: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  INVALID_MONEY_RANGE: { status: 422, moneyWords: 'from-rule', variants: {} },
+  INVALID_MONEY_VERSION: { status: 422, moneyWords: 'from-rule', variants: {} },
   INVALID_MONEY: {
     status: 422,
     words: 'Enter a positive amount with the currency’s supported precision.',
-    includeCode: true,
     moneyWords: 'from-rule',
     variants: {},
   },
   INVALID_MONTH: {
     status: 400,
     words: 'Send a Month as YYYY-MM, such as 2026-09.',
-    includeCode: true,
     variants: {},
   },
   INVALID_MONTHS: {
     status: 400,
     words: 'Ask for 1 to 12 months of spending.',
-    includeCode: true,
     variants: {},
   },
-  INVALID_PARTY: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
-  INVALID_PAYER_AMOUNT: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
-  INVALID_PERCENTAGE: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  INVALID_PARTY: { status: 422, moneyWords: 'from-rule', variants: {} },
+  INVALID_PAYER_AMOUNT: { status: 422, moneyWords: 'from-rule', variants: {} },
+  INVALID_PERCENTAGE: { status: 422, moneyWords: 'from-rule', variants: {} },
   INVALID_SETTLEMENT_BATCH: {
     status: 422,
     moneyWords: 'from-rule',
-    includeCode: true,
     variants: {},
   },
-  INVALID_SHARES: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
-  INVALID_SPLIT: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  INVALID_SHARES: { status: 422, moneyWords: 'from-rule', variants: {} },
+  INVALID_SPLIT: { status: 422, moneyWords: 'from-rule', variants: {} },
   INVALID_TAG_COMMAND: {
     status: 400,
     words: 'Check the Tag name and submitted action, then try again.',
-    includeCode: true,
     variants: {
       identity: {
         status: 400,
         words: 'Invalid Group, Tag or request identity.',
-        includeCode: true,
       },
     },
   },
   INVALID_TAG: {
     status: 422,
     words: 'Tag must be an active group tag',
-    includeCode: true,
     variants: {},
   },
   INVALID_TIME_ZONE: {
     status: 400,
     words: 'Send a named IANA time zone, such as Asia/Kolkata.',
-    includeCode: true,
     variants: {},
   },
   INVALID_WINDOW: {
     status: 422,
     words: 'End date must be on or after the start date',
-    includeCode: true,
     variants: {},
   },
   INVITATION_EXPIRED: {
     status: 410,
     words: 'Invitation has expired',
-    includeCode: false,
     variants: {},
   },
   INVITATION_NOT_PENDING: {
     status: 400,
     words: 'Invitation is no longer pending',
-    includeCode: false,
     variants: {},
   },
   LAST_ACTIVE_TAG: {
     status: 409,
     words: 'Create or restore another Tag before removing the last active Tag.',
-    includeCode: true,
     variants: {},
   },
   LAST_ADMIN: {
     status: 409,
     words: 'Make someone else an admin before you leave.',
-    includeCode: true,
     variants: {
       demotion: {
         status: 409,
         words: 'Cannot demote the last admin. Promote another member first.',
-        includeCode: false,
       },
-      removal: { status: 409, words: 'Cannot remove the last admin.', includeCode: false },
+      removal: { status: 409, words: 'Cannot remove the last admin.' },
     },
   },
   LEAVE_CONFLICT: {
     status: 409,
     words: 'This Group changed while you were leaving. Try again.',
-    includeCode: true,
     variants: {},
   },
-  MISSING_SPLIT_AMOUNT: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  MISSING_SPLIT_AMOUNT: { status: 422, moneyWords: 'from-rule', variants: {} },
   MONEY_REPRESENTATION_MISMATCH: {
     status: 422,
     moneyWords: 'from-rule',
-    includeCode: true,
     variants: {},
   },
   NO_SETTLEMENT_DEBT: {
     status: 422,
     words:
       'This pair no longer has a Debt or Suggested payment in one of these currencies. Reload before recording the payment.',
-    includeCode: true,
     variants: {},
   },
   NOT_A_TRIP: {
     status: 409,
     words: 'Only a Trip has a Trip summary.',
-    includeCode: true,
+    variants: {},
+  },
+  NOTIFICATIONS_UNAVAILABLE: {
+    status: 503,
+    words: 'Notifications are not available yet.',
+    variants: {},
+  },
+  NOTIFICATION_SETTINGS_CHANGED: {
+    status: 409,
+    words: 'Notification settings changed. Retry.',
+    variants: {},
+  },
+  NOTIFICATION_TOKEN_REQUIRED: {
+    status: 400,
+    words: 'Notification registration needs a device token.',
+    variants: {},
+  },
+  NOT_FOUND: {
+    status: 404,
+    words: (data: RefusalContext) => `${data.resource} not found`,
     variants: {},
   },
   NOT_HOUSEHOLD: {
     status: 422,
     words: 'Recurring expenses are only available in Household groups',
-    includeCode: true,
     variants: {},
   },
   OPEN_BALANCE: {
     status: 409,
     words: (data: RefusalContext) =>
       `Settle up before you leave: you ${owing(data.balances!, false)} in this Group.`,
-    includeCode: true,
     variants: {
       removal: {
         status: 409,
         words: (data: RefusalContext) =>
           `${data.memberName} ${owing(data.balances!, true)} in this Group. Settle up before removing them.`,
-        includeCode: true,
       },
     },
   },
-  PAYER_TOTAL_MISMATCH: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  PAYER_TOTAL_MISMATCH: { status: 422, moneyWords: 'from-rule', variants: {} },
   PERCENTAGE_TOTAL_MISMATCH: {
     status: 422,
     moneyWords: 'from-rule',
-    includeCode: true,
     variants: {},
   },
   QUERY_TOO_LONG: {
     status: 422,
     words: 'Search for at most 100 characters.',
-    includeCode: true,
     variants: {},
   },
   RECURRING_EXPENSE_PROBLEM: {
     status: 409,
     words: (data: RefusalContext) => leaveRecurringWords(data),
-    includeCode: true,
     variants: {
       removal: {
         status: 409,
         words: (data: RefusalContext) => removalRecurringWords(data),
-        includeCode: true,
       },
     },
   },
   RECURRING_EXPENSES_OFF: {
     status: 409,
     words: 'Recurring Expenses are turned off.',
-    includeCode: true,
     variants: {},
   },
   REMOVAL_CONFLICT: {
     status: 409,
     words: 'This Group changed while you were removing this member. Try again.',
-    includeCode: true,
     variants: {},
   },
   REQUEST_KEY_REUSED: {
     status: 409,
     words: 'This request was already used for another action.',
-    includeCode: true,
     variants: {},
   },
-  REQUEST_TOO_LARGE: { status: 413, words: 'Request too large', includeCode: true, variants: {} },
+  REQUEST_TOO_LARGE: { status: 413, words: 'Request too large', variants: {} },
   REVISION_REQUIRED: {
     status: 428,
     words: 'Reload this record before changing it.',
-    includeCode: true,
     variants: {},
   },
   SAME_PARTY: {
     status: 422,
     words: 'Payer and recipient must be different people',
-    includeCode: true,
     moneyWords: 'from-rule',
     variants: {},
   },
   SELF_REMOVE: {
     status: 400,
     words: 'You cannot remove yourself. Use leave group instead.',
-    includeCode: false,
     variants: {},
   },
   SETTLEMENT_TRANSACTIONS_REQUIRED: {
     status: 503,
     words:
       'Payments across several currencies need a transactional database. Nothing was recorded.',
-    includeCode: true,
     variants: {},
   },
-  SPLIT_TOTAL_MISMATCH: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  SPLIT_TOTAL_MISMATCH: { status: 422, moneyWords: 'from-rule', variants: {} },
   STALE_REVISION: {
     status: 409,
     words: 'This record changed while you were editing. Reload the latest version before saving.',
-    includeCode: true,
     variants: {},
   },
   TAG_ADMIN_REQUIRED: {
     status: 403,
     words: 'Only Group admins can manage Tags.',
-    includeCode: true,
     variants: {},
   },
   TAG_CHANGED: {
     status: 409,
     words: 'This Tag changed. Review its current state before applying your change.',
-    includeCode: true,
     variants: {},
   },
   TAG_EXISTS: {
     status: 409,
     words: 'A Tag with this name already exists. Archived Tags can be restored.',
-    includeCode: true,
     variants: {},
   },
   TAG_IN_USE: {
     status: 409,
     words: 'This Tag is used by Expenses or recurring templates and cannot be deleted.',
-    includeCode: true,
     variants: {},
   },
   TAG_PRECONDITION_REQUIRED: {
     status: 428,
     words: 'Reload Tag management before making this change.',
-    includeCode: true,
     variants: {},
   },
   TAG_TRANSACTIONS_REQUIRED: {
     status: 503,
     words: 'Tag changes are temporarily unavailable. Try again later.',
-    includeCode: true,
     variants: {},
   },
-  UNBALANCED_LEDGER: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
-  UNBALANCED_TEMPLATE: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
-  UNSAFE_MONEY: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
-  UNSUPPORTED_CURRENCY: { status: 422, moneyWords: 'from-rule', includeCode: true, variants: {} },
+  UNAUTHORIZED: { status: 401, words: 'Unauthorized', variants: {} },
+  UNBALANCED_LEDGER: { status: 422, moneyWords: 'from-rule', variants: {} },
+  UNBALANCED_TEMPLATE: { status: 422, moneyWords: 'from-rule', variants: {} },
+  UNSAFE_MONEY: { status: 422, moneyWords: 'from-rule', variants: {} },
+  UNSUPPORTED_CURRENCY: { status: 422, moneyWords: 'from-rule', variants: {} },
 } as const satisfies Record<string, Entry>;
 
-/** Direct HTTP helper templates have no machine code today. They do not extend RefusalCode. */
-export const directRefusalVocabulary = {
-  unauthorized: { status: 401, words: 'Unauthorized', includeCode: false },
-  forbidden: refusalVocabulary.FORBIDDEN.variants.membership,
-  notFound: {
-    status: 404,
-    words: (resource: string) => `${resource} not found`,
-    includeCode: false,
-  },
-} as const;
-
-export function directRefusalAnswer(
-  helper: keyof typeof directRefusalVocabulary,
-  resource = 'Resource',
-) {
-  const entry = directRefusalVocabulary[helper];
-  return {
-    error: typeof entry.words === 'function' ? entry.words(resource) : entry.words,
-    status: entry.status,
-  };
-}
-
 export type RefusalCode = keyof typeof refusalVocabulary;
-/** Temporary caller context for the existing code-less membership answers (#1086). */
-export type RefusalCaller = keyof typeof refusalVocabulary.FORBIDDEN.variants;
 type RequestRefusalCode = {
   [C in RefusalCode]: (typeof refusalVocabulary)[C] extends { words: unknown } ? C : never;
 }[RefusalCode];
 
 type RequiredData = {
+  NOT_FOUND: { resource: string };
   TAG_ADMIN_REQUIRED: { snapshot: TagSnapshot };
   TAG_CHANGED: { snapshot: TagSnapshot };
   TAG_EXISTS: { snapshot: TagSnapshot; existingTagId: string };
@@ -570,17 +501,16 @@ export class Refusal<C extends RequestRefusalCode = RequestRefusalCode> extends 
 }
 
 /** The request refusal body serialized by serverError. */
-export function refusalAnswer(refusal: Refusal, caller?: RefusalCaller) {
+export function refusalAnswer(refusal: Refusal) {
   const entry = refusalVocabulary[refusal.code];
   const variants: Readonly<Record<string, Answer>> = entry.variants;
   const { data, code } = refusal;
-  const answer: Answer =
-    (data.variant ? variants[data.variant] : caller ? variants[caller] : undefined) ?? entry;
+  const answer: Answer = (data.variant ? variants[data.variant] : undefined) ?? entry;
   const words = typeof answer.words === 'function' ? answer.words(data) : answer.words;
   return {
     error: words,
     status: answer.status,
-    ...(answer.includeCode ? { code } : {}),
+    code,
     ...(data.use ? { use: data.use } : {}),
     ...(data.snapshot ? { snapshot: data.snapshot } : {}),
     ...(data.existingTagId ? { existingTagId: data.existingTagId } : {}),

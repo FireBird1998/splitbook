@@ -1,4 +1,5 @@
 import 'server-only';
+import { Refusal, refusalAnswer } from '@splitbook/shared/refusals';
 import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { timingSafeEqual } from 'node:crypto';
 import { refreshRates } from './service';
@@ -12,7 +13,7 @@ export function createRefreshHandler(providers: RateProviders, now = () => new D
     const expected = Buffer.from(`Bearer ${secret ?? ''}`);
     const headers = { 'Cache-Control': API_CACHE_CONTROL };
     if (!secret || supplied.length !== expected.length || !timingSafeEqual(supplied, expected))
-      return Response.json({ error: 'Unauthorized', status: 401 }, { status: 401, headers });
+      return Response.json(refusalAnswer(new Refusal('UNAUTHORIZED')), { status: 401, headers });
     try {
       const data = await refreshRates(providers, now());
       const status = data.reason === 'providers_unavailable' ? 502 : 200;

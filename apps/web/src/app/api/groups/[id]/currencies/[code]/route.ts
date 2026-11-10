@@ -20,6 +20,6 @@ export async function DELETE(
     const { id } = await routeIds(params.then(({ id }) => ({ id })));
     return success(await groupCurrencyService.remove(id, code, user.id!));
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }

@@ -99,7 +99,11 @@ describe('POST and GET /api/groups/[id]/invite-link', () => {
     });
     expect(joined).toEqual({
       status: 404,
-      body: { error: 'Invite link is invalid or expired not found', status: 404 },
+      body: {
+        error: 'Invite link is invalid or expired not found',
+        status: 404,
+        code: 'NOT_FOUND',
+      },
     });
     expect((await readLink(groupId, await signIn('priya'))).status).toBe(403);
   });
@@ -122,7 +126,7 @@ describe('POST and GET /api/groups/[id]/invite-link', () => {
     const made = await makeLink(groupId, priyaCookie);
     const read = await readLink(groupId, priyaCookie);
 
-    const forbidden = { status: 403, body: { error: 'Forbidden', status: 403 } };
+    const forbidden = { status: 403, body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' } };
     expect([made, read]).toEqual([forbidden, forbidden]);
   });
 });

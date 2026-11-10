@@ -247,7 +247,7 @@ describe('GET /api/export', () => {
     const ferry = await createGroup('Ferry Trip', alice);
     const answer = await request(null, exportOf([ferry]));
     expect(answer.status).toBe(401);
-    expect(json(answer)).toEqual({ error: 'Unauthorized', status: 401 });
+    expect(json(answer)).toEqual({ error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' });
   });
 
   describe('refuses the whole request, adding nothing, for a Group the member isn’t in', () => {
@@ -263,7 +263,7 @@ describe('GET /api/export', () => {
       ] as const) {
         const answer = await request(actor, exportOf([...groups]));
         expect(answer.status).toBe(403);
-        expect(json(answer)).toEqual({ error: 'Forbidden', status: 403 });
+        expect(json(answer)).toEqual({ error: 'Forbidden', status: 403, code: 'FORBIDDEN' });
       }
       // Bob can export the Group he is in.
       expect((await csv(bob, exportOf([ferry]))).records).toHaveLength(1);
@@ -277,7 +277,7 @@ describe('GET /api/export', () => {
       await groupService.leave(ferry, bob);
       const answer = await request(bob, exportOf([ferry]));
       expect(answer.status).toBe(403);
-      expect(json(answer)).toEqual({ error: 'Forbidden', status: 403 });
+      expect(json(answer)).toEqual({ error: 'Forbidden', status: 403, code: 'FORBIDDEN' });
     });
 
     it('without adding due recurring Expenses to the Groups it could read', async () => {

@@ -32,16 +32,16 @@ exports[`records dispatch authorization, invalid requests and a failed pass at H
 [
   {
     "answer": {
-      "body": "{"error":"Unauthorized","status":401}",
-      "hasCode": false,
+      "body": "{"error":"Unauthorized","status":401,"code":"UNAUTHORIZED"}",
+      "hasCode": true,
       "status": 401,
     },
     "state": "no authorization",
   },
   {
     "answer": {
-      "body": "{"error":"Invalid request","status":400}",
-      "hasCode": false,
+      "body": "{"error":"Invalid request","status":400,"code":"VALIDATION_ERROR"}",
+      "hasCode": true,
       "status": 400,
     },
     "state": "unexpected query",
@@ -61,64 +61,64 @@ exports[`records notification registration’s code-less refusals at HTTP 1`] = 
 [
   {
     "answer": {
-      "body": "{"error":"Unauthorized","status":401}",
-      "hasCode": false,
+      "body": "{"error":"Unauthorized","status":401,"code":"UNAUTHORIZED"}",
+      "hasCode": true,
       "status": 401,
     },
     "state": "signed out",
   },
   {
     "answer": {
-      "body": "{"error":"Notifications are not available yet.","status":503}",
-      "hasCode": false,
+      "body": "{"error":"Notifications are not available yet.","status":503,"code":"NOTIFICATIONS_UNAVAILABLE"}",
+      "hasCode": true,
       "status": 503,
     },
     "state": "feature disabled",
   },
   {
     "answer": {
-      "body": "{"error":"Notification registration needs a device token.","status":400}",
-      "hasCode": false,
+      "body": "{"error":"Notification registration needs a device token.","status":400,"code":"NOTIFICATION_TOKEN_REQUIRED"}",
+      "hasCode": true,
       "status": 400,
     },
     "state": "token missing",
   },
   {
     "answer": {
-      "body": "{"error":"Unauthorized","status":401}",
-      "hasCode": false,
+      "body": "{"error":"Unauthorized","status":401,"code":"UNAUTHORIZED"}",
+      "hasCode": true,
       "status": 401,
     },
     "state": "session revoked",
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "state": "installation key differs",
   },
   {
     "answer": {
-      "body": "{"error":"Forbidden","status":403}",
-      "hasCode": false,
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
       "status": 403,
     },
     "state": "read installation key differs",
   },
   {
     "answer": {
-      "body": "{"error":"Notification settings changed. Retry.","status":409}",
-      "hasCode": false,
+      "body": "{"error":"Notification settings changed. Retry.","status":409,"code":"NOTIFICATION_SETTINGS_CHANGED"}",
+      "hasCode": true,
       "status": 409,
     },
     "state": "revision differs",
   },
   {
     "answer": {
-      "body": "{"error":"Notification settings changed. Retry.","status":409}",
-      "hasCode": false,
+      "body": "{"error":"Notification settings changed. Retry.","status":409,"code":"NOTIFICATION_SETTINGS_CHANGED"}",
+      "hasCode": true,
       "status": 409,
     },
     "state": "maintenance without a live binding",
@@ -129,8 +129,8 @@ exports[`records notification registration’s code-less refusals at HTTP 1`] = 
 exports[`records the rates cron’s authorization and failure answers through its handler 1`] = `
 [
   {
-    "body": "{"error":"Unauthorized","status":401}",
-    "hasCode": false,
+    "body": "{"error":"Unauthorized","status":401,"code":"UNAUTHORIZED"}",
+    "hasCode": true,
     "status": 401,
   },
   {

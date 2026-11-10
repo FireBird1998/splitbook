@@ -40,7 +40,7 @@ export async function PATCH(
 
     return success(template);
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }
 
@@ -68,6 +68,6 @@ export async function DELETE(
 
     return success({ message: 'Recurring expense deleted' });
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }

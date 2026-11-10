@@ -5,17 +5,19 @@ vi.mock('next/headers', () => ({ headers: vi.fn() }));
 vi.mock('@/lib/auth', () => ({ auth: { api: { getSession: vi.fn() } } }));
 
 describe('serverError answers typed refusals', () => {
-  it('answers the named payment caller with its original words', async () => {
-    const answer = serverError(new Refusal('FORBIDDEN_SETTLEMENT', { variant: 'payment' }));
+  it('answers the payment authorization refusal with its words', async () => {
+    const answer = serverError(new Refusal('FORBIDDEN_SETTLEMENT'));
     expect(answer.status).toBe(422);
     expect(await answer.text()).toBe(
       '{"error":"Only the payer or recipient can record this payment","status":422,"code":"FORBIDDEN_SETTLEMENT"}',
     );
   });
-  it('preserves legacy route answers with no code', async () => {
+  it('codes the last-admin removal answer', async () => {
     const answer = serverError(new Refusal('LAST_ADMIN', { variant: 'removal' }));
     expect(answer.status).toBe(409);
-    expect(await answer.text()).toBe('{"error":"Cannot remove the last admin.","status":409}');
+    expect(await answer.text()).toBe(
+      '{"error":"Cannot remove the last admin.","status":409,"code":"LAST_ADMIN"}',
+    );
   });
   it('answers data carried by a currency refusal', async () => {
     const answer = serverError(
@@ -41,7 +43,7 @@ describe('serverError answers typed refusals', () => {
   });
 });
 
-// Literal answers captured on main. This matrix covers every default and named wording.
+// Original census answers with the approved #1086 corrections. Every wording is covered.
 import cases from './refusal-vocabulary-answers.json';
 import { refusalVocabulary } from '@splitbook/shared/refusals';
 
@@ -75,7 +77,7 @@ it('has exactly the census codes and a recorded answer for every named variant',
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import inputs from '../refusal-census-inputs.json';
-it('uses only answers and codes recorded by the unchanged-main census', () => {
+it('uses only answers and codes recorded by the corrected census', () => {
   const baseline = ['refusal-census.test.ts.snap', 'refusal-census-other.test.ts.snap']
     .map((file) => readFileSync(resolve('src/lib/__snapshots__', file), 'utf8'))
     .join('\n');
@@ -101,16 +103,15 @@ it('uses only answers and codes recorded by the unchanged-main census', () => {
     'EXPORT_TOO_LARGE',
     'DATABASE_UNAVAILABLE',
   ]);
-  for (const code of [
-    'BACKUP_ALL_TIME',
-    'INVALID_REQUEST_FINGERPRINT',
-    'GROUP_DELETION_NOT_REQUESTED',
-    'GROUP_DELETION_CHANGED',
-    'GROUP_NOT_FOUND',
-  ])
+  for (const code of ['BACKUP_ALL_TIME', 'INVALID_REQUEST_FINGERPRINT', 'GROUP_NOT_FOUND'])
     recordedCodes.delete(code);
   for (const code of [
     'DRAFT_UNCONFIRMED',
+    'UNAUTHORIZED',
+    'NOT_FOUND',
+    'NOTIFICATION_SETTINGS_CHANGED',
+    'NOTIFICATION_TOKEN_REQUIRED',
+    'NOTIFICATIONS_UNAVAILABLE',
     'INVALID_MONTH',
     'INVALID_COMPARE',
     'INVALID_MONTHS',
@@ -120,18 +121,6 @@ it('uses only answers and codes recorded by the unchanged-main census', () => {
   ])
     recordedCodes.add(code);
   expect([...recordedCodes].sort()).toEqual(Object.keys(refusalVocabulary).sort());
-});
-
-it('keeps the membership caller’s FORBIDDEN answer for typed and legacy producers', async () => {
-  for (const cause of [new Refusal('FORBIDDEN')]) {
-    const answer = serverError(cause, 'membership');
-    expect(answer.status).toBe(403);
-    expect(await answer.text()).toBe('{"error":"Forbidden","status":403}');
-  }
-  const other = serverError(new Refusal('GROUP_ARCHIVED'), 'membership');
-  expect(await other.text()).toBe(
-    '{"error":"This Group was archived, so nothing more can be saved in it.","status":409,"code":"GROUP_ARCHIVED"}',
-  );
 });
 
 import draftAnswers from '../refusal-census-draft-answers.json';

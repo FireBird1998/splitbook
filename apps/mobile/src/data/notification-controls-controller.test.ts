@@ -29,6 +29,7 @@ const response = (body: unknown, status = 200) =>
 function device(available = true) {
   let confirmed = { ...off, available };
   let fail = false;
+  let unavailable = false;
   let unreachable = false;
   let hold: Promise<void> | null = null;
   let heldRead: Promise<void> | null = null;
@@ -58,6 +59,15 @@ function device(available = true) {
       if (init.method === 'POST') {
         writes.push(JSON.parse(String(init.body)));
         if (hold) await hold;
+        if (unavailable)
+          return response(
+            {
+              error: 'Notifications are not available yet.',
+              status: 503,
+              code: 'NOTIFICATIONS_UNAVAILABLE',
+            },
+            503,
+          );
         if (fail) return response({ error: 'Failed' }, 500);
         const sent = JSON.parse(String(init.body));
         confirmed = {
@@ -122,6 +132,9 @@ function device(available = true) {
     writes,
     setOffline: (value: boolean) => {
       unreachable = value;
+    },
+    setUnavailable: (value: boolean) => {
+      unavailable = value;
     },
     setFailure: (value: boolean) => {
       fail = value;
@@ -219,6 +232,48 @@ describe('Settings notification controls at the controller/native seam', () => {
     setFailure(false);
     await controller.retryNotifications();
     expect(controller.getSnapshot().notifications.confirmed.enabled).toBe(true);
+  });
+  it('keeps confirmed settings and the offline message when notifications are unavailable', async () => {
+    const { controller, setUnavailable } = device();
+    await controller.signIn('alex');
+    await controller.refreshNotifications();
+    setUnavailable(true);
+    await controller.enableNotifications();
+    expect(controller.getSnapshot().notifications).toMatchObject({
+      status: 'offline',
+      message: 'Connect to confirm notification settings.',
+      hasConfirmed: true,
+      confirmed: off,
+    });
+  });
+  it('keeps notification retry and monitored transitions local to Settings', async () => {
+    const { controller, notifications, writes, setUnavailable } = device();
+    await controller.signIn('alex');
+    const statuses: string[] = [];
+    const unsubscribe = controller.subscribe(() => {
+      const status = controller.getSnapshot().notifications.status;
+      if (statuses.at(-1) !== status) statuses.push(status);
+    });
+    setUnavailable(true);
+    await controller.enableNotifications();
+    expect(controller.getSnapshot()).toMatchObject({
+      auth: { status: 'authenticated' },
+      offline: { active: false },
+      notifications: { hasConfirmed: false, confirmed: { enabled: false } },
+    });
+    expect(writes).toHaveLength(1);
+    setUnavailable(false);
+    await controller.retryNotifications();
+    unsubscribe();
+    expect(statuses).toEqual(['pending', 'offline', 'loading', 'ready', 'pending', 'ready']);
+    expect(controller.getSnapshot().notifications).toMatchObject({
+      status: 'ready',
+      hasConfirmed: true,
+      confirmed: { enabled: true },
+    });
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toEqual(writes[0]);
+    expect(notifications.requestPermission).toHaveBeenCalledOnce();
   });
   it('sign-out clears native state and a late token or reply cannot restore previous account settings', async () => {
     const { controller, notifications, writes, hold } = device();

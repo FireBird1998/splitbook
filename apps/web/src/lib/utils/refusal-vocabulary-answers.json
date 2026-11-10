@@ -7,15 +7,6 @@
     "body": "{\"error\":\"Forbidden\",\"status\":403,\"code\":\"FORBIDDEN\"}"
   },
   {
-    "code": "FORBIDDEN",
-    "variant": "membership",
-    "data": {
-      "variant": "membership"
-    },
-    "status": 403,
-    "body": "{\"error\":\"Forbidden\",\"status\":403}"
-  },
-  {
     "code": "INVALID_IDEMPOTENCY_KEY",
     "variant": "default",
     "data": {},
@@ -126,15 +117,6 @@
     "code": "FORBIDDEN_SETTLEMENT",
     "variant": "default",
     "data": {},
-    "status": 422,
-    "body": "{\"error\":\"Only the payer or recipient can record this settlement\",\"status\":422,\"code\":\"FORBIDDEN_SETTLEMENT\"}"
-  },
-  {
-    "code": "FORBIDDEN_SETTLEMENT",
-    "variant": "payment",
-    "data": {
-      "variant": "payment"
-    },
     "status": 422,
     "body": "{\"error\":\"Only the payer or recipient can record this payment\",\"status\":422,\"code\":\"FORBIDDEN_SETTLEMENT\"}"
   },
@@ -441,7 +423,7 @@
       "variant": "demotion"
     },
     "status": 409,
-    "body": "{\"error\":\"Cannot demote the last admin. Promote another member first.\",\"status\":409}"
+    "body": "{\"error\":\"Cannot demote the last admin. Promote another member first.\",\"status\":409,\"code\":\"LAST_ADMIN\"}"
   },
   {
     "code": "LAST_ADMIN",
@@ -450,35 +432,35 @@
       "variant": "removal"
     },
     "status": 409,
-    "body": "{\"error\":\"Cannot remove the last admin.\",\"status\":409}"
+    "body": "{\"error\":\"Cannot remove the last admin.\",\"status\":409,\"code\":\"LAST_ADMIN\"}"
   },
   {
     "code": "SELF_REMOVE",
     "variant": "default",
     "data": {},
     "status": 400,
-    "body": "{\"error\":\"You cannot remove yourself. Use leave group instead.\",\"status\":400}"
+    "body": "{\"error\":\"You cannot remove yourself. Use leave group instead.\",\"status\":400,\"code\":\"SELF_REMOVE\"}"
   },
   {
     "code": "INVITATION_NOT_PENDING",
     "variant": "default",
     "data": {},
     "status": 400,
-    "body": "{\"error\":\"Invitation is no longer pending\",\"status\":400}"
+    "body": "{\"error\":\"Invitation is no longer pending\",\"status\":400,\"code\":\"INVITATION_NOT_PENDING\"}"
   },
   {
     "code": "INVITATION_EXPIRED",
     "variant": "default",
     "data": {},
     "status": 410,
-    "body": "{\"error\":\"Invitation has expired\",\"status\":410}"
+    "body": "{\"error\":\"Invitation has expired\",\"status\":410,\"code\":\"INVITATION_EXPIRED\"}"
   },
   {
     "code": "ALREADY_INVITED",
     "variant": "default",
     "data": {},
     "status": 409,
-    "body": "{\"error\":\"This person has already been invited\",\"status\":409}"
+    "body": "{\"error\":\"This person has already been invited\",\"status\":409,\"code\":\"ALREADY_INVITED\"}"
   },
   {
     "code": "LEAVE_CONFLICT",
@@ -694,5 +676,56 @@
     "data": {},
     "status": 409,
     "body": "{\"error\":\"Only a Trip has a Trip summary.\",\"status\":409,\"code\":\"NOT_A_TRIP\"}"
+  },
+  {
+    "code": "UNAUTHORIZED",
+    "variant": "default",
+    "data": {},
+    "status": 401,
+    "body": "{\"error\":\"Unauthorized\",\"status\":401,\"code\":\"UNAUTHORIZED\"}"
+  },
+  {
+    "code": "NOT_FOUND",
+    "variant": "default",
+    "data": {
+      "resource": "Resource"
+    },
+    "status": 404,
+    "body": "{\"error\":\"Resource not found\",\"status\":404,\"code\":\"NOT_FOUND\"}"
+  },
+  {
+    "code": "NOTIFICATION_SETTINGS_CHANGED",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"Notification settings changed. Retry.\",\"status\":409,\"code\":\"NOTIFICATION_SETTINGS_CHANGED\"}"
+  },
+  {
+    "code": "NOTIFICATION_TOKEN_REQUIRED",
+    "variant": "default",
+    "data": {},
+    "status": 400,
+    "body": "{\"error\":\"Notification registration needs a device token.\",\"status\":400,\"code\":\"NOTIFICATION_TOKEN_REQUIRED\"}"
+  },
+  {
+    "code": "GROUP_DELETION_NOT_REQUESTED",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This Group changed. Reload and try again.\",\"status\":409,\"code\":\"GROUP_DELETION_NOT_REQUESTED\"}"
+  },
+  {
+    "code": "GROUP_DELETION_CHANGED",
+    "variant": "default",
+    "data": {},
+    "status": 409,
+    "body": "{\"error\":\"This Group changed. Reload and try again.\",\"status\":409,\"code\":\"GROUP_DELETION_CHANGED\"}"
+  },
+  {
+    "code": "NOTIFICATIONS_UNAVAILABLE",
+    "variant": "default",
+    "data": {},
+    "status": 503,
+    "body": "{\"error\":\"Notifications are not available yet.\",\"status\":503,\"code\":\"NOTIFICATIONS_UNAVAILABLE\"}"
   }
 ]

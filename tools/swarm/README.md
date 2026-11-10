@@ -248,7 +248,7 @@ Domain services, models and MCP protocol result policies keep their own boundari
 The same check covers the central answering function. Tests and fixtures are
 excluded.
 
-The twelve retained sites and their reasons live in
+The nine retained sites and their reasons live in
 `src/refusal-exceptions.ts`. Each exception matches its file, enclosing function,
 code and guard condition once. An unused or moved exception fails the check.
 The gate, PR checks and the full CI verification job run the same root command.

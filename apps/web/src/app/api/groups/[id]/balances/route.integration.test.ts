@@ -259,12 +259,12 @@ describe('GET /api/groups/[id]/balances with a recurring Expense due', () => {
     session.userId = dave;
     expect(await read(readBalances, groupId, '/balances')).toEqual({
       status: 403,
-      body: { error: 'Forbidden', status: 403 },
+      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
     });
     session.userId = null;
     expect(await read(readBalances, groupId, '/balances')).toEqual({
       status: 401,
-      body: { error: 'Unauthorized', status: 401 },
+      body: { error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' },
     });
 
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);

@@ -129,7 +129,7 @@ export async function resumeGroupDeletion(
     try {
       const complete = await mongoose.connection.transaction(async (session) => {
         const request = await requests.findOne({ _id: id }, { session });
-        if (!request) throw new Error('GROUP_DELETION_NOT_REQUESTED');
+        if (!request) throw new Refusal('GROUP_DELETION_NOT_REQUESTED');
         if (request.state === 'complete') return true;
         const group = await db.collection('groups').updateOne(
           {
@@ -140,7 +140,7 @@ export async function resumeGroupDeletion(
           { $inc: { mutationSequence: 1 } },
           { session },
         );
-        if (!group.matchedCount) throw new Error('GROUP_DELETION_CHANGED');
+        if (!group.matchedCount) throw new Refusal('GROUP_DELETION_CHANGED');
         const collection = groupOwnedCollections[request.collectionIndex];
         if (collection) {
           const records = await db
@@ -163,7 +163,7 @@ export async function resumeGroupDeletion(
         // Every writer shares the fence, so completed collections cannot gain late records.
         for (const name of groupOwnedCollections) {
           if (await db.collection(name).findOne({ group: id }, { session, projection: { _id: 1 } }))
-            throw new Error('GROUP_DELETION_CHANGED');
+            throw new Refusal('GROUP_DELETION_CHANGED');
         }
         await db.collection('groups').deleteOne({ _id: id, members: { $size: 0 } }, { session });
         const completedAt = new Date();
@@ -183,8 +183,8 @@ export async function resumeGroupDeletion(
       if (complete) return result(true);
     } catch (error) {
       if (
-        error instanceof Error &&
-        ['GROUP_DELETION_NOT_REQUESTED', 'GROUP_DELETION_CHANGED'].includes(error.message)
+        error instanceof Refusal &&
+        ['GROUP_DELETION_NOT_REQUESTED', 'GROUP_DELETION_CHANGED'].includes(error.code)
       )
         throw error;
       // A committed claim remains durable after process death, lost responses or an interrupted batch.

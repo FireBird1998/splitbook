@@ -233,7 +233,7 @@ describe('GET /api/groups/[id]/currencies (#721)', () => {
     const groupId = await lisbonAndTokyo();
     expect(await read(groupId, 'priya')).toEqual({
       status: 403,
-      body: { error: 'Forbidden', status: 403 },
+      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
     });
   });
 });
@@ -314,7 +314,7 @@ describe('POST /api/groups/[id]/currencies (#721)', () => {
     const groupId = await lisbonAndTokyo();
     expect(await add(groupId, 'CHF', 'priya')).toEqual({
       status: 403,
-      body: { error: 'Forbidden', status: 403 },
+      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
     });
     expect(await extras(groupId)).toEqual(['EUR', 'JPY', 'GBP']);
   });
@@ -354,7 +354,7 @@ describe('DELETE /api/groups/[id]/currencies/[code] (#721)', () => {
     for (const persona of ['sam', 'priya'] as const) {
       expect(await remove(groupId, 'GBP', persona), persona).toEqual({
         status: 403,
-        body: { error: 'Forbidden', status: 403 },
+        body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
       });
     }
     expect(await extras(groupId)).toEqual(['EUR', 'JPY', 'GBP']);

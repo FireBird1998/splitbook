@@ -79,11 +79,15 @@ for (const format of ['csv', 'json'] as const) {
         );
         if (scenario === 'anonymous') {
           expect.soft(response.status()).toBe(401);
-          expect.soft(await response.json()).toEqual({ error: 'Unauthorized', status: 401 });
+          expect
+            .soft(await response.json())
+            .toEqual({ error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' });
           expect.soft(response.headers().location, 'API 401s carry no redirect').toBeUndefined();
         } else {
           expect.soft(response.status()).toBe(403);
-          expect.soft(await response.json()).toEqual({ error: 'Forbidden', status: 403 });
+          expect
+            .soft(await response.json())
+            .toEqual({ error: 'Forbidden', status: 403, code: 'FORBIDDEN' });
           expect.soft(response.headers()['content-disposition']).toBeUndefined();
         }
         expect(await observeLedger(ledger, expense)).toEqual(before);

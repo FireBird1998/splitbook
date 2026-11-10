@@ -135,7 +135,10 @@ describe('POST and GET /api/groups/[id]/recurring', () => {
       paidBy: [{ user: sam, amount: 30000 }],
     });
 
-    expect(refused).toEqual({ status: 403, body: { error: 'Forbidden', status: 403 } });
+    expect(refused).toEqual({
+      status: 403,
+      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
+    });
     expect(await templates(groupId, samCookie)).toEqual([]);
     expect(await debts(groupId, samCookie)).toEqual([]);
   });
@@ -148,8 +151,8 @@ describe('POST and GET /api/groups/[id]/recurring', () => {
     const added = await addRecurring(groupId, priyaCookie, monthlyRent);
 
     expect([read, added]).toEqual([
-      { status: 403, body: { error: 'Forbidden', status: 403 } },
-      { status: 403, body: { error: 'Forbidden', status: 403 } },
+      { status: 403, body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' } },
+      { status: 403, body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' } },
     ]);
     expect(await templates(groupId, await signIn('alex'))).toEqual([]);
   });

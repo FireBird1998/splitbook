@@ -18,7 +18,11 @@ test('the HTTP API prevents caching on successful and refused ledger requests (#
   privateResponse(await sam.get('/api/groups'), 200, 'Groups list');
   const anonymousGroups = await anonymous.get('/api/groups', { maxRedirects: 0 });
   privateResponse(anonymousGroups, 401, 'Groups list refused by the proxy');
-  expect(await anonymousGroups.json()).toEqual({ error: 'Unauthorized', status: 401 });
+  expect(await anonymousGroups.json()).toEqual({
+    error: 'Unauthorized',
+    status: 401,
+    code: 'UNAUTHORIZED',
+  });
   expect(anonymousGroups.headers().location).toBeUndefined();
 
   for (const [family, path] of [

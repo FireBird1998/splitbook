@@ -9,8 +9,8 @@ states its own success format.
 
 ## Error contract
 
-A request refusal has `{ error, status, code?, …data }`. `error` is the words
-shown to the member, `status` matches the HTTP status, and `code`, when present,
+Every refusal Splitbook writes carries a code, with `{ error, status, code, …data }`. `error` is the words
+shown to the member, `status` matches the HTTP status, and `code`
 is the stable machine-readable refusal code. Clients match `code` to select
 behaviour. The vocabulary in `packages/shared/src/refusals.ts` supplies statuses
 and words. Services throw `new Refusal(code, data?)`, and HTTP routes hand a
@@ -26,15 +26,30 @@ through `draftError` below. A `Refusal` remains an `Error` with its code as its
 }
 ```
 
-Some answers carry no code **today**. The direct `unauthorized()`, `forbidden()`
-and `notFound(resource)` helpers answer `401` with `Unauthorized`, `403` with
-`Forbidden`, and `404` with `<resource> not found`. Their vocabulary templates
-are marked `includeCode: false` outside the exported `RefusalCode` type.
-The code-less refusal entries today are `ALREADY_INVITED`, `INVITATION_EXPIRED`,
-`INVITATION_NOT_PENDING`, `SELF_REMOVE`, the membership answer for `FORBIDDEN`,
-and the demotion and removal answers for `LAST_ADMIN`. The list below includes
-these codes so the inventory includes each refusal even while those answers
-omit the field. #1086 reserves the decisions about giving these answers a code.
+The direct `unauthorized()`, `forbidden()` and `notFound(resource)` helpers
+answer `401` `UNAUTHORIZED`, `403` `FORBIDDEN` and `404` `NOT_FOUND`.
+The proxy's anonymous API answer, the notification routes and the rates cron
+use the same coded unauthorized body. A missing resource keeps its resource's
+words. The signed-out example is
+`{ "error": "Unauthorized", "status": 401, "code": "UNAUTHORIZED" }`.
+
+Demoting or removing the last admin carries `LAST_ADMIN`, removing yourself
+carries `SELF_REMOVE`, and invitation refusals carry `INVITATION_NOT_PENDING`,
+`INVITATION_EXPIRED` or `ALREADY_INVITED`. Their statuses and words are kept.
+Both payment routes answer `422` `FORBIDDEN_SETTLEMENT` with
+"Only the payer or recipient can record this payment".
+
+A changed or missing Group deletion request answers `409`,
+"This Group changed. Reload and try again.", with `GROUP_DELETION_CHANGED` or
+`GROUP_DELETION_NOT_REQUESTED`. Notification registration answers
+`NOTIFICATION_SETTINGS_CHANGED` (`409`) and `NOTIFICATION_TOKEN_REQUIRED`
+(`400`) in its existing words.
+
+Notification registration answers `503` `NOTIFICATIONS_UNAVAILABLE` with
+"Notifications are not available yet." and its private response headers.
+Android notification controls keep the offline state and its existing banner for this code.
+Older Android APKs show the error state for this answer until they update.
+Better Auth and the MCP transport keep their own protocol answers.
 
 Some refusals add data. Money rules supply their own words and, when present,
 a `field` path. A schema refusal supplies `details` with issue paths and
@@ -75,7 +90,9 @@ A test compares every code and all of its statuses with the vocabulary.
 | `FORBIDDEN`                            | 403         |
 | `FORBIDDEN_SETTLEMENT`                 | 422         |
 | `GROUP_ARCHIVED`                       | 409         |
+| `GROUP_DELETION_CHANGED`               | 409         |
 | `GROUP_DELETION_CONFIRMATION_REQUIRED` | 409         |
+| `GROUP_DELETION_NOT_REQUESTED`         | 409         |
 | `GROUP_DELETION_UNAVAILABLE`           | 409         |
 | `IDEMPOTENCY_CONFLICT`                 | 409         |
 | `INVALID_AMOUNT_RANGE`                 | 422         |
@@ -112,7 +129,11 @@ A test compares every code and all of its statuses with the vocabulary.
 | `MONEY_REPRESENTATION_MISMATCH`        | 422         |
 | `NO_SETTLEMENT_DEBT`                   | 422         |
 | `NOT_A_TRIP`                           | 409         |
+| `NOT_FOUND`                            | 404         |
 | `NOT_HOUSEHOLD`                        | 422         |
+| `NOTIFICATION_SETTINGS_CHANGED`        | 409         |
+| `NOTIFICATION_TOKEN_REQUIRED`          | 400         |
+| `NOTIFICATIONS_UNAVAILABLE`            | 503         |
 | `OPEN_BALANCE`                         | 409         |
 | `PAYER_TOTAL_MISMATCH`                 | 422         |
 | `PERCENTAGE_TOTAL_MISMATCH`            | 422         |
@@ -134,6 +155,7 @@ A test compares every code and all of its statuses with the vocabulary.
 | `TAG_IN_USE`                           | 409         |
 | `TAG_PRECONDITION_REQUIRED`            | 428         |
 | `TAG_TRANSACTIONS_REQUIRED`            | 503         |
+| `UNAUTHORIZED`                         | 401         |
 | `UNBALANCED_LEDGER`                    | 422         |
 | `UNBALANCED_TEMPLATE`                  | 422         |
 | `UNSAFE_MONEY`                         | 422         |
@@ -143,8 +165,9 @@ A test compares every code and all of its statuses with the vocabulary.
 
 ### Validation and money
 
-A body or query the route's schema refuses answers **422** `VALIDATION_ERROR`,
-with each problem in `details` as `{ path, message }`, the shape the Draft APIs
+A body or query the route's schema refuses answers `VALIDATION_ERROR`, with
+status **422** except the dispatch job's **400**. Schema validation normally
+supplies each problem in `details` as `{ path, message }`, the shape the Draft APIs
 use too (#538):
 
 ```json
@@ -159,15 +182,17 @@ use too (#538):
 An Expense create refused only for the total amount’s precision uses
 `INVALID_MONEY_PRECISION` instead, retaining the same `details` shape (#748).
 
-Two routes refuse with a message of their own instead: an invite's email
-(`Invalid email address`) and an invitation's action (`Invalid action`), both
-**422** without `details`. Tag commands answer **400** `INVALID_TAG_COMMAND`.
+Three hand-written schema refusals carry `VALIDATION_ERROR` and their own words,
+without `details`. An invite's email (`Invalid email address`) and an invitation's
+action (`Invalid action`) answer **422**. The dispatch job (`Invalid request`)
+answers **400**. `VALIDATION_ERROR` is separate from `RefusalCode`. Tag commands
+answer **400** `INVALID_TAG_COMMAND`.
 
 ### Authentication and faults
 
 **Unauthenticated `/api/*` requests get `401` JSON, never a redirect.** Route
 protection lives in `src/proxy.ts` (rules in `src/lib/auth/proxy-rules.ts`); for
-API paths without a session cookie it answers `{ "error": "Unauthorized", "status": 401 }`,
+API paths without a session cookie it answers `{ "error": "Unauthorized", "status": 401, "code": "UNAUTHORIZED" }`,
 the same shape the route helpers use, so browser and native clients can detect
 an expired session.
 Pages still redirect to `/login?callbackUrl=…`. The web client's SWR `fetcher`
@@ -218,21 +243,12 @@ save uncertainty words above and is never logged, since it may hold submitted
 values. This includes plain `GROUP_NOT_FOUND`, money errors, version errors and
 raw timeouts.
 
-Today the family also keeps the recorded uncertainty answer for these typed
-refusals, pending the owner's #1086 decisions. The named `hiddenDraftRefusals`
-set beside `draftError` records this exception.
-
-`ACTIVITY_BACKLOG_FULL`, `ALREADY_INVITED`, `CURRENCY_LOCKED`,
-`CURRENCY_MISMATCH`, `FORBIDDEN_SETTLEMENT`,
-`GROUP_DELETION_CONFIRMATION_REQUIRED`, `GROUP_DELETION_UNAVAILABLE`,
-`INVALID_ID`, `INVALID_IDEMPOTENCY_KEY`, `INVALID_JSON`, `INVALID_MEMBERS`,
-`INVALID_TAG`, `INVALID_WINDOW`, `INVITATION_EXPIRED`, `INVITATION_NOT_PENDING`,
-`LAST_ADMIN`, `LEAVE_CONFLICT`, `NOT_HOUSEHOLD`, `NO_SETTLEMENT_DEBT`,
-`RECURRING_EXPENSES_OFF`, `REMOVAL_CONFLICT`, `SAME_PARTY`, `SELF_REMOVE`,
-`SETTLEMENT_TRANSACTIONS_REQUIRED`.
-
-A parsed `SyntaxError` still answers `INVALID_JSON`. The exception above
-preserves the recorded answer for an explicitly thrown typed `INVALID_JSON`.
+The former set of 24 hidden typed refusals was made from cross-family census
+injections. None reaches the Draft HTTP error policy through an admitted
+request. Participant and Tag checks become review problems, and invalid
+currency is also a review problem before saving. Per-Draft save outcomes keep
+their existing classification. The synthetic cross-family answers and the
+hidden-code set have been removed.
 
 ## Group writes
 

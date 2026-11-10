@@ -1,4 +1,3 @@
-import { directRefusalAnswer, directRefusalVocabulary } from './refusals';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { Refusal, refusalVocabulary, type RefusalCode } from './refusals';
 
@@ -28,11 +27,8 @@ describe('the server refusal vocabulary', () => {
     expect(cause.data).toEqual(data);
     expect(cause.message).toBe('CURRENCY_IN_USE');
   });
-  it('keeps caller-specific payment wordings in the vocabulary', () => {
+  it('uses the payment words for authorization refusals', () => {
     expect(refusalVocabulary.FORBIDDEN_SETTLEMENT.words).toBe(
-      'Only the payer or recipient can record this settlement',
-    );
-    expect(refusalVocabulary.FORBIDDEN_SETTLEMENT.variants.payment.words).toBe(
       'Only the payer or recipient can record this payment',
     );
   });
@@ -80,15 +76,12 @@ it('catalogs request refusals and delegates money words to their rules', () => {
   expect(refusalVocabulary.INVALID_CURRENCY.status).toBe(400);
 });
 
-it('records code-less helper templates without extending RefusalCode', () => {
-  expect(directRefusalAnswer('unauthorized')).toEqual({ error: 'Unauthorized', status: 401 });
-  expect(directRefusalAnswer('forbidden')).toEqual({ error: 'Forbidden', status: 403 });
-  expect(directRefusalAnswer('notFound', 'Expense')).toEqual({
-    error: 'Expense not found',
-    status: 404,
-  });
-  expect(directRefusalAnswer('notFound')).toEqual({ error: 'Resource not found', status: 404 });
-  for (const entry of Object.values(directRefusalVocabulary)) expect(entry.includeCode).toBe(false);
-  expect(refusalVocabulary).not.toHaveProperty('UNAUTHORIZED');
-  expect(refusalVocabulary).not.toHaveProperty('NOT_FOUND');
+it('includes the direct helper codes and requires the missing resource', () => {
+  expect(refusalVocabulary.UNAUTHORIZED.status).toBe(401);
+  expect(refusalVocabulary.NOT_FOUND.status).toBe(404);
+  const invalid = () => {
+    // @ts-expect-error A missing resource is supplied by the answering helper.
+    new Refusal('NOT_FOUND');
+  };
+  expect(invalid).toBeTypeOf('function');
 });

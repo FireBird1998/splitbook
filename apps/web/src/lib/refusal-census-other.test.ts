@@ -72,7 +72,14 @@ it('records notification registration’s code-less refusals at HTTP', async () 
   census.push({ state: 'signed out', answer: await recorded(await POST(request())) });
   vi.mocked(auth.api.getSession).mockResolvedValue({ user, session } as never);
   vi.stubEnv('ANDROID_NOTIFICATIONS_ENABLED', 'false');
-  census.push({ state: 'feature disabled', answer: await recorded(await POST(request())) });
+  const unavailable = await POST(request());
+  expect(unavailable.headers.get('Cache-Control')).toBe('private, no-store');
+  expect(unavailable.headers.get('Vary')).toBe('Cookie, X-Expected-Account, X-Installation-Key');
+  const unavailableAnswer = await recorded(unavailable);
+  expect(unavailableAnswer.body).toBe(
+    '{"error":"Notifications are not available yet.","status":503,"code":"NOTIFICATIONS_UNAVAILABLE"}',
+  );
+  census.push({ state: 'feature disabled', answer: unavailableAnswer });
   vi.stubEnv('ANDROID_NOTIFICATIONS_ENABLED', 'true');
   registration.findOne.mockResolvedValue(null);
   census.push({ state: 'token missing', answer: await recorded(await POST(request())) });
@@ -118,17 +125,17 @@ it('records dispatch authorization, invalid requests and a failed pass at HTTP',
     ),
   });
   const headers = { authorization: 'Bearer synthetic-dispatch-secret-for-census-1079' };
-  census.push({
-    state: 'unexpected query',
-    answer: await recorded(
-      await POST(
-        new Request('http://localhost/api/notifications/dispatch?bad=1', {
-          method: 'POST',
-          headers,
-        }),
-      ),
+  const invalid = await recorded(
+    await POST(
+      new Request('http://localhost/api/notifications/dispatch?bad=1', { method: 'POST', headers }),
     ),
+  );
+  expect(invalid).toEqual({
+    status: 400,
+    body: '{"error":"Invalid request","status":400,"code":"VALIDATION_ERROR"}',
+    hasCode: true,
   });
+  census.push({ state: 'unexpected query', answer: invalid });
   vi.mocked(dispatchExpenseAlerts).mockRejectedValue(new Error('provider unavailable'));
   census.push({
     state: 'dispatch failed',

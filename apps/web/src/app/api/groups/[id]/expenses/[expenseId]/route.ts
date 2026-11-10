@@ -30,7 +30,7 @@ export async function GET(
 
     return success(expense);
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }
 
@@ -62,7 +62,7 @@ export async function PATCH(
 
     return success(expense);
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }
 
@@ -85,6 +85,6 @@ export async function DELETE(
 
     return success({ message: 'Expense deleted', revision: expense.revision ?? 0 });
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }

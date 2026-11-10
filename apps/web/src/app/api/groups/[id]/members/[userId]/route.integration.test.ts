@@ -96,7 +96,7 @@ async function roles(groupId: string) {
   }));
 }
 
-const forbidden = { status: 403, body: { error: 'Forbidden', status: 403 } };
+const forbidden = { status: 403, body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' } };
 
 /** `payer` pays `amount` in `currency`, shared equally by `between`. */
 function pays(groupId: string, payer: string, amount: number, between: string[], currency = 'INR') {
@@ -167,7 +167,11 @@ describe('DELETE /api/groups/[id]/members/[userId]', () => {
 
     expect(refused).toEqual({
       status: 400,
-      body: { error: 'You cannot remove yourself. Use leave group instead.', status: 400 },
+      body: {
+        error: 'You cannot remove yourself. Use leave group instead.',
+        status: 400,
+        code: 'SELF_REMOVE',
+      },
     });
   });
 });
@@ -271,7 +275,11 @@ describe('PATCH /api/groups/[id]/members/[userId]', () => {
 
     expect(refused).toEqual({
       status: 409,
-      body: { error: 'Cannot demote the last admin. Promote another member first.', status: 409 },
+      body: {
+        error: 'Cannot demote the last admin. Promote another member first.',
+        status: 409,
+        code: 'LAST_ADMIN',
+      },
     });
     expect(await roles(groupId)).toEqual([
       { user: alex, role: 'admin' },

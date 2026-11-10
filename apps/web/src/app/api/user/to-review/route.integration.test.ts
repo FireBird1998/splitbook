@@ -134,6 +134,9 @@ describe('GET /api/user/to-review', () => {
   it('refuses a request without a session', async () => {
     const listed = await readToReview('');
 
-    expect(listed).toEqual({ status: 401, body: { error: 'Unauthorized', status: 401 } });
+    expect(listed).toEqual({
+      status: 401,
+      body: { error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' },
+    });
   });
 });

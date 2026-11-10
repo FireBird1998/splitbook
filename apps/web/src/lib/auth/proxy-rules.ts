@@ -7,7 +7,7 @@
  * where validation lives: `getAuthUser()` answers 401 for API routes and the
  * authenticated layout redirects for pages.
  */
-
+import { Refusal, refusalAnswer } from '@splitbook/shared/refusals';
 import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { NextResponse } from 'next/server';
 
@@ -19,7 +19,7 @@ export interface ProxyDecisionInput {
   hasSessionCookie: boolean;
 }
 
-export const UNAUTHORIZED_BODY = { error: 'Unauthorized', status: 401 } as const;
+export const UNAUTHORIZED_BODY = refusalAnswer(new Refusal('UNAUTHORIZED'));
 
 export function resolveProxyResponse({
   url,

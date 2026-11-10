@@ -39,7 +39,7 @@ export async function PATCH(
 
     return success(result);
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }
 
@@ -61,6 +61,6 @@ export async function DELETE(
 
     return success({ message: 'Member removed' });
   } catch (err) {
-    return serverError(err, 'membership');
+    return serverError(err);
   }
 }

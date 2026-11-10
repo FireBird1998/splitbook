@@ -207,9 +207,7 @@ test('only a pair that includes the member can be recorded', async ({ page }, te
     headers: { 'Idempotency-Key': `w312-parties-${testInfo.project.name}-${Date.now()}` },
   });
   expect(refused.status()).toBe(422);
-  expect((await refused.json()).error).toBe(
-    'Only the payer or recipient can record this settlement',
-  );
+  expect((await refused.json()).error).toBe('Only the payer or recipient can record this payment');
 });
 
 test('the Balances tab with Record payment is accessible', async ({ page }, testInfo) => {

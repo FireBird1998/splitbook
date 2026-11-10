@@ -426,5 +426,31 @@
     "../app/api/user/profile/route.ts": ["FORBIDDEN"],
     "../app/api/user/spending/route.ts": ["FORBIDDEN", "INVALID_MONTHS", "INVALID_TIME_ZONE"],
     "../app/api/user/to-review/route.ts": ["FORBIDDEN"]
-  }
+  },
+  "unreachableDraftCodes": [
+    "ACTIVITY_BACKLOG_FULL",
+    "ALREADY_INVITED",
+    "CURRENCY_LOCKED",
+    "CURRENCY_MISMATCH",
+    "FORBIDDEN_SETTLEMENT",
+    "GROUP_DELETION_CONFIRMATION_REQUIRED",
+    "GROUP_DELETION_UNAVAILABLE",
+    "INVALID_ID",
+    "INVALID_IDEMPOTENCY_KEY",
+    "INVALID_JSON",
+    "INVALID_MEMBERS",
+    "INVALID_TAG",
+    "INVALID_WINDOW",
+    "INVITATION_EXPIRED",
+    "INVITATION_NOT_PENDING",
+    "LAST_ADMIN",
+    "LEAVE_CONFLICT",
+    "NOT_HOUSEHOLD",
+    "NO_SETTLEMENT_DEBT",
+    "RECURRING_EXPENSES_OFF",
+    "REMOVAL_CONFLICT",
+    "SAME_PARTY",
+    "SELF_REMOVE",
+    "SETTLEMENT_TRANSACTIONS_REQUIRED"
+  ]
 }

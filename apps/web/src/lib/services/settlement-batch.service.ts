@@ -58,7 +58,7 @@ export async function createSettlementBatch(
       paidBy,
       data.paidTo,
     );
-    assertSettlementAuthorization(userId, paidBy, data.paidTo, 'payment');
+    assertSettlementAuthorization(userId, paidBy, data.paidTo);
     return group;
   };
   await authorize();

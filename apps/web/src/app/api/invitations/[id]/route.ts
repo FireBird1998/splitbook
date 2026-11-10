@@ -24,7 +24,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { id } = await routeIds(params);
     const body = await readJson(req);
     const parsed = actionSchema.safeParse(body);
-    if (!parsed.success) return error('Invalid action', 422);
+    if (!parsed.success) return error('Invalid action', 422, 'VALIDATION_ERROR');
 
     if (parsed.data.action === 'accept') {
       const invitation = await invitationService.accept(id, user.id!, user.email!);

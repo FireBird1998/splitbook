@@ -87,7 +87,7 @@ function archiveGroup(groupId: string, cookie: string) {
   });
 }
 
-const forbidden = { status: 403, body: { error: 'Forbidden', status: 403 } };
+const forbidden = { status: 403, body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' } };
 
 describe('GET /api/groups/[id]', () => {
   it('shows the Group to its members and refuses anyone else', async () => {
@@ -219,7 +219,7 @@ describe('Group deletion (ADR 0007)', () => {
     });
     expect(await readGroup(groupId, alexCookie)).toEqual({
       status: 404,
-      body: { error: 'Group not found', status: 404 },
+      body: { error: 'Group not found', status: 404, code: 'NOT_FOUND' },
     });
   });
 });

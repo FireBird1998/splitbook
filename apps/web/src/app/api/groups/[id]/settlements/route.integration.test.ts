@@ -150,7 +150,10 @@ describe('POST /api/groups/[id]/settlements', () => {
       currency: 'INR',
     });
 
-    expect(refused).toEqual({ status: 403, body: { error: 'Forbidden', status: 403 } });
+    expect(refused).toEqual({
+      status: 403,
+      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
+    });
     expect(await listedSettlementIds(groupId, await signIn('alex'))).toEqual([]);
     expect(debtsOf(await readBalances(groupId, 'alex'))).toEqual([
       { from: sam, to: alex, amount: 500 },

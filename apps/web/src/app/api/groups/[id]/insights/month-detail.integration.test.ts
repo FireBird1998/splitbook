@@ -756,7 +756,7 @@ describe('only members', () => {
       const refused = await read(groupId);
       expect(refused).toEqual({
         status: 403,
-        text: JSON.stringify({ error: 'Forbidden', status: 403 }),
+        text: JSON.stringify({ error: 'Forbidden', status: 403, code: 'FORBIDDEN' }),
       });
       expect(refused).toEqual(await readBalances(groupId));
     }
@@ -766,7 +766,7 @@ describe('only members', () => {
     session.userId = null;
     expect(await read(maple)).toEqual({
       status: 401,
-      text: JSON.stringify({ error: 'Unauthorized', status: 401 }),
+      text: JSON.stringify({ error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' }),
     });
   });
 });

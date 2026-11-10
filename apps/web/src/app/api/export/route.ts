@@ -36,6 +36,6 @@ export async function GET(req: Request) {
       },
     });
   } catch (err) {
-    return failedRead(err, req, 'membership');
+    return failedRead(err, req);
   }
 }

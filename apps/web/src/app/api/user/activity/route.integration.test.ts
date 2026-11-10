@@ -402,7 +402,7 @@ describe('GET /api/user/activity', () => {
   it('refuses a signed-out request', async () => {
     expect(await readLatest(null)).toEqual({
       status: 401,
-      body: { error: 'Unauthorized', status: 401 },
+      body: { error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' },
     });
   });
 });

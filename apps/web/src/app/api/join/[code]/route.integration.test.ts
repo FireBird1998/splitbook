@@ -80,7 +80,7 @@ async function groupStatusFor(groupId: string, persona: DemoPersonaKey) {
 
 const noSuchLink = {
   status: 404,
-  body: { error: 'Invite link is invalid or expired not found', status: 404 },
+  body: { error: 'Invite link is invalid or expired not found', status: 404, code: 'NOT_FOUND' },
 };
 
 describe('POST /api/join/[code]', () => {
@@ -137,7 +137,10 @@ describe('POST /api/join/[code]', () => {
 
     const refused = await joinWith(code, '');
 
-    expect(refused).toEqual({ status: 401, body: { error: 'Unauthorized', status: 401 } });
+    expect(refused).toEqual({
+      status: 401,
+      body: { error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' },
+    });
     expect(await preview(code)).toEqual({
       status: 200,
       body: {

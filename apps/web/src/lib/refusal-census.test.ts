@@ -1,5 +1,6 @@
 import inputs from './refusal-census-inputs.json';
 import draftAnswers from './refusal-census-draft-answers.json';
+import vocabularyAnswers from './utils/refusal-vocabulary-answers.json';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
@@ -121,7 +122,12 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
       census.push({
         thrown: thrown(cause),
         central: await recorded(response.serverError(currentCause(cause))),
-        draft: await recorded(draftError(currentCause(cause, 'draft'))),
+        // These cross-family injections cannot reach the Draft HTTP answering policy.
+        ...(inputs.unreachableDraftCodes.includes(code)
+          ? {}
+          : {
+              draft: await recorded(draftError(currentCause(cause, 'draft'))),
+            }),
       });
     }
     expect(census).toMatchSnapshot();
@@ -245,6 +251,7 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
 it('covers every literal producer, route table entry and message comparison', () => {
   const covered = new Set([
     ...draftAnswers.map(({ code }) => code),
+    ...vocabularyAnswers.map(({ code }) => code),
     ...plainCodes,
     ...moneyCases.map(({ code }) => code),
     ...tagCodes,
@@ -493,4 +500,44 @@ it('records a non-Trip Group’s direct summary refusal', async () => {
   expect(await recorded(answer)).toMatchSnapshot();
   read.mockRestore();
   member.mockRestore();
+});
+
+it('records invitation schema refusals before persistence', async () => {
+  const { POST: answerInvitation } = await import('@/app/api/invitations/[id]/route');
+  const { POST: sendInvitation } = await import('@/app/api/groups/[id]/invite/route');
+  const { default: Group } = await import('@/lib/models/Group');
+  const membership = vi.spyOn(Group, 'findOne').mockReturnValue({
+    lean: async () => ({ _id: 'a00000000000000000000001' }),
+  } as never);
+  vi.mocked(auth.api.getSession).mockResolvedValue({
+    user: { id: 'a00000000000000000000001', name: 'Alex', email: 'alex@example.test' },
+  } as never);
+  const census = [];
+  try {
+    for (const { state, handler, body, expected } of [
+      {
+        state: 'invalid invitation action',
+        handler: answerInvitation,
+        body: { action: 'wait' },
+        expected: '{"error":"Invalid action","status":422,"code":"VALIDATION_ERROR"}',
+      },
+      {
+        state: 'invalid invite email',
+        handler: sendInvitation,
+        body: { email: 'not-an-email' },
+        expected: '{"error":"Invalid email address","status":422,"code":"VALIDATION_ERROR"}',
+      },
+    ]) {
+      const answer = await handler(
+        new Request('http://localhost/api/census', { method: 'POST', body: JSON.stringify(body) }),
+        { params: Promise.resolve({ id: 'a00000000000000000000001' }) },
+      );
+      const result = await recorded(answer);
+      expect.soft(result.body).toBe(expected);
+      census.push({ state, answer: result });
+    }
+    expect(census).toMatchSnapshot();
+  } finally {
+    membership.mockRestore();
+  }
 });
