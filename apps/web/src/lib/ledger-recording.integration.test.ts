@@ -50,11 +50,11 @@ function record(key = randomUUID()) {
             description: 'A record',
             amount: 10,
             currency: 'INR',
-            category: 'food',
+            category: 'food', tag: 'Food',
             date: new Date('2026-11-11T12:00:00Z'),
             splitMethod: 'equal',
             paidBy: [{ user: new Types.ObjectId(alice), amount: 10 }],
-            splitBetween: [{ user: new Types.ObjectId(bob) }],
+            splitBetween: [{ user: new Types.ObjectId(bob), amount: 10 }],
           },
           activity: {
             type: 'expense_added',
