@@ -1,3 +1,4 @@
+import type { TripSummaryRead } from '@splitbook/shared/trip-summary-read';
 import { bodyFails, gatewayReply, hangUntilAborted, type GatewayBody } from './transport-faults';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { FetchResponse, MobileFetch, PersonaId, SessionUser } from '../data/types';
@@ -51,6 +52,34 @@ export function groupFixture(overrides: Partial<WireGroup> = {}): WireGroup {
     ...overrides,
   };
 }
+/** The common single-member INR Expense used by financial-view fixtures. */
+export function expenseFixture(
+  group: WireGroup,
+  id = 'b00000000000000000000001',
+  description = 'Groceries',
+) {
+  const member = group.members[0]!.user;
+  const person = { _id: member._id, name: member.name, image: member.image ?? null };
+  return {
+    _id: id,
+    group: group._id,
+    description,
+    currency: 'INR',
+    amount: 10,
+    amountMinor: 1000,
+    moneyVersion: 1,
+    category: 'food',
+    tag: 'Shared',
+    tagId: 'c00000000000000000000001',
+    date: group.updatedAt,
+    createdAt: group.updatedAt,
+    updatedAt: group.updatedAt,
+    paidBy: [{ user: person, amount: 10, amountMinor: 1000 }],
+    splitBetween: [{ user: person, amount: 10, amountMinor: 1000 }],
+    splitMethod: 'equal',
+  };
+}
+
 export function expensePage(expenses: unknown[] = [], page = 1) {
   return {
     expenses,
@@ -67,6 +96,47 @@ export function expensePage(expenses: unknown[] = [], page = 1) {
       userGetsBack: 0,
       byMember: [],
     },
+  };
+}
+
+/** A stable suggestion used by the payment fixtures, in the rate endpoint's wire shape. */
+export const rateSuggestion = (from: string, to: string, rate: string) => ({
+  from,
+  to,
+  rate,
+  source: 'frankfurter',
+  asOf: '2026-10-20',
+  fetchedAt: '2026-10-21T00:30:00.000Z',
+  ageDays: 1,
+  attributionRequired: false,
+  attribution: null,
+  components: [],
+});
+
+function emptyTripSummary(currency: string): TripSummaryRead {
+  return {
+    timeZone: 'UTC',
+    currency,
+    tripDates: { start: null, end: null },
+    window: null,
+    dayCount: 0,
+    tooManyDays: false,
+    spentMinor: 0,
+    expenseCount: 0,
+    yourShareMinor: 0,
+    youPaidMinor: 0,
+    yourExpenseCount: 0,
+    peopleCount: 0,
+    perPersonPerDayMinor: null,
+    days: [],
+    dailyAverageMinor: null,
+    beforeTrip: null,
+    afterTrip: null,
+    byTag: [],
+    suggestedPayments: [],
+    otherCurrencies: [],
+    hasExpenses: false,
+    currencies: [],
   };
 }
 
@@ -143,14 +213,27 @@ export function fakeSplitbook() {
   const world = {
     people: structuredClone(demoPeople) as Record<PersonaId, SessionUser>,
     groups: [group],
-    home: { buckets: [] as unknown[] },
+    home: { buckets: [] } as { buckets: unknown[]; groups?: unknown[] },
     balances: { [group._id]: { byCurrency: [] } } as Record<string, unknown>,
-    expenses: { [group._id]: expensePage() },
+    expenses: { [group._id]: expensePage() } as Record<string, unknown>,
     settlements: { [group._id]: [] as unknown[] },
     rates: { [group._id]: {} } as Record<string, Record<string, unknown>>,
+    tripSummaries: { [group._id]: { '': emptyTripSummary(group.defaultCurrency) } } as Record<
+      string,
+      Record<string, TripSummaryRead>
+    >,
   };
   const unanswered: string[] = [];
   const requests: FakeRequest[] = [];
+  const sentViews = new Map<boolean, string[]>();
+  const sent = ({ query = true } = {}) => {
+    let view = sentViews.get(query);
+    if (!view) {
+      view = requests.map((r) => `${r.method} ${query ? r.path : r.url.pathname}`);
+      sentViews.set(query, view);
+    }
+    return view;
+  };
   const replies: { method: string; path: string; answer: Answer; once: boolean }[] = [];
   const reply = (method: string, path: string, answer: Answer, { once = false } = {}) => {
     replies.unshift({ method, path, answer, once });
@@ -170,6 +253,8 @@ export function fakeSplitbook() {
       init,
     };
     requests.push(request);
+    for (const [query, view] of sentViews)
+      view.push(`${method} ${query ? request.path : url.pathname}`);
     if (!online) throw new TypeError('Network request failed');
     // Replacements can observe a request and defer to its normal answer with undefined.
     for (const entry of [...replies]) {
@@ -185,7 +270,7 @@ export function fakeSplitbook() {
       '/api/groups',
       '/api/user/balances',
       ...world.groups.flatMap((g) =>
-        ['', '/balances', '/expenses', '/settlements', '/rates'].map(
+        ['', '/balances', '/expenses', '/settlements', '/rates', '/trip-summary'].map(
           (suffix) => `/api/groups/${g._id}${suffix}`,
         ),
       ),
@@ -281,6 +366,13 @@ export function fakeSplitbook() {
         return Response.json({ code: 'NOT_FOUND' }, { status: 404 });
       }
       if (url.pathname === base + '/settlements') return answer(world.settlements[found._id]);
+      if (url.pathname === base + '/trip-summary') {
+        const currency = url.searchParams.get('currency') ?? '';
+        const data =
+          world.tripSummaries[found._id]?.[currency] ??
+          emptyTripSummary(currency || found.defaultCurrency);
+        return answer({ ...data, timeZone: url.searchParams.get('tz') ?? data.timeZone });
+      }
       if (url.pathname === base + '/rates') {
         const pair = `${url.searchParams.get('from')}→${url.searchParams.get('to')}`;
         const suggestion = world.rates[found._id]?.[pair] ?? null;
@@ -303,6 +395,7 @@ export function fakeSplitbook() {
     },
     fetch,
     requests,
+    sent,
     unanswered,
     reply,
     fault(
@@ -323,7 +416,9 @@ export function fakeSplitbook() {
         ({ init }) => {
           if (typeof kind === 'object') return gatewayReply(kind.status, kind.body);
           if (kind === 'headers' || kind === 'body') return hangUntilAborted(init, kind);
-          if (kind === 'lost-reply' || kind === 'body-fails') return bodyFails();
+          if (kind === 'body-fails') return bodyFails();
+          // A lost reply fails fetch after the request was logged as taken; no response headers arrive.
+          if (kind === 'lost-reply') throw new TypeError('Network request failed');
           return Promise.reject(new TypeError('Network request failed'));
         },
         options,

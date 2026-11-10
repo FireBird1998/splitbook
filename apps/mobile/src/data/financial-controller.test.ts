@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expenseFixture } from '../test-utils/fake-splitbook';
 import type { FetchResponse } from './types';
 
 const user = {
@@ -31,24 +32,7 @@ const group = {
 };
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const person = { _id: user.id, name: user.name, image: null };
-const expense = {
-  _id: 'b00000000000000000000001',
-  group: groupId,
-  description: 'Groceries',
-  currency: 'INR',
-  amount: 10,
-  amountMinor: 1000,
-  moneyVersion: 1,
-  category: 'food',
-  tag: 'Shared',
-  tagId: 'c00000000000000000000001',
-  date: iso,
-  createdAt: iso,
-  updatedAt: iso,
-  paidBy: [{ user: person, amount: 10, amountMinor: 1000 }],
-  splitBetween: [{ user: person, amount: 10, amountMinor: 1000 }],
-  splitMethod: 'equal',
-};
+const expense = expenseFixture(group);
 const expensePage = (rows = [expense], page = 1, total = rows.length) => ({
   data: {
     expenses: rows,
@@ -89,54 +73,35 @@ function setup(
     init: RequestInit,
   ) => FetchResponse | Promise<FetchResponse> | undefined = () => undefined,
 ) {
-  let cookie: string | null = null;
+  const server = fakeSplitbook();
+  server.world.people.sam = user;
+  server.world.groups = [group];
+  server.world.home = { buckets: [], groups: named };
+  server.world.expenses[groupId] = expensePage().data;
+  server.world.balances[groupId] = balances.data;
   const calls: string[] = [];
-  const clock = { now: new Date(2026, 8, 27, 12).getTime() };
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
+  server.reply('*', '*', ({ path, init }) => {
+    calls.push(path);
+    return intercept(path, init);
+  });
+  // Original phone: credentials, HTTP and local noon only; no account-local stores or keys.
+  const phone = testPhone(server, {
+    now: new Date(2026, 8, 27, 12).getTime(),
+    parts: {
+      accountLocal: undefined,
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
     },
-    {
-      now: () => clock.now,
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      fetch: async (url, init) => {
-        const path = new URL(url).pathname + new URL(url).search;
-        calls.push(path);
-        const intercepted = intercept(path, init);
-        if (intercepted) return intercepted;
-        if (path.endsWith('/sign-in'))
-          return new Response(JSON.stringify({ user }), {
-            status: 200,
-            headers: { 'Set-Cookie': 'better-auth.session_token=test.signature; Path=/; HttpOnly' },
-          });
-        if (path.endsWith('/get-session'))
-          return json({
-            user,
-            session: { userId: user.id, expiresAt: '2030-01-01T00:00:00.000Z' },
-          });
-        if (path.endsWith('/sign-out')) return json({ success: true });
-        if (path === '/api/groups') return json({ data: [group], status: 200 });
-        if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
-        // Like Splitbook's, Home's figures name the Groups they were worked out over (#333).
-        if (path === '/api/user/balances')
-          return json({ data: { buckets: [], groups: named }, status: 200 });
-        if (path.startsWith(`/api/groups/${groupId}/expenses?`)) return json(expensePage());
-        if (path === `/api/groups/${groupId}/balances`) return json(balances);
-        return json({}, 404);
-      },
-    },
-  );
-  return { controller, calls, clock };
+  });
+  return { controller: phone.open(), calls, clock: phone.clock };
 }
 
 /** Hold matching requests until released, to observe the screen mid-refresh. */

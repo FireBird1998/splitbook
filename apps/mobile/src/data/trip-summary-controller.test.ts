@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { focusManager, onlineManager } from '@tanstack/query-core';
-import { createMobileController } from './mobile-controller';
-import type { FetchResponse } from './types';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expensePage as emptyPage } from '../test-utils/fake-splitbook';
 
 /** The phone's zone as the app reads it, so these paths hold in every zone CI runs (#730). */
 const PHONE_ZONE = encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
@@ -94,201 +94,84 @@ const tripSummary = (currency: string | null, timeZone: string) => {
 };
 
 function fixture() {
-  /** `offlineAfterPost`: the connection drops as soon as a save's POST is answered. */
-  const server = { offline: false, created: 0, offlineAfterPost: false };
-  let cookie: string | null = null,
-    owner: string | null = null,
-    cleanup = false;
-  const rows = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>(),
-    attempts = new Map<string, unknown>();
-  const calls: { method: string; path: string }[] = [];
-  const records = (map: Map<string, unknown>) => ({
-    load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
-    save: async (account: string, key: string, value: unknown) => {
-      map.set(account + key, structuredClone(value));
+  const api = fakeSplitbook();
+  api.world.people.alex = { ...alex, image: null };
+  api.world.groups = groups;
+  api.world.home = { buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 0 }] };
+  const server = {
+    get offline() {
+      return !api.online;
     },
-    remove: async (account: string, key: string) => {
-      map.delete(account + key);
+    set offline(value: boolean) {
+      api.online = !value;
     },
-    clear: async () => {
-      map.clear();
-    },
-    list: async (account: string) =>
-      [...map]
-        .filter(([key]) => key.startsWith(account))
-        .map(([key, value]) => ({
-          groupId: key.slice(account.length),
-          value: structuredClone(value),
-        })),
-  });
-  const untrusted = { value: null as unknown },
-    identity = { value: null as unknown };
-  const untrustedCopies = {
-    load: async () => structuredClone(untrusted.value),
-    save: async (value: unknown) => {
-      untrusted.value = structuredClone(value);
-    },
-    clear: async () => {
-      untrusted.value = null;
-    },
+    created: 0,
+    offlineAfterPost: false,
   };
-  const savedQueries = {
-    ...records(rows),
-    keys: async (account: string) =>
-      [...rows.keys()]
-        .filter((key) => key.startsWith(account))
-        .map((key) => key.slice(account.length)),
-  };
-  const respond = (path: string, init: RequestInit): FetchResponse => {
-    const method = init.method ?? 'GET';
-    if (path.endsWith('/sign-in'))
-      return new Response(JSON.stringify({ user: alex }), {
-        headers: { 'Set-Cookie': 'better-auth.session_token=alex.signature; Path=/; HttpOnly' },
-      });
-    if (path.endsWith('/sign-out')) return json({ success: true });
-    if (path.endsWith('/get-session'))
-      return json({
-        user: { ...alex, image: null },
-        session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' },
-      });
-    if (path === '/api/groups') return json({ status: 200, data: groups });
-    if (path === '/api/user/balances')
-      return json({
-        status: 200,
-        data: { buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 0 }] },
-      });
-    const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
-    const group = groups.find(({ _id }) => _id === id);
-    if (!id || !group) return json({}, 404);
-    if (path === `/api/groups/${id}`) return json({ status: 200, data: group });
-    if (path.startsWith(`/api/groups/${id}/activity?`))
-      return json({
-        status: 200,
-        data: { activities: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } },
-      });
-    if (path.startsWith(`/api/groups/${id}/expenses?`))
-      return json({
-        status: 200,
-        data: {
-          expenses: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          summary: {
-            count: 0,
-            totalsByCurrency:
-              id === lisbonId
-                ? Object.entries(spent).map(([currency, row]) => ({
-                    currency,
-                    totalAmount: row.spent / (currency === 'JPY' ? 1 : 100),
-                  }))
-                : id === baliId
-                  ? [
-                      { currency: 'INR', totalAmount: 1200 },
-                      { currency: 'EUR', totalAmount: 40 },
-                    ]
-                  : [{ currency: 'INR', totalAmount: 0 }],
-            userOwes: 0,
-            userGetsBack: 0,
-            byMember: [],
-          },
-        },
-      });
-    if (path === `/api/groups/${id}/expenses` && method === 'POST') {
-      server.created += 1;
-      // The reply arrives; every request after it can't reach the server.
+  for (const group of groups) {
+    // Keep the old fixtures: empty Expense pages still carry nonzero all-time totals, and
+    // even Bali receives the Lisbon & Tokyo summary. These are not new default-world rules.
+    const totalsByCurrency =
+      group._id === lisbonId
+        ? Object.entries(spent).map(([currency, row]) => ({
+            currency,
+            totalAmount: row.spent / (currency === 'JPY' ? 1 : 100),
+          }))
+        : group._id === baliId
+          ? [
+              { currency: 'INR', totalAmount: 1200 },
+              { currency: 'EUR', totalAmount: 40 },
+            ]
+          : [{ currency: 'INR', totalAmount: 0 }];
+    const page = emptyPage();
+    api.world.expenses[group._id] = { ...page, summary: { ...page.summary, totalsByCurrency } };
+    api.world.balances[group._id] = { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] };
+    api.world.tripSummaries[group._id] = Object.fromEntries(
+      ['', 'INR', 'EUR', 'JPY'].map((currency) => [
+        currency,
+        tripSummary(currency || null, decodeURIComponent(PHONE_ZONE)).data,
+      ]),
+    );
+    // This file's minimal create acknowledgement and connection loss stay explicit. The world
+    // is left alone, as before; only this fixture's request count and connection change.
+    api.reply('POST', `/api/groups/${group._id}/expenses`, () => {
+      server.created++;
       if (server.offlineAfterPost) server.offline = true;
       return json(
-        { status: 201, data: { _id: `e${String(server.created).padStart(23, '0')}`, group: id } },
+        {
+          status: 201,
+          data: { _id: `e${String(server.created).padStart(23, '0')}`, group: group._id },
+        },
         201,
       );
-    }
-    if (path === `/api/groups/${id}/balances`)
-      return json({
-        status: 200,
-        data: { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] },
-      });
-    if (path.startsWith(`/api/groups/${id}/trip-summary?`)) {
-      const query = new URL(path, 'http://local').searchParams;
-      return json(tripSummary(query.get('currency'), query.get('tz') ?? ''));
-    }
-    return json({}, 404);
-  };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
-      },
-      {
-        newSubmissionKey: () =>
-          `trip-summary-attempt-${String(server.created + 1).padStart(4, '0')}`,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        savedQueries,
-        netInfo: {
-          addEventListener: (listener) => {
-            listener({ isConnected: !server.offline });
-            return () => undefined;
-          },
-        },
-        offlineIdentity: {
-          load: async () => structuredClone(identity.value),
-          save: async (value) => {
-            identity.value = structuredClone(value);
-          },
-          clear: async () => {
-            identity.value = null;
-          },
-        },
-        expenseDrafts: records(drafts),
-        settlementAttempts: records(attempts),
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          untrustedCopies,
-          stores: [savedQueries, records(drafts), records(attempts), untrustedCopies],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname + new URL(url).search;
-          calls.push({ method: init.method ?? 'GET', path });
-          if (server.offline) throw new TypeError('Network request failed');
-          return respond(path, init);
+    });
+  }
+  const phone = testPhone(api, {
+    newSubmissionKey: () => `trip-summary-attempt-${String(server.created + 1).padStart(4, '0')}`,
+    parts: {
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
+      netInfo: {
+        addEventListener(listener) {
+          listener({ isConnected: !server.offline });
+          return () => undefined;
         },
       },
-    );
+    },
+    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts', 'untrustedCopies'],
+  });
+  const rows = phone.stores.savedQueries.records;
+  const calls = api.requests;
   return {
-    create,
+    create: phone.open,
     server,
     rows,
     calls,
-    /** The Trip summary reads sent, as paths. */
     tripReads: () =>
       calls.filter(({ path }) => path.startsWith(`${tripPath}?`)).map(({ path }) => path),
-    /** This phone's saved Trip summaries of Lisbon & Tokyo, by path. */
     savedTrips: () =>
       [...rows.keys()]
         .filter((key) => key.startsWith(`${alex.id}${tripPath}?`))

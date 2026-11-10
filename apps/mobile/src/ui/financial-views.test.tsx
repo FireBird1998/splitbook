@@ -1,7 +1,9 @@
 import { useSyncExternalStore } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createMobileController, type MobileController } from '../data/mobile-controller';
+import type { MobileController } from '../data/mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook, expenseFixture } from '../test-utils/fake-splitbook';
 import type { FetchResponse } from '../data/types';
 import { DetailsNotice, ReadTime, RefreshStatus } from './financial-views';
 import { flatten } from '../test-utils/layout';
@@ -28,24 +30,7 @@ const group = {
   createdAt: iso,
   updatedAt: iso,
 };
-const expense = (id: string, description: string) => ({
-  _id: id,
-  group: groupId,
-  description,
-  currency: 'INR',
-  amount: 10,
-  amountMinor: 1000,
-  moneyVersion: 1,
-  category: 'food',
-  tag: 'Shared',
-  tagId: 'c00000000000000000000001',
-  date: iso,
-  createdAt: iso,
-  updatedAt: iso,
-  paidBy: [{ user: person, amount: 10, amountMinor: 1000 }],
-  splitBetween: [{ user: person, amount: 10, amountMinor: 1000 }],
-  splitMethod: 'equal',
-});
+const expense = (id: string, description: string) => expenseFixture(group, id, description);
 const page = (rows: unknown[], pageNumber = 1, total = rows.length) => ({
   data: {
     expenses: rows,
@@ -79,53 +64,34 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 type Handler = (path: string) => FetchResponse | Promise<FetchResponse> | undefined;
 function backend() {
-  let cookie: string | null = null;
-  const clock = { now: new Date(2026, 8, 27, 12).getTime() };
+  const server = fakeSplitbook();
+  server.world.people.sam = user;
+  server.world.groups = [group];
+  server.world.home = { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] };
+  server.world.expenses[groupId] = page([expense('b00000000000000000000001', 'Groceries')]).data;
+  server.world.balances[groupId] = balances.data;
   let handler: Handler = () => undefined;
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4138',
-      authOrigin: 'http://localhost:4138',
-      developmentPersonaEnabled: true,
+  server.reply('*', '*', ({ path }) => handler(path));
+  // Same credentials-only phone and injected local noon as before this move.
+  const phone = testPhone(server, {
+    now: new Date(2026, 8, 27, 12).getTime(),
+    parts: {
+      accountLocal: undefined,
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      newSubmissionKey: undefined,
     },
-    {
-      now: () => clock.now,
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
-      },
-      fetch: async (url) => {
-        const path = new URL(url).pathname + new URL(url).search;
-        const override = handler(path);
-        if (override) return override;
-        if (path.endsWith('/sign-in'))
-          return new Response(JSON.stringify({ user }), {
-            headers: { 'Set-Cookie': 'better-auth.session_token=test.signature; Path=/; HttpOnly' },
-          });
-        if (path.endsWith('/get-session'))
-          return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
-        if (path === '/api/groups') return json({ data: [group], status: 200 });
-        if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
-        if (path === '/api/user/balances')
-          return json({
-            data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] },
-            status: 200,
-          });
-        if (path.includes('/expenses?'))
-          return json(page([expense('b00000000000000000000001', 'Groceries')]));
-        if (path === `/api/groups/${groupId}/balances`) return json(balances);
-        return json({}, 404);
-      },
-    },
-  );
+  });
   return {
-    controller,
-    clock,
+    controller: phone.open(),
+    clock: phone.clock,
     use(next: Handler) {
       handler = next;
     },

@@ -1,5 +1,9 @@
-import { testPhone } from '../test-utils/test-phone';
-import { fakeSplitbook, recordedBatch } from '../test-utils/fake-splitbook';
+import { testPhone, until } from '../test-utils/test-phone';
+import {
+  fakeSplitbook,
+  rateSuggestion as frankfurter,
+  recordedBatch,
+} from '../test-utils/fake-splitbook';
 import { describe, expect, it } from 'vitest';
 import type { FetchResponse } from './types';
 
@@ -47,19 +51,6 @@ const balances = (euros = 20) => ({
   },
 });
 const json = (body: unknown, status = 200) => Response.json(body, { status });
-/** Frankfurter's rates of 20 Oct, fetched at 06:00 in India the next day (#726). */
-const frankfurter = (from: string, to: string, rate: string) => ({
-  from,
-  to,
-  rate,
-  source: 'frankfurter',
-  asOf: '2026-10-20',
-  fetchedAt: '2026-10-21T00:30:00.000Z',
-  ageDays: 1,
-  attributionRequired: false,
-  attribution: null,
-  components: [],
-});
 const suggestions: Record<string, ReturnType<typeof frankfurter>> = {
   'EUR→INR': frankfurter('EUR', 'INR', '92.1'),
   'INR→EUR': frankfurter('INR', 'EUR', '0.010858'),
@@ -77,19 +68,6 @@ const rates = (suggestion: unknown, reason = 'unavailable') =>
   });
 /** Nothing comes back: the phone has no connection. */
 const offline = () => Promise.reject(new TypeError('Network request failed'));
-/** Until the controller's snapshot satisfies `ready`. */
-const until = (
-  controller: ReturnType<typeof setup>['controller'],
-  ready: (snapshot: ReturnType<ReturnType<typeof setup>['controller']['getSnapshot']>) => boolean,
-) =>
-  new Promise<void>((resolve) => {
-    if (ready(controller.getSnapshot())) return resolve();
-    const stop = controller.subscribe(() => {
-      if (!ready(controller.getSnapshot())) return;
-      stop();
-      resolve();
-    });
-  });
 /** Build altered replies for the tests that check the server's recorded amounts. */
 const batchRecorded = (body: Parameters<typeof recordedBatch>[0]) => recordedBatch(body, group);
 
@@ -104,12 +82,11 @@ function setup(
   server.world.groups = [group];
   server.world.balances[groupId] = balances().data;
   server.world.rates[groupId] = suggestions;
-  const sent: string[] = [];
+  const sent = server.sent();
   const payments: Record<string, unknown>[] = [];
   const batches: { key: string | null; body: Record<string, unknown> }[] = [];
   // Keep the existing assertions' live log views; all replies come from the shared fake.
-  server.reply('*', '*', ({ url, init, method, path, body, headers }) => {
-    sent.push(`${method} ${path}`);
+  server.reply('*', '*', ({ url, init, method, body, headers }) => {
     if (url.pathname.endsWith('/settlements') && method === 'POST') payments.push(body!);
     if (url.pathname.endsWith('/settlements/batch') && method === 'POST')
       batches.push({ key: headers.get('Idempotency-Key'), body: body! });
