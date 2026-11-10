@@ -2,7 +2,6 @@ import inputs from './refusal-census-inputs.json';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
-import { Types } from 'mongoose';
 import { describe, expect, it, vi } from 'vitest';
 import { MoneyValidationError } from '@splitbook/shared/exact-money';
 import { auth } from '@/lib/auth';
@@ -176,7 +175,7 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
     if (!text.includes('getAuthUser')) continue;
     const codes = inputs.routeCodes[path as keyof typeof inputs.routeCodes];
     it(`records ${path} through its exported handlers`, async () => {
-      const module = (await load()) as Record<string, unknown>;
+      const route = (await load()) as Record<string, unknown>;
       const census = [];
       const causes = [
         ...codes.map((code) => new Error(code)),
@@ -186,7 +185,7 @@ describe('refusal census, recorded on main before the vocabulary (#1079)', () =>
             (cause instanceof TagManagementError && text.includes('tagError')),
         ),
       ];
-      for (const [method, handler] of Object.entries(module)) {
+      for (const [method, handler] of Object.entries(route)) {
         if (
           !['GET', 'POST', 'PATCH', 'DELETE', 'PUT'].includes(method) ||
           typeof handler !== 'function'
@@ -233,6 +232,18 @@ it('covers every literal producer, route table entry and message comparison', ()
           'TagManagementError',
         ].includes(node.expression.getText())
       ) {
+        const [code, message] = node.arguments;
+        if (
+          ['MoneyValidationError', 'StoredMoneyError'].includes(node.expression.getText()) &&
+          ts.isStringLiteral(code) &&
+          message &&
+          ts.isStringLiteral(message)
+        ) {
+          expect(
+            moneyCases.some((row) => row.code === code.text && row.message === message.text),
+            `${path} words for ${code.text}`,
+          ).toBe(true);
+        }
         visit(node.arguments[0], (part) => {
           if (ts.isStringLiteral(part) && codePattern.test(part.text))
             expect(covered.has(part.text), `${path} produces ${part.text}`).toBe(true);
@@ -320,14 +331,14 @@ it('records query and command refusals before any database read', async () => {
     ['search', '?q=' + 'x'.repeat(201)],
   ];
   for (const [path, query] of cases) {
-    const module = (await routes[`../app/api/${path}/route.ts`]()) as {
+    const route = (await routes[`../app/api/${path}/route.ts`]()) as {
       GET: (req: Request, context: unknown) => Promise<Response>;
     };
     census.push({
       path,
       query,
       answer: await recorded(
-        await module.GET(new Request('http://localhost/api/' + path + query), {
+        await route.GET(new Request('http://localhost/api/' + path + query), {
           params: Promise.resolve({ id: 'a00000000000000000000001' }),
         }),
       ),
@@ -347,7 +358,7 @@ it('records each per-Expense Tag refusal through the bulk HTTP response', async 
   const expenseId = 'a00000000000000000000003';
   const group = vi
     .spyOn(Group, 'findOne')
-    .mockResolvedValue({ tags: [{ _id: new Types.ObjectId(tagId) }] });
+    .mockResolvedValue(new Group({ tags: [{ _id: tagId, name: 'Food' }] }));
   const expense = vi
     .spyOn(Expense, 'findOne')
     .mockReturnValue({ select: () => ({ lean: async () => ({ revision: 0 }) }) } as never);
@@ -399,5 +410,17 @@ it('records stale database versions, unreachable databases and unknown thrown va
       thrown: cause instanceof Error ? thrown(cause) : { value: cause },
       answer: await recorded(response.serverError(cause)),
     });
+  expect(census).toMatchSnapshot();
+});
+
+it('records Group currency fields and an already-listed currency’s separate words', async () => {
+  const census = [];
+  for (const [message, field] of [
+    ['EUR is already one of this Group’s currencies.', ['currency']],
+    ['EUR is listed twice.', ['alternateCurrencies']],
+  ] as const) {
+    const cause = new MoneyValidationError('INVALID_GROUP_CURRENCIES', message, field);
+    census.push({ thrown: thrown(cause), answer: await recorded(response.serverError(cause)) });
+  }
   expect(census).toMatchSnapshot();
 });

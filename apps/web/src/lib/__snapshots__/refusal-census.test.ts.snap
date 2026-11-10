@@ -1,5 +1,40 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`records Group currency fields and an already-listed currency’s separate words 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"EUR is already one of this Group’s currencies.","status":422,"code":"INVALID_GROUP_CURRENCIES","field":["currency"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": [
+        "currency",
+      ],
+      "message": "EUR is already one of this Group’s currencies.",
+      "name": "MoneyValidationError",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"EUR is listed twice.","status":422,"code":"INVALID_GROUP_CURRENCIES","field":["alternateCurrencies"]}",
+      "hasCode": true,
+      "status": 422,
+    },
+    "thrown": {
+      "code": "INVALID_GROUP_CURRENCIES",
+      "field": [
+        "alternateCurrencies",
+      ],
+      "message": "EUR is listed twice.",
+      "name": "MoneyValidationError",
+    },
+  },
+]
+`;
+
 exports[`records each per-Expense Tag refusal through the bulk HTTP response 1`] = `
 [
   {
