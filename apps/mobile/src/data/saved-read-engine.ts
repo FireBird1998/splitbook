@@ -127,17 +127,21 @@ export interface SavedReadPorts {
 }
 export type RefusalRule = 'forbidden-only' | 'forbidden-or-missing';
 /** View decisions, not persistence machinery. More preview policies join as their views move. */
-export interface SavedReadView {
+export interface SavedReadView<Scope extends string = never> {
   path(key: QueryKey, page?: number): string;
   readable(key: QueryKey, value: unknown, page?: number): boolean;
   ownsKey(key: QueryKey): boolean;
   rowScope: {
     groupId(key: QueryKey): string;
+    /** Scopes whose removal retires this row; omitted for one scope per Group. */
+    scopes?(key: QueryKey): readonly Scope[];
+    defaultScope?: Scope;
     remove(
       rows: FindableRecordStore,
       accountId: string,
       groupId: string,
       known: Iterable<string>,
+      scope?: Scope,
     ): Promise<void>;
     pathGroup(path: string): string | null;
     distrust(key: QueryKey): string[];
@@ -163,12 +167,17 @@ interface RowRead<T> {
   key: QueryKey;
   page?: number;
   accept(value: unknown): void | Promise<void>;
+  /** A screen-owned request, such as Tags' role-aware read (#638), keeps the same row rules. */
+  send?(signal?: AbortSignal): Promise<unknown>;
   project?(answer: Envelope): T;
   failure?(error: unknown): T;
 }
 
 /** Owns a view's saved rows and query ownership; no run or queue escapes to callers. */
-export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadView) {
+export function createSavedReadEngine<Scope extends string = never>(
+  session: SavedReadPorts,
+  view: SavedReadView<Scope>,
+) {
   const { client, rows } = session;
   const queue = createSavedCopyQueue(),
     runs = new Map<string, Run>();
@@ -190,7 +199,19 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
   };
   let rebinding = false;
   const held = (key: QueryKey) => client.getQueryCache().get<unknown, Error>(hashKey(key));
-  const removals = (key: QueryKey) => forgotten.get(view.rowScope.groupId(key)) ?? 0;
+  const scopeKey = (groupId: string, scope?: Scope) =>
+    scope === undefined ? groupId : `${groupId}:${scope}`;
+  /** Every scope reaching the row counts: a ledger removal leaves the Group's own row alone. */
+  const removals = (key: QueryKey) => {
+    const groupId = view.rowScope.groupId(key);
+    return (view.rowScope.scopes?.(key) ?? [undefined])
+      .map((scope) => forgotten.get(scopeKey(groupId, scope)) ?? 0)
+      .join(':');
+  };
+  const removed = (groupId: string, scope = view.rowScope.defaultScope) => {
+    const key = scopeKey(groupId, scope);
+    forgotten.set(key, (forgotten.get(key) ?? 0) + 1);
+  };
   const savedRow = async (lease: AccountStorageLease, path: string) =>
     cachedRead(
       await lease.write(() => rows!.load(lease.accountId, path)),
@@ -257,7 +278,11 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
         if (page.source === 'network') saveRow(key, start, page, page.page);
     } else if (data.source === 'network') saveRow(key, start, data);
   };
-  /** Records a read, and its fetch's start, so its answer is saved only while current. */
+  /**
+   * Records a read and its fetch's start, so its answer is saved only while current. A read
+   * replacing one a change cancelled waits for its request and what its answer set off (a
+   * refusal or session change), as Home's reads do.
+   */
   const track = (key: QueryKey, run: Run) => {
     const query = held(key),
       previous = runs.get(hashKey(key));
@@ -290,7 +315,9 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
     const obsolete = () => !session.current(owner) || !owns();
     let value: unknown;
     try {
-      value = await session.read(path, owner, run.abort?.signal);
+      value = await (request.send
+        ? request.send(run.abort?.signal)
+        : session.read(path, owner, run.abort?.signal));
       answered(key, run);
     } catch (error) {
       answered(key, run);
@@ -373,6 +400,22 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
     return data;
   };
   return {
+    /** An answer already verified elsewhere is saved with its original time and owner (#219). */
+    save: saveRow,
+    /**
+     * This phone's saved row, without showing it in a query (Tags' offline choices, #638):
+     * never one a change, a denial or a failed removal made obsolete, nor one it can't read.
+     */
+    async saved(key: QueryKey, page?: number): Promise<Envelope | null> {
+      const lease = session.lease();
+      if (!lease || !rows) return null;
+      const row = await savedRow(lease, view.path(key, page)).catch(() => null);
+      return row &&
+        row.refreshedAt > session.distrusted(key, false) &&
+        view.readable(key, row.value, page)
+        ? copy(row)
+        : null;
+    },
     /** A query function's read of one row; `project` and `failure` shape what its query holds. */
     read<T = Envelope>(request: RowRead<T>): Promise<T> {
       const run: Run = { answered: false, reading: Promise.resolve() };
@@ -479,10 +522,10 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
       }
     },
     /** Removes a scope's rows, inside a lease write: a change or a loss. */
-    async forget(accountId: string, groupId: string) {
+    async forget(accountId: string, groupId: string, scope = view.rowScope.defaultScope) {
       if (!rows) return;
-      forgotten.set(groupId, (forgotten.get(groupId) ?? 0) + 1);
-      await view.rowScope.remove(rows, accountId, groupId, known);
+      removed(groupId, scope);
+      await view.rowScope.remove(rows, accountId, groupId, known, scope);
     },
     /** Keeps only these Groups' rows: a Groups list from the server left the others out. */
     async retain(accountId: string, listed: string[]) {
@@ -491,7 +534,7 @@ export function createSavedReadEngine(session: SavedReadPorts, view: SavedReadVi
       for (const path of await rowPaths(rows, accountId, known)) {
         const id = view.rowScope.pathGroup(path);
         if (!id || keep.has(id)) continue;
-        forgotten.set(id, (forgotten.get(id) ?? 0) + 1);
+        removed(id);
         await rows.remove(accountId, path);
       }
     },

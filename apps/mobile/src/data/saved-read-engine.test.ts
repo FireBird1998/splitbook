@@ -10,7 +10,13 @@ import { RequestError, Superseded } from './transport';
 import type { RefusalRule, SavedReadPorts, SavedReadView } from './saved-read-engine';
 import type { MobileSnapshot } from './types';
 import { QueryClient, QueryObserver, focusManager, onlineManager } from '@tanstack/query-core';
-import { expenseRecordKey, queryKeyPath, type QueryKey } from '@splitbook/shared/query-keys';
+import {
+  expenseRecordKey,
+  groupKey,
+  groupBalancesKey,
+  queryKeyPath,
+  type QueryKey,
+} from '@splitbook/shared/query-keys';
 import { followInjectedClock } from '../test-utils/query-clock';
 
 describe('the saved-copy queue', () => {
@@ -851,6 +857,262 @@ it("returns Activity's projected preview with its saved time for the view to kee
     pageParams: [1],
   });
   expect(f.client.getQueryData(f.key)).toBe(copy);
+  f.stop();
+  f.client.clear();
+});
+
+function twoScopeFixture() {
+  const f = engineFixture();
+  f.stop();
+  const details = groupKey(f.ports.account(), f.group),
+    ledger = groupBalancesKey(f.ports.account(), f.group);
+  const engine = createSavedReadEngine<'group' | 'ledger'>(f.ports, {
+    path: (key) => queryKeyPath(key),
+    readable: (_key, value) => !!value && typeof value === 'object' && 'title' in value,
+    ownsKey: (key) => key[0] === 'group' || key[0] === 'balances',
+    rowScope: {
+      groupId: (key) => key[3] as string,
+      defaultScope: 'group',
+      scopes: (key) => (key[0] === 'group' ? ['group'] : ['group', 'ledger']),
+      remove: async (store, accountId, group, known, scope = 'group') => {
+        for (const path of await rowPaths(store, accountId, known)) {
+          if (
+            scope === 'group'
+              ? path.startsWith(`/api/groups/${group}`)
+              : path === queryKeyPath(ledger)
+          )
+            await store.remove(accountId, path);
+        }
+      },
+      pathGroup: () => f.group,
+      distrust: (key) => [`${key[0]}:${key[3]}`],
+    },
+    refusal: 'forbidden-or-missing',
+    preview: 'same-run-unanswered',
+    automaticRefetch: false,
+    cancelOnRemove: true,
+    staleWhenOffline: true,
+  });
+  return { ...f, engine, details, ledger, stop: engine.listen() };
+}
+
+it('keeps the Group row being written when only its ledger scope is removed', async () => {
+  const f = twoScopeFixture(),
+    started = deferred(),
+    slow = deferred(),
+    save = f.rows.save;
+  await save('account', queryKeyPath(f.ledger), { title: 'Old balances' });
+  f.rows.save = async (...args) => {
+    started.resolve();
+    await slow.promise;
+    await save(...args);
+  };
+  await f.client.fetchQuery({
+    queryKey: f.details,
+    queryFn: () => f.engine.read({ key: f.details, accept: () => undefined }),
+  });
+  await started.promise;
+  await f.engine.forget('account', f.group, 'ledger');
+  slow.resolve();
+  await f.engine.idle();
+  expect(await f.rows.load('account', queryKeyPath(f.details))).toMatchObject({
+    value: { title: 'Read answer' },
+  });
+  expect(await f.rows.load('account', queryKeyPath(f.ledger))).toBeNull();
+  f.stop();
+  f.client.clear();
+});
+
+it.each(['forget', 'retain'] as const)(
+  'removes a ledger row landing after %s without changing a kept Group row',
+  async (removal) => {
+    const f = twoScopeFixture(),
+      started = deferred(),
+      slow = deferred(),
+      save = f.rows.save;
+    await save('account', queryKeyPath(f.details), { title: 'Kept Group' });
+    f.rows.save = async (...args) => {
+      started.resolve();
+      await slow.promise;
+      await save(...args);
+    };
+    await f.client.fetchQuery({
+      queryKey: f.ledger,
+      queryFn: () => f.engine.read({ key: f.ledger, accept: () => undefined }),
+    });
+    await started.promise;
+    if (removal === 'forget') await f.engine.forget('account', f.group, 'ledger');
+    else await f.engine.retain('account', []);
+    slow.resolve();
+    await f.engine.idle();
+    expect(await f.rows.load('account', queryKeyPath(f.ledger))).toBeNull();
+    expect(await f.rows.load('account', queryKeyPath(f.details))).toEqual(
+      removal === 'forget' ? { title: 'Kept Group' } : null,
+    );
+    f.stop();
+    f.client.clear();
+  },
+);
+
+it('uses a screen-owned request while keeping the same saved-read behavior', async () => {
+  const f = engineFixture();
+  const answer = await f.client.fetchQuery({
+    queryKey: f.key,
+    queryFn: () =>
+      f.engine.read({
+        key: f.key,
+        accept: () => undefined,
+        send: async () => ({ title: 'Tags request' }),
+      }),
+  });
+  expect(answer).toEqual({
+    source: 'network',
+    refreshedAt: 1000,
+    value: { title: 'Tags request' },
+  });
+  await f.engine.idle();
+  expect(await f.rows.load('account', f.path)).toMatchObject({ value: { title: 'Tags request' } });
+  f.stop();
+  f.client.clear();
+});
+
+it('reads trusted saved data for a screen without starting or populating its query', async () => {
+  const f = engineFixture();
+  await f.seed();
+  expect(await f.engine.saved(f.key)).toEqual({
+    source: 'saved',
+    refreshedAt: 500,
+    value: { title: 'Saved answer' },
+  });
+  expect(f.client.getQueryData(f.key)).toBeUndefined();
+  f.state.mark = 500;
+  expect(await f.engine.saved(f.key)).toBeNull();
+  f.state.mark = -Infinity;
+  await f.seed(500, { wrong: 'Unreadable' });
+  expect(await f.engine.saved(f.key)).toBeNull();
+  f.stop();
+  f.client.clear();
+});
+
+it('saves a separately verified answer through the same ownership-checked saved-copy lane', async () => {
+  const f = engineFixture();
+  const verified = {
+    source: 'network' as const,
+    refreshedAt: 750,
+    value: { title: 'Verified elsewhere' },
+  };
+  f.client.setQueryData(f.key, verified);
+  f.engine.save(f.key, { owner: 1, owns: () => true }, verified);
+  await f.engine.idle();
+  expect(await f.rows.load('account', f.path)).toMatchObject({
+    refreshedAt: 750,
+    value: { title: 'Verified elsewhere' },
+  });
+  f.engine.save(
+    f.key,
+    { owner: 1, owns: () => false },
+    { ...verified, value: { title: 'Replaced owner' } },
+  );
+  await f.engine.idle();
+  expect(await f.rows.load('account', f.path)).toMatchObject({
+    value: { title: 'Verified elsewhere' },
+  });
+  f.stop();
+  f.client.clear();
+});
+
+it('falls back to the saved row when a screen-owned request cannot reach Splitbook', async () => {
+  const f = engineFixture();
+  await f.seed();
+  const answer = await f.client.fetchQuery({
+    queryKey: f.key,
+    queryFn: () =>
+      f.engine.read({
+        key: f.key,
+        accept: () => undefined,
+        send: async () => {
+          throw offlineFailure();
+        },
+      }),
+  });
+  expect(answer).toEqual({ source: 'saved', refreshedAt: 500, value: { title: 'Saved answer' } });
+  f.stop();
+  f.client.clear();
+});
+
+it('cancels a screen-owned request when its query is removed', async () => {
+  const f = engineFixture(),
+    started = deferred();
+  const options = {
+    queryKey: f.key,
+    queryFn: () =>
+      f.engine.read({
+        key: f.key,
+        accept: () => undefined,
+        send: (signal) =>
+          new Promise((_, reject) => {
+            signal?.addEventListener('abort', () =>
+              reject(new RequestError('Cancelled', 0, null, false, null, 'cancelled')),
+            );
+            started.resolve();
+          }),
+      }),
+  };
+  const reading = f.engine.readNow(options, 1, () => false);
+  const refused = expect(reading).rejects.toBeInstanceOf(Superseded);
+  await started.promise;
+  f.client.removeQueries({ queryKey: f.key });
+  await refused;
+  expect(f.client.getQueryData(f.key)).toBeUndefined();
+  expect(await f.rows.load('account', f.path)).toBeNull();
+  f.stop();
+  f.client.clear();
+});
+
+it('distrusts only the late ledger row when its removal fails in a two-scope view', async () => {
+  const f = twoScopeFixture(),
+    started = deferred(),
+    slow = deferred(),
+    save = f.rows.save,
+    remove = f.rows.remove;
+  const path = queryKeyPath(f.details);
+  await save('account', path, {
+    version: 1,
+    accountId: 'account',
+    path,
+    refreshedAt: 500,
+    value: { title: 'Kept Group' },
+  });
+  f.rows.save = async (...args) => {
+    started.resolve();
+    await slow.promise;
+    await save(...args);
+  };
+  f.rows.remove = async (accountId, path) => {
+    if (await f.rows.load(accountId, path)) throw new Error('Cannot remove');
+    await remove(accountId, path);
+  };
+  const options = {
+    queryKey: f.ledger,
+    queryFn: () => f.engine.read({ key: f.ledger, accept: () => undefined }),
+  };
+  await f.client.fetchQuery(options);
+  await started.promise;
+  await f.engine.forget('account', f.group, 'ledger');
+  slow.resolve();
+  await f.engine.idle();
+  expect(await f.rows.load('account', queryKeyPath(f.ledger))).toMatchObject({
+    value: { title: 'Read answer' },
+  });
+  f.state.read = async () => {
+    throw offlineFailure();
+  };
+  await expect(f.client.fetchQuery(options)).rejects.toMatchObject({ code: 'OFFLINE_UNAVAILABLE' });
+  expect(await f.engine.saved(f.details)).toEqual({
+    source: 'saved',
+    refreshedAt: 500,
+    value: { title: 'Kept Group' },
+  });
   f.stop();
   f.client.clear();
 });
