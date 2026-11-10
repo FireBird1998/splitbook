@@ -6,7 +6,6 @@ import {
   serverError,
   failedRead,
   validationError,
-  error,
   readJson,
   routeIds,
 } from '@/lib/utils/api-response';
@@ -22,12 +21,6 @@ import {
 } from '@splitbook/shared/expense-page-read';
 import type { ExpenseFilters } from '@splitbook/shared/types';
 import { parseIdempotencyKey } from '@/lib/financial-write';
-
-const expenseValidationMessages: Record<string, string> = {
-  INVALID_MEMBERS: 'All payers and split participants must be group members',
-  INVALID_TAG: 'Tag must be an active group tag',
-  CURRENCY_MISMATCH: 'Currency is not one of this Group’s currencies',
-};
 
 // POST /api/groups/[id]/expenses — Add expense
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -67,10 +60,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
     return success(expense, 201);
   } catch (err) {
-    if (err instanceof Error && err.message in expenseValidationMessages) {
-      return error(expenseValidationMessages[err.message], 422, err.message);
-    }
-
     return serverError(err);
   }
 }

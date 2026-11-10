@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Refusal, refusalAnswer } from './refusals';
 import {
   assertActiveTag,
   assertExpenseParticipants,
@@ -10,6 +11,21 @@ import {
 } from './expense-validation';
 
 describe('expense validation', () => {
+  it('refuses an Expense participant with its code and Expense wording', () => {
+    let cause: unknown;
+    try {
+      assertExpenseParticipants(new Set(['member']), [{ user: 'outsider' }], []);
+    } catch (error) {
+      cause = error;
+    }
+    expect(cause).toBeInstanceOf(Refusal);
+    expect(cause).toMatchObject({ message: 'INVALID_MEMBERS', code: 'INVALID_MEMBERS' });
+    expect(refusalAnswer(cause as Refusal)).toEqual({
+      error: 'All payers and split participants must be group members',
+      status: 422,
+      code: 'INVALID_MEMBERS',
+    });
+  });
   describe('assertExpenseParticipants', () => {
     it('accepts payers and split participants who are group members', () => {
       const memberIds = new Set(['user-1', 'user-2']);
@@ -112,4 +128,15 @@ describe('expense validation', () => {
       );
     });
   });
+});
+
+it.each([
+  ['INVALID_TAG', () => assertActiveTag(new Set(), 'Food')],
+  ['INVALID_MEMBERS', () => assertSettlementMembers(new Set(), 'payer', 'payee')],
+  ['SAME_PARTY', () => assertSettlementMembers(new Set(['payer']), 'payer', 'payer')],
+  ['FORBIDDEN_SETTLEMENT', () => assertSettlementAuthorization('other', 'payer', 'payee')],
+  ['CURRENCY_MISMATCH', () => assertGroupCurrency({ defaultCurrency: 'INR' }, 'EUR')],
+] as const)('keeps %s as the Error message of a typed shared refusal', (code, refuse) => {
+  expect(refuse).toThrow(Refusal);
+  expect(refuse).toThrow(code);
 });

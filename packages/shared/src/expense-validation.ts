@@ -1,3 +1,4 @@
+import { Refusal } from './refusals';
 import { canRecordSettlement } from './settlement-authorization';
 import { isGroupCurrency, type GroupCurrencyList } from './group-currencies';
 
@@ -15,7 +16,7 @@ export function assertExpenseParticipants(
   );
 
   if (hasInvalidParticipant) {
-    throw new Error('INVALID_MEMBERS');
+    throw new Refusal('INVALID_MEMBERS', { variant: 'expense' });
   }
 }
 
@@ -28,7 +29,7 @@ export function shouldValidateExpenseTag(
 
 export function assertActiveTag(activeTagNames: Set<string>, tag: string): void {
   if (!activeTagNames.has(tag)) {
-    throw new Error('INVALID_TAG');
+    throw new Refusal('INVALID_TAG');
   }
 }
 
@@ -38,10 +39,10 @@ export function assertSettlementMembers(
   paidTo: string,
 ): void {
   if (!memberIds.has(paidBy) || !memberIds.has(paidTo)) {
-    throw new Error('INVALID_MEMBERS');
+    throw new Refusal('INVALID_MEMBERS');
   }
   if (paidBy === paidTo) {
-    throw new Error('SAME_PARTY');
+    throw new Refusal('SAME_PARTY');
   }
 }
 
@@ -53,13 +54,13 @@ export function assertSettlementAuthorization(
   paidTo: string,
 ): void {
   if (!canRecordSettlement(actorId, paidBy, paidTo)) {
-    throw new Error('FORBIDDEN_SETTLEMENT');
+    throw new Refusal('FORBIDDEN_SETTLEMENT');
   }
 }
 
 /** A record's currency must be one of the Group's: its main currency or an extra one (#719). */
 export function assertGroupCurrency(group: GroupCurrencyList, currency: string): void {
   if (!isGroupCurrency(group, currency)) {
-    throw new Error('CURRENCY_MISMATCH');
+    throw new Refusal('CURRENCY_MISMATCH');
   }
 }
