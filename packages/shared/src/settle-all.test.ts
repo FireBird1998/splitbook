@@ -353,3 +353,89 @@ it('waits for the suggestion even when a rate is typed while it is loading', () 
   expect(read.waiting).toBe('Getting the suggested rate for EUR…');
   expect(read.lines[1]).toMatchObject({ paidMinor: null, rate: null, kind: null });
 });
+
+describe('Settle up waits with a reason and the Debt currency', () => {
+  it.each([null, '92.50'])('needs a connection even with the typed rate %s', (custom) => {
+    const read = readSettleAll({
+      debts: twoDebts,
+      paidCurrency: 'INR',
+      rates: { EUR: { state: { status: 'unreachable' }, custom } },
+    });
+    expect(read.amounts).toBeNull();
+    expect(read.reason).toEqual({ kind: 'unreachable', currency: 'EUR' });
+    expect(read.waiting).toBe('Recording a payment needs a connection.');
+    expect(read.lines[1]).toMatchObject({ paidMinor: null, rate: null, kind: null });
+  });
+
+  it('names the first Debt still looking up a rate, without hiding the known lines', () => {
+    const read = readSettleAll({
+      debts: [...twoDebts, { currency: 'JPY', amountMinor: 2500 }],
+      paidCurrency: 'INR',
+      rates: {},
+    });
+    expect(read.reason).toEqual({ kind: 'loading', currency: 'EUR' });
+    expect(read.waiting).toBe('Getting the suggested rate for EUR…');
+    expect(read.lines[0].paidMinor).toBe(148000);
+    expect(read.amounts).toBeNull();
+  });
+
+  it('names the currency with no rate entered yet', () => {
+    const read = readSettleAll({
+      debts: twoDebts,
+      paidCurrency: 'INR',
+      rates: { EUR: { state: { status: 'none', reason: null }, custom: null } },
+    });
+    expect(read.reason).toEqual({ kind: 'missing-rate', currency: 'EUR' });
+    expect(read.waiting).toBe('Enter the rate for the EUR Debt to record it.');
+    expect(read.amounts).toBeNull();
+  });
+
+  it('names an invalid rate without changing its words', () => {
+    const read = readSettleAll({
+      debts: twoDebts,
+      paidCurrency: 'INR',
+      rates: { EUR: { state: { status: 'ready', suggestion: frankfurter }, custom: '0' } },
+    });
+    expect(read.reason).toEqual({ kind: 'invalid-rate', currency: 'EUR' });
+    expect(read.amounts).toBeNull();
+  });
+
+  it('names a payment-wide calculation failure without blaming an arbitrary Debt', () => {
+    const read = readSettleAll({
+      debts: [
+        { currency: 'INR', amountMinor: 100 },
+        { currency: 'INR', amountMinor: 100 },
+      ],
+      paidCurrency: 'INR',
+      rates: {},
+    });
+    expect(read.reason).toEqual({ kind: 'unworkable-rates' });
+    expect(read.waiting).toBe('This payment can’t be worked out from these rates. Check them.');
+    expect(read.amounts).toBeNull();
+  });
+
+  it('has no reason to wait once the rates can be recorded', () => {
+    const read = readSettleAll({
+      debts: twoDebts,
+      paidCurrency: 'INR',
+      rates: { EUR: { state: { status: 'ready', suggestion: frankfurter }, custom: null } },
+    });
+    expect(read.reason).toBeNull();
+    expect(read.amounts?.totalPaidMinor).toBe(332200);
+  });
+});
+
+it.each([[ALEX, PRIYA], [SAM, PRIYA], []])(
+  'returns no Debts unless both people are current members: %j',
+  (...members) => {
+    expect(settleAllDebtsBetween(buckets, ALEX, SAM, ORDER, members)).toEqual([]);
+  },
+);
+
+it('does not offer a former payer’s incoming Settle up', () => {
+  const incoming = [
+    { currency: 'INR', debts: [{ from: sam, to: alex, amount: 500 }] },
+    { currency: 'EUR', debts: [{ from: sam, to: alex, amount: 20 }] },
+  ];
+  expect(settleAllOffers(incoming, ALEX, ORDER, [ALEX, PRIYA])).toEqual([]);
+});
