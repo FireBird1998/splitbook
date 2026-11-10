@@ -397,6 +397,7 @@ describe('Settle up waits with a reason and the Debt currency', () => {
       rates: { EUR: { state: { status: 'ready', suggestion: frankfurter }, custom: '0' } },
     });
     expect(read.reason).toEqual({ kind: 'invalid-rate', currency: 'EUR' });
+    expect(read.waiting).toBe('Enter a rate above 0.');
     expect(read.amounts).toBeNull();
   });
 
@@ -425,10 +426,10 @@ describe('Settle up waits with a reason and the Debt currency', () => {
   });
 });
 
-it.each([[ALEX, PRIYA], [SAM, PRIYA], []])(
-  'returns no Debts unless both people are current members: %j',
-  (...members) => {
-    expect(settleAllDebtsBetween(buckets, ALEX, SAM, ORDER, members)).toEqual([]);
+it.each([{ memberIds: [ALEX, PRIYA] }, { memberIds: [SAM, PRIYA] }, { memberIds: [] }])(
+  'returns no Debts unless both people are current members: $memberIds',
+  ({ memberIds }) => {
+    expect(settleAllDebtsBetween(buckets, ALEX, SAM, ORDER, memberIds)).toEqual([]);
   },
 );
 

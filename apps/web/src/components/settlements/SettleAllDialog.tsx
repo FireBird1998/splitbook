@@ -15,6 +15,7 @@ import {
   rateNote,
   rateText,
   suggestedRateText,
+  type PaymentRateState,
 } from '@splitbook/shared/cross-currency-payment';
 import { decimalMoney, minorMoney, perUnit } from '@splitbook/shared/cross-currency-settlement';
 import { currencyPrefix } from '@splitbook/shared/currency';
@@ -39,7 +40,6 @@ import {
   type SettleAllDebt,
   type SettleAllLine,
   type SettleAllOffer,
-  type SettleAllRateState,
 } from '@splitbook/shared/settle-all';
 import { SEPARATOR } from '@splitbook/shared/separator';
 
@@ -539,7 +539,7 @@ function RateCell({
   fixed: boolean;
   changing: boolean;
   custom: string | null;
-  state: SettleAllRateState;
+  state: PaymentRateState;
   onChange: () => void;
   onType: (value: string) => void;
   onUseSuggestion: () => void;

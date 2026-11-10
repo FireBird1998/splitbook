@@ -4,16 +4,13 @@ import useSWR from 'swr';
 import { groupRatesKey, type QueryKey } from '@splitbook/shared/query-keys';
 import {
   parseRateSuggestionResponse,
-  type RateSuggestion,
+  type PaymentRateState,
 } from '@splitbook/shared/cross-currency-payment';
 import { fetchWebRead } from '@/lib/web-read';
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 
 /** What Record payment knows of a suggested rate between two currencies (#726, #727). */
-export type RateSuggestionState =
-  | { status: 'loading' }
-  | { status: 'none'; reason: string | null }
-  | { status: 'ready'; suggestion: RateSuggestion };
+export type RateSuggestionState = Exclude<PaymentRateState, { status: 'unreachable' }>;
 
 const readSuggestion = async (key: QueryKey) =>
   parseRateSuggestionResponse(await fetchWebRead(key));
