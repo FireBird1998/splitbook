@@ -147,9 +147,15 @@ for (const scenario of ['outsider', 'removed', 'left', 'missing', 'anonymous'] a
     const before = await observeTrip(ledger, tripId);
     const refused = await answer(actor, summary(groupId));
     if (scenario === 'anonymous') {
-      expect(refused).toEqual({ status: 401, body: { error: 'Unauthorized', status: 401 } });
+      expect(refused).toEqual({
+        status: 401,
+        body: { error: 'Unauthorized', status: 401, code: 'UNAUTHORIZED' },
+      });
     } else {
-      expect(refused).toEqual({ status: 403, body: { error: 'Forbidden', status: 403 } });
+      expect(refused).toEqual({
+        status: 403,
+        body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
+      });
     }
     expect(refused).toEqual(await answer(actor, groupBalancesPath(groupId)));
     // A bad query tells a non-member nothing more.

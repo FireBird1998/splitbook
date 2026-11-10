@@ -31,7 +31,9 @@ for (const membership of ['outsider', 'removed'] as const) {
         headers: { 'Content-Type': 'application/json' },
       });
       expect.soft(response.status()).toBe(403);
-      expect.soft(await response.json()).toEqual({ error: 'Forbidden', status: 403 });
+      expect
+        .soft(await response.json())
+        .toEqual({ error: 'Forbidden', status: 403, code: 'FORBIDDEN' });
       expect(await observeLedger(ledger, ledger.expenseB)).toEqual(before);
     });
   }
