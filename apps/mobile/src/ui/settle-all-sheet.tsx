@@ -13,6 +13,7 @@ import { groupCurrencies } from '@splitbook/shared/group-currencies';
 import {
   readSettleAll,
   settleAllPayCurrencies,
+  settleAllWords,
   type SettleAllLine,
 } from '@splitbook/shared/settle-all';
 import { acceptsNumericText } from '../data/field-feedback';
@@ -325,6 +326,13 @@ export function SettleAllSheet({
       : null;
   const waiting = reading ? settleAllWaiting(reading) : null;
   const count = legs.length;
+  const words = settleAllWords({
+    paidBy,
+    paidTo,
+    other,
+    youPay,
+    debts: legs.map(({ currency, debtMinor }) => ({ currency, amountMinor: debtMinor })),
+  });
   // The main currency first, then each Debt's own (#872).
   const payCurrencies =
     batch && state.group
@@ -383,7 +391,7 @@ export function SettleAllSheet({
   return (
     <BottomSheet
       visible={visible}
-      title={`Settle up with ${other}`}
+      title={words.title}
       doneLabel="Close"
       doneIcon="close"
       dismissLabel="Close without recording"
@@ -419,9 +427,7 @@ export function SettleAllSheet({
         ) : null
       ) : (
         <>
-          <CompactText tone="secondary">
-            {`${youPay ? `You owe ${other}` : `${other} owes you`} in ${count}${NO_BREAK_SPACE}currencies. One payment can clear ${count === 2 ? 'both' : 'them all'}; each Debt keeps its own rate.`}
-          </CompactText>
+          <CompactText tone="secondary">{words.intro}</CompactText>
           {editable && payCurrencies.length > 1 ? (
             <View style={{ gap: 6 }}>
               <CompactText variant="caption" tone="secondary" weight="medium">
@@ -482,7 +488,7 @@ export function SettleAllSheet({
             </View>
           </Card>
           <CompactText variant="caption" tone="secondary">
-            {`Records ${count}${NO_BREAK_SPACE}Settlements, one for each Debt, each with its own rate. Activity shows them as one payment. To pay part of a Debt, record it on its own.`}
+            {words.note}
           </CompactText>
         </>
       )}
