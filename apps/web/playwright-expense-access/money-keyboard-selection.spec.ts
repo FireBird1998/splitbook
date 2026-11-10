@@ -140,10 +140,12 @@ for (const crossCurrency of [false, true]) {
     expect(parseAmountMinor(String(body.amount), body.currency)).toBe(crossCurrency ? 2000 : 30000);
     const response = await sent.response();
     expect(response?.status()).toBe(201);
-    expect((await response!.json()).data).toMatchObject({
-      amountMinor: crossCurrency ? 2000 : 30000,
-    });
     await expect(page.getByText('Payment recorded.', { exact: false })).toBeVisible();
+    // Check the saved payment through the API. Chromium's network observer can stall reading
+    // the body of a no-store POST after the app has already received it.
+    expect(await dataOf(await ledger.alex.get(`/api/groups/${group}/settlements`))).toEqual([
+      expect.objectContaining({ amountMinor: crossCurrency ? 2000 : 30000 }),
+    ]);
   });
 }
 

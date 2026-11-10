@@ -41,7 +41,6 @@ test('a lost create response preserves the draft and retries the same submission
   await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
   const created = await retried;
   expect(created.status()).toBe(201);
-  await created.finished();
   await expect(dialog).toBeHidden();
   expect(keys).toHaveLength(2);
   expect(keys[0]).toBeTruthy();
