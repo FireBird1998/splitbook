@@ -13,6 +13,8 @@ import {
 import { decimalMoney, minorMoney, perUnit } from '@splitbook/shared/cross-currency-settlement';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { groupCurrencies } from '@splitbook/shared/group-currencies';
+import { overpaymentMessage } from '@splitbook/shared/settlement-preview';
+import { paymentPreview } from '../data/payment-balances';
 import { acceptsNumericText, visibleFieldErrors } from '../data/field-feedback';
 import {
   enterRateOrPaid,
@@ -63,34 +65,6 @@ const minor = (amount: string | number, currency: string) => {
     return null;
   }
 };
-
-/**
- * Above the suggestion, how much extra and where the payer would stand afterwards. Balances
- * are simplified across the Group, so this states the payer's overall position, not a debt
- * between these two people.
- */
-export function overpayment(state: SettlementState, currentUserId: string, name: string) {
-  const { draft, suggested } = state;
-  if (!draft || suggested === null) return null;
-  const paid = minor(draft.amount, draft.currency),
-    suggestion = minor(suggested, draft.currency);
-  if (paid === null || suggestion === null || paid <= suggestion) return null;
-  const money = (value: number) =>
-    formatCurrency(toMajorAmount(Math.abs(value), draft.currency), draft.currency);
-  const net =
-    state.balances
-      .find((bucket) => bucket.currency === draft.currency)
-      ?.balances.find(({ user }) => user.id === draft.paidBy)?.balance ?? 0;
-  const after = (minor(net, draft.currency) ?? 0) + paid;
-  const you = draft.paidBy === currentUserId;
-  const position =
-    after > 0
-      ? `${you ? 'you’d' : `${name} would`} be owed ${money(after)}`
-      : after < 0
-        ? `${you ? 'you’d' : `${name} would`} still owe ${money(after)}`
-        : `${you ? 'you’d' : `${name} would`} be settled up`;
-  return `That’s ${money(paid - suggestion)} more than suggested. Afterwards ${position} in this Group.`;
-}
 
 function Checkbox({
   label,
@@ -308,10 +282,22 @@ function SinglePaymentSheet({
       : null;
   // An unconfirmed payment in another currency names its amount as the amount cleared.
   const amountTitle = paidAs ? 'Amount cleared' : 'Amount paid';
+  const paid = figures ? minor(figures.amount, figures.currency) : null;
+  const preview =
+    draft && !cross && debtMinor !== null && debtMinor > 0 && paid !== null
+      ? paymentPreview(state.balances, { ...draft, amountMinor: paid }, debtMinor)
+      : null;
   const extra = draft
     ? cross
       ? (summary?.overpaid ?? null)
-      : overpayment(state, currentUserId, name(draft.paidBy))
+      : preview?.overpays
+        ? overpaymentMessage(
+            preview,
+            draft.currency,
+            { isViewer: draft.paidBy === currentUserId, name: fullName(draft.paidBy) },
+            draft.paidTo === currentUserId ? 'you' : fullName(draft.paidTo),
+          )
+        : null
     : null;
   // The payer says what they meant; the member being paid confirms what the payer paid (#640).
   const tick =
@@ -319,7 +305,6 @@ function SinglePaymentSheet({
       ? 'I meant to pay more than suggested'
       : `${fullName(draft.paidBy)} paid more than suggested`;
   const waitingForTick = Boolean(extra) && !state.acknowledged;
-  const paid = figures ? minor(figures.amount, figures.currency) : null;
   const amountLabel =
     figures && paid !== null && paid > 0
       ? formatCurrency(toMajorAmount(paid, figures.currency), figures.currency)

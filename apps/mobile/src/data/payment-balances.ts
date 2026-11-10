@@ -1,4 +1,5 @@
 import type { GroupCurrencyBalance } from './types';
+import { previewSettlement, settlementLedgerFromRead } from '@splitbook/shared/settlement-preview';
 
 /**
  * Android's Balances as the shared payment readings take them: people by `_id`, without rows
@@ -17,4 +18,22 @@ export function paymentBalances(balances: readonly GroupCurrencyBalance[]) {
         : [],
     ),
   }));
+}
+
+/**
+ * A single payment's shared preview. The sheet keeps the suggestion it opened with; Record
+ * omits that override to check the Balances it just read. Both compare exact minor units.
+ */
+export function paymentPreview(
+  balances: readonly GroupCurrencyBalance[],
+  payment: { paidBy: string; paidTo: string; currency: string; amountMinor: number },
+  suggestedMinor?: number,
+) {
+  const [read] = paymentBalances(balances.filter(({ currency }) => currency === payment.currency));
+  const ledger = settlementLedgerFromRead(read ?? {}, payment.currency);
+  if (suggestedMinor !== undefined)
+    ledger.suggestions = [
+      { from: payment.paidBy, to: payment.paidTo, amountMinor: suggestedMinor },
+    ];
+  return previewSettlement(ledger, payment);
 }
