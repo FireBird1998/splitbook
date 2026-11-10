@@ -257,8 +257,9 @@ function fixture() {
   delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
   const rows = phone.stores.savedQueries.records,
     drafts = phone.stores.expenseDrafts.records;
-  // Stopped under #1075: this legacy probe is not injected. Pointing it at savedQueries
-  // exposes its vacuous empty-list assertion; the actual wire rows are asserted separately.
+  // Stopped under #1075: MobileDependencies has no legacy financial-store read/write port.
+  // The purge registry offers clear() only, so registering this map there cannot prove the
+  // assertion below. Real legacy-table retirement is covered by saved-copy-storage.test.ts.
   const disk = new Map<string, unknown>();
   const device = { failRemoval: false };
   const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [];
