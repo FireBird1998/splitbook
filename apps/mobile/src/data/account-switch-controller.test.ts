@@ -3,7 +3,6 @@ import { decodeStoredSession } from './cookies';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { MobileController } from './mobile-controller';
-import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse, MobileSnapshot } from './types';
 
 // #200: the app dies partway through an account switch and restarts over the same storage.
@@ -203,7 +202,6 @@ function phone() {
     {
       origin: 'http://localhost:4146',
       now: Date.parse(iso),
-      recordSeparator: ':',
       newSubmissionKey: () => 'account-switch-test-0001',
       parts: {
         pendingInvitation: undefined,
@@ -211,26 +209,10 @@ function phone() {
         draftRequests: undefined,
         tagRequests: undefined,
         netInfo: undefined,
-        accountLocal: {
-          financialCleanup: undefined,
-          untrustedCopies: undefined,
-          signOutRecord: undefined,
-          stores: [
-            {
-              clear: async (): Promise<void> => {
-                native.stores.savedQueries.records.clear();
-                native.stores.expenseDrafts.records.clear();
-                native.stores.groupCreations.records.clear();
-                native.stores.offlineIdentity.value = null;
-              },
-            },
-          ],
-        },
       },
     },
   );
   delete native.stores.savedQueries.retainGroups;
-  delete (native.stores.expenseDrafts as AccountGroupRecordStore).keys;
   const stored = {
     get cookie() {
       return native.stores.credentials.value;
