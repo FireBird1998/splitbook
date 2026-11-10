@@ -245,6 +245,17 @@ describe('settlementLedgerFromRead', () => {
 
 // Moved from the web's Record payment suite: the exact same sentences, now read at their home.
 describe('overpaymentMessage', () => {
+  it('states the extra amount alone when the payer’s position cannot be read (#1052)', () => {
+    expect(
+      overpaymentMessage(
+        { suggestedMinor: 106000, overpaidMinor: 5000, paidBy: null },
+        'INR',
+        { isViewer: true, name: 'Alex Rivera' },
+        'Sam Chen',
+      ),
+    ).toBe('That’s ₹50.00 more than suggested.');
+  });
+
   it('says how much more than suggested, and where the payer stands afterwards', () => {
     const preview = previewSettlement(maple, { paidBy: YOU, paidTo: SAM, amountMinor: 120000 })!;
     expect(overpaymentMessage(preview, 'INR', { isViewer: true, name: 'You' }, 'Sam Chen')).toBe(
