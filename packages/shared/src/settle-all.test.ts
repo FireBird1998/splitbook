@@ -336,3 +336,18 @@ describe('a currency Splitbook no longer supports (#812)', () => {
     expect(settleAllDebtsBetween(withMarks, ALEX, SAM, ORDER)).toEqual(twoDebts);
   });
 });
+
+it('does not offer Settle up with a person who has left the Group', () => {
+  expect(settleAllOffers(buckets, ALEX, ORDER, [ALEX, PRIYA])).toEqual([]);
+});
+
+it('waits for the suggestion even when a rate is typed while it is loading', () => {
+  const read = readSettleAll({
+    debts: twoDebts,
+    paidCurrency: 'INR',
+    rates: { EUR: { state: { status: 'loading' }, custom: '92.50' } },
+  });
+  expect(read.amounts).toBeNull();
+  expect(read.waiting).toBe('Getting the suggested rate for EUR…');
+  expect(read.lines[1]).toMatchObject({ paidMinor: null, rate: null, kind: null });
+});
