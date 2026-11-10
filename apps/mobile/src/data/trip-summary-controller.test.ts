@@ -213,7 +213,6 @@ function fixture() {
       draftRequests: undefined,
       tagRequests: undefined,
       groupCreations: undefined,
-      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
       netInfo: {
         addEventListener(listener) {
           listener({ isConnected: !server.offline });
@@ -221,7 +220,6 @@ function fixture() {
         },
       },
     },
-    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts', 'untrustedCopies'],
   });
   const rows = phone.stores.savedQueries.records;
   const calls = api.requests;
