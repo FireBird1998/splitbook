@@ -11,13 +11,13 @@ import {
   type CrossCurrencyField,
   type CrossCurrencyReading,
   type PaymentCurrencies,
+  type PaymentRateState,
 } from '@splitbook/shared/cross-currency-payment';
 import {
   decimalMoney,
   type CrossCurrencySettlementFields,
 } from '@splitbook/shared/cross-currency-settlement';
 import { acceptsNumericText } from '../data/field-feedback';
-import type { RateState } from '../data/settlement';
 import { Badge, Banner, CompactButton, CompactText, radius } from './compact';
 import { FieldError } from './group-workflows';
 import { fonts, useTheme } from './theme';
@@ -97,7 +97,7 @@ export function CrossCurrencyFields({
   reading: CrossCurrencyReading;
   /** The rate kind the payment would record now. */
   kind: CrossCurrencySettlementFields['rateKind'];
-  rate: RateState;
+  rate: PaymentRateState;
   now: Date;
   editable: boolean;
   onEdit: (field: CrossCurrencyField, text: string) => void;
