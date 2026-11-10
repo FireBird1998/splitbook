@@ -80,9 +80,9 @@ function cell<T>(initial: T) {
     },
   });
 }
-function records(savedQueries = false) {
+function records(savedQueries = false, separator = '') {
   const rows = new Map<string, unknown>();
-  const adapter = savedQueriesIn(rows);
+  const adapter = savedQueriesIn(rows, {}, separator);
   // Saved-query helpers intentionally find API paths only. Native Draft/payment stores also
   // list plain Group ids, which is how Home discovers recovery copies after a restart.
   return faultable({
@@ -92,17 +92,17 @@ function records(savedQueries = false) {
       savedQueries
         ? adapter.list!(account)
         : [...rows]
-            .filter(([key]) => key.startsWith(account))
+            .filter(([key]) => key.startsWith(account + separator))
             .map(([key, value]) => ({
-              groupId: key.slice(account.length),
+              groupId: key.slice(account.length + separator.length),
               value: structuredClone(value),
             })),
     keys: async (account: string) =>
       savedQueries
         ? adapter.keys!(account)
         : [...rows.keys()]
-            .filter((key) => key.startsWith(account))
-            .map((key) => key.slice(account.length)),
+            .filter((key) => key.startsWith(account + separator))
+            .map((key) => key.slice(account.length + separator.length)),
   });
 }
 
@@ -111,6 +111,7 @@ export function testPhone(
   server: Pick<MobileDependencies, 'fetch'> & { online: boolean },
   options: {
     now?: number;
+    recordSeparator?: string;
     newSubmissionKey?: () => string;
     parts?: PhoneParts;
     purge?: readonly PurgeStore[];
@@ -135,7 +136,7 @@ export function testPhone(
     offlineIdentity: cell<unknown>(null),
     pendingInvitation: cell<string | null>(null),
     savedQueries: records(true),
-    expenseDrafts: records(),
+    expenseDrafts: records(false, options.recordSeparator),
     settlementAttempts: records(),
     draftRequests: records(),
     tagRequests: records(),

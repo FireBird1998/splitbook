@@ -258,17 +258,19 @@ describe('test phone', () => {
   });
   it('keeps a fixture’s separated Draft keys across restart and sign-out', async () => {
     const phone = testPhone(fakeSplitbook(), { recordSeparator: ':' });
-    const account = 'a00000000000000000000001';
-    await phone.stores.expenseDrafts.save(account, 'maple', { draft: 'kept' });
-    expect([...phone.stores.expenseDrafts.records.keys()]).toEqual([account + ':maple']);
-    expect(await phone.stores.expenseDrafts.keys(account)).toEqual(['maple']);
+    const account = 'a00000000000000000000001',
+      group = 'b00000000000000000000001';
     const app = phone.open();
     await app.signIn('alex');
+    await app.openExpense(group);
+    await app.updateExpenseDraft({ description: 'Dinner' });
+    expect([...phone.stores.expenseDrafts.records.keys()]).toEqual([account + ':' + group]);
+    expect(await phone.stores.expenseDrafts.keys(account)).toEqual([group]);
+    const before = await phone.stores.expenseDrafts.load(account, group);
     const restarted = phone.open();
     await restarted.restore();
-    expect(await phone.stores.expenseDrafts.load(account, 'maple')).toEqual({ draft: 'kept' });
+    expect(await phone.stores.expenseDrafts.load(account, group)).toEqual(before);
     await restarted.signOut();
     expect(phone.stores.expenseDrafts.records.size).toBe(0);
   });
-
 });
