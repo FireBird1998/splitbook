@@ -147,11 +147,12 @@ export function notificationControls(d: {
   const result = parseNotificationPreferences;
   const failed = (error: unknown) => {
     if (error instanceof Superseded) return;
+    const offline =
+      error instanceof RequestError &&
+      (['network', 'timeout'].includes(error.kind) || error.code === 'NOTIFICATIONS_UNAVAILABLE');
     set(
-      error instanceof RequestError && ['network', 'timeout'].includes(error.kind)
-        ? 'offline'
-        : 'error',
-      error instanceof RequestError && ['network', 'timeout'].includes(error.kind)
+      offline ? 'offline' : 'error',
+      offline
         ? 'Connect to confirm notification settings.'
         : 'Couldn’t confirm notification settings. Retry.',
     );
