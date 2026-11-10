@@ -1,3 +1,4 @@
+import { testPhone } from './test-phone';
 import { parseNotificationPreferences } from '../data/notification-controls';
 import { parseToReviewResponse } from '@splitbook/shared/to-review-read';
 import { tagRead } from '../data/tag-management';
@@ -764,4 +765,14 @@ it('reads the world’s confirmed notification preferences through the app reade
  const server=fakeSplitbook();server.world.notifications={available:true,enabled:false,expenseUpdates:false,payments:false,revision:0,activation:null,expenseCutoff:null,paymentCutoff:null};
  const cookie=server.auth.issue('alex');const response=await server.fetch('http://local/api/notifications/device',{headers:{Cookie:cookie}});
  expect(response.status).toBe(200);expect(parseNotificationPreferences(await response.json())).toEqual(server.world.notifications);
+});
+
+it('reads configured Connected assistants and Group scope through the controller’s readers',async()=>{
+ const server=fakeSplitbook();server.world.groups=[];
+ server.world.connections={resource:'http://local/api/mcp',connections:[{id:'helper',clientId:'registered-helper',name:'Fictional Helper',access:'Ledger',lastUsedAt:null,excludedGroupIds:[]}],nextOffset:null};
+ server.world.assistantGroups={groups:[{id:'b00000000000000000000001',rule:'allowed'}]};
+ const phone=testPhone(server);const app=phone.open();await app.signIn('alex');app.openSettings();
+ await vi.waitFor(()=>expect(app.getSnapshot().assistants.available).toBe(true));
+ await app.openAssistants();
+ expect(app.getSnapshot().assistants).toMatchObject({status:'ready',assistants:[{name:'Fictional Helper',groups:{reached:1,of:1}}]});
 });
