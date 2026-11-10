@@ -335,7 +335,9 @@ export function fakeSplitbook() {
         ({ init }) => {
           if (typeof kind === 'object') return gatewayReply(kind.status, kind.body);
           if (kind === 'headers' || kind === 'body') return hangUntilAborted(init, kind);
-          if (kind === 'lost-reply' || kind === 'body-fails') return bodyFails();
+          if (kind === 'body-fails') return bodyFails();
+          // A lost reply fails fetch after the request was logged as taken; no response headers arrive.
+          if (kind === 'lost-reply') throw new TypeError('Network request failed');
           return Promise.reject(new TypeError('Network request failed'));
         },
         options,
