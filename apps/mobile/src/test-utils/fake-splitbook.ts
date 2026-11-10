@@ -5,7 +5,7 @@ import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { FetchResponse, MobileFetch, PersonaId, SessionUser } from '../data/types';
 
 /** The personas and ids most controller suites use. Each fake gets its own mutable world. */
-export const demoPeople = {
+const demoPeople = {
   alex: {
     id: 'a00000000000000000000001',
     name: 'Alex Rivera',
@@ -21,7 +21,7 @@ export const demoPeople = {
   },
 };
 const iso = '2026-09-28T12:00:00.000Z';
-export interface WireGroup {
+interface WireGroup {
   _id: string;
   createdBy: string;
   name: string;
@@ -36,7 +36,7 @@ export interface WireGroup {
   createdAt: string;
   updatedAt: string;
 }
-export function groupFixture(overrides: Partial<WireGroup> = {}): WireGroup {
+function groupFixture(overrides: Partial<WireGroup> = {}): WireGroup {
   return {
     _id: 'b00000000000000000000001',
     createdBy: demoPeople.alex.id,
@@ -224,7 +224,7 @@ export function recordedBatch(
   };
 }
 
-export interface FakeRequest {
+interface FakeRequest {
   url: URL;
   method: string;
   path: string;
