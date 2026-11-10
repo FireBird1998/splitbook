@@ -137,7 +137,6 @@ function device(
   options: { failAttemptSave?: boolean; failAttemptLoad?: boolean; noAttemptStore?: boolean } = {},
 ) {
   let keys = 0;
-  const purge: { clear(): Promise<void> }[] = [];
   const phone = testPhone(backend, {
     now: localNoon,
     newSubmissionKey: () => `payment-attempt-${String(++keys).padStart(4, '0')}`,
@@ -150,17 +149,9 @@ function device(
       tagRequests: undefined,
       ...(options.noAttemptStore ? { settlementAttempts: undefined } : {}),
       netInfo: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: purge,
-      },
     },
   });
   const attempts = phone.stores.settlementAttempts;
-  purge.push(attempts, phone.stores.groupCreations);
   // These original flags last until the test changes them, including across restarts.
   const { load, save } = attempts;
   attempts.load = (...args) => {
