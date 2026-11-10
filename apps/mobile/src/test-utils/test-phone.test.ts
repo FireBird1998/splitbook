@@ -411,4 +411,13 @@ describe('test phone', () => {
     expect(await reading).toEqual({saved:1});
   });
 
+  it('can seed native cell contents without consuming a write fault and still clones them', async () => {
+    const phone=testPhone(fakeSplitbook()), store=phone.stores.financialCleanup;
+    store.failNext('save',new Error('Journal unavailable'));
+    const copy={groupId:'maple'};store.value=copy;copy.groupId='other';
+    expect(await store.load()).toEqual({groupId:'maple'});
+    await expect(store.save(null)).rejects.toThrow('Journal unavailable');
+    store.value=null;expect(await store.load()).toBeNull();
+  });
+
 });
