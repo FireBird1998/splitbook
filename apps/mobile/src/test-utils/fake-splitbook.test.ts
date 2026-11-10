@@ -242,4 +242,16 @@ describe('fake Splitbook', () => {
     expect(paths).toEqual(['GET /probe', 'POST /probe']);
     expect(server.requests.map((r) => r.path)).toEqual(['/probe?page=1', '/probe?page=2']);
   });
+  it('loses the connection after taking a request, separately from a body that fails after headers', async () => {
+    const server = fakeSplitbook();
+    server.fault('POST', '/accepted', 'lost-reply', { once: true });
+    await expect(
+      server.fetch('http://local/accepted', { method: 'POST', body: '{"receipt":1}' }),
+    ).rejects.toThrow('Network request failed');
+    expect(server.requests[0]?.body).toEqual({ receipt: 1 });
+    server.fault('GET', '/body', 'body-fails', { once: true });
+    const headers = await server.fetch('http://local/body', {});
+    expect(headers.status).toBe(200);
+    await expect(headers.json()).rejects.toThrow('Network request failed');
+  });
 });
