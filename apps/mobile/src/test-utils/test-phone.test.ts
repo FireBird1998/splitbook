@@ -322,4 +322,18 @@ describe('test phone', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it('reports connected without internet, keeps that signal on restart, and reconnects', async () => {
+    const server = fakeSplitbook(), phone = testPhone(server);
+    const app = phone.open(); await app.signIn('alex');
+    phone.connect(true,false);
+    expect(server.online).toBe(false);
+    await app.refreshHome();
+    expect(app.getSnapshot().offline.active).toBe(true);
+    const restarted = phone.open(); await restarted.restore();
+    expect(restarted.getSnapshot().offline.active).toBe(true);
+    phone.connect(true,true);
+    await vi.waitFor(()=>expect(restarted.getSnapshot().offline.active).toBe(false));
+    expect(server.online).toBe(true);
+  });
+
 });
