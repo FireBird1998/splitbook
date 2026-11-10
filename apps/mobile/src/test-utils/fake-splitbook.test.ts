@@ -1,3 +1,4 @@
+import { tagRead } from '../data/tag-management';
 import { parseExpenseRecord } from '../data/expense-record';
 import { parseActivityPage } from '../data/activity';
 import { parseTripSummaryResponse } from '@splitbook/shared/trip-summary-read';
@@ -573,5 +574,68 @@ describe('fake Splitbook', () => {
       ),
     ).toEqual(['d00000000000000000000021']);
     expect(server.unanswered).toEqual([]);
+  });
+  it('distinguishes offline attempts from requests sent while connected', async () => {
+    const server = fakeSplitbook();
+    server.online = false;
+    await expect(server.fetch('http://local/probe', {})).rejects.toThrow('Network request failed');
+    server.online = true;
+    await server.fetch('http://local/probe', {});
+    expect(server.requests.map((r) => r.online)).toEqual([false, true]);
+  });
+  it('answers empty and populated Tags in the app reader’s wire shape', async () => {
+    const server = fakeSplitbook(),
+      group = server.world.groups[0]!;
+    const signed = await server.fetch('http://local/api/auth/demo-persona/sign-in', {
+      method: 'POST',
+      body: '{"personaId":"alex"}',
+    });
+    const Cookie = signed.headers.get('Set-Cookie')!.split(';')[0];
+    const read = async () =>
+      tagRead({
+        source: 'network',
+        refreshedAt: 100,
+        value: await (
+          await server.fetch(`http://local/api/groups/${group._id}/tag-actions`, {
+            headers: { Cookie },
+          })
+        ).json(),
+      });
+    expect((await read()).snapshot).toEqual({ canManage: false, tags: [] });
+    server.world.tags[group._id] = {
+      canManage: true,
+      tags: [
+        {
+          id: 'c00000000000000000000001',
+          name: 'Food',
+          revision: 0,
+          isArchived: false,
+          isDeleted: false,
+        },
+      ],
+    };
+    expect((await read()).snapshot).toEqual({
+      canManage: true,
+      tags: [
+        {
+          id: 'c00000000000000000000001',
+          name: 'Food',
+          revision: 0,
+          isArchived: false,
+          isDeleted: false,
+        },
+      ],
+    });
+  });
+
+  it('keeps a mutable pathname-only view without clearing the complete request log', async () => {
+    const server = fakeSplitbook(),
+      paths = server.sent({ query: false, method: false });
+    await server.fetch('http://local/first?page=1', {});
+    expect(paths).toEqual(['/first']);
+    paths.length = 0;
+    await server.fetch('http://local/second?page=2', { method: 'POST', body: '{}' });
+    expect(paths).toEqual(['/second']);
+    expect(server.requests).toHaveLength(2);
   });
 });

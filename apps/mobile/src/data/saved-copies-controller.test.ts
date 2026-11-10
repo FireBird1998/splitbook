@@ -1,58 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { onlineManager } from '@tanstack/query-core';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
-import { createMobileController } from './mobile-controller';
-import { createAccountGroupRecordStore } from './account-record-storage';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
 import type { TagCommand } from '@splitbook/shared/tag-management';
 
 // #191: a member's own confirmed or unconfirmed change leaves no saved copy older than it.
-
-// This device's SQLite records, kept in memory. The real saved-copy store runs on top of them.
-const device = vi.hoisted(() => ({
-  records: new Map<string, unknown>(),
-  /** The next write of an environment's saved copies is held part-way, as on a slow disk. */
-  stall: null as null | { environment: string; arrive: () => void; released: Promise<void> },
-  /** The next removal of an environment's saved copies is held part-way, as on a slow disk. */
-  removal: null as null | { environment: string; arrive: () => void; released: Promise<void> },
-}));
-vi.mock('./account-record-storage', () => ({
-  createAccountGroupRecordStore: (environment: string, kind: string) => {
-    const key = (accountId: string, id: string) => `${environment}|${kind}|${accountId}|${id}`;
-    return {
-      load: async (accountId: string, id: string) =>
-        structuredClone(device.records.get(key(accountId, id)) ?? null),
-      save: async (accountId: string, id: string, value: unknown) => {
-        const stall = device.stall;
-        // All saved copies are now per-query persister rows (#223).
-        if (kind === 'saved' && stall?.environment === environment) {
-          device.stall = null;
-          stall.arrive();
-          await stall.released;
-        }
-        device.records.set(key(accountId, id), structuredClone(value));
-      },
-      remove: async (accountId: string, id: string) => {
-        const removal = device.removal;
-        if (kind === 'saved' && removal?.environment === environment) {
-          device.removal = null;
-          removal.arrive();
-          await removal.released;
-        }
-        device.records.delete(key(accountId, id));
-      },
-      clear: async () => {
-        for (const stored of [...device.records.keys()])
-          if (stored.startsWith(`${environment}|${kind}|`)) device.records.delete(stored);
-      },
-      // As the real store finds its rows: by their keys, without reading any (#219).
-      keys: async (accountId: string) =>
-        [...device.records.keys()]
-          .filter((stored) => stored.startsWith(key(accountId, '')))
-          .map((stored) => stored.slice(key(accountId, '').length)),
-    };
-  },
-}));
 
 // Fictional people and Groups only.
 const alex = { id: 'a00000000000000000000001', name: 'Alex', email: 'alex@example.test' };
@@ -101,7 +56,6 @@ const pageOf = (path: string) => {
  * and this device's stores, which survive a restart.
  */
 function fixture(tagActions = false) {
-  const clock = { now: Date.parse(iso) };
   const server = {
     offline: false,
     tagName: 'Food',
@@ -118,71 +72,20 @@ function fixture(tagActions = false) {
     ledger: 0,
     dinner: { description: 'Dinner', revision: 3, isDeleted: false },
   };
-  let cookie: string | null = null,
-    owner: string | null = null,
-    identity: unknown = null,
-    cleanup = false,
-    keys = 0;
-  const calls: { method: string; path: string }[] = [];
-  const requests: { method: string; path: string }[] = [];
-  const memory = (map = new Map<string, unknown>()) => ({
-    load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
-    save: async (account: string, key: string, value: unknown) => {
-      map.set(account + key, structuredClone(value));
+  const backend = fakeSplitbook();
+  backend.world.people.alex = { ...alex, image: null };
+  backend.world.people.sam = { ...sam, image: null };
+  backend.world.groups = [maple, cabin];
+  Object.defineProperty(server, 'offline', {
+    get: () => !backend.online,
+    set: (value: boolean) => {
+      backend.online = !value;
     },
-    remove: async (account: string, key: string) => {
-      map.delete(account + key);
-    },
-    clear: async () => {
-      map.clear();
-    },
-    list: async (account: string) =>
-      [...map]
-        .filter(([key]) => key.startsWith(account))
-        .map(([key, value]) => ({
-          groupId: key.slice(account.length),
-          value: structuredClone(value),
-        })),
   });
-  const drafts = memory(),
-    attempts = memory(),
-    tagRequests = memory();
-  const environment = `http://localhost:4138/${Math.random()}`;
-  const store = createAccountGroupRecordStore(environment, 'saved');
-  const savedQueries = {
-    ...store,
-    remove: (accountId: string, path: string) =>
-      server.failInvalidation
-        ? Promise.reject(new Error('The device storage is full'))
-        : store.remove(accountId, path),
-  };
-  let distrust: unknown = null;
-  const untrustedCopies = {
-    load: async () => {
-      if (server.failJournalReads > 0) {
-        server.failJournalReads -= 1;
-        throw new Error('Transient cleanup journal read failure');
-      }
-      return structuredClone(distrust);
-    },
-    save: async (value: unknown) => {
-      if (server.failJournal) throw new Error('Device journal unavailable');
-      distrust = structuredClone(value);
-    },
-    clear: async () => {
-      distrust = null;
-    },
-  };
-  const offlineIdentity = {
-    load: async () => structuredClone(identity),
-    save: async (value: unknown) => {
-      identity = structuredClone(value);
-    },
-    clear: async () => {
-      identity = null;
-    },
-  };
-
+  let keys = 0;
+  const requests = () => backend.requests.map(({ method, path }) => ({ method, path }));
+  const calls = () =>
+    backend.requests.filter((r) => r.online).map(({ method, path }) => ({ method, path }));
   const dinner = () => ({
     _id: dinnerId,
     group: mapleId,
@@ -255,20 +158,11 @@ function fixture(tagActions = false) {
       },
     });
 
-  const respond = (path: string, init: RequestInit): FetchResponse => {
+  const respond = (path: string, init: RequestInit): FetchResponse | undefined => {
+    if (path.startsWith('/api/auth/')) return undefined;
     const method = init.method ?? 'GET';
     const maplePath = `/api/groups/${mapleId}`;
     const dinnerPath = `${maplePath}/expenses/${dinnerId}`;
-    if (path.endsWith('/sign-in'))
-      return new Response(JSON.stringify({ user: alex }), {
-        headers: { 'Set-Cookie': 'better-auth.session_token=alex.signature; Path=/; HttpOnly' },
-      });
-    if (path.endsWith('/get-session'))
-      return json({
-        user: alex,
-        session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00.000Z' },
-      });
-    if (path.endsWith('/sign-out')) return json({ success: true });
     if (path === '/api/groups') return json({ status: 200, data: [maple, cabin] });
     if (path === '/api/user/balances')
       return json({
@@ -403,79 +297,68 @@ function fixture(tagActions = false) {
     return json({}, 404);
   };
 
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
-      },
-      {
-        now: () => clock.now,
-        newSubmissionKey: () =>
-          tagActions
-            ? '00000000-0000-4000-8000-000000000001'
-            : `attempt-${String(++keys).padStart(4, '0')}`,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        savedQueries,
-        offlineIdentity,
-        expenseDrafts: drafts,
-        settlementAttempts: attempts,
-        tagRequests,
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          untrustedCopies,
-          stores: [savedQueries, offlineIdentity, drafts, attempts, tagRequests, untrustedCopies],
-        },
-        fetch: async (url, init) => {
-          requests.push({
-            method: init.method ?? 'GET',
-            path: new URL(url).pathname + new URL(url).search,
-          });
-          if (server.offline) throw new Error('Offline');
-          const path = new URL(url).pathname + new URL(url).search;
-          const method = init.method ?? 'GET';
-          calls.push({ method, path });
-          // Every answer takes a moment to arrive.
-          clock.now += 1;
-          const response = respond(path, init);
-          // The server has answered; a held answer is still on its way back.
-          const held = holds.findIndex((entry) => entry.match(path, method));
-          if (held >= 0) {
-            const [entry] = holds.splice(held, 1);
-            entry.arrive();
-            await entry.released;
-          }
-          return response;
-        },
-      },
-    );
-
+  backend.reply('*', '*', async ({ path, method, init }) => {
+    // Keep this fixture’s moving session clock: each reached request advances it once.
+    phone.clock.now += 1;
+    const response = respond(path, init);
+    const held = holds.findIndex((entry) => entry.match(path, method));
+    if (held >= 0) {
+      const [entry] = holds.splice(held, 1);
+      entry.arrive();
+      await entry.released;
+    }
+    return response;
+  });
+  const phone = testPhone(backend, {
+    now: Date.parse(iso),
+    newSubmissionKey: () =>
+      tagActions
+        ? '00000000-0000-4000-8000-000000000001'
+        : `attempt-${String(++keys).padStart(4, '0')}`,
+    purge: [
+      'savedQueries',
+      'offlineIdentity',
+      'expenseDrafts',
+      'settlementAttempts',
+      'tagRequests',
+      'untrustedCopies',
+    ],
+    parts: {
+      pendingInvitation: undefined,
+      draftRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      accountLocal: { financialCleanup: undefined, signOutRecord: undefined },
+    },
+  });
+  const store = phone.stores.savedQueries;
+  delete store.retainGroups;
+  delete (store as AccountGroupRecordStore).list;
+  store.failPersistently(
+    'remove',
+    new Error('The device storage is full'),
+    () => server.failInvalidation,
+  );
+  phone.stores.untrustedCopies.failPersistently(
+    'load',
+    new Error('Transient cleanup journal read failure'),
+    () => {
+      if (server.failJournalReads <= 0) return false;
+      server.failJournalReads--;
+      return true;
+    },
+  );
+  phone.stores.untrustedCopies.failPersistently(
+    'save',
+    new Error('Device journal unavailable'),
+    () => server.failJournal,
+  );
+  const drafts = phone.stores.expenseDrafts,
+    attempts = phone.stores.settlementAttempts,
+    tagRequests = phone.stores.tagRequests;
+  for (const part of [drafts, attempts, tagRequests]) delete (part as AccountGroupRecordStore).keys;
+  const clock = phone.clock;
+  const create = () => phone.open();
   const holds: {
     match: (path: string, method: string) => boolean;
     arrive: () => void;
@@ -490,34 +373,19 @@ function fixture(tagActions = false) {
     return { arrived, release };
   };
   /** Holds the next write of this device's saved copies part-way, until released. */
-  const stallSave = () => {
-    let arrive!: () => void, release!: () => void;
-    const arrived = new Promise<void>((resolve) => (arrive = resolve));
-    const released = new Promise<void>((resolve) => (release = resolve));
-    device.stall = { environment, arrive, released };
-    return { arrived, release };
-  };
-
-  /** Holds the next removal of this device's saved copies part-way, until released. */
-  const stallRemoval = () => {
-    let arrive!: () => void, release!: () => void;
-    const arrived = new Promise<void>((resolve) => (arrive = resolve));
-    const released = new Promise<void>((resolve) => (release = resolve));
-    device.removal = { environment, arrive, released };
-    return { arrived, release };
-  };
+  const stallSave = () => store.holdNext('save');
+  const stallRemoval = () => store.holdNext('remove');
 
   /** This device's saved copies for Alex, by path: the older document's, then the persister's rows. */
-  const saved = (): Record<string, { refreshedAt: number; value: unknown }> => ({
-    ...Object.fromEntries(
-      [...device.records]
-        .filter(([key]) => key.startsWith(`${environment}|saved|${alex.id}|`))
+  const saved = (): Record<string, { refreshedAt: number; value: unknown }> =>
+    Object.fromEntries(
+      [...store.records]
+        .filter(([key]) => key.startsWith(alex.id))
         .map(([key, row]) => [
-          key.split('|').at(-1),
+          key.slice(alex.id.length),
           row as { refreshedAt: number; value: unknown },
         ]),
-    ),
-  });
+    );
   /** What this device keeps for a Group: each saved copy by the view it belongs to. */
   const savedOf = (groupId: string) =>
     Object.fromEntries(
@@ -547,7 +415,9 @@ function fixture(tagActions = false) {
     create,
     clock,
     server,
-    calls,
+    get calls() {
+      return calls();
+    },
     saved,
     savedOf,
     hold,
@@ -556,7 +426,9 @@ function fixture(tagActions = false) {
     drafts,
     attempts,
     tagRequests,
-    requests,
+    get requests() {
+      return requests();
+    },
   };
 }
 type Fixture = ReturnType<typeof fixture>;

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
 import { createAccountGroupRecordStore } from './account-record-storage';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 
 // The SQLite bridge is the adapter seam: real SQL, fictional records, no native runtime.
 // Device QA separately exercises Expo's own adapter on emulator-5554.
@@ -73,19 +74,29 @@ describe('saved-copy SQLite adapter upgrade (#223)', () => {
     await drafts.save(alex, 'trip', { description: 'Unsaved dinner' });
     await attempts.save(alex, 'trip', { submissionKey: 'same-key', amount: 12 });
     const copies = createAccountGroupRecordStore(environment, 'saved');
-    const fetch = vi.fn(async () => Response.json({}));
-    const controller = createMobileController(
-      { apiBaseUrl: environment, authOrigin: environment, developmentPersonaEnabled: true },
+    const backend = fakeSplitbook();
+    const fetch = vi.fn(backend.fetch);
+    const phone = testPhone(
+      { ...backend, fetch },
       {
-        savedQueries: copies,
-        credentials: {
-          load: async () => null,
-          save: async () => undefined,
-          clear: async () => undefined,
+        origin: environment,
+        parts: {
+          savedQueries: copies,
+          credentials: { load: async () => null, save: async () => {}, clear: async () => {} },
+          accountLocal: undefined,
+          offlineIdentity: undefined,
+          pendingInvitation: undefined,
+          expenseDrafts: undefined,
+          settlementAttempts: undefined,
+          draftRequests: undefined,
+          tagRequests: undefined,
+          groupCreations: undefined,
+          netInfo: undefined,
+          newSubmissionKey: undefined,
         },
-        fetch,
       },
     );
+    const controller = phone.open();
     await controller.restore();
     expect(controller.getSnapshot().auth.status).toBe('signed-out');
     expect(fetch).not.toHaveBeenCalled();

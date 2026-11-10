@@ -228,6 +228,7 @@ export interface FakeRequest {
   method: string;
   path: string;
   at: number;
+  online: boolean;
   headers: Headers;
   body: Record<string, unknown> | undefined;
   init: RequestInit;
@@ -249,6 +250,7 @@ export function fakeSplitbook() {
     expenses: { [group._id]: expensePage() } as Record<string, unknown>,
     expenseRecords: {} as Record<string, Record<string, unknown>>,
     activities: {} as Record<string, unknown[]>,
+    tags: {} as Record<string, unknown>,
     settlements: { [group._id]: [] as unknown[] },
     rates: { [group._id]: {} } as Record<string, Record<string, unknown>>,
     tripSummaries: { [group._id]: { '': emptyTripSummary(group.defaultCurrency) } } as Record<
@@ -258,14 +260,17 @@ export function fakeSplitbook() {
   };
   const unanswered: string[] = [];
   const requests: FakeRequest[] = [];
-  const sentViews = new Map<boolean, string[]>();
-  const sent = ({ query = true } = {}) => {
-    let view = sentViews.get(query);
+  const sentViews = new Map<string, { query: boolean; method: boolean; rows: string[] }>();
+  const label = (r: FakeRequest, query: boolean, method: boolean) =>
+    (method ? r.method + ' ' : '') + (query ? r.path : r.url.pathname);
+  const sent = ({ query = true, method = true } = {}) => {
+    const key = `${query}:${method}`;
+    let view = sentViews.get(key);
     if (!view) {
-      view = requests.map((r) => `${r.method} ${query ? r.path : r.url.pathname}`);
-      sentViews.set(query, view);
+      view = { query, method, rows: requests.map((r) => label(r, query, method)) };
+      sentViews.set(key, view);
     }
-    return view;
+    return view.rows;
   };
   const replies: { method: string; path: string; answer: Answer; once: boolean }[] = [];
   const reply = (method: string, path: string, answer: Answer, { once = false } = {}) => {
@@ -308,14 +313,15 @@ export function fakeSplitbook() {
       url,
       method,
       at: Date.now(),
+      online,
       path: url.pathname + url.search,
       headers: new Headers(init.headers),
       body: init.body ? JSON.parse(String(init.body)) : undefined,
       init,
     };
     requests.push(request);
-    for (const [query, view] of sentViews)
-      view.push(`${method} ${query ? request.path : url.pathname}`);
+    for (const { query, method, rows } of sentViews.values())
+      rows.push(label(request, query, method));
     if (!online) throw new TypeError('Network request failed');
     const index = holds.findIndex(
       (h) =>
@@ -350,6 +356,7 @@ export function fakeSplitbook() {
             '/rates',
             '/trip-summary',
             '/activity',
+            '/tag-actions',
             ...Object.keys(world.expenseRecords[g._id] ?? {}).map((id) => '/expenses/' + id),
           ].map((suffix) => `/api/groups/${g._id}${suffix}`),
         ),
@@ -452,6 +459,8 @@ export function fakeSplitbook() {
           unanswered.push(`${method} ${request.path}`);
           return Response.json({ code: 'NOT_FOUND' }, { status: 404 });
         }
+        if (url.pathname === base + '/tag-actions')
+          return answer(world.tags[found._id] ?? { canManage: false, tags: [] });
         if (url.pathname === base + '/settlements') return answer(world.settlements[found._id]);
         if (url.pathname === base + '/trip-summary') {
           const currency = url.searchParams.get('currency') ?? '';

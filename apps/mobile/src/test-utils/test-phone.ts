@@ -28,11 +28,11 @@ function faultable<T extends object>(store: T) {
     operation: StoreOperation;
     path?: string;
     when: () => boolean;
-    action: () => Promise<void>;
+    action: () => Promise<void> | null;
   }>();
   const persist = (
     operation: StoreOperation,
-    action: () => Promise<void>,
+    action: () => Promise<void> | null,
     when: () => boolean,
     path?: string,
   ) => {
@@ -53,19 +53,30 @@ function faultable<T extends object>(store: T) {
     Object.defineProperty(store, operation, {
       enumerable: true,
       configurable: true,
-      value: async (...args: unknown[]) => {
-        for (const rule of persistent)
-          if (
-            rule.operation === operation &&
-            (rule.path === undefined || rule.path === args[1]) &&
-            rule.when()
-          )
-            await rule.action();
-        const queue = next.get(operation);
-        const index =
-          queue?.findIndex((step) => step.path === undefined || step.path === args[1]) ?? -1;
-        await (index < 0 ? undefined : queue!.splice(index, 1)[0].action());
-        return call.apply(store, args);
+      value: (...args: unknown[]) => {
+        const rules = [...persistent].filter(
+          (rule) =>
+            rule.operation === operation && (rule.path === undefined || rule.path === args[1]),
+        );
+        const invoke = (index: number): unknown => {
+          if (index < rules.length) {
+            const rule = rules[index];
+            if (!rule.when()) return invoke(index + 1);
+            const waiting = rule.action();
+            return waiting ? waiting.then(() => invoke(index + 1)) : invoke(index + 1);
+          }
+          const queue = next.get(operation);
+          const slot =
+            queue?.findIndex((step) => step.path === undefined || step.path === args[1]) ?? -1;
+          if (slot >= 0)
+            return queue!
+              .splice(slot, 1)[0]
+              .action()
+              .then(() => call.apply(store, args));
+          // Fast native reads must keep their turn: saved previews race immediate network answers.
+          return call.apply(store, args);
+        };
+        return invoke(0);
       },
     });
   }
@@ -87,6 +98,9 @@ function faultable<T extends object>(store: T) {
         () => milliseconds() > 0,
         path,
       );
+    },
+    stallPersistently(operation: StoreOperation, waiting: () => Promise<void> | null) {
+      return persist(operation, waiting, () => true, path);
     },
     stallNext(operation: StoreOperation, until: Promise<void>) {
       enqueue(operation, () => until, path);
@@ -119,6 +133,9 @@ function cell<T>(initial: T) {
   return faultable({
     get value() {
       return structuredClone(value);
+    },
+    set value(next: T) {
+      value = structuredClone(next);
     },
     load: async () => structuredClone(value),
     save: async (next: T) => {
@@ -158,17 +175,23 @@ function records(savedQueries = false, separator = '') {
 }
 
 /** A phone owns its stores; reopening replaces only the app, never the phone's contents. */
-export function testPhone(
+export function testPhone<Queries extends SavedQueryRecords | undefined = undefined>(
   server: Pick<MobileDependencies, 'fetch'> & { online: boolean },
   options: {
     now?: number;
+    origin?: string;
     recordSeparator?: string;
     newSubmissionKey?: () => string;
-    parts?: PhoneParts;
+    parts?: Omit<PhoneParts, 'savedQueries'> & { savedQueries?: Queries };
     purge?: readonly PurgeStore[];
     monitor?: boolean;
   } = {},
 ) {
+  type QueryStorage = Queries extends SavedQueryRecords ? Queries : ReturnType<typeof records>;
+  // A supplied adapter stays native (including SQLite); only the default adapter has memory rows.
+  const queries = (
+    options.parts?.savedQueries ? faultable(options.parts.savedQueries) : records(true)
+  ) as ReturnType<typeof faultable<QueryStorage>>;
   const stores = {
     credentials: cell<string | null>(null),
     owner: cell<string | null>(null),
@@ -186,7 +209,7 @@ export function testPhone(
     untrustedCopies: cell<unknown>(null),
     offlineIdentity: cell<unknown>(null),
     pendingInvitation: cell<string | null>(null),
-    savedQueries: records(true),
+    savedQueries: queries,
     expenseDrafts: records(false, options.recordSeparator),
     settlementAttempts: records(),
     draftRequests: records(),
@@ -248,6 +271,7 @@ export function testPhone(
     ...(injected ? { now: () => clock.now } : {}),
     newSubmissionKey: options.newSubmissionKey ?? (() => `test-phone-key-${++key}`),
     ...options.parts,
+    ...(options.parts?.savedQueries ? { savedQueries: stores.savedQueries } : {}),
   };
   const accountParts = options.parts?.accountLocal;
   const accountLocal: AccountLocalStorage = {
@@ -294,8 +318,8 @@ export function testPhone(
       active?.dispose();
       active = (options.monitor === false ? createMobileController : createCheckedMobileController)(
         {
-          apiBaseUrl: 'http://localhost:4138',
-          authOrigin: 'http://localhost:4138',
+          apiBaseUrl: options.origin ?? 'http://localhost:4138',
+          authOrigin: options.origin ?? 'http://localhost:4138',
           developmentPersonaEnabled: true,
         },
         {

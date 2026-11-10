@@ -1,10 +1,11 @@
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import { describe, expect, it, vi } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { DISPLAY_FRESHNESS_MS } from './mobile-controller';
 import type { FetchResponse, PendingInvitationStore } from './types';
 import { refreshFeedback } from '../ui/refresh-feedback';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #103: reuse cached views and coalesce foreground reads.
 const alex = {
@@ -65,7 +66,6 @@ function gate() {
  * persistent device stores that survive a controller restart.
  */
 function fixture(options: { freshness?: number; pendingInvitation?: PendingInvitationStore } = {}) {
-  const clock = { now: Date.parse(iso) };
   const state = {
     ledger: 0,
     offline: false,
@@ -73,44 +73,26 @@ function fixture(options: { freshness?: number; pendingInvitation?: PendingInvit
     loseWrites: false,
     failGroup: 0,
   };
-  let cookie: string | null = null,
-    owner: string | null = null,
-    cleanup = false,
-    keys = 0;
-  const disk = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>(),
-    attempts = new Map<string, unknown>();
-  const calls: { method: string; path: string }[] = [];
-  const held = gate();
-  let holding: (path: string, method: string) => boolean = () => false;
-  const records = (map: Map<string, unknown>) => ({
-    load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
-    save: async (account: string, key: string, value: unknown) => {
-      map.set(account + key, structuredClone(value));
-    },
-    remove: async (account: string, key: string) => {
-      map.delete(account + key);
-    },
-    clear: async () => {
-      map.clear();
+  const backend = fakeSplitbook();
+  backend.world.people.alex = alex;
+  backend.world.people.sam = sam;
+  backend.world.groups = [group];
+  Object.defineProperty(state, 'offline', {
+    get: () => !backend.online,
+    set: (value: boolean) => {
+      backend.online = !value;
     },
   });
-  const signedIn = (init: RequestInit) =>
-    String((init.headers as Record<string, string>).Cookie ?? '').includes('sam.') ? sam : alex;
-  const respond = (path: string, init: RequestInit): FetchResponse => {
+  let keys = 0;
+  // This file’s original log excluded attempts made while offline.
+  const calls = () =>
+    backend.requests.filter((r) => r.online).map(({ method, path }) => ({ method, path }));
+  const held = gate();
+  let holding: (path: string, method: string) => boolean = () => false;
+  const respond = (path: string, init: RequestInit): FetchResponse | undefined => {
+    if (path.startsWith('/api/auth/')) return undefined;
     const method = init.method ?? 'GET';
-    const user = signedIn(init);
-    if (path.endsWith('/sign-in')) {
-      const persona = String(init.body).includes('sam') ? 'sam' : 'alex';
-      return new Response(JSON.stringify({ user: persona === 'sam' ? sam : alex }), {
-        headers: {
-          'Set-Cookie': `better-auth.session_token=${persona}.signature; Path=/; HttpOnly`,
-        },
-      });
-    }
-    if (path.endsWith('/get-session'))
-      return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
-    if (path.endsWith('/sign-out')) return json({ success: true });
+    const user = new Headers(init.headers).get('Cookie')?.includes('sam-') ? sam : alex;
     if (state.revoked && path.startsWith(`/api/groups/${groupId}`)) return json({}, 403);
     if (path === '/api/groups') return json({ status: 200, data: state.revoked ? [] : [group] });
     if (path === '/api/user/balances')
@@ -217,82 +199,55 @@ function fixture(options: { freshness?: number; pendingInvitation?: PendingInvit
     if (path === `/api/groups/${groupId}/settlements`) return json({ status: 200, data: [] });
     return json({}, 404);
   };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
+  backend.reply('*', '*', async ({ path, method, init }) => {
+    if (holding(path, method)) {
+      const response = await held.hold(path);
+      if (response.status === 598) throw new Error('Lost response');
+      return response.status === 599 ? respond(path, init) : response;
+    }
+    return respond(path, init);
+  });
+  const phone = testPhone(backend, {
+    now: Date.parse(iso),
+    newSubmissionKey: () => `attempt-${String(++keys).padStart(4, '0')}`,
+    purge: ['savedQueries', 'expenseDrafts', 'settlementAttempts'],
+    parts: {
+      displayFreshnessMs: options.freshness,
+      pendingInvitation: options.pendingInvitation,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      netInfo: undefined,
+      offlineIdentity: { load: async () => null, save: async () => {}, clear: async () => {} },
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
       },
-      {
-        now: () => clock.now,
-        displayFreshnessMs: options.freshness,
-        pendingInvitation: options.pendingInvitation,
-        newSubmissionKey: () => `attempt-${String(++keys).padStart(4, '0')}`,
-        credentials: {
-          load: async () => cookie,
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        savedQueries: savedQueriesIn(disk),
-        offlineIdentity: {
-          load: async () => null,
-          save: async () => undefined,
-          clear: async () => undefined,
-        },
-        expenseDrafts: records(drafts),
-        settlementAttempts: records(attempts),
-        accountLocal: {
-          owner: {
-            load: async () => owner,
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          stores: [records(disk), records(drafts), records(attempts)],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname + new URL(url).search;
-          const method = init.method ?? 'GET';
-          if (state.offline) throw new Error('Offline');
-          calls.push({ method, path });
-          if (holding(path, method)) {
-            const response = await held.hold(path);
-            if (response.status === 598) throw new Error('Lost response');
-            return response.status === 599 ? respond(path, init) : response;
-          }
-          return respond(path, init);
-        },
-      },
-    );
+    },
+  });
+  delete phone.stores.savedQueries.retainGroups;
+  for (const store of [phone.stores.expenseDrafts, phone.stores.settlementAttempts]) {
+    delete (store as AccountGroupRecordStore).list;
+    delete (store as AccountGroupRecordStore).keys;
+  }
+  const disk = phone.stores.savedQueries.records,
+    drafts = phone.stores.expenseDrafts.records;
+  const create = () => phone.open();
   /** GET requests for exactly this path, or starting with it when it ends in `?`. */
   const reads = (match: string) =>
-    calls.filter(
+    calls().filter(
       (call) =>
         call.method === 'GET' &&
         (call.path === match || (match.endsWith('?') && call.path.startsWith(match))),
     ).length;
   return {
     create,
-    clock,
+    clock: phone.clock,
     state,
-    calls,
+    get calls() {
+      return calls();
+    },
     disk,
     drafts,
     reads,
@@ -303,7 +258,7 @@ function fixture(options: { freshness?: number; pendingInvitation?: PendingInvit
     /** Answer a held request from the fictional backend's state at release time. */
     live: () => new Response(null, { status: 599 }),
     /** The response Alex would receive for this path right now. */
-    answer: (path: string) => respond(path, { headers: { Cookie: 'alex.signature' } }),
+    answer: (path: string) => respond(path, {}) ?? json({}, 404),
     /** A request that reached the server but whose response never arrived. */
     lost: () => new Response(null, { status: 598 }),
   };

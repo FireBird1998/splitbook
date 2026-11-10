@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { refreshFeedback } from '../ui/refresh-feedback';
-import { createMobileController } from './mobile-controller';
+import { testPhone } from '../test-utils/test-phone';
+import { expensePage, fakeSplitbook } from '../test-utils/fake-splitbook';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse, MobileSnapshot } from './types';
-import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #127: first load, refresh, offline and cold-start states at the controller's public seam.
 const accountId = 'a00000000000000000000001',
@@ -28,7 +29,6 @@ const groups = [group(maple, 'Maple House', 'home'), group(lisbon, 'Lisbon Offsi
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 function fixture() {
-  const clock = { now: Date.parse(iso) };
   const state = {
     offline: false,
     /** get-session: a session, none, an expired one, or an HTTP status. */
@@ -53,16 +53,46 @@ function fixture() {
     state.noGroups
       ? []
       : known().filter(({ _id }) => ![state.removed, state.archived, state.deleted].includes(_id));
-  let cookie: string | null = null,
-    owner: string | null = null,
-    identity: unknown = null;
-  const cache = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>(),
-    // A Group submission is sent only once this device holds it (#203).
-    creations = new Map<string, unknown>();
-  const requests: string[] = [];
-  /** Every request as its method and path, with any query, in the order sent. */
-  const calls: string[] = [];
+  const backend = fakeSplitbook();
+  backend.world.people.alex = user;
+  Object.defineProperty(backend.world, 'groups', { get: known });
+  Object.defineProperty(backend.world.groupsByAccount, accountId, { get: listed });
+  Object.defineProperty(backend.world, 'home', {
+    get: () => ({
+      buckets: state.noGroups ? [] : [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+      groups: listed().map(({ _id }) => ({ groupId: _id, balances: [] })),
+    }),
+  });
+  const emptyReads = (item: ReturnType<typeof group>) => {
+    backend.world.expenses[item._id] = expensePage();
+    backend.world.balances[item._id] = {
+      byCurrency: [{ currency: 'INR', balances: [], debts: [] }],
+    };
+    Object.defineProperty(backend.world.activities, item._id, {
+      get: () =>
+        state.noActivity
+          ? []
+          : [
+              {
+                _id: 'd00000000000000000000001',
+                group: item._id,
+                type: 'group_created',
+                actor: { _id: accountId, name: 'Alex' },
+                metadata: {},
+                createdAt: iso,
+              },
+            ],
+    });
+  };
+  groups.forEach(emptyReads);
+  Object.defineProperty(state, 'offline', {
+    get: () => !backend.online,
+    set: (value: boolean) => {
+      backend.online = !value;
+    },
+  });
+  const requests = backend.sent({ query: false, method: false }),
+    calls = backend.sent();
   const holds: {
     prefix: string;
     arrive: () => void;
@@ -85,30 +115,17 @@ function fixture() {
     return { reached, release };
   };
   let clearing: Promise<void> | null = null;
-  let retaining: { arrive: () => void; released: Promise<void> } | null = null;
-  let saving: { path: string; arrive: () => void; released: Promise<void> } | null = null;
   // Reads from this device, which can be slow on a phone: while `slow`, each waits for a round.
   const storage = { slow: false, waiting: [] as (() => void)[] };
-  const read = <T>(value: () => T) =>
-    storage.slow
-      ? new Promise<T>((resolve) => storage.waiting.push(() => resolve(value())))
-      : Promise.resolve(value());
-  const respond = (path: string, init: RequestInit): FetchResponse => {
-    if (path.endsWith('/sign-in'))
-      return new Response(JSON.stringify({ user }), {
-        headers: { 'Set-Cookie': 'better-auth.session_token=alex.signature; Max-Age=2592000' },
-      });
+  const waitForStorage = () =>
+    storage.slow ? new Promise<void>((resolve) => storage.waiting.push(resolve)) : null;
+  const respond = (path: string, init: RequestInit): FetchResponse | undefined => {
     if (path === '/api/auth/get-session') {
       if (typeof state.session === 'number') return json({}, state.session);
       if (state.session === 'none') return json(null);
-      return json({
-        user,
-        session: {
-          userId: accountId,
-          expiresAt:
-            state.session === 'expired' ? '2020-01-01T00:00:00.000Z' : '2030-01-01T00:00:00Z',
-        },
-      });
+      return state.session === 'expired'
+        ? json({ user, session: { userId: accountId, expiresAt: '2020-01-01T00:00:00.000Z' } })
+        : undefined;
     }
     if (path === '/api/groups' && init.method === 'POST') {
       const { name, category } = JSON.parse(String(init.body)) as Record<string, string>;
@@ -118,20 +135,12 @@ function fixture() {
         category,
       );
       state.created.push(made);
+      emptyReads(made);
       return json({ status: 201, data: made }, 201);
     }
-    if (path === '/api/groups') return json({ status: 200, data: listed() });
     // As Better Auth does: 200, even for a session already gone (#202).
-    if (path === '/api/auth/sign-out' && init.method === 'POST') return json({ success: true });
-    // Like Splitbook's, Home's figures name the Groups they were worked out over (#333).
-    if (path === '/api/user/balances')
-      return json({
-        status: 200,
-        data: {
-          buckets: state.noGroups ? [] : [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
-          groups: listed().map(({ _id }) => ({ groupId: _id, balances: [] })),
-        },
-      });
+    if (path.startsWith('/api/auth/')) return undefined;
+    if (path === '/api/groups' || path === '/api/user/balances') return undefined;
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
     if (path === `/api/groups/${id}/leave` && init.method === 'POST') {
       state.removed = id ?? null;
@@ -141,42 +150,6 @@ function fixture() {
     if (id && id === state.deleted) return json({}, 404);
     const found = known().find((item) => item._id === id);
     if (!found) return json({}, 404);
-    if (path === `/api/groups/${id}`) return json({ status: 200, data: found });
-    if (path.endsWith('/balances'))
-      return json({
-        status: 200,
-        data: { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] },
-      });
-    if (path.endsWith('/expenses'))
-      return json({
-        status: 200,
-        data: {
-          expenses: [],
-          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-          summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
-        },
-      });
-    if (path.endsWith('/activity'))
-      return json({
-        status: 200,
-        data: {
-          activities: state.noActivity
-            ? []
-            : [
-                {
-                  _id: 'd00000000000000000000001',
-                  group: id,
-                  type: 'group_created',
-                  actor: { _id: accountId, name: 'Alex' },
-                  metadata: {},
-                  createdAt: iso,
-                },
-              ],
-          pagination: state.noActivity
-            ? { page: 1, limit: 20, total: 0, totalPages: 0 }
-            : { page: 1, limit: 20, total: 1, totalPages: 1 },
-        },
-      });
     if (path.endsWith('/invite-link') && init.method !== 'POST')
       return json({
         status: 200,
@@ -186,142 +159,77 @@ function fixture() {
           expiresAt: '2030-01-01T00:00:00.000Z',
         },
       });
-    throw new Error(`Unexpected request ${init.method} ${path}`);
+    return undefined;
   };
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4145',
-        authOrigin: 'http://localhost:4145',
-        developmentPersonaEnabled: true,
+  backend.reply('*', '*', async ({ url, init }) => {
+    const path = url.pathname;
+
+    const index = holds.findIndex((item) => path.startsWith(item.prefix));
+    if (index >= 0) {
+      const [item] = holds.splice(index, 1);
+      item.arrive();
+      const response = await item.response;
+      if (response instanceof Error) throw response;
+      if (response) return response;
+    }
+    return respond(path, init);
+  });
+  const phone = testPhone(backend, {
+    origin: 'http://localhost:4145',
+    now: Date.parse(iso),
+    newSubmissionKey: () => 'loading-states-test-0001',
+    parts: {
+      settlementAttempts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      netInfo: undefined,
+      pendingInvitation: {
+        load: (): Promise<string | null> => phone.stores.pendingInvitation.load(),
+        save: async () => {},
+        clear: async () => {},
       },
-      {
-        now: () => clock.now,
-        newSubmissionKey: () => 'loading-states-test-0001',
-        credentials: {
-          load: () => read(() => cookie),
-          save: async (value) => {
-            cookie = value;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        offlineIdentity: {
-          load: () => read(() => structuredClone(identity)),
-          save: async (value) => {
-            identity = structuredClone(value);
-          },
-          clear: async () => {
-            identity = null;
-          },
-        },
-        // All display reads use these per-query rows; device operations can still be held.
-        savedQueries: savedQueriesIn(cache, {
-          retainGroups: async () => {
-            const held = retaining;
-            retaining = null;
-            held?.arrive();
-            await held?.released;
-          },
-          load: (account, key) => read(() => structuredClone(cache.get(account + key) ?? null)),
-          save: async (account, key, value) => {
-            const held = saving?.path === key ? saving : null;
-            if (held) {
-              saving = null;
-              held.arrive();
-              await held.released;
-            }
-            cache.set(account + key, structuredClone(value));
-          },
-        }),
-        expenseDrafts: {
-          load: (account, id) =>
-            read(() => structuredClone(drafts.get(`${account}:${id}`) ?? null)),
-          save: async (account, id, value) => {
-            drafts.set(`${account}:${id}`, structuredClone(value));
-          },
-          remove: async (account, id) => {
-            drafts.delete(`${account}:${id}`);
-          },
-          clear: async () => {
-            drafts.clear();
-          },
-          list: (account) =>
-            read(() =>
-              [...drafts]
-                .filter(([key]) => key.startsWith(`${account}:`))
-                .map(([key, value]) => ({
-                  groupId: key.split(':')[1],
-                  value: structuredClone(value),
-                })),
-            ),
-        },
-        groupCreations: {
-          load: (account) => read(() => structuredClone(creations.get(account) ?? null)),
-          save: async (account, value) => {
-            creations.set(account, structuredClone(value));
-          },
-          remove: async (account) => {
-            creations.delete(account);
-          },
-          clear: async () => {
-            creations.clear();
-          },
-        },
-        pendingInvitation: {
-          load: () => read(() => null),
-          save: async () => undefined,
-          clear: async () => undefined,
-        },
-        accountLocal: {
-          owner: {
-            load: () => read(() => owner),
-            save: async (value) => {
-              owner = value;
-            },
-            clear: async () => {
-              owner = null;
+      accountLocal: {
+        financialCleanup: undefined,
+        untrustedCopies: undefined,
+        signOutRecord: undefined,
+        stores: [
+          {
+            clear: async (): Promise<void> => {
+              await clearing;
+              phone.stores.savedQueries.records.clear();
+              phone.stores.expenseDrafts.records.clear();
+              phone.stores.groupCreations.records.clear();
+              phone.stores.offlineIdentity.value = null;
             },
           },
-          cleanupMarker: {
-            load: () => read(() => state.cleanup),
-            mark: async () => {
-              state.cleanup = true;
-            },
-            clear: async () => {
-              state.cleanup = false;
-            },
-          },
-          stores: [
-            {
-              clear: async () => {
-                await clearing;
-                cache.clear();
-                drafts.clear();
-                creations.clear();
-                identity = null;
-              },
-            },
-          ],
-        },
-        fetch: async (url, init) => {
-          const path = new URL(url).pathname;
-          requests.push(path);
-          calls.push(`${init.method ?? 'GET'} ${path}${new URL(url).search}`);
-          if (state.offline) throw new Error('Offline');
-          const index = holds.findIndex((item) => path.startsWith(item.prefix));
-          if (index >= 0) {
-            const [item] = holds.splice(index, 1);
-            item.arrive();
-            const response = await item.response;
-            if (response instanceof Error) throw response;
-            if (response) return response;
-          }
-          return respond(path, init);
-        },
+        ],
       },
-    );
+    },
+    recordSeparator: ':',
+  });
+  Object.defineProperty(state, 'cleanup', {
+    get: () => phone.stores.cleanupMarker.value,
+    set: (value: boolean) => {
+      phone.stores.cleanupMarker.value = value;
+    },
+  });
+  for (const store of [
+    phone.stores.credentials,
+    phone.stores.owner,
+    phone.stores.cleanupMarker,
+    phone.stores.offlineIdentity,
+    phone.stores.savedQueries,
+    phone.stores.expenseDrafts,
+    phone.stores.groupCreations,
+    phone.stores.pendingInvitation,
+  ])
+    store.stallPersistently('load', waitForStorage);
+  phone.stores.expenseDrafts.stallPersistently('list', waitForStorage);
+  delete (phone.stores.expenseDrafts as AccountGroupRecordStore).keys;
+  const cache = phone.stores.savedQueries.records;
+  const clock = phone.clock;
+  const create = () => phone.open();
+
   return {
     clock,
     state,
@@ -340,16 +248,8 @@ function fixture() {
         .map((key) => key.slice(accountId.length)),
     /** The next save of `path` to this device waits until released. */
     holdSave: (path: string) => {
-      let arrive!: () => void;
-      let release!: () => void;
-      const reached = new Promise<void>((resolve) => {
-        arrive = resolve;
-      });
-      const released = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      saving = { path, arrive, released };
-      return { reached, release };
+      const held = phone.stores.savedQueries.at(path).holdNext('save');
+      return { reached: held.arrived, release: held.release };
     },
     /** From now on, each read from this device waits for `answerReads`. */
     slowStorage: () => {
@@ -380,16 +280,8 @@ function fixture() {
     },
     /** The next trim of this device's saved copies to the listed Groups waits until released. */
     holdRetain: () => {
-      let arrive!: () => void;
-      let release!: () => void;
-      const reached = new Promise<void>((resolve) => {
-        arrive = resolve;
-      });
-      const released = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      retaining = { arrive, released };
-      return { reached, release };
+      const held = phone.stores.savedQueries.holdNext('retainGroups');
+      return { reached: held.arrived, release: held.release };
     },
   };
 }
