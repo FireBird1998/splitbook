@@ -288,4 +288,18 @@ describe('test phone', () => {
     expect(await store.load('alex', '/api/second')).toEqual({ saved: 2 });
   });
 
+  it('keeps a native failure active until disabled or removed, independently of failNext', async () => {
+    const phone = testPhone(fakeSplitbook()), store = phone.stores.savedQueries;
+    await store.save('alex','/api/group',{ saved:1 });
+    let broken = true;
+    const stop = store.at('/api/group').failPersistently('load',new Error('Broken storage'),()=>broken);
+    for (let i=0;i<2;i++) await expect(store.load('alex','/api/group')).rejects.toThrow('Broken storage');
+    broken = false;
+    expect(await store.load('alex','/api/group')).toEqual({saved:1});
+    broken = true;
+    await expect(store.load('alex','/api/group')).rejects.toThrow('Broken storage');
+    stop();
+    expect(await store.load('alex','/api/group')).toEqual({saved:1});
+  });
+
 });
