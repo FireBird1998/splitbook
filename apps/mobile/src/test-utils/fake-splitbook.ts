@@ -280,13 +280,14 @@ export function fakeSplitbook() {
     method: string;
     path: string | RegExp;
     at: 'request' | 'reply';
+    abortable: boolean;
     arrive(): void;
     wait: Promise<void>;
   }[] = [];
   const hold = (
     method: string,
     path: string | RegExp,
-    { at = 'reply' }: { at?: 'request' | 'reply' } = {},
+    { at = 'reply', abortable=false }: { at?: 'request' | 'reply'; abortable?:boolean } = {},
   ) => {
     let arrive!: () => void, release!: () => void, lose!: (error: Error) => void;
     const arrived = new Promise<void>((done) => {
@@ -296,7 +297,7 @@ export function fakeSplitbook() {
       release = done;
       lose = reject;
     });
-    holds.push({ method, path, at, arrive, wait });
+    holds.push({ method, path, at, abortable, arrive, wait });
     return {
       arrived,
       release: (fault?: 'lost-reply') =>
@@ -346,9 +347,15 @@ export function fakeSplitbook() {
         (typeof h.path === 'string' ? h.path === request.path : h.path.test(request.path)),
     );
     const held = index < 0 ? undefined : holds.splice(index, 1)[0];
+    const waitForHold = () => !held?.abortable ? held?.wait : new Promise<void>((resolve,reject)=>{
+      const abort=()=>reject(new TypeError('Network request failed'));
+      if(init.signal?.aborted)return abort();
+      init.signal?.addEventListener('abort',abort);
+      void held.wait.then(()=>{init.signal?.removeEventListener('abort',abort);resolve()},reject);
+    });
     if (held?.at === 'request') {
       held.arrive();
-      await held.wait;
+      await waitForHold();
     }
     const respond = async () => {
       // Replacements can observe a request and defer to its normal answer with undefined.
@@ -527,7 +534,7 @@ export function fakeSplitbook() {
       response.headers.set('Set-Cookie', rotated + '; Max-Age=2592000; Path=/; HttpOnly');
     if (held?.at === 'reply') {
       held.arrive();
-      await held.wait;
+      await waitForHold();
     }
     return response;
   };
