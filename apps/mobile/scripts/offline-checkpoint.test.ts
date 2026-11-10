@@ -27,7 +27,6 @@ function checkpointPhone() {
   server.auth.cookie = () => 'better-auth.session_token=sam.signature';
   const phone = testPhone(server, {
     origin: 'http://localhost:4145',
-    purge: ['savedQueries'],
     parts: {
       pendingInvitation: undefined,
       expenseDrafts: undefined,
@@ -37,12 +36,6 @@ function checkpointPhone() {
       groupCreations: undefined,
       netInfo: undefined,
       newSubmissionKey: undefined,
-      accountLocal: {
-        financialCleanup: undefined,
-        untrustedCopies: undefined,
-        signOutRecord: undefined,
-        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-      },
     },
   });
   const rows = phone.stores.savedQueries;
