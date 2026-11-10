@@ -1,6 +1,10 @@
-import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import { testPhone, until } from '../test-utils/test-phone';
+import {
+  fakeSplitbook,
+  rateSuggestion as frankfurter,
+  recordedSettlement,
+} from '../test-utils/fake-splitbook';
 import { describe, expect, it } from 'vitest';
-import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { FetchResponse } from './types';
 
 /**
@@ -10,8 +14,7 @@ import type { FetchResponse } from './types';
 const alex = 'a00000000000000000000001',
   sam = 'a00000000000000000000002',
   priya = 'a00000000000000000000003';
-const groupId = 'b00000000000000000000001',
-  settlementId = 'c00000000000000000000001';
+const groupId = 'b00000000000000000000001';
 const iso = '2026-10-21T04:50:00.000Z';
 const user = { id: alex, name: 'Alex Rivera', email: 'alex@example.test', image: null };
 const people = [alex, sam, priya].map((_id, i) => ({
@@ -47,19 +50,6 @@ const balances = (euros = 20) => ({
   },
 });
 const json = (body: unknown, status = 200) => Response.json(body, { status });
-/** Frankfurter's rates of 20 Oct, fetched at 06:00 in India the next day (#726). */
-const frankfurter = (from: string, to: string, rate: string) => ({
-  from,
-  to,
-  rate,
-  source: 'frankfurter',
-  asOf: '2026-10-20',
-  fetchedAt: '2026-10-21T00:30:00.000Z',
-  ageDays: 1,
-  attributionRequired: false,
-  attribution: null,
-  components: [],
-});
 const suggestions: Record<string, ReturnType<typeof frankfurter>> = {
   'EUR→INR': frankfurter('EUR', 'INR', '92.1'),
   'EUR→JPY': frankfurter('EUR', 'JPY', '162.4'),
@@ -72,32 +62,7 @@ const rates = (suggestion: unknown, reason = 'unavailable') =>
   });
 /** Nothing comes back: the phone has no connection. */
 const offline = () => Promise.reject(new TypeError('Network request failed'));
-/** Until the controller's snapshot satisfies `ready`. */
-const until = (
-  controller: ReturnType<typeof setup>['controller'],
-  ready: (snapshot: ReturnType<ReturnType<typeof setup>['controller']['getSnapshot']>) => boolean,
-) =>
-  new Promise<void>((resolve) => {
-    if (ready(controller.getSnapshot())) return resolve();
-    const stop = controller.subscribe(() => {
-      if (!ready(controller.getSnapshot())) return;
-      stop();
-      resolve();
-    });
-  });
-/** The server's answer to a payment: what was sent, as it stores it. */
-const recorded = (body: Record<string, unknown>) => ({
-  _id: settlementId,
-  group: groupId,
-  createdBy: people[0],
-  ...body,
-  paidBy: people.find(({ _id }) => _id === body.paidBy),
-  paidTo: people.find(({ _id }) => _id === body.paidTo),
-  amountMinor: parseAmountMinor(body.amount as number, body.currency as string),
-  moneyVersion: 1,
-  createdAt: iso,
-  updatedAt: iso,
-});
+const recorded = (body: Record<string, unknown>) => recordedSettlement(body, group);
 
 function setup(
   intercept: (
@@ -105,143 +70,40 @@ function setup(
     init: RequestInit,
   ) => FetchResponse | Promise<FetchResponse> | undefined = () => undefined,
 ) {
-  let cookie: string | null = null,
-    account: string | null = null,
-    cleanup = false,
-    key = 0;
-  const records = new Map<string, unknown>();
-  let cleanupRecord: unknown = null;
-  const financialCleanup = {
-    load: async () => structuredClone(cleanupRecord),
-    save: async (value: unknown) => {
-      cleanupRecord = structuredClone(value);
-    },
-    clear: async () => {
-      cleanupRecord = null;
-    },
-  };
-  const store = {
-    list: async (owner: string) =>
-      [...records]
-        .filter(([id]) => id.startsWith(owner))
-        .map(([id, value]) => ({ groupId: id.slice(owner.length), value: structuredClone(value) })),
-    load: async (a: string, g: string) => structuredClone(records.get(a + g) ?? null),
-    save: async (a: string, g: string, v: unknown) => {
-      records.set(a + g, structuredClone(v));
-    },
-    remove: async (a: string, g: string) => {
-      records.delete(a + g);
-    },
-    clear: async () => {
-      records.clear();
-    },
-  };
-  /** Each payment's body, as sent. */
+  const server = fakeSplitbook();
+  server.world.people.alex = user;
+  server.world.groups = [group];
+  server.world.balances[groupId] = balances().data;
+  server.world.rates[groupId] = suggestions;
   const payments: Record<string, unknown>[] = [];
-  /** Every request sent, as `METHOD /path?query`, in the order sent. */
-  const sent: string[] = [];
-  /** NetInfo's listeners: the device's connection, which `connect` reports. */
-  const connection = new Set<(state: { isConnected: boolean | null }) => void>();
-  const create = () =>
-    createMobileController(
-      {
-        apiBaseUrl: 'http://localhost:4138',
-        authOrigin: 'http://localhost:4138',
-        developmentPersonaEnabled: true,
-      },
-      {
-        credentials: {
-          load: async () => cookie,
-          save: async (v) => {
-            cookie = v;
-          },
-          clear: async () => {
-            cookie = null;
-          },
-        },
-        settlementAttempts: store,
-        netInfo: {
-          // As NetInfo does, a new listener hears the connection as it is now.
-          addEventListener: (listener) => {
-            connection.add(listener);
-            listener({ isConnected: true });
-            return () => connection.delete(listener);
-          },
-        },
-        newSubmissionKey: () => `settlement-key-${++key}`,
-        accountLocal: {
-          financialCleanup,
-          owner: {
-            load: async () => account,
-            save: async (v) => {
-              account = v;
-            },
-            clear: async () => {
-              account = null;
-            },
-          },
-          cleanupMarker: {
-            load: async () => cleanup,
-            mark: async () => {
-              cleanup = true;
-            },
-            clear: async () => {
-              cleanup = false;
-            },
-          },
-          stores: [store, financialCleanup],
-        },
-        fetch: async (address, init) => {
-          const url = new URL(address);
-          const path = url.pathname;
-          sent.push(`${init.method ?? 'GET'} ${path}${url.search}`);
-          if (path.endsWith('/settlements') && init.method === 'POST')
-            payments.push(JSON.parse(String(init.body)));
-          const override = intercept(url, init);
-          if (override) return override;
-          if (path.endsWith('/sign-in'))
-            return new Response(JSON.stringify({ user }), {
-              headers: {
-                'Set-Cookie': 'better-auth.session_token=alex.signature; Max-Age=2592000',
-              },
-            });
-          if (path.endsWith('/get-session'))
-            return json({ user, session: { userId: alex, expiresAt: '2030-01-01T00:00:00Z' } });
-          if (path === '/api/groups') return json({ status: 200, data: [group] });
-          if (path === `/api/groups/${groupId}`) return json({ status: 200, data: group });
-          if (path.endsWith('/user/balances')) return json({ status: 200, data: { buckets: [] } });
-          if (path === `/api/groups/${groupId}/rates`)
-            return rates(
-              suggestions[`${url.searchParams.get('from')}→${url.searchParams.get('to')}`] ?? null,
-            );
-          if (path.endsWith('/balances')) return json(balances());
-          if (path.endsWith('/settlements'))
-            return init.method === 'POST'
-              ? json({ status: 201, data: recorded(JSON.parse(String(init.body))) }, 201)
-              : json({ status: 200, data: [] });
-          if (path.endsWith('/expenses'))
-            return json({
-              status: 200,
-              data: {
-                expenses: [],
-                pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-                summary: {
-                  count: 0,
-                  totalsByCurrency: [],
-                  userOwes: 0,
-                  userGetsBack: 0,
-                  byMember: [],
-                },
-              },
-            });
-          return json({}, 404);
-        },
-      },
-    );
-  /** NetInfo reports the device's connection: false when it drops, true when it's back. */
-  const connect = (isConnected: boolean) =>
-    connection.forEach((listener) => listener({ isConnected }));
-  return { controller: create(), create, records, payments, sent, connect };
+  server.reply('*', '*', ({ url, init, method, body }) => {
+    if (method === 'POST' && url.pathname.endsWith('/settlements')) payments.push(body!);
+    return intercept(url, init);
+  });
+  let key = 0;
+  // Original phone: recovery + financial cleanup and NetInfo, on the platform clock.
+  const phone = testPhone(server, {
+    newSubmissionKey: () => `settlement-key-${++key}`,
+    parts: {
+      savedQueries: undefined,
+      offlineIdentity: undefined,
+      pendingInvitation: undefined,
+      expenseDrafts: undefined,
+      draftRequests: undefined,
+      tagRequests: undefined,
+      groupCreations: undefined,
+      accountLocal: { signOutRecord: undefined, untrustedCopies: undefined },
+    },
+    purge: ['settlementAttempts', 'financialCleanup'],
+  });
+  return {
+    controller: phone.open(),
+    create: phone.open,
+    records: phone.stores.settlementAttempts.records,
+    payments,
+    sent: server.sent(),
+    connect: phone.connect,
+  };
 }
 
 describe('a Debt recorded in its own currency (#728)', () => {
