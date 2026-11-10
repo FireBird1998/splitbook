@@ -258,3 +258,18 @@ export function testPhone(
   onTestFinished(phone.dispose);
   return phone;
 }
+
+/** Wait on the app's public snapshot, as the member waits for a read to finish. */
+export function until(
+  controller: MobileController,
+  ready: (snapshot: ReturnType<MobileController['getSnapshot']>) => boolean,
+) {
+  return new Promise<void>((resolve) => {
+    if (ready(controller.getSnapshot())) return resolve();
+    const stop = controller.subscribe(() => {
+      if (!ready(controller.getSnapshot())) return;
+      stop();
+      resolve();
+    });
+  });
+}
