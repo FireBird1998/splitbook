@@ -906,6 +906,20 @@ describe('payers that name the same person twice (#716)', () => {
     expect(memberProblems(model)).toEqual([]);
   });
 
+  it('names a repeated split instead of treating its people as missing (#1152)', () => {
+    const base = item(1);
+    base.draft.values!.splitBetween = [{ user: member }, { user: member }];
+    base.draft.missingFields = ['splitBetween'];
+    const [model] = buildToReview(read([base]), [], now).items;
+
+    expect(model.needs).toEqual([{ field: 'splitBetween', reason: 'listed-twice' }]);
+    expect(model.unknownFacts).toEqual([]);
+    expect(model.state).toBe('needs-details');
+    expect(reviewProblem('splitBetween: Each person can appear only once')).toBe(
+      'The same person is listed twice. Choose who shared it.',
+    );
+  });
+
   it('keeps “didn’t know who paid” for a payer that is really missing', () => {
     const base = item(1);
     const values = { ...base.draft.values };
