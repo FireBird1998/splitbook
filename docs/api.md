@@ -1422,6 +1422,8 @@ an outcome for each, in the order asked:
 
 ## Recurring expenses
 
+Generation rechecks that the Group is open at the Expense commit. If an archive wins that race, the triggering read still answers normally, adds no Expense for that Month and leaves its marker unchanged so a later eligible read can retry it. The template's creator remains the recorded actor and receives no alert for that Expense.
+
 Household-themed groups only (`category: "home"`). Templates materialize
 expenses lazily when the group, its expense list or its balances are read, and
 before a member's leave or removal is checked. An archived Group materializes

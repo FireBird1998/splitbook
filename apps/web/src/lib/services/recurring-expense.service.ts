@@ -485,7 +485,7 @@ export class RecurringExpenseService {
               actorId: String(template.createdBy),
               model: Expense,
               transactions: 'allow-standalone',
-              compatibility: { membership: 'template-validated', archive: 'before-generation' },
+              compatibility: { membership: 'template-validated' },
               retry: { template: template._id, period, lookup: 'on-duplicate' },
               command: () => ({ period }),
               currencies: [{ currency: template.currency, rule: 'listed' }],

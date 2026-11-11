@@ -72,7 +72,6 @@ export interface LedgerRecording<
   transactions: 'allow-standalone' | { required: Refusal };
   compatibility?: {
     membership: 'before-retry-and-at-commit' | 'actor-before-retry' | 'template-validated';
-    archive?: 'before-generation';
   };
   retry?: SubmissionRetry | TemplateMonthRetry;
   command: (context: { group?: IGroupDocument; receipt?: HydratedDocument<T> }) => Command;
@@ -195,7 +194,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
           await lockCurrencies(description.currencies);
         const group = await Group.findById(groupId);
         if (!group) throw new Refusal('FORBIDDEN');
-        if (group.isArchived && description.compatibility?.archive !== 'before-generation') {
+        if (group.isArchived) {
           throw new Refusal('GROUP_ARCHIVED');
         }
         if (description.compatibility?.membership !== 'template-validated') checkMembers(group);
@@ -249,7 +248,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
         }
         return { records: result, outcome: 'created' as const };
       },
-      { ledger: description.compatibility?.archive !== 'before-generation' },
+      { ledger: true },
     );
   } catch (error) {
     if (retry && (error as { code?: number }).code === 11000) {

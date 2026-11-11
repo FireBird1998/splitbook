@@ -69,3 +69,31 @@ it('captures recurring Activity time after the currency lock and before waiting 
   const feed = await fixture.http(fixture.routes.feed.GET, 'GET', 'activity');
   expect(feed.body.data.activities[0].createdAt).toBe(fixture.clock.toISOString());
 });
+
+it('keeps an archived-at-commit Month for the next read without failing the read', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  const pause = fixture.holdFence(2);
+  const pending = fixture.send();
+  try {
+    await Promise.race([
+      pause.reached,
+      pending.then(() => {
+        throw new Error('Read ended before recording fence');
+      }),
+    ]);
+    await fixture.archive();
+  } finally {
+    pause.restore();
+    pause.release();
+    await pending;
+  }
+  const first = await pending;
+  expect(first.status).toBe(200);
+  expect(first.body.data.expenses).toHaveLength(0);
+  expect((await RecurringExpense.findById(fixture.templateId))!.lastGeneratedFor).toBeNull();
+  await Group.updateOne({ _id: fixture.groupId }, { $set: { isArchived: false } });
+  const next = await fixture.send();
+  expect(next.status).toBe(200);
+  expect(next.body.data.expenses).toHaveLength(1);
+  expect((await RecurringExpense.findById(fixture.templateId))!.lastGeneratedFor).toBe('2026-11');
+});
