@@ -113,7 +113,8 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
   };
   const checkMembers = (group: IGroupDocument, includePeople = true) => {
     const members = new Set(group.members.map((member) => String(member.user)));
-    if (!members.has(actorId)) throw new Refusal('FORBIDDEN');
+    if (description.compatibility?.membership !== 'template-validated' && !members.has(actorId))
+      throw new Refusal('FORBIDDEN');
     if (includePeople) description.checkPeople?.(members);
   };
   let admittedGroup: IGroupDocument | undefined;
@@ -197,7 +198,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
         if (group.isArchived) {
           throw new Refusal('GROUP_ARCHIVED');
         }
-        if (description.compatibility?.membership !== 'template-validated') checkMembers(group);
+        checkMembers(group);
         if (submission?.atCommit) {
           const receipt = await lookup();
           const concurrent = receipt ? await confirm(receipt, normalize(receipt)) : null;

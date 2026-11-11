@@ -490,6 +490,9 @@ export class RecurringExpenseService {
               command: () => ({ period }),
               currencies: [{ currency: template.currency, rule: 'listed' }],
               currenciesAt: 'before-fence',
+              checkPeople(members) {
+                assertExpenseParticipants(members, money.paidBy, money.splitBetween);
+              },
               async prepare(command): ReturnType<LedgerRecording<IExpenseDocument>['prepare']> {
                 const expenseId = new mongoose.Types.ObjectId();
                 const occurredAt = new Date();

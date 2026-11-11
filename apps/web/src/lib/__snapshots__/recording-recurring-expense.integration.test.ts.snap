@@ -4320,85 +4320,9 @@ exports[`recurring-expense record of recordings > named person is no longer a me
 exports[`recurring-expense record of recordings > named person leaves between the checks and the commit 1`] = `
 {
   "after": {
-    "activities": [
-      {
-        "__v": 0,
-        "_id": "<event-1>",
-        "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
-        "group": "<group-1>",
-        "metadata": {
-          "amount": 120,
-          "currency": "INR",
-          "description": "Recorded dinner",
-          "expenseId": "<expense-1>",
-          "period": "2026-11",
-          "recurring": true,
-          "recurringExpenseId": "<template-1>",
-        },
-        "notificationContext": {
-          "eventId": "<event-1>",
-          "groupId": "<group-1>",
-          "kind": "expense_added",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
-          "recipientIds": [
-            "<member-c>",
-          ],
-          "recordId": "<expense-1>",
-          "version": 2,
-        },
-        "type": "expense_added",
-      },
-    ],
+    "activities": [],
     "drafts": [],
-    "expenses": [
-      {
-        "_id": "<expense-1>",
-        "amount": 120,
-        "amountMinor": 12000,
-        "category": "food",
-        "createdAt": "2026-11-11T12:00:00.000Z",
-        "createdBy": "<member-a>",
-        "currency": "INR",
-        "date": "2026-11-01T00:00:00.000Z",
-        "deletedAt": null,
-        "deletedBy": null,
-        "description": "Recorded dinner",
-        "editHistory": [],
-        "group": "<group-1>",
-        "isDeleted": false,
-        "moneyVersion": 1,
-        "paidBy": [
-          {
-            "amount": 120,
-            "amountMinor": 12000,
-            "user": "<member-b>",
-          },
-        ],
-        "pendingActivity": [],
-        "period": "2026-11",
-        "predefinedItem": null,
-        "receiptUrl": null,
-        "recurringExpense": "<template-1>",
-        "revision": 0,
-        "splitBetween": [
-          {
-            "amount": 60,
-            "amountMinor": 6000,
-            "user": "<member-b>",
-          },
-          {
-            "amount": 60,
-            "amountMinor": 6000,
-            "user": "<member-c>",
-          },
-        ],
-        "splitMethod": "equal",
-        "tag": "Groceries",
-        "tagId": "<tag-groceries-1>",
-        "updatedAt": "2026-11-11T12:00:00.000Z",
-      },
-    ],
+    "expenses": [],
     "group": {
       "alternateCurrencies": [
         "EUR",
@@ -4426,7 +4350,7 @@ exports[`recurring-expense record of recordings > named person leaves between th
         "endsOn": null,
         "group": "<group-1>",
         "isPaused": false,
-        "lastGeneratedFor": "2026-11",
+        "lastGeneratedFor": null,
         "paidBy": [
           {
             "amount": 120,
@@ -4455,81 +4379,19 @@ exports[`recurring-expense record of recordings > named person leaves between th
   "answers": {
     "body": {
       "data": {
-        "expenses": [
-          {
-            "_id": "<expense-1>",
-            "amount": 120,
-            "amountMinor": 12000,
-            "category": "food",
-            "createdAt": "2026-11-11T12:00:00.000Z",
-            "createdBy": {
-              "_id": "<member-a>",
-              "name": "Alex Rivera",
-            },
-            "currency": "INR",
-            "date": "2026-11-01T00:00:00.000Z",
-            "deletedAt": null,
-            "deletedBy": null,
-            "description": "Recorded dinner",
-            "group": "<group-1>",
-            "isDeleted": false,
-            "moneyVersion": 1,
-            "paidBy": [
-              {
-                "amount": 120,
-                "amountMinor": 12000,
-                "user": {
-                  "_id": "<member-b>",
-                  "name": "Sam Chen",
-                },
-              },
-            ],
-            "period": "2026-11",
-            "predefinedItem": null,
-            "receiptUrl": null,
-            "recurringExpense": "<template-1>",
-            "revision": 0,
-            "splitBetween": [
-              {
-                "amount": 60,
-                "amountMinor": 6000,
-                "user": {
-                  "_id": "<member-b>",
-                  "name": "Sam Chen",
-                },
-              },
-              {
-                "amount": 60,
-                "amountMinor": 6000,
-                "user": {
-                  "_id": "<member-c>",
-                  "name": "Priya Shah",
-                },
-              },
-            ],
-            "splitMethod": "equal",
-            "tag": "Groceries",
-            "tagId": "<tag-groceries-1>",
-            "updatedAt": "2026-11-11T12:00:00.000Z",
-          },
-        ],
+        "expenses": [],
         "pagination": {
           "limit": 20,
           "page": 1,
-          "total": 1,
-          "totalPages": 1,
+          "total": 0,
+          "totalPages": 0,
         },
         "summary": {
-          "count": 1,
-          "totalAmount": 120,
-          "totalsByCurrency": [
-            {
-              "currency": "INR",
-              "totalAmount": 120,
-            },
-          ],
+          "count": 0,
+          "totalAmount": 0,
+          "totalsByCurrency": [],
           "userGetsBack": 0,
-          "userOwes": 60,
+          "userOwes": 0,
         },
       },
       "status": 200,
