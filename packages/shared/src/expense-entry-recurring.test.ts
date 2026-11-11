@@ -54,15 +54,26 @@ it('reports an unreadable total before an over-precise split amount in a templat
 });
 
 it('keeps the recurring whole-currency precision refusal verbatim', () => {
-  expect(readExpenseEntry({...entries[0], currency: 'JPY', amount: '1.5'}, {kind: 'new'}, recurringEntryPolicy).result).toMatchObject({
-    kind: 'refused', problems: [{field: 'form', message: 'Amount supports at most 0 decimal places'}],
+  expect(
+    readExpenseEntry(
+      { ...entries[0], currency: 'JPY', amount: '1.5' },
+      { kind: 'new' },
+      recurringEntryPolicy,
+    ).result,
+  ).toMatchObject({
+    kind: 'refused',
+    problems: [{ field: 'form', message: 'Amount supports at most 0 decimal places' }],
   });
 });
 it('keeps submitted participant order separately from an unchanged historical preview', () => {
   const original = entries[0];
-  const entry = {...original, participantIds: [sam, alex]};
-  expect(readExpenseEntry(entry, {kind: 'edit', saved: savedFor(original)}, recurringEntryPolicy).result).toMatchObject({
-    kind: 'ready', figures: {splitBetween: [{user: sam}, {user: alex}]},
-    money: {splitBetween: [{user: alex}, {user: sam}]},
+  const entry = { ...original, participantIds: [sam, alex] };
+  expect(
+    readExpenseEntry(entry, { kind: 'edit', saved: savedFor(original) }, recurringEntryPolicy)
+      .result,
+  ).toMatchObject({
+    kind: 'ready',
+    figures: { splitBetween: [{ user: sam }, { user: alex }] },
+    money: { splitBetween: [{ user: alex }, { user: sam }] },
   });
 });

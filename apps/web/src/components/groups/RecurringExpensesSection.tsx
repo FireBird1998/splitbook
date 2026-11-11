@@ -276,8 +276,15 @@ export default function RecurringExpensesSection({
       splitValues: method === 'equal' ? {} : splitBookmarks.current[key(method)],
     });
   };
+  const currentEntry = {
+    ...entry,
+    currency: defaultCurrency,
+    participantIds: members
+      .filter(({ user }) => entry.participantIds.includes(user._id))
+      .map(({ user }) => user._id),
+  };
   const reading = readExpenseEntry(
-    entry,
+    currentEntry,
     editing ? { kind: 'edit', saved: editing } : { kind: 'new' },
     recurringEntryPolicy,
   );
@@ -285,7 +292,7 @@ export default function RecurringExpensesSection({
     if (!entry.description.trim()) return 'Description is required';
     if (!entry.tagId) return 'Tag is required';
     if (!entry.payerId) return 'Choose who pays';
-    if (!entry.participantIds.length) return 'Include at least one person in the split';
+    if (!currentEntry.participantIds.length) return 'Include at least one person in the split';
     if (reading.result.kind === 'refused') return reading.result.problems[0].message;
     const day = Number(schedule.dayOfMonth);
     if (!Number.isInteger(day) || day < 1 || day > 31) return 'Day of month must be 1–31';
@@ -781,6 +788,7 @@ export default function RecurringExpensesSection({
               </Typography>
               <Stack spacing={0.5}>
                 {members.map((member) => {
+                  if (!Object.hasOwn(splitBookmarks.current.shares, member.user._id)) return null;
                   const included = entry.participantIds.includes(member.user._id);
                   const value = entry.splitValues[member.user._id] ?? '';
                   return (

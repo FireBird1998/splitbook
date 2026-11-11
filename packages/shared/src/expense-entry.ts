@@ -166,7 +166,7 @@ export function readExpenseEntry(
       return decideExpenseMoneyEdit(purpose.saved, kept ?? input).money;
     } catch (error) {
       // Part of a yen paid or shared: the amount field's words, as on the web (#755).
-      throw inAmountWords(error, entry.currency);
+      throw policy.feedback === 'allocation-summary' ? error : inAmountWords(error, entry.currency);
     }
   };
   const { problems, status, ...breakdown } = splitBreakdown(entry, allocate);
@@ -213,16 +213,19 @@ export function readExpenseEntry(
         currency: money.currency,
         paidBy: money.paidBy.map(({ user, amount }) => ({ user, amount })),
         splitMethod: entry.splitMethod,
-        splitBetween: money.splitBetween.map((row) => ({
-          user: row.user,
-          ...(entry.splitMethod === 'exact' || entry.splitMethod === 'unequal'
-            ? { amount: row.amount }
-            : entry.splitMethod === 'percentage'
-              ? { percentage: 'percentage' in row ? row.percentage : undefined }
-              : entry.splitMethod === 'shares'
-                ? { shares: 'shares' in row ? row.shares : undefined }
-                : {}),
-        })),
+        splitBetween: entry.participantIds.map((user) => {
+          const row = money.splitBetween.find((row) => row.user === user)!;
+          return {
+            user: row.user,
+            ...(entry.splitMethod === 'exact' || entry.splitMethod === 'unequal'
+              ? { amount: row.amount }
+              : entry.splitMethod === 'percentage'
+                ? { percentage: 'percentage' in row ? row.percentage : undefined }
+                : entry.splitMethod === 'shares'
+                  ? { shares: 'shares' in row ? row.shares : undefined }
+                  : {}),
+          };
+        }),
       },
       financialEdit:
         purpose.kind === 'new' ||
@@ -230,7 +233,8 @@ export function readExpenseEntry(
           .financialEdit,
     };
   } catch (cause) {
-    const error = inAmountWords(cause, entry.currency);
+    const error =
+      policy.feedback === 'allocation-summary' ? cause : inAmountWords(cause, entry.currency);
     result = {
       kind: 'refused' as const,
       error,
