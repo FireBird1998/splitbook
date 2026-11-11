@@ -259,10 +259,24 @@ The gate, PR checks and the full CI verification job run the same root command.
 
 `pnpm check:reads` binds production sources with the same source reader as the recording
 contract. It rejects local membership gates/filters, recurring generator calls and
-unadmitted Insights/Trip-summary calls outside `group-ledger-read.ts`. Read projections
-use the Group supplied to the module's callback. Tests/fixtures are outside the scan.
-`src/read-exceptions.ts` pins each permitted write, projection, notification, maintenance
-or demo site by file, owner and tokenized expression. A missing, changed or duplicated
-site fails. Assistant reads use the module. Its across operation supports bounded
-`page` queries and `fields` projections. The Insights/Trip-summary guard also
-checks preloaded Group objects, whose TypeScript types alone establish no admission.
+unadmitted Insights/Trip-summary calls outside `group-ledger-read.ts`. Tests and fixtures
+are excluded. Member-list checks include mapped-id `includes`, Set `has`, `findIndex`
+and equality comparisons inside `for…of`. Group query checks include aggregate matches,
+`where` paths/objects, raw model collections, constant collection names and mutations of
+filter objects, including aliases.
+
+This structural check can pass a new GET that calls `Expense.find({ group: groupId })`
+with no access check. The reviewer's rule is that a Group ledger read goes through
+`readGroupLedger` or `readGroupLedgers`. Metadata reads use the corresponding metadata
+operations. Computed string concatenation such as `['members.' + 'user']` and opaque
+runtime filter construction remain outside literal resolution.
+
+`src/read-exceptions.ts` identifies each reviewed site by file, function kind, lexical
+container, local declaration ordinal and tokenized expression. A missing, changed or
+duplicated site fails. The function identity keeps same-named helpers and public methods
+from sharing an entry. Reviewed exceptions include writes, projections, notifications,
+maintenance and demo operations. The server-side member-email disclosure and currency
+post-write response read have explicit reasons describing their current policies.
+
+Assistant reads use the module. Its across operation supports bounded `page` queries and
+`fields` projections. The Insights/Trip-summary guard also checks preloaded Group objects.

@@ -300,7 +300,7 @@ export const readExceptions = [
     operation: 'membership',
     site: 'memberGroup(groupId,viewerId,null)',
     reason:
-      'Private post-write response for currency add/remove rechecks membership; the public settings read uses readGroupLedger.',
+      'Currency add/remove response re-admits through memberGroup using findById and isMember. This post-write path omits the deletion-marker rule. The public settings read uses readGroupMetadata.',
   },
   {
     path: 'apps/web/src/lib/services/group-currency.service.ts',
@@ -340,7 +340,7 @@ export const readExceptions = [
     operation: 'membership',
     site: 'isGroupAdmin(group,viewer.id)',
     reason:
-      'Select visible controls, names or email fields from already delivered/admitted Group data; this does not admit a ledger read.',
+      'Server-side role-based disclosure: isGroupAdmin decides whether this admitted read returns every member’s email. That disclosure policy currently lives outside the read module.',
   },
   {
     path: 'apps/web/src/lib/services/group.service.ts',

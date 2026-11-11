@@ -353,3 +353,27 @@ it('allows member projections that make no comparison', () => {
     ]),
   ).toEqual([]);
 });
+
+it('leaves a read with no local gate to the reviewer admission rule', () => {
+  expect(
+    checkReadSources([
+      route(`export async function GET() {
+    return Expense.find({group: groupId});
+  }`),
+    ]),
+  ).toEqual([]);
+});
+
+it('leaves a member path assembled by string concatenation outside literal resolution', () => {
+  expect(
+    checkReadSources([
+      {
+        path: 'apps/web/src/lib/models/Group.ts',
+        source: 'const Group = {}; export default Group;',
+      },
+      route(
+        `import Group from '@/lib/models/Group'; Group.findOne({['members.' + 'user']: actor});`,
+      ),
+    ]),
+  ).toEqual([]);
+});

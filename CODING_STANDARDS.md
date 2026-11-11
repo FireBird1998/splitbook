@@ -16,7 +16,7 @@ The product's promise: a member's ledger is exact, recorded once, and only ever 
 
 - **One account's data per screen.** Sign-out and an account change purge account-local storage; losing access to a Group removes its cached and saved copies (ADR 0006).
 - **Saved copies show their age.** A saved copy keeps its verification time and is never presented as current.
-- **Every API route authenticates.** Group ledger reads use `apps/web/src/lib/group-ledger-read.ts` for actor admission, the admitted Group and delivery-time access checks. Review the read's named settings against the read record; do not add a route/service membership gate or a read-time generator call. `pnpm check:reads` enforces the boundary with site-specific, stale-checked exceptions. Writes keep access checks in their own recording or Group mutation.
+- **Every API route authenticates.** Reviewers verify that a Group ledger read goes through `readGroupLedger` or `readGroupLedgers` in `apps/web/src/lib/group-ledger-read.ts`. These operations supply actor admission, the admitted Group and delivery-time access checks. Metadata reads use `readGroupMetadata` or `readGroupsMetadata`. Review the operation's named settings against the read record. `pnpm check:reads` bans local membership gates/filters and generator calls outside the module, with exact stale-checked exceptions. A new GET that calls `Expense.find({ group: groupId })` with no access check can pass this structural check, so admission remains a review requirement. Writes keep access checks in their own recording or Group mutation.
 
 ## Structure
 

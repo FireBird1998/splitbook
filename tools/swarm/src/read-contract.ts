@@ -233,11 +233,12 @@ export function checkReadSources(
       : loop.initializer;
     if (!binding) return false;
     const bindings = new Set<ts.Symbol>();
-    contains(binding, (value) => {
+    function collectBindings(value: ts.Node) {
       const found = ts.isIdentifier(value) ? symbol(value) : undefined;
       if (found) bindings.add(found);
-      return false;
-    });
+      value.forEachChild(collectBindings);
+    }
+    collectBindings(binding);
     return contains(
       loop.statement,
       (value) =>
@@ -248,10 +249,10 @@ export function checkReadSources(
           ts.SyntaxKind.ExclamationEqualsToken,
           ts.SyntaxKind.ExclamationEqualsEqualsToken,
         ].includes(value.operatorToken.kind) &&
-        contains(
-          value,
-          (part) => ts.isIdentifier(part) && !!symbol(part) && bindings.has(symbol(part)!),
-        ),
+        contains(value, (part) => {
+          const found = ts.isIdentifier(part) ? symbol(part) : undefined;
+          return !!found && bindings.has(found);
+        }),
     );
   }
   function named(node: ts.Node, name: string, file: string): boolean {
