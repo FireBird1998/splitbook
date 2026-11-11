@@ -47,7 +47,27 @@ export function checkReadSources(
   ): boolean {
     node = unwrap(node);
     if (match(node)) return true;
-    const found = symbol(node);
+    // Binding a method does not invoke it; calling the bound value still has its identity.
+    if (
+      ts.isCallExpression(node) &&
+      property(node.expression, 'bind') &&
+      (ts.isPropertyAccessExpression(node.expression) ||
+        ts.isElementAccessExpression(node.expression))
+    )
+      return origins(node.expression.expression, match, seen);
+    if (
+      (property(node, 'call') || property(node, 'apply')) &&
+      (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
+    )
+      return origins(node.expression, match, seen);
+    const found =
+      symbol(node) ??
+      (ts.isElementAccessExpression(node) && literal(node.argumentExpression)
+        ? checker.getPropertyOfType(
+            checker.getTypeAtLocation(node.expression),
+            literal(node.argumentExpression)!,
+          )
+        : undefined);
     if (!found || seen.has(found)) return false;
     const next = new Set(seen).add(found);
     return (found.declarations ?? []).some((declaration) => {
@@ -72,12 +92,20 @@ export function checkReadSources(
       return false;
     });
   }
+  function literal(node: ts.Node): string | undefined {
+    let text: string | undefined;
+    origins(node, (value) => {
+      if (!ts.isStringLiteralLike(value)) return false;
+      text = value.text;
+      return true;
+    });
+    return text;
+  }
   function property(node: ts.Node, name: string): boolean {
     return (
       (ts.isPropertyAccessExpression(node) && node.name.text === name) ||
-      (ts.isElementAccessExpression(node) &&
-        ts.isStringLiteralLike(node.argumentExpression) &&
-        node.argumentExpression.text === name)
+      (ts.isElementAccessExpression(node) && literal(node.argumentExpression) === name) ||
+      (ts.isBindingElement(node) && (node.propertyName ?? node.name).getText() === name)
     );
   }
   function membershipFilter(node: ts.Node, seen = new Set<ts.Node>()): boolean {
@@ -86,7 +114,11 @@ export function checkReadSources(
     return origins(node, (value) => {
       if (
         ts.isPropertyAssignment(value) &&
-        /^members(?:\.|$)/.test(value.name.getText().replace(/^['"]|['"]$/g, ''))
+        /^members(?:\.|$)/.test(
+          ts.isComputedPropertyName(value.name)
+            ? (literal(value.name.expression) ?? '')
+            : value.name.getText().replace(/^['"]|['"]$/g, ''),
+        )
       )
         return true;
       let found = false;
@@ -117,7 +149,7 @@ export function checkReadSources(
         value.getSourceFile().fileName.endsWith(file),
     );
   }
-  const admitted = new Set<ts.Symbol>();
+  const callbacks = new Set<ts.SignatureDeclaration>();
   for (const node of nodes) {
     if (
       !ts.isCallExpression(node) ||
@@ -135,16 +167,56 @@ export function checkReadSources(
                 ts.isFunctionExpression(callback) ||
                 ts.isFunctionDeclaration(callback)
               ) {
-                for (const parameter of callback.parameters.slice(0, 2)) {
-                  const found = symbol(parameter.name);
-                  if (found) admitted.add(found);
-                }
+                callbacks.add(callback);
                 return true;
               }
               return false;
             });
       return false;
     });
+  }
+  const assigned = new Set<ts.Symbol>();
+  for (const node of nodes)
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+    ) {
+      let target: ts.Node = node.left;
+      while (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target))
+        target = target.expression;
+      const found = symbol(target);
+      if (found) assigned.add(found);
+    }
+  const admitted = new Set<ts.Symbol>();
+  for (const callback of callbacks) {
+    // A registered callback is not an admission gate for its other invocations.
+    if (
+      nodes.some(
+        (node) =>
+          ts.isCallExpression(node) && origins(node.expression, (value) => value === callback),
+      )
+    )
+      continue;
+    for (const parameter of callback.parameters.slice(0, 2)) {
+      const found = symbol(parameter.name);
+      if (found) admitted.add(found);
+    }
+  }
+  function admittedValue(node: ts.Node): boolean {
+    if (
+      origins(node, (value) => {
+        const found = symbol(
+          ts.isVariableDeclaration(value) || ts.isParameter(value) ? value.name : value,
+        );
+        return !!found && assigned.has(found);
+      })
+    )
+      return false;
+    return origins(
+      node,
+      (value) => ts.isParameter(value) && !!symbol(value.name) && admitted.has(symbol(value.name)!),
+    );
   }
   const findings: ReadFinding[] = [];
   const used = new Set<number>();
@@ -186,12 +258,7 @@ export function checkReadSources(
             : '/services/trip-summary.service.ts',
         ),
       ) &&
-      (!node.arguments[0] ||
-        !origins(
-          node.arguments[0],
-          (value) =>
-            ts.isParameter(value) && !!symbol(value.name) && admitted.has(symbol(value.name)!),
-        ))
+      (!node.arguments[0] || !admittedValue(node.arguments[0]))
     )
       report(node, 'unadmitted-service');
     else if (

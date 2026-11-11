@@ -714,4 +714,60 @@ export const readExceptions = [
     reason:
       'Confirmed Group deletion or orphan maintenance uses this membership fence; no ledger read is delivered.',
   },
+  {
+    path: 'apps/web/src/components/expenses/ExpenseFields.tsx',
+    within: 'addPayer',
+    operation: 'membership',
+    site: 'members.find((m)=>!usedUsers.includes(m.user._id))',
+    reason:
+      'A client form selects member labels or controls from already delivered Group data; it does not admit a server ledger read.',
+  },
+  {
+    path: 'apps/web/src/components/expenses/ExpenseFields.tsx',
+    within: 'memberName',
+    operation: 'membership',
+    site: 'members.find((m)=>m.user._id===id)',
+    reason:
+      'A client form selects member labels or controls from already delivered Group data; it does not admit a server ledger read.',
+  },
+  {
+    path: 'apps/web/src/components/expenses/quick-add-view.ts',
+    within: 'nameOf',
+    operation: 'membership',
+    site: 'members.find((member)=>member.id===id)',
+    reason:
+      'A client form selects member labels or controls from already delivered Group data; it does not admit a server ledger read.',
+  },
+  {
+    path: 'apps/web/src/components/expenses/quick-add-view.ts',
+    within: 'shortName',
+    operation: 'membership',
+    site: 'members.filter((member)=>member.id!==id&&member.name.split(/\\s+/u)[0]===first,)',
+    reason:
+      'A client form selects member labels or controls from already delivered Group data; it does not admit a server ledger read.',
+  },
+  {
+    path: 'apps/web/src/components/groups/AssistantRuleSection.tsx',
+    within: 'AssistantRuleSection',
+    operation: 'membership',
+    site: "members.some((m)=>m.user._id===viewerId&&m.role==='admin')",
+    reason:
+      'A client form selects member labels or controls from already delivered Group data; it does not admit a server ledger read.',
+  },
+  {
+    path: 'apps/web/src/components/groups/RecurringExpensesSection.tsx',
+    within: 'memberName',
+    operation: 'membership',
+    site: 'members.find((m)=>m.user._id===id)',
+    reason:
+      'A client form selects member labels or controls from already delivered Group data; it does not admit a server ledger read.',
+  },
+  {
+    path: 'apps/web/src/components/groups/RecurringExpensesSection.tsx',
+    within: 'RecurringExpensesSection',
+    operation: 'membership',
+    site: 'members.filter(({user})=>entry.participantIds.includes(user._id))',
+    reason:
+      'A client form selects member labels or controls from already delivered Group data; it does not admit a server ledger read.',
+  },
 ] satisfies readonly AllowedReadSite[];

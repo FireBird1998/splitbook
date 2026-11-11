@@ -187,3 +187,47 @@ it('inventories membership fences on Group writes too, so they require an exact 
     ]),
   ).toMatchObject([{ operation: 'membership' }]);
 });
+
+it.each([
+  'const {members: people} = group; people.some(m => m.user === actor);',
+  "const key = 'members.user'; Groups.findOne({[key]: actor});",
+])('keeps destructured members and computed literal filters visible (%s)', (body) => {
+  expect(
+    checkReadSources([
+      {
+        path: 'apps/web/src/lib/models/Group.ts',
+        source: 'const Group = {}; export default Group;',
+      },
+      route(`import Groups from '@/lib/models/Group'; export async function GET() { ${body} }`),
+    ]),
+  ).toMatchObject([{ operation: 'membership' }]);
+});
+it.each([
+  "recurring['generateDueExpenses'](id);",
+  'const generate = recurring.generateDueExpenses.bind(recurring); generate(id);',
+])('keeps bracket and bound generator calls visible (%s)', (body) => {
+  expect(
+    checkReadSources([
+      generator,
+      route(
+        `import {recurringExpenseService as recurring} from '@/lib/services/recurring-expense.service'; ${body}`,
+      ),
+    ]),
+  ).toMatchObject([{ operation: 'recurring' }]);
+});
+it.each([
+  'const query = async group => getGroupInsights(group); readGroupLedger({read: query}); query(id);',
+  'readGroupLedger({read: async group => {group = id; return getGroupInsights(group);}});',
+  'readGroupLedger({read: async group => {let value = group; value = id; return getGroupInsights(value);}});',
+])('does not admit a reused callback or a replaced callback value (%s)', (body) => {
+  expect(
+    checkReadSources([
+      insight,
+      reader,
+      route(`
+    import {getGroupInsights} from '@/lib/services/group-insights.service';
+    import {readGroupLedger} from '@/lib/group-ledger-read'; ${body}
+  `),
+    ]),
+  ).toMatchObject([{ operation: 'unadmitted-service' }]);
+});

@@ -482,7 +482,7 @@ jobs:
         run: pnpm check:recordings
 
       - name: Group ledger read contract
-        working-directory: .
+        if: steps.changes.outputs.docs_only != 'true'
         run: pnpm check:reads
 
       - name: Adopted design-system style policy
