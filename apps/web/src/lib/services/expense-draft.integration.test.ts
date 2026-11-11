@@ -1,3 +1,4 @@
+import { draftForExpenseEntry, entryForExpenseDraft } from '@splitbook/shared/expense-entry-draft';
 import {
   GET as expenseRecordRoute,
   PATCH as editExpenseRoute,
@@ -563,6 +564,17 @@ describe('persistent private expense Drafts', () => {
       expect(reviewed.problems).toContain('paidBy: Each person can appear only once');
       expect((await drafts.list(alice, groupId))[0].values).toEqual(values);
       expect((await drafts.save(alice, groupId, saveCommand(reviewed)))[0].status).toBe('failed');
+      expect(await db().collection('expenses').countDocuments()).toBe(0);
+      // A note edit resolves repeated boxes, but is not an instruction that this one person
+      // paid the entire Expense when their later amount was omitted (#1117).
+      const edited = draftForExpenseEntry(
+        { ...entryForExpenseDraft(values), notes: 'Checked the receipt' },
+        { from: values, changed: { notes: true } },
+      );
+      expect(edited).not.toHaveProperty('paidBy');
+      const kept = await drafts.replace(alice, groupId, changed.id, edited, changed.revision);
+      const nextReview = await drafts.review(alice, groupId, kept.id);
+      expect((await drafts.save(alice, groupId, saveCommand(nextReview)))[0].status).toBe('failed');
       expect(await db().collection('expenses').countDocuments()).toBe(0);
     },
   );

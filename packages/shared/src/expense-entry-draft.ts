@@ -107,7 +107,7 @@ export function draftForExpenseEntry(
       for (const id of replace ? entry.participantIds : Object.keys(entry.splitValues))
         fields[`splitBetween.${id}.${part}`] = entry.splitValues[id] ?? '';
   }
-  return draftValues(fields);
+  return draftValues(fields, entry.multiPayer);
 }
 
 // Private codec: these temporary fields are never held by a form or persisted.
@@ -137,7 +137,7 @@ function draftEntries(values: ExpenseDraftValues = {}): DraftEntries {
   if (values.predefinedItem) entries.predefinedItem = values.predefinedItem;
   return entries;
 }
-function draftValues(entries: DraftEntries): ExpenseDraftValues {
+function draftValues(entries: DraftEntries, multiPayer: boolean): ExpenseDraftValues {
   const value: Record<string, unknown> = {};
   for (const key of [
     'description',
@@ -168,7 +168,9 @@ function draftValues(entries: DraftEntries): ExpenseDraftValues {
         return row;
       });
     const kept =
-      kind === 'paidBy' && rows.length > 1
+      // Collapsing repeated identities can leave one row, but does not turn an entered
+      // multiple-payer amount into an instruction that one person paid the whole Expense.
+      kind === 'paidBy' && (multiPayer || rows.length > 1)
         ? rows.filter((row) => row.amount !== undefined && row.amount !== 0)
         : rows;
     if (kept.length) value[kind] = kept;

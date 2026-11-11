@@ -191,3 +191,21 @@ it('omits unpaid people from Finish later and from a later note edit (#1117 deci
     ).paidBy,
   ).toEqual([{ user: alex, amount: 100 }]);
 });
+
+it.each([0, undefined])(
+  'does not infer a whole payment after a note edit drops an unpaid duplicate (%s, #1117 decisions 2 and 11)',
+  (amount) => {
+    const from = {
+      ...draftForExpenseEntry(entries[0]),
+      paidBy: [
+        { user: alex, amount: 100 },
+        { user: alex, ...(amount === undefined ? {} : { amount }) },
+      ],
+    };
+    const entry = { ...entryForExpenseDraft(from), notes: 'Checked the receipt' };
+    expect(entry.multiPayer).toBe(true);
+    const kept = draftForExpenseEntry(entry, { from, changed: { notes: true } });
+    expect(kept).not.toHaveProperty('paidBy');
+    expect(from.paidBy).toHaveLength(2);
+  },
+);
