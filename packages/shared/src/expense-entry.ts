@@ -51,15 +51,12 @@ export type IncompleteExpenseEntry = ExpenseEntry<ExpenseSplitMethod | ''>;
 export type ExpenseEntryPurpose = { kind: 'new' } | { kind: 'edit'; saved: StoredExpenseMoney };
 
 export interface ExpenseEntryPolicy {
-  splitPreview: 'whole-expense' | 'independent-split';
   roundingNote: 'show' | 'hide';
 }
 export const expenseEntryPolicy: ExpenseEntryPolicy = {
-  splitPreview: 'independent-split',
   roundingNote: 'show',
 };
 export const formSummaryPolicy: ExpenseEntryPolicy = {
-  splitPreview: 'whole-expense',
   roundingNote: 'hide',
 };
 
@@ -200,19 +197,6 @@ export function readExpenseEntry(
         ? new MoneyValidationError(original.code, problem.message, original.field)
         : original;
     result = { kind: 'refused' as const, error, problems: [problem] };
-  }
-  if (policy.splitPreview === 'whole-expense') {
-    split.shares =
-      result.kind === 'ready'
-        ? Object.fromEntries(
-            result.money.splitBetween.map((row) => [String(row.user), row.amountMinor]),
-          )
-        : {};
-    if (result.kind === 'refused')
-      split.status = {
-        kind: 'problem',
-        message: result.error instanceof Error ? result.error.message : 'Invalid allocation',
-      };
   }
   if (policy.roundingNote === 'hide' && split.status.kind === 'adds-up')
     split.status = { kind: 'adds-up', leftover: null };

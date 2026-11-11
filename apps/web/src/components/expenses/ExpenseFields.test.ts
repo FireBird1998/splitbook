@@ -249,3 +249,11 @@ it.each([
     ).toContain(words);
   },
 );
+
+it('shows both shares while the payer total is wrong (#1117 decision 8)', () => {
+  expect(
+    text(render('100', { multiPayerMode: true, payers: [{ user: YOU, amount: '40' }] })).match(
+      /₹50\.00/g,
+    ),
+  ).toHaveLength(2);
+});

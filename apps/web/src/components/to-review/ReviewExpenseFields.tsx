@@ -1,17 +1,11 @@
 'use client';
 import { useState } from 'react';
-import { draftForExpenseEntry } from '@splitbook/shared/expense-entry-draft';
 import {
   readExpenseEntry,
   formSummaryPolicy,
   type IncompleteExpenseEntry,
 } from '@splitbook/shared/expense-entry';
-import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
-import {
-  completeExpenseDraftSchema,
-  withGroupCurrency,
-  type ExpenseDraftValues,
-} from '@splitbook/shared/validators/expense-draft';
+import { type ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
 import ExpenseFields from '@/components/expenses/ExpenseFields';
 import type { DraftContext } from '@splitbook/shared/expense-entry-draft';
 
@@ -79,23 +73,8 @@ export default function ReviewExpenseFields({
   const members = [...context.members];
   for (const id of [...entry.payers.map((row) => row.user), ...entry.participantIds])
     if (!members.some((member) => member.id === id)) members.push({ id, name: 'Former member' });
-  let preview: ReturnType<typeof normalizeExpenseMoney> | undefined;
-  try {
-    const parsed = completeExpenseDraftSchema.safeParse(
-      withGroupCurrency(
-        draftForExpenseEntry(entry, { from: original, changed: changes }),
-        context.currency,
-      ),
-    );
-    if (parsed.success) preview = normalizeExpenseMoney(parsed.data);
-  } catch {
-    // An incomplete Draft remains editable; the review machine asks for the missing facts.
-  }
+  // Completeness and Save remain with the review flow; the same entry explains its split.
   const reading = readExpenseEntry(shown, { kind: 'new' }, formSummaryPolicy);
-  // To review uses the server's completeness check: a missing row must not become zero here.
-  reading.split.shares = Object.fromEntries(
-    preview?.splitBetween.map((row) => [row.user, row.amountMinor]) ?? [],
-  );
   return (
     <ExpenseFields
       review

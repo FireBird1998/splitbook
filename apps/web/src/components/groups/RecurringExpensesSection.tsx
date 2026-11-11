@@ -53,7 +53,7 @@ import {
   type ExpenseEntry,
 } from '@splitbook/shared/expense-entry';
 import { formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
-import { assertStoredExpenseMoney } from '@splitbook/shared/exact-money';
+import { assertStoredExpenseMoney, toMajorAmount } from '@splitbook/shared/exact-money';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { recurringRefusal } from '@/components/groups/recurring-refusal';
 import { RECURRING_SECTION_ID } from '@/components/groups/group-tabs';
@@ -299,7 +299,9 @@ export default function RecurringExpensesSection({
       return 'End date must be on or after the start date';
     return null;
   };
-  const splitPreview = reading.result.kind === 'ready' ? reading.result.money.splitBetween : [];
+  const splitPreview = Object.entries(reading.split.shares).flatMap(([user, minor]) =>
+    minor === undefined ? [] : [{ user, amount: toMajorAmount(minor, defaultCurrency) }],
+  );
   const previewError = reading.result.kind === 'refused' ? reading.result.problems[0].message : '';
 
   const reloadLatest = async (target: 'form' | 'action') => {

@@ -158,3 +158,17 @@ it('keeps a cleared named Tag unselected while the changed entry is being kept',
     vi.unstubAllGlobals();
   }
 });
+
+it('keeps a complete split visible while Who paid needs correction (#1117 decision 8)', () => {
+  expect(
+    text(
+      render({
+        amount: 100,
+        currency: 'INR',
+        paidBy: [{ user: viewer, amount: 40 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: viewer }, { user: sam }],
+      }),
+    ).match(/₹50\.00/g),
+  ).toHaveLength(2);
+});

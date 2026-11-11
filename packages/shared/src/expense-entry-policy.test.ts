@@ -25,7 +25,9 @@ it('keeps complete-form refusals and numeric weights while withholding partial a
     problems: [{ field: 'split', message: 'Give at least one person a share.' }],
   });
   const partial = entries.find((entry) => entry.id === 'amounts-not-total')!;
-  expect(readExpenseEntry(partial, { kind: 'new' }, formSummaryPolicy).split.shares).toEqual({});
+  expect(readExpenseEntry(partial, { kind: 'new' }, formSummaryPolicy).split.shares).toEqual(
+    Object.fromEntries(partial.participantIds.map((id) => [id, 4000])),
+  );
   const rounded = entries.find((entry) => entry.id === 'leftover-cent')!;
   expect(readExpenseEntry(rounded, { kind: 'new' }, formSummaryPolicy).split.status).toEqual({
     kind: 'adds-up',
@@ -180,4 +182,15 @@ it('uses the Split sheet’s no-shares correction for the complete form (#1117 d
     problems: [{ field: 'split', message: 'Give at least one person a share.' }],
     error: { message: 'Give at least one person a share.' },
   });
+});
+
+it('keeps each split share visible while payer amounts need correcting (#1117 decision 8)', () => {
+  const entry = {
+    ...entries[0],
+    multiPayer: true,
+    payers: [{ user: entries[0].payerId, amount: '40' }],
+  };
+  expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).split.shares).toEqual(
+    Object.fromEntries(entry.participantIds.map((id) => [id, 5000])),
+  );
 });

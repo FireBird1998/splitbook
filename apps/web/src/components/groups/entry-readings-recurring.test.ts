@@ -361,3 +361,16 @@ it('uses the shared no-shares correction for recurring Save (#1117 decision 6)',
     issues: [{ field: '', message: 'Give at least one person a share.' }],
   });
 });
+
+it('keeps entered split amounts visible while their total is incomplete (#1117 decision 8)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  expect(
+    (await read(entries.find((row) => row.id === 'amounts-not-total')!, false)).shown,
+  ).toMatchObject({ before: expect.stringContaining('₹40.00') });
+});
