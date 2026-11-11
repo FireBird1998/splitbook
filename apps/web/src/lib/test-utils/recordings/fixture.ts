@@ -67,7 +67,7 @@ export function recordingFixture(writer: Writer, namespace: string = writer) {
   let recordingStarted = false;
   let requestNumber = 0;
   const isChange = ['edit', 'delete', 'restore', 'tag-change'].includes(writer);
-  const fenceNumber = isChange || writer === 'recurring-expense' ? 2 : 1;
+  const fenceNumber = isChange ? 2 : 1;
 
   const expenseBody = (changes: object = {}) => ({
     description: 'Recorded dinner',

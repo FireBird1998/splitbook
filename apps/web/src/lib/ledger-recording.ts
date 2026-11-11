@@ -60,7 +60,6 @@ interface SubmissionRetry {
 interface TemplateMonthRetry {
   template: Types.ObjectId;
   period: string;
-  lookup?: 'on-duplicate';
 }
 export interface LedgerRecording<
   T extends LedgerRecord,
@@ -73,7 +72,6 @@ export interface LedgerRecording<
   retry?: SubmissionRetry | TemplateMonthRetry;
   command: (context: { group?: IGroupDocument; receipt?: HydratedDocument<T> }) => Command;
   currencies: readonly CurrencyUse[];
-  currenciesAt?: 'before-fence';
   checkPeople?: (members: Set<string>) => void;
   /** The batch reads presentation data after its commit-time replay; other writers prepare before the fence. */
   prepareAt?: 'commit';
@@ -98,7 +96,6 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
   const submission = retry && 'key' in retry ? retry : undefined;
   const month = retry && 'template' in retry ? retry : undefined;
   await connectDB();
-  await ensureLedgerWriteIndexes();
   const source = model.collection.collectionName;
   if (source !== 'expenses' && source !== 'settlements')
     throw new Error('Ledger recording needs an Expense or Settlement model');
@@ -159,17 +156,17 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
     }
     return { records: rows, created: outcome === 'created' };
   };
-  const first = month?.lookup === 'on-duplicate' ? null : await lookup();
+  const first = await lookup();
   const command = normalize(first);
   const existing = await confirm(first, command);
   if (existing) return publish(existing, 'replayed');
+  await ensureLedgerWriteIndexes();
   let committed: { records: HydratedDocument<T>[]; outcome: 'created' | 'replayed' };
   try {
     if (description.transactions !== 'allow-standalone' && !(await supportsGroupTransactions()))
       throw description.transactions.required;
     if (admittedGroup.isArchived) throw new Refusal('GROUP_ARCHIVED');
     checkMembers(admittedGroup);
-    if (description.currenciesAt === 'before-fence') await lockCurrencies(description.currencies);
     const prepared =
       description.prepareAt === 'commit'
         ? undefined
@@ -179,8 +176,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
       async (session) => {
         if (description.transactions !== 'allow-standalone' && !session)
           throw description.transactions.required;
-        if (description.currenciesAt !== 'before-fence')
-          await lockCurrencies(description.currencies);
+        await lockCurrencies(description.currencies);
         const group = await Group.findById(groupId);
         if (!group) throw new Refusal('FORBIDDEN');
         if (group.isArchived) {

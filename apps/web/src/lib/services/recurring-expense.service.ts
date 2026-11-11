@@ -30,7 +30,6 @@ import { displayTagReference, resolveTagReference } from '@splitbook/shared/tag-
 import { involvedMembers } from '@/lib/financial-write';
 import { assertExpectedRevision } from '@/lib/ledger-revision';
 import { lockLedgerCurrency } from '@/lib/ledger-currency';
-import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
 import {
   assertRecurringExpensesOn,
   recurringExpensesEnabled,
@@ -468,12 +467,6 @@ export class RecurringExpenseService {
         if (duePeriods.length === 0) continue;
 
         const money = generatableMoney(group, template);
-        if (!money) continue; // Problem state — visible in the settings list.
-
-        // The unique (recurringExpense, period) index makes the inserts below
-        // idempotent. Only a run that inserts needs it (the call is memoized), so a
-        // Trip Group or a Household with nothing due never depends on it.
-        await ensureLedgerWriteIndexes();
 
         // Advance only through the unbroken materialized prefix: a period that
         // fails unexpectedly is retried on the next read instead of being lost.
@@ -485,12 +478,16 @@ export class RecurringExpenseService {
               actor: { id: String(template.createdBy), source: 'template-creator' },
               model: Expense,
               transactions: 'allow-standalone',
-              retry: { template: template._id, period, lookup: 'on-duplicate' },
-              command: () => ({ period }),
+              retry: { template: template._id, period },
+              command({ receipt }) {
+                // A problem holds only new Months; a stored receipt is still confirmed.
+                if (!receipt && !money)
+                  throw new Refusal('RECURRING_EXPENSE_PROBLEM', { recurringExpenses: [] });
+                return { period };
+              },
               currencies: [{ currency: template.currency, rule: 'listed' }],
-              currenciesAt: 'before-fence',
               checkPeople(members) {
-                assertExpenseParticipants(members, money.paidBy, money.splitBetween);
+                assertExpenseParticipants(members, money!.paidBy, money!.splitBetween);
               },
               async prepare(command): ReturnType<LedgerRecording<IExpenseDocument>['prepare']> {
                 const expenseId = new mongoose.Types.ObjectId();
@@ -514,7 +511,7 @@ export class RecurringExpenseService {
                           metadata: {
                             expenseId: String(expenseId),
                             description: template.description,
-                            amount: money.amount,
+                            amount: money!.amount,
                             currency: template.currency,
                             recurring: true,
                             recurringExpenseId: String(template._id),
@@ -522,7 +519,7 @@ export class RecurringExpenseService {
                           },
                           alert: {
                             kind: 'expense_added',
-                            involved: involvedMembers(money),
+                            involved: involvedMembers(money!),
                             switch: 'expense-changes',
                           },
                         },
@@ -535,6 +532,7 @@ export class RecurringExpenseService {
             if (result.created) generated += 1;
             materializedThrough = period;
           } catch (err) {
+            if (err instanceof Refusal && err.code === 'RECURRING_EXPENSE_PROBLEM') break;
             console.error(`Recurring generation failed for template ${template._id}:`, err);
             complete = false;
             break;

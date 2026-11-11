@@ -12,7 +12,7 @@ vi.mock('next/server', async (original) =>
 );
 const fixture = recordingFixture('recurring-expense', 'recurring-order');
 
-it('locks currency before recovering an already recorded month with a stale marker', async () => {
+it('recognises a recorded Month before validating a drifted template', async () => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   const outage = vi.spyOn(Activity, 'updateOne').mockImplementation(() => {
     throw new Error('Activity unavailable');
@@ -23,31 +23,18 @@ it('locks currency before recovering an already recorded month with a stale mark
     { _id: fixture.templateId },
     { $set: { lastGeneratedFor: null } },
   );
-  const pause = fixture.holdFence(1);
+  await Group.updateOne({ _id: fixture.groupId }, { $set: { defaultCurrency: 'EUR' } });
   const pending = fixture.send();
-  try {
-    await Promise.race([
-      pause.reached,
-      pending.then(() => {
-        throw new Error('Read ended before currency lock');
-      }),
-    ]);
-    await Group.updateOne({ _id: fixture.groupId }, { $set: { defaultCurrency: 'EUR' } });
-  } finally {
-    pause.restore();
-    pause.release();
-    await pending;
-  }
   expect((await pending).status).toBe(200);
   expect(await Expense.countDocuments({ group: fixture.groupId })).toBe(1);
-  expect(await Activity.countDocuments({ group: fixture.groupId })).toBe(0);
+  expect(await Activity.countDocuments({ group: fixture.groupId })).toBe(1);
   const stored = await Expense.findOne({ group: fixture.groupId }).select('+pendingActivity');
-  expect(stored!.pendingActivity).toHaveLength(1);
-  expect((await RecurringExpense.findById(fixture.templateId))!.lastGeneratedFor).toBeNull();
+  expect(stored!.pendingActivity).toHaveLength(0);
+  expect((await RecurringExpense.findById(fixture.templateId))!.lastGeneratedFor).toBe('2026-11');
 });
 
 it('captures recurring Activity time after the currency lock and before waiting for the write', async () => {
-  const pause = fixture.holdFence(2);
+  const pause = fixture.holdFence(1);
   const pending = fixture.send();
   try {
     await Promise.race([
@@ -73,7 +60,7 @@ it('captures recurring Activity time after the currency lock and before waiting 
 
 it('keeps an archived-at-commit Month for the next read without failing the read', async () => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  const pause = fixture.holdFence(2);
+  const pause = fixture.holdFence(1);
   const pending = fixture.send();
   try {
     await Promise.race([
@@ -102,7 +89,7 @@ it('keeps an archived-at-commit Month for the next read without failing the read
 it('keeps a Month for the next read when a template participant leaves at the commit', async () => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   await fixture.readAs('priya');
-  const pause = fixture.holdFence(2);
+  const pause = fixture.holdFence(1);
   const pending = fixture.send();
   try {
     await Promise.race([

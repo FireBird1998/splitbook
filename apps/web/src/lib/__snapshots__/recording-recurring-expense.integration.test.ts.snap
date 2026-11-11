@@ -1330,7 +1330,7 @@ exports[`recurring-expense record of recordings > a failed first insertion leave
         "EUR",
         "USD",
       ],
-      "currencyLocked": true,
+      "currencyLocked": false,
       "defaultCurrency": "INR",
       "isArchived": false,
       "members": [
@@ -2797,7 +2797,7 @@ exports[`recurring-expense record of recordings > archive commits after the chec
         "EUR",
         "USD",
       ],
-      "currencyLocked": true,
+      "currencyLocked": false,
       "defaultCurrency": "INR",
       "isArchived": true,
       "members": [
@@ -4328,7 +4328,7 @@ exports[`recurring-expense record of recordings > named person leaves between th
         "EUR",
         "USD",
       ],
-      "currencyLocked": true,
+      "currencyLocked": false,
       "defaultCurrency": "INR",
       "isArchived": false,
       "members": [

@@ -360,7 +360,7 @@ export function recordCreationPaths(recording: Recording) {
         const recorded = await recording.capture(() => recording.send());
         expect(recorded.after.expenses).toHaveLength(0);
         expect(recorded.after.activities).toHaveLength(0);
-        expect(recorded.after.group?.currencyLocked).toBe(recording.writer === 'recurring-expense');
+        expect(recorded.after.group?.currencyLocked).toBe(false);
       } finally {
         await mongoose.connection.db!.command({ collMod: 'expenses', validator: {} });
       }
