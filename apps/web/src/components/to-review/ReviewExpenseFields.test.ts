@@ -1,5 +1,6 @@
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import TextField from '@mui/material/TextField';
+import Chip from '@mui/material/Chip';
+import Checkbox from '@mui/material/Checkbox';
 import ExpenseFields from '@/components/expenses/ExpenseFields';
 import { entryForExpenseDraft, fieldDraftEntryPolicy } from '@splitbook/shared/expense-entry-draft';
 import { createElement, useState } from 'react';
@@ -99,22 +100,55 @@ describe('the payer and split pickers in the web To review editor (#591)', () =>
 
 it('keeps a cleared named Tag unselected while the changed entry is being kept', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  vi.stubGlobal('window', {addEventListener() {}, removeEventListener() {}});
-  vi.stubGlobal('document', {querySelector: () => null, getElementById: () => null});
-  const original = {description: 'Lunch', amount: 100, tag: 'Food'};
+  vi.stubGlobal('window', { addEventListener() {}, removeEventListener() {} });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  const original = {
+    description: 'Lunch',
+    amount: 100,
+    tag: 'Food',
+    splitMethod: 'equal' as const,
+    splitBetween: [{ user: viewer }, { user: sam }],
+  };
   let renderer: ReactTestRenderer | undefined;
   function Form() {
     const [entry, setEntry] = useState(() => entryForExpenseDraft(original, fieldDraftEntryPolicy));
     const [changed, setChanged] = useState(false);
-    return createElement(ReviewExpenseFields, {entry, original, changes: {tagId: changed},
-      context: {currency: 'INR', members: [{id: viewer, name: 'Alex'}], tags: []},
-      onChange: (patch) => {setEntry((prior) => ({...prior, ...patch})); setChanged(true);},
+    return createElement(ReviewExpenseFields, {
+      entry,
+      original,
+      changes: { tagId: changed },
+      context: {
+        currency: 'INR',
+        members: [
+          { id: viewer, name: 'Alex' },
+          { id: sam, name: 'Sam' },
+        ],
+        tags: [{ id: 'c00000000000000000000001', name: 'Food' }],
+      },
+      onChange: (patch) => {
+        setEntry((prior) => ({ ...prior, ...patch }));
+        setChanged(true);
+      },
     });
   }
   try {
-    await act(async () => {renderer = create(createElement(ThemeProvider, {theme: createAppTheme('light')}, createElement(Form)));});
-    await act(async () => renderer!.root.findByType(ExpenseFields).props.editEntry({tagId: ''}));
-    expect(renderer!.root.findAllByType(TextField).find((field) => field.props.label === 'Tag')!.props.value).toBe('');
+    await act(async () => {
+      renderer = create(
+        createElement(ThemeProvider, { theme: createAppTheme('light') }, createElement(Form)),
+      );
+    });
+    await act(async () => renderer!.root.findByType(ExpenseFields).props.editEntry({ tagId: '' }));
+    expect(
+      renderer!.root.findAllByType(Chip).find((chip) => chip.props.label === 'Food')!.props[
+        'aria-pressed'
+      ],
+    ).toBe(false);
+    await act(async () => renderer!.root.findAllByType(Checkbox)[0].props.onChange());
+    await act(async () => renderer!.root.findAllByType(Checkbox)[0].props.onChange());
+    expect(renderer!.root.findByType(ExpenseFields).props.entry.participantIds).toEqual([
+      viewer,
+      sam,
+    ]);
   } finally {
     if (renderer) await act(async () => renderer!.unmount());
     vi.unstubAllGlobals();

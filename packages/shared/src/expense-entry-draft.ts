@@ -107,23 +107,15 @@ export function draftForExpenseEntry(
     const replace = !update || policy.splitEdit !== 'patch';
     for (const key of Object.keys(fields)) {
       if (!key.startsWith('splitBetween.')) continue;
-      if (
-        replace ||
-        (changed?.splitMethod && key.split('.').length === 3) ||
-        (changed?.participantIds && key.split('.').length === 2)
-      )
-        delete fields[key];
+      if (replace || (changed?.splitMethod && key.split('.').length === 3)) delete fields[key];
+      else if (changed?.participantIds && key.split('.').length === 2) fields[key] = '';
     }
-    if (!update || changed?.splitMethod) fields.splitMethod = entry.splitMethod;
-    const part =
-      entry.splitMethod === 'percentage'
-        ? 'percentage'
-        : entry.splitMethod === 'shares'
-          ? 'shares'
-          : 'amount';
+    const method = entry.splitMethod || (update && replace ? 'equal' : '');
+    if (replace || changed?.splitMethod) fields.splitMethod = method;
+    const part = method === 'percentage' ? 'percentage' : method === 'shares' ? 'shares' : 'amount';
     if (replace || changed?.participantIds)
       for (const id of entry.participantIds) fields[`splitBetween.${id}`] = 'yes';
-    if (entry.splitMethod !== 'equal' && (replace || changed?.splitValues))
+    if (method !== 'equal' && (replace || changed?.splitValues))
       for (const id of replace ? entry.participantIds : Object.keys(entry.splitValues))
         fields[`splitBetween.${id}.${part}`] = entry.splitValues[id] ?? '';
   }

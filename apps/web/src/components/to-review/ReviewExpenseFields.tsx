@@ -38,21 +38,30 @@ export default function ReviewExpenseFields({
   // Keep several payers open while the member clears an amount to retype it (#591).
   if (mismatched && !multiple) setMultiple(true);
   const multiPayer = multiple || mismatched || entry.multiPayer;
+  const currentTag = changes.tagId ? undefined : original.tag;
   const shown = {
     ...entry,
     currency: entry.currency || context.currency || '',
     category: entry.category || 'other',
     tagId:
-      entry.tagId ||
-      context.tags.find((tag) => tag.name === original.tag)?.id ||
-      original.tag ||
-      '',
+      entry.tagId || context.tags.find((tag) => tag.name === currentTag)?.id || currentTag || '',
     multiPayer,
   };
   function edit(change: Partial<IncompleteExpenseEntry>) {
     if (change.multiPayer !== undefined) setMultiple(change.multiPayer);
     // Expanding Who paid is an interaction, not a saved edit until a box changes.
     if (Object.keys(change).every((key) => key === 'multiPayer')) return;
+    if (change.participantIds) {
+      const remembered = { ...entry.splitValues };
+      for (const id of change.participantIds)
+        if (!Object.hasOwn(remembered, id)) remembered[id] = '';
+      const selected = new Set(change.participantIds);
+      change = {
+        ...change,
+        participantIds: Object.keys(remembered).filter((id) => selected.has(id)),
+        splitValues: { ...remembered, ...change.splitValues },
+      };
+    }
     const nextMode = change.multiPayer ?? multiPayer;
     const payers = change.payers ?? entry.payers;
     onChange({
@@ -101,9 +110,14 @@ export default function ReviewExpenseFields({
       viewerId={context.viewerId}
       members={members.map((member) => ({ user: { _id: member.id, name: member.name } }))}
       groupTags={context.tags.map((tag) => ({ _id: tag.id, name: tag.name, isArchived: false }))}
-      currentTag={original.tag}
-      currentTagId={original.tagId}
-      chooseSplitMethod={(splitMethod) => onChange({ splitMethod, splitValues: {} })}
+      currentTag={currentTag}
+      currentTagId={changes.tagId ? entry.tagId : original.tagId}
+      chooseSplitMethod={(splitMethod) =>
+        onChange({
+          splitMethod,
+          splitValues: Object.fromEntries(Object.keys(entry.splitValues).map((id) => [id, ''])),
+        })
+      }
     />
   );
 }

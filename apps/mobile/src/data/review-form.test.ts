@@ -37,7 +37,15 @@ describe('review picker changes', () => {
 });
 
 it('keeps the shown Equal choice when a member edits an otherwise unspecified split', () => {
-  expect(reviewFormChange({description: 'Lunch'}, {participantIds: ['a00000000000000000000001']}, 'INR')).toEqual({
-    description: 'Lunch', splitMethod: 'equal', splitBetween: [{user: 'a00000000000000000000001'}],
+  expect(
+    reviewFormChange(
+      { description: 'Lunch' },
+      { participantIds: ['a00000000000000000000001'] },
+      'INR',
+    ),
+  ).toEqual({
+    description: 'Lunch',
+    splitMethod: 'equal',
+    splitBetween: [{ user: 'a00000000000000000000001' }],
   });
 });
