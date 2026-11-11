@@ -1,9 +1,5 @@
 import { expenseRecordSchema, storedExpenseMoney, type ExpenseRecord } from './expense-record';
-import {
-  decideExpenseMoneyEdit,
-  keepSavedPayers,
-  readExpenseMoney,
-} from '@splitbook/shared/expense-money-edit';
+import { decideExpenseMoneyEdit, readExpenseMoney } from '@splitbook/shared/expense-money-edit';
 import { expenseDate, expenseDay } from '@splitbook/shared/expense-day';
 import {
   createExpenseSchema,
@@ -17,13 +13,7 @@ import {
 import { isGroupCurrency } from '@splitbook/shared/group-currencies';
 import { resolveTagReference } from '@splitbook/shared/tag-identity';
 import { z } from 'zod';
-import {
-  MoneyValidationError,
-  moneyParticipantId,
-  normalizeExpenseMoney,
-  parseAmountMinor,
-  parseDecimalUnits,
-} from '@splitbook/shared/exact-money';
+import { moneyParticipantId, normalizeExpenseMoney } from '@splitbook/shared/exact-money';
 import { getCurrency } from '@splitbook/shared/currency';
 import {
   expenseMoneyFields,
@@ -31,10 +21,9 @@ import {
   resolveExpenseReview,
   type ExpenseMoneyField,
 } from '@splitbook/shared/expense-review';
-import { amountError as moneyAmountError, calendarDateError } from './field-feedback';
-import { inAmountWords } from '@splitbook/shared/amount-entry';
+import { calendarDateError } from './field-feedback';
+import { readExpenseEntry, type ExpenseEntry } from '@splitbook/shared/expense-entry';
 import { parseGroupResponse } from '@splitbook/shared/group-read';
-import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import { objectId, toMobileGroup } from './dto';
 import { emptyExpenseHistory, type ExpenseHistoryState } from './activity';
 import type { GroupReturnContext, MobileGroup } from './types';
@@ -42,6 +31,11 @@ import { expenseRecoveryWords } from './expense-recovery-words';
 
 // Historical missing identities are local read/delete-recovery keys, never API identities.
 const draftMemberId = z.union([objectId, z.string().regex(/^former-(payer|participant)-\d+$/)]);
+
+export type ExpenseDraft = ExpenseEntry & {
+  original?: ExpenseRecord;
+  review?: ExpenseMoneyField[];
+};
 
 export const expenseDraftSchema = z.object({
   original: expenseRecordSchema.optional(),
@@ -63,8 +57,7 @@ export const expenseDraftSchema = z.object({
    * entry until they choose theirs or the saved one; saving waits for every choice.
    */
   review: z.array(z.enum(expenseMoneyFields)).optional(),
-});
-export type ExpenseDraft = z.infer<typeof expenseDraftSchema>;
+}) satisfies z.ZodType<ExpenseDraft>;
 export interface ExpenseContext {
   group: MobileGroup;
   tags: { id: string; name: string; isArchived: boolean; isDeleted: boolean }[];
@@ -333,38 +326,19 @@ export function parseStoredExpenseDraft(value: unknown, accountId: string, group
   }
   return record;
 }
-/** Adapt text entry to the same exact-money command used by the web ledger. */
-export function expenseMoney(draft: ExpenseDraft) {
-  try {
-    const input = expenseMoneyInput(draft);
-    if (!draft.original) return normalizeExpenseMoney(input);
-    const stored = storedExpenseMoney(draft.original);
-    const kept = draft.multiPayer ? keepSavedPayers(stored, input) : null;
-    return decideExpenseMoneyEdit(stored, kept ?? input).money;
-  } catch (error) {
-    // Part of a yen paid or shared: the amount field's words, as on the web (#755).
-    throw inAmountWords(error, draft.currency);
-  }
+/** The native record supplies saved money; the shared reading owns every typed money field. */
+export function readExpenseDraft(draft: ExpenseDraft) {
+  return readExpenseEntry(
+    draft,
+    draft.original ? { kind: 'edit', saved: storedExpenseMoney(draft.original) } : { kind: 'new' },
+  );
 }
-function expenseMoneyInput(draft: ExpenseDraft) {
-  return {
-    amount: draft.amount,
-    currency: draft.currency,
-    paidBy: draft.multiPayer
-      ? enteredPayers(draft.payers)
-      : [{ user: draft.payerId, amount: draft.amount }],
-    splitMethod: draft.splitMethod,
-    splitBetween: draft.participantIds.map((user) => ({
-      user,
-      ...(draft.splitMethod === 'unequal' || draft.splitMethod === 'exact'
-        ? { amount: draft.splitValues[user] || '0' }
-        : draft.splitMethod === 'percentage'
-          ? { percentage: parseDecimalUnits(draft.splitValues[user] || '0', 2) / 100 }
-          : draft.splitMethod === 'shares'
-            ? { shares: parseDecimalUnits(draft.splitValues[user] || '0', 0) }
-            : {}),
-    })),
-  };
+
+/** Keep callers' throwing contract while all figures and corrections come from the one reading. */
+export function expenseMoney(draft: ExpenseDraft) {
+  const { result } = readExpenseDraft(draft);
+  if (result.kind === 'refused') throw result.error;
+  return result.money;
 }
 /** An edit re-checks current members only when it changes the saved allocation. */
 function changesExpenseMoney(draft: ExpenseDraft, money: ReturnType<typeof expenseMoney>) {
@@ -384,8 +358,11 @@ export function previewExpense(draft: ExpenseDraft): ExpenseEditor['preview'] {
   }
 }
 
-const moneyCode = (error: unknown) => (error instanceof MoneyValidationError ? error.code : '');
-function amountError(draft: ExpenseDraft, context: ExpenseContext | null) {
+function amountError(
+  draft: ExpenseDraft,
+  context: ExpenseContext | null,
+  enteredError: string | undefined,
+) {
   const { currency } = draft;
   const { group } = context ?? {};
   if (!draft.original && group && !isGroupCurrency(group, currency))
@@ -396,7 +373,7 @@ function amountError(draft: ExpenseDraft, context: ExpenseContext | null) {
         expenseRecoveryWords(
           `This draft uses ${currency}, but the Group now uses ${group.defaultCurrency}. Choose Use ${group.defaultCurrency}, then review the amount.`,
         );
-  return moneyAmountError(draft.amount, currency);
+  return enteredError;
 }
 function memberName(draft: ExpenseDraft, id: string) {
   return [...(draft.original?.paidBy ?? []), ...(draft.original?.splitBetween ?? [])].find(
@@ -404,41 +381,16 @@ function memberName(draft: ExpenseDraft, id: string) {
   )?.name;
 }
 /** Payer and split problems stay with their editors; the shared money rules decide validity. */
-function allocationErrors(draft: ExpenseDraft, context: ExpenseContext | null): ExpenseFieldErrors {
-  let money: ReturnType<typeof expenseMoney>;
-  try {
-    money = expenseMoney(draft);
-  } catch (error) {
-    const code = moneyCode(error);
-    const payerIds = draft.multiPayer
-      ? enteredPayers(draft.payers).map((payer) => payer.user)
-      : [draft.payerId];
-    if (code === 'EMPTY_PARTICIPANTS')
-      return payerIds.length
-        ? { split: 'Choose at least one person to share this Expense.' }
-        : { payers: 'Choose who paid.' };
-    const unreadablePayer =
-      draft.multiPayer &&
-      enteredPayers(draft.payers).some((payer) => {
-        try {
-          parseAmountMinor(payer.amount, draft.currency);
-          return false;
-        } catch {
-          return true;
-        }
-      });
-    const payerProblem =
-      code === 'PAYER_TOTAL_MISMATCH' ||
-      code === 'INVALID_PAYER_AMOUNT' ||
-      (code === 'DUPLICATE_PARTICIPANTS' && new Set(payerIds).size !== payerIds.length) ||
-      (code.startsWith('INVALID_MONEY') && unreadablePayer);
-    const message =
-      error instanceof MoneyValidationError
-        ? error.message
-        : 'Review who paid and how this Expense is split.';
-    return payerProblem ? { payers: message } : { split: message };
-  }
-  if (!context || !changesExpenseMoney(draft, money)) return {};
+function allocationErrors(
+  draft: ExpenseDraft,
+  context: ExpenseContext | null,
+  reading: ReturnType<typeof readExpenseDraft>,
+): ExpenseFieldErrors {
+  const { result } = reading;
+  if (result.kind === 'refused')
+    return Object.fromEntries(result.problems.map(({ field, message }) => [field, message]));
+  if (!context || !result.financialEdit) return {};
+  const money = result.money;
   const members = new Set(context.group.members.map((member) => member.user.id));
   const payer = money.paidBy.find((row) => !members.has(String(row.user)));
   if (payer)
@@ -483,7 +435,8 @@ export function validateExpenseDraft(
   context: ExpenseContext | null,
   today: string,
 ): ExpenseFieldErrors {
-  const amount = amountError(draft, context);
+  const reading = readExpenseDraft(draft);
+  const amount = amountError(draft, context, reading.amount.error);
   const found: ExpenseFieldErrors = {
     amount,
     description: updateExpenseSchema.shape.description.safeParse(draft.description).success
@@ -492,7 +445,7 @@ export function validateExpenseDraft(
         ? 'Keep the description to 200 characters or fewer.'
         : 'Add a description, such as Groceries.',
     date: calendarDateError(draft.date, today),
-    ...(amount ? {} : allocationErrors(draft, context)),
+    ...(amount ? {} : allocationErrors(draft, context, reading)),
     tag: expenseTagError(draft, context),
   };
   return Object.fromEntries(

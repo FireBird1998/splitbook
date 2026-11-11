@@ -1,17 +1,9 @@
 import { Pressable, TextInput, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
-import {
-  enteredPayers,
-  giveRest,
-  minorAmountText,
-  payerRemainder,
-  restRecipient,
-  setPayerAmount,
-} from '@splitbook/shared/payer-remainder';
-import type { ExpenseDraft } from '../data/expense-draft';
+import { minorAmountText, setPayerAmount } from '@splitbook/shared/payer-remainder';
+import { readExpenseDraft, type ExpenseDraft } from '../data/expense-draft';
 import { acceptsNumericText } from '../data/field-feedback';
-import { payerEntryError } from '../data/payer-remainder';
 import {
   Badge,
   BottomSheet,
@@ -33,7 +25,7 @@ import { NO_BREAK_SPACE } from '@splitbook/shared/separator';
 /** The Paid by tile's value: who paid, or how many people did. */
 export function paidBySummary(draft: ExpenseDraft, person: (id: string) => string) {
   if (!draft.multiPayer) return person(draft.payerId);
-  const payers = enteredPayers(draft.payers);
+  const payers = readExpenseDraft(draft).payers.entries;
   if (payers.length === 1) return person(payers[0].user);
   return payers.length ? `${payers.length}${NO_BREAK_SPACE}people` : 'Choose who paid';
 }
@@ -77,7 +69,7 @@ export function PayerSheet({
   const edit = (patch: Partial<ExpenseDraft>) => {
     if (!locked) onChange(patch);
   };
-  const remainder = payerRemainder(draft);
+  const remainder = readExpenseDraft(draft).payers;
   const { totalMinor, assignedMinor } = remainder;
   const left = remainder.remainingMinor ?? 0;
   const invalid = Object.keys(remainder.problems).length > 0;
@@ -155,7 +147,7 @@ export function PayerSheet({
     </>
   );
 
-  const entered = enteredPayers(draft.payers).map((payer) => payer.user);
+  const entered = remainder.entries.map((payer) => payer.user);
   const rows = [...new Set([...memberIds, ...entered])];
   const several = (
     <>
@@ -171,7 +163,7 @@ export function PayerSheet({
       </CompactText>
       {rows.map((id) => {
         const entry = draft.payers.find((payer) => payer.user === id)?.amount ?? '';
-        const error = payerEntryError(entry, currency);
+        const error = remainder.errors[id];
         const gone = unavailable(id);
         return (
           <View key={id} style={{ gap: 6 }}>
@@ -237,8 +229,17 @@ export function PayerSheet({
     </>
   );
 
-  const recipient = restRecipient(draft, memberIds);
-  const rest = giveRest(draft, memberIds);
+  // The reading supplies which entries count and what is left. The sheet chooses the first
+  // available person in this Group's order; pressing only fills their field, never sends a save.
+  const recipient =
+    left > 0 && !invalid && remainder.remainingMinor !== null
+      ? memberIds.find((id) => !entered.includes(id))
+      : undefined;
+  const rest = recipient
+    ? {
+        payers: setPayerAmount(draft.payers, recipient, minorAmountText(left, currency)),
+      }
+    : null;
   const remainderText = left > 0 ? ' still to assign' : ' more than the total';
   const status =
     totalMinor === null

@@ -118,7 +118,7 @@ it.each([
   'reads $id without changing the entry and agrees with the displayed shares',
   ({ id, shares, paid }) => {
     const entry = entries.find((entry) => entry.id === id)!;
-    const before = structuredClone(entry);
+    const before = JSON.parse(JSON.stringify(entry));
     const reading = readExpenseEntry(entry, { kind: 'new' });
     expect(entry).toEqual(before);
     expect(reading.result.kind).toBe('ready');
@@ -167,4 +167,31 @@ it('keeps incomplete amount and percentage allocations visible with their remain
     shares: { [alex]: 4000, [sam]: 4000 },
     status: { kind: 'remaining', unit: 'percent', entered: 8000, target: 10000 },
   });
+});
+
+it('gives sheets the counted people and shares without reading typed fields again', () => {
+  const reading = readExpenseEntry(entries.find((entry) => entry.id === 'shares-partly-blank')!, {
+    kind: 'new',
+  });
+  expect(reading.splitSummary).toEqual({ participants: 2, shares: 2 });
+  expect(reading.payers.ids).toEqual([alex]);
+  const several = readExpenseEntry(entries.find((entry) => entry.id === 'payers-zero')!, {
+    kind: 'new',
+  });
+  expect(several.payers.ids).toEqual([alex]);
+});
+
+it.each([
+  ['1.5', 1.5],
+  ['not a number', 0],
+  ['', 0],
+  ['0', 0],
+  ['-1', -1],
+])('keeps the Shares stepper display for an older typed value %s', (value, shown) => {
+  const entry = entries.find((entry) => entry.id === 'shares')!;
+  expect(
+    readExpenseEntry({ ...entry, splitValues: { [alex]: value } }, { kind: 'new' }).shareSteps[
+      alex
+    ],
+  ).toBe(shown);
 });

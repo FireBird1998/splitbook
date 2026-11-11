@@ -1,3 +1,4 @@
+import { readExpenseDraft } from '../data/expense-draft';
 import type { ViewInstance, TextInputInstance, TextStyle, ViewStyle } from 'react-native';
 import {
   createContext,
@@ -65,7 +66,6 @@ import {
 import { outfitWidth } from './compact/outfit-metrics';
 import { useTheme } from './theme';
 import { SEPARATOR } from '@splitbook/shared/separator';
-import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import { amountError } from '../data/field-feedback';
 
 type Allocation = ReturnType<typeof expenseMoney>;
@@ -554,8 +554,8 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
   const paid = new Map<string, number | null>(
     allocation
       ? allocation.paidBy.map((row) => [String(row.user), row.amountMinor])
-      : (draft.multiPayer ? enteredPayers(draft.payers).map(({ user }) => user) : [draft.payerId])
-          .filter(Boolean)
+      : readExpenseDraft(draft)
+          .payers.ids.filter(Boolean)
           .map((user) => [user, null]),
   );
   const shares = new Map<string, number | null>(

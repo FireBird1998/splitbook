@@ -12,6 +12,7 @@ import {
   type SplitChoice,
   type SplitEntryProblem,
   type SplitProblem,
+  type SplitLeftover,
 } from './expense-split';
 import { amountExample, amountError, inAmountWords } from './amount-entry';
 import { getCurrencyPrecision } from './currency';
@@ -96,6 +97,9 @@ export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpo
   const payers = {
     ...payerRemainder(entry),
     entries: enteredPayers(entry.payers),
+    ids: entry.multiPayer
+      ? enteredPayers(entry.payers).map((payer) => payer.user)
+      : [entry.payerId],
     errors: payerErrors,
   };
   const amount = { minor: payers.totalMinor, error: amountError(entry.amount, entry.currency) };
@@ -122,7 +126,22 @@ export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpo
       ],
     };
   }
-  return { amount, split, payers, result };
+  const splitSummary = {
+    participants: entry.participantIds.length,
+    shares:
+      split.status.kind === 'adds-up' && entry.splitMethod === 'shares'
+        ? entry.participantIds.reduce((sum, id) => sum + Number(entry.splitValues[id] || 0), 0)
+        : null,
+  };
+  // An older stored share can be fractional or unreadable. Its stepper keeps today's display
+  // (the number, or 0 for unreadable text); the correction above still refuses an invalid save.
+  const shareSteps = Object.fromEntries(
+    entry.participantIds.map((id) => {
+      const value = Number(entry.splitValues[id] || 0);
+      return [id, Number.isFinite(value) ? value : 0];
+    }),
+  );
+  return { amount, split, splitSummary, shareSteps, payers, result };
 }
 
 function allocationProblem(entry: ExpenseEntry, error: unknown) {
@@ -207,4 +226,16 @@ export function payerEntryError(amount: string, currency: string): string | unde
   if (problem === 'negative') return 'Enter an amount of 0 or more.';
   // Unreadable text, the wrong precision and amounts over the limit read as on the Amount field.
   return amountError(amount, currency);
+}
+
+/** "The leftover ₹0.01 goes to Sam Chen so the total is exact." */
+export function roundingNote(
+  leftover: SplitLeftover,
+  name: (id: string) => string,
+  money: (minor: number) => string,
+) {
+  const names = leftover.users.map(name);
+  const people =
+    names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+  return `The leftover ${money(leftover.amountMinor)} goes to ${people} so the total is exact.`;
 }
