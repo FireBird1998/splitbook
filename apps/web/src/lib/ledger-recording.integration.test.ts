@@ -304,5 +304,4 @@ describe('ledger recording', () => {
     expect(String(retry.records[0]._id)).toBe(String(first.records[0]._id));
     expect(await Expense.countDocuments()).toBe(1);
   });
-
 });

@@ -46,6 +46,18 @@ export interface LedgerRecordDescription<T> {
   currencies?: readonly CurrencyUse[];
   build: (group: IGroupDocument) => Promise<NewLedgerRecord<T>>;
 }
+interface SubmissionRetry {
+  key: string;
+  receipt?: 'ordered-records';
+  atCommit?: true;
+  raceCommand?: 'original';
+  legacyTagAlias?: string;
+}
+interface TemplateMonthRetry {
+  template: Types.ObjectId;
+  period: string;
+  lookup?: 'on-duplicate';
+}
 export interface LedgerRecording<
   T extends LedgerRecord,
   Command extends Record<string, unknown> = Record<string, unknown>,
@@ -55,20 +67,20 @@ export interface LedgerRecording<
   model: Model<T>;
   transactions: 'allow-standalone' | { required: Refusal };
   compatibility?: {
-    membership: 'before-retry' | 'before-retry-and-at-commit' | 'actor-before-retry';
+    membership:
+      | 'before-retry'
+      | 'before-retry-and-at-commit'
+      | 'actor-before-retry'
+      | 'template-validated';
     missingGroup?: 'fault';
     standaloneArchive?: 'fence-only';
+    archive?: 'before-generation';
   };
-  retry?: {
-    key: string;
-    receipt?: 'ordered-records';
-    atCommit?: true;
-    raceCommand?: 'original';
-    legacyTagAlias?: string;
-  };
+  retry?: SubmissionRetry | TemplateMonthRetry;
   command: (context: { group?: IGroupDocument; receipt?: HydratedDocument<T> }) => Command;
   currencies: readonly CurrencyUse[];
-  checkPeople: (members: Set<string>) => void;
+  currenciesAt?: 'before-fence';
+  checkPeople?: (members: Set<string>) => void;
   /** The batch reads presentation data after its commit-time replay; other writers prepare before the fence. */
   prepareAt?: 'commit';
   prepareResponseRecord?: (
@@ -89,6 +101,8 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
   description: LedgerRecording<T, Command>,
 ) {
   const { groupId, actorId, model, retry } = description;
+  const submission = retry && 'key' in retry ? retry : undefined;
+  const month = retry && 'template' in retry ? retry : undefined;
   await connectDB();
   await ensureLedgerWriteIndexes();
   const source = model.collection.collectionName;
@@ -103,11 +117,14 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
   const checkMembers = (group: IGroupDocument, includePeople = true) => {
     const members = new Set(group.members.map((member) => String(member.user)));
     if (!members.has(actorId)) throw new Refusal('FORBIDDEN');
-    if (includePeople) description.checkPeople(members);
+    if (includePeople) description.checkPeople?.(members);
   };
   let admittedGroup: IGroupDocument | undefined;
   // Admission is separate from commit-time checks: an Expense replay may name a former member.
-  if (description.compatibility?.membership) {
+  if (
+    description.compatibility?.membership &&
+    description.compatibility.membership !== 'template-validated'
+  ) {
     admittedGroup = (await Group.findById(groupId)) ?? undefined;
     if (!admittedGroup) {
       if (description.compatibility?.missingGroup === 'fault') throw new Error('Group not found');
@@ -115,12 +132,17 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
     }
     checkMembers(admittedGroup, description.compatibility.membership !== 'actor-before-retry');
   }
-  const lookup = async () =>
-    retry
-      ? model
-          .findOne({ group: groupId, createdBy: actorId, 'creationRequest.key': retry.key })
-          .select('+creationRequest +pendingActivity +batchSettlementIds')
-      : null;
+  const lookup = async () => {
+    if (month)
+      return model
+        .findOne({ recurringExpense: month.template, period: month.period })
+        .select('+pendingActivity');
+    if (submission)
+      return model
+        .findOne({ group: groupId, createdBy: actorId, 'creationRequest.key': submission.key })
+        .select('+creationRequest +pendingActivity +batchSettlementIds');
+    return null;
+  };
   const normalize = (receipt: HydratedDocument<T> | null) =>
     description.command({
       group: admittedGroup,
@@ -128,8 +150,9 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
     });
   const confirm = async (first: HydratedDocument<T> | null, command: Command) => {
     if (!first) return null;
+    if (month) return [first];
     assertCreateReplay(first.creationRequest!, command);
-    if (!retry?.receipt) return [first];
+    if (!submission?.receipt) return [first];
     if (!first.batchSettlementIds?.length) throw new Error('IDEMPOTENCY_CONFLICT');
     const saved = await model
       .find({ group: groupId, _id: { $in: first.batchSettlementIds } })
@@ -150,7 +173,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
     }
     return { records: rows, created: outcome === 'created' };
   };
-  const first = await lookup();
+  const first = month?.lookup === 'on-duplicate' ? null : await lookup();
   const command = normalize(first);
   const existing = await confirm(first, command);
   if (existing) return publish(existing, 'replayed');
@@ -161,6 +184,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
     description.compatibility?.membership !== 'before-retry-and-at-commit'
   )
     throw new Refusal('GROUP_ARCHIVED');
+  if (description.currenciesAt === 'before-fence') await lockCurrencies(description.currencies);
   const prepared =
     description.prepareAt === 'commit'
       ? undefined
@@ -172,10 +196,11 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
       async (session) => {
         if (description.transactions !== 'allow-standalone' && !session)
           throw description.transactions.required;
-        await lockCurrencies(description.currencies);
+        if (description.currenciesAt !== 'before-fence')
+          await lockCurrencies(description.currencies);
         const group = await Group.findById(groupId);
         if (!group) throw new Refusal('FORBIDDEN');
-        if (group.isArchived) {
+        if (group.isArchived && description.compatibility?.archive !== 'before-generation') {
           // Standalone payments historically rely on the fence's earlier archive check.
           // A real independent archive can commit after it, while currencies are being locked.
           const legacyStandalone =
@@ -183,8 +208,12 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
             !(await supportsGroupTransactions());
           if (!legacyStandalone) throw new Refusal('GROUP_ARCHIVED');
         }
-        if (description.compatibility?.membership !== 'before-retry') checkMembers(group);
-        if (retry?.atCommit) {
+        if (
+          description.compatibility?.membership !== 'before-retry' &&
+          description.compatibility?.membership !== 'template-validated'
+        )
+          checkMembers(group);
+        if (submission?.atCommit) {
           const receipt = await lookup();
           const concurrent = receipt ? await confirm(receipt, normalize(receipt)) : null;
           if (concurrent) return { records: concurrent, outcome: 'replayed' as const };
@@ -220,26 +249,30 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
               group: groupId,
               createdBy: actorId,
               creationRequest:
-                index === 0 && retry
-                  ? createRequestMetadata(retry.key, command, retry.legacyTagAlias)
+                index === 0 && submission
+                  ? createRequestMetadata(submission.key, command, submission.legacyTagAlias)
                   : undefined,
               batchSettlementIds:
-                index === 0 && retry?.receipt === 'ordered-records'
+                index === 0 && submission?.receipt === 'ordered-records'
                   ? descriptions.map((entry) => entry.id)
                   : undefined,
+              ...(month ? { recurringExpense: month.template, period: month.period } : {}),
               pendingActivity: [event],
             }),
           );
         }
         return { records: result, outcome: 'created' as const };
       },
-      { ledger: true },
+      { ledger: description.compatibility?.archive !== 'before-generation' },
     );
   } catch (error) {
     if (retry && (error as { code?: number }).code === 11000) {
       const receipt = await lookup();
       const raced = receipt
-        ? await confirm(receipt, retry.raceCommand === 'original' ? command : normalize(receipt))
+        ? await confirm(
+            receipt,
+            submission?.raceCommand === 'original' ? command : normalize(receipt),
+          )
         : null;
       if (raced) return publish(raced, 'raced');
     }
