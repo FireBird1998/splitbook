@@ -1,8 +1,11 @@
+import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import TextField from '@mui/material/TextField';
+import ExpenseFields from '@/components/expenses/ExpenseFields';
 import { entryForExpenseDraft, fieldDraftEntryPolicy } from '@splitbook/shared/expense-entry-draft';
-import { createElement } from 'react';
+import { createElement, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider } from '@mui/material/styles';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
@@ -92,4 +95,28 @@ describe('the payer and split pickers in the web To review editor (#591)', () =>
   it('leave an item without a payer without one: the viewer is not filled in', () => {
     expect(paidBy(render(dinner))).toEqual({ shows: '', holds: '' });
   });
+});
+
+it('keeps a cleared named Tag unselected while the changed entry is being kept', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {addEventListener() {}, removeEventListener() {}});
+  vi.stubGlobal('document', {querySelector: () => null, getElementById: () => null});
+  const original = {description: 'Lunch', amount: 100, tag: 'Food'};
+  let renderer: ReactTestRenderer | undefined;
+  function Form() {
+    const [entry, setEntry] = useState(() => entryForExpenseDraft(original, fieldDraftEntryPolicy));
+    const [changed, setChanged] = useState(false);
+    return createElement(ReviewExpenseFields, {entry, original, changes: {tagId: changed},
+      context: {currency: 'INR', members: [{id: viewer, name: 'Alex'}], tags: []},
+      onChange: (patch) => {setEntry((prior) => ({...prior, ...patch})); setChanged(true);},
+    });
+  }
+  try {
+    await act(async () => {renderer = create(createElement(ThemeProvider, {theme: createAppTheme('light')}, createElement(Form)));});
+    await act(async () => renderer!.root.findByType(ExpenseFields).props.editEntry({tagId: ''}));
+    expect(renderer!.root.findAllByType(TextField).find((field) => field.props.label === 'Tag')!.props.value).toBe('');
+  } finally {
+    if (renderer) await act(async () => renderer!.unmount());
+    vi.unstubAllGlobals();
+  }
 });

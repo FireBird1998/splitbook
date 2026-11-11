@@ -97,3 +97,17 @@ it('keeps an unreadable saved amount visible for correction instead of throwing 
     entryForExpenseDraft({ amount: 0 }, { ...expenseEntryPolicy, repeatedPeople: 'merge' }).amount,
   ).toBe('0');
 });
+
+it('records the displayed Equal choice only when a sheet edits an incomplete split', () => {
+  const from = {description: 'Lunch'};
+  const entry = {...entryForExpenseDraft(from), participantIds: [alex]};
+  expect(draftForExpenseEntry(entry, expenseEntryPolicy, {from, changed: {participantIds: true}})).toEqual({
+    description: 'Lunch', splitMethod: 'equal', splitBetween: [{user: alex}],
+  });
+});
+
+it('keeps existing row positions when a field unticks and reticks a participant', () => {
+  const from = {splitMethod: 'equal' as const, splitBetween: [{user: alex}, {user: sam}]};
+  const entry = {...entryForExpenseDraft(from), participantIds: [sam, alex]};
+  expect(draftForExpenseEntry(entry, {...expenseEntryPolicy, splitEdit: 'patch'}, {from, changed: {participantIds: true}}).splitBetween).toEqual([{user: alex}, {user: sam}]);
+});
