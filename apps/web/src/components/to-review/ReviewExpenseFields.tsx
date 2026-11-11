@@ -1,10 +1,6 @@
 'use client';
 import { useState } from 'react';
-import {
-  readExpenseEntry,
-  formSummaryPolicy,
-  type IncompleteExpenseEntry,
-} from '@splitbook/shared/expense-entry';
+import { readExpenseEntry, type IncompleteExpenseEntry } from '@splitbook/shared/expense-entry';
 import { type ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
 import ExpenseFields from '@/components/expenses/ExpenseFields';
 import type { DraftContext } from '@splitbook/shared/expense-entry-draft';
@@ -74,7 +70,7 @@ export default function ReviewExpenseFields({
   for (const id of [...entry.payers.map((row) => row.user), ...entry.participantIds])
     if (!members.some((member) => member.id === id)) members.push({ id, name: 'Former member' });
   // Completeness and Save remain with the review flow; the same entry explains its split.
-  const reading = readExpenseEntry(shown, { kind: 'new' }, formSummaryPolicy);
+  const reading = readExpenseEntry(shown, { kind: 'new' });
   return (
     <ExpenseFields
       review

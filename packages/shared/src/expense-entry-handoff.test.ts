@@ -69,3 +69,30 @@ it('hands Duplicate to the form as one active split map with its historical weig
     splitValues: { [alex]: '2', [sam]: '1' },
   });
 });
+
+it('reads an existing Expense with its historical zero payer without rewriting it (#1117)', async () => {
+  const { entries, savedFor } = await import('./test-support/expense-entry-cases');
+  const row = entries.find((row) => row.id === 'saved-zero-payer-unchanged')!;
+  const saved = savedFor(row);
+  const before = JSON.stringify(saved);
+  const draft = ExpenseDraft.open(context, saved);
+  expect(draft.reading().result).toMatchObject({
+    kind: 'ready',
+    financialEdit: false,
+    money: {
+      paidBy: [
+        { user: alex, amountMinor: 10000 },
+        { user: sam, amountMinor: 0 },
+      ],
+    },
+  });
+  expect(JSON.stringify(saved)).toBe(before);
+  expect(
+    JSON.parse(
+      draft.change({ notes: 'Checked' }).prepare([tagId], 'historical-readback').submission!.body,
+    ).paidBy,
+  ).toEqual([
+    { user: alex, amount: 100, amountMinor: 10000 },
+    { user: sam, amount: 0, amountMinor: 0 },
+  ]);
+});

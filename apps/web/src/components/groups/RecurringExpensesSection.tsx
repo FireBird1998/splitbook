@@ -47,11 +47,7 @@ import {
 } from '@/components/expenses/expense-form-helpers';
 import type { GroupReadMember, GroupReadTag } from '@splitbook/shared/group-read';
 import type { IRecurringExpense, SplitMethod } from '@splitbook/shared/types';
-import {
-  readExpenseEntry,
-  recurringEntryPolicy,
-  type ExpenseEntry,
-} from '@splitbook/shared/expense-entry';
+import { readExpenseEntry, roundingNote, type ExpenseEntry } from '@splitbook/shared/expense-entry';
 import { formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
 import { assertStoredExpenseMoney, toMajorAmount } from '@splitbook/shared/exact-money';
 import { apiFetch } from '@/lib/utils/api-fetch';
@@ -286,7 +282,6 @@ export default function RecurringExpensesSection({
   const reading = readExpenseEntry(
     currentEntry,
     editing ? { kind: 'edit', saved: editing } : { kind: 'new' },
-    recurringEntryPolicy,
   );
   const validateForm = (): string | null => {
     if (!entry.description.trim()) return 'Description is required';
@@ -303,6 +298,14 @@ export default function RecurringExpensesSection({
     minor === undefined ? [] : [{ user, amount: toMajorAmount(minor, defaultCurrency) }],
   );
   const previewError = reading.result.kind === 'refused' ? reading.result.problems[0].message : '';
+  const leftover = reading.split.status.kind === 'adds-up' ? reading.split.status.leftover : null;
+  const note = leftover
+    ? roundingNote(
+        leftover,
+        (id) => (id === viewerId ? 'you' : memberName(id)),
+        (minor) => formatCurrency(toMajorAmount(minor, defaultCurrency), defaultCurrency),
+      )
+    : null;
 
   const reloadLatest = async (target: 'form' | 'action') => {
     const id = target === 'form' ? editing?._id : selected?._id;
@@ -863,6 +866,11 @@ export default function RecurringExpensesSection({
                 <Box role="status" sx={{ color: 'status.negative' }}>
                   {previewError}
                 </Box>
+              )}
+              {note && (
+                <Typography role="status" variant="caption" component="p" color="text.secondary">
+                  {note}
+                </Typography>
               )}
               {splitPreview.length > 0 && (
                 <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1 }}>

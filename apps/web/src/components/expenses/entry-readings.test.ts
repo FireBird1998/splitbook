@@ -81,7 +81,7 @@ function renderFields(draft: ExpenseDraft, edit: boolean) {
       return row ? formatCurrency(row.amount, draft.entry.currency) : '—';
     })(),
   }));
-  return {
+  const shown = {
     preview,
     perPerson,
     advancedInitiallyOpen: edit,
@@ -104,7 +104,10 @@ function renderFields(draft: ExpenseDraft, edit: boolean) {
         ),
       ),
     ),
-    roundingNote: null,
+  };
+  return {
+    ...shown,
+    roundingNote: shown.formContents.match(/The leftover .*? so the total is exact\./)?.[0] ?? null,
   };
 }
 for (const edit of [false, true]) {
@@ -208,7 +211,8 @@ it('records the web To review editor and the Draft it reads (#1111)', async () =
           value: n.props.value ?? '',
           type: n.props.type,
         })),
-        roundingNote: null,
+        roundingNote:
+          words(renderer!.root).match(/The leftover .*? so the total is exact\./)?.[0] ?? null,
       },
     };
     await act(async () => renderer!.unmount());

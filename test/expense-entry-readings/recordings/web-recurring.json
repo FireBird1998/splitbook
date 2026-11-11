@@ -350,9 +350,9 @@
         { "label": "Starts on", "value": "2026-11-10" },
         { "label": "Ends on (optional)", "value": "" }
       ],
-      "before": "Recurring Expenses that log themselves every month — rent, WiFi, utilities. Generated expenses are ordinary expenses: edit or delete any month without touching the template. Add No recurring expenses yet. Add rent, WiFi, or utilities. Add recurring expense Description Description Amount INR Amount Up to 2 decimal places Category 🍕 Food & Drink Category Tag Shared Tag Paid by Alex Rivera Paid by Split method Shares Split method Split between Alex Rivera Shares Shares Sam Chen Shares Shares Priya Shah You: ₹66.67 · Sam Chen: ₹33.33 Day of month Day of month Short months use their last day — e.g. 31 → Feb 28 Starts on Starts on Ends on (optional) Ends on (optional) Cancel Add recurring expense",
+      "before": "Recurring Expenses that log themselves every month — rent, WiFi, utilities. Generated expenses are ordinary expenses: edit or delete any month without touching the template. Add No recurring expenses yet. Add rent, WiFi, or utilities. Add recurring expense Description Description Amount INR Amount Up to 2 decimal places Category 🍕 Food & Drink Category Tag Shared Tag Paid by Alex Rivera Paid by Split method Shares Split method Split between Alex Rivera Shares Shares Sam Chen Shares Shares Priya Shah The leftover ₹0.01 goes to you so the total is exact. You: ₹66.67 · Sam Chen: ₹33.33 Day of month Day of month Short months use their last day — e.g. 31 → Feb 28 Starts on Starts on Ends on (optional) Ends on (optional) Cancel Add recurring expense",
       "errors": [],
-      "roundingNote": null
+      "roundingNote": "The leftover ₹0.01 goes to you so the total is exact."
     },
     "edit": {
       "result": {
@@ -389,9 +389,9 @@
           { "label": "Starts on", "value": "2026-11-10" },
           { "label": "Ends on (optional)", "value": "" }
         ],
-        "before": "Recurring Expenses that log themselves every month — rent, WiFi, utilities. Generated expenses are ordinary expenses: edit or delete any month without touching the template. Add Groceries ₹100.00 Shared Day 1 monthly · You pay · split equally 2 ways · since Today Edit recurring expense Description Description Amount INR Amount Up to 2 decimal places Category 🍕 Food & Drink Category Tag Shared Tag Paid by Alex Rivera Paid by Split method Shares Split method Split between Alex Rivera Shares Shares Sam Chen Shares Shares Priya Shah You: ₹66.67 · Sam Chen: ₹33.33 Day of month Day of month Short months use their last day — e.g. 31 → Feb 28 Starts on Starts on Ends on (optional) Ends on (optional) Cancel Save changes",
+        "before": "Recurring Expenses that log themselves every month — rent, WiFi, utilities. Generated expenses are ordinary expenses: edit or delete any month without touching the template. Add Groceries ₹100.00 Shared Day 1 monthly · You pay · split equally 2 ways · since Today Edit recurring expense Description Description Amount INR Amount Up to 2 decimal places Category 🍕 Food & Drink Category Tag Shared Tag Paid by Alex Rivera Paid by Split method Shares Split method Split between Alex Rivera Shares Shares Sam Chen Shares Shares Priya Shah The leftover ₹0.01 goes to you so the total is exact. You: ₹66.67 · Sam Chen: ₹33.33 Day of month Day of month Short months use their last day — e.g. 31 → Feb 28 Starts on Starts on Ends on (optional) Ends on (optional) Cancel Save changes",
         "errors": [],
-        "roundingNote": null
+        "roundingNote": "The leftover ₹0.01 goes to you so the total is exact."
       }
     }
   },
@@ -441,9 +441,9 @@
         { "label": "Starts on", "value": "2026-11-10" },
         { "label": "Ends on (optional)", "value": "" }
       ],
-      "before": "Recurring Expenses that log themselves every month — rent, WiFi, utilities. Generated expenses are ordinary expenses: edit or delete any month without touching the template. Add No recurring expenses yet. Add rent, WiFi, or utilities. Add recurring expense Description Description Amount INR Amount Up to 2 decimal places Category 🍕 Food & Drink Category Tag Shared Tag Paid by Alex Rivera Paid by Split method Split equally Split method Split between Alex Rivera Sam Chen Priya Shah You: ₹33.34 · Sam Chen: ₹33.33 · Priya Shah: ₹33.33 Day of month Day of month Short months use their last day — e.g. 31 → Feb 28 Starts on Starts on Ends on (optional) Ends on (optional) Cancel Add recurring expense",
+      "before": "Recurring Expenses that log themselves every month — rent, WiFi, utilities. Generated expenses are ordinary expenses: edit or delete any month without touching the template. Add No recurring expenses yet. Add rent, WiFi, or utilities. Add recurring expense Description Description Amount INR Amount Up to 2 decimal places Category 🍕 Food & Drink Category Tag Shared Tag Paid by Alex Rivera Paid by Split method Split equally Split method Split between Alex Rivera Sam Chen Priya Shah The leftover ₹0.01 goes to you so the total is exact. You: ₹33.34 · Sam Chen: ₹33.33 · Priya Shah: ₹33.33 Day of month Day of month Short months use their last day — e.g. 31 → Feb 28 Starts on Starts on Ends on (optional) Ends on (optional) Cancel Add recurring expense",
       "errors": [],
-      "roundingNote": null
+      "roundingNote": "The leftover ₹0.01 goes to you so the total is exact."
     },
     "edit": {
       "result": {
@@ -479,9 +479,9 @@
           { "label": "Starts on", "value": "2026-11-10" },
           { "label": "Ends on (optional)", "value": "" }
         ],
-        "before": "Recurring Expenses that log themselves every month — rent, WiFi, utilities. Generated expenses are ordinary expenses: edit or delete any month without touching the template. Add Groceries ₹100.00 Shared Day 1 monthly · You pay · split equally 2 ways · since Today Edit recurring expense Description Description Amount INR Amount Up to 2 decimal places Category 🍕 Food & Drink Category Tag Shared Tag Paid by Alex Rivera Paid by Split method Split equally Split method Split between Alex Rivera Sam Chen Priya Shah You: ₹33.34 · Sam Chen: ₹33.33 · Priya Shah: ₹33.33 Day of month Day of month Short months use their last day — e.g. 31 → Feb 28 Starts on Starts on Ends on (optional) Ends on (optional) Cancel Save changes",
+        "before": "Recurring Expenses that log themselves every month — rent, WiFi, utilities. Generated expenses are ordinary expenses: edit or delete any month without touching the template. Add Groceries ₹100.00 Shared Day 1 monthly · You pay · split equally 2 ways · since Today Edit recurring expense Description Description Amount INR Amount Up to 2 decimal places Category 🍕 Food & Drink Category Tag Shared Tag Paid by Alex Rivera Paid by Split method Split equally Split method Split between Alex Rivera Sam Chen Priya Shah The leftover ₹0.01 goes to you so the total is exact. You: ₹33.34 · Sam Chen: ₹33.33 · Priya Shah: ₹33.33 Day of month Day of month Short months use their last day — e.g. 31 → Feb 28 Starts on Starts on Ends on (optional) Ends on (optional) Cancel Save changes",
         "errors": [],
-        "roundingNote": null
+        "roundingNote": "The leftover ₹0.01 goes to you so the total is exact."
       }
     }
   },

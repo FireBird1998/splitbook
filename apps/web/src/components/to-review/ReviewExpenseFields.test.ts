@@ -172,3 +172,17 @@ it('keeps a complete split visible while Who paid needs correction (#1117 decisi
     ).match(/₹50\.00/g),
   ).toHaveLength(2);
 });
+
+it('shows the leftover-cent note while reviewing (#1117 decision 9)', () => {
+  expect(
+    text(
+      render({
+        amount: 0.01,
+        currency: 'INR',
+        paidBy: [{ user: viewer, amount: 0.01 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: viewer }, { user: sam }],
+      }),
+    ),
+  ).toContain('The leftover ₹0.01 goes to you so the total is exact.');
+});

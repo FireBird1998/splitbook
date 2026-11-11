@@ -1,10 +1,10 @@
 import { expect, it } from 'vitest';
-import { readExpenseEntry, formSummaryPolicy } from './expense-entry';
+import { readExpenseEntry } from './expense-entry';
 import { entries, savedFor, sam } from './test-support/expense-entry-cases';
 
 it('counts a blank share as zero both on save and in its displayed share count', () => {
   const entry = entries.find((entry) => entry.id === 'shares-partly-blank')!;
-  const reading = readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy);
+  const reading = readExpenseEntry(entry, { kind: 'new' });
   expect(reading.result).toMatchObject({
     kind: 'ready',
     money: { splitBetween: [{ amountMinor: 10000 }, { amountMinor: 0 }] },
@@ -15,45 +15,45 @@ it('counts a blank share as zero both on save and in its displayed share count',
 
 it('keeps complete-form refusals and numeric weights while withholding partial allocations and rounding notes', () => {
   const fractional = entries.find((entry) => entry.id === 'shares-fractional')!;
-  expect(readExpenseEntry(fractional, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+  expect(readExpenseEntry(fractional, { kind: 'new' }).result).toMatchObject({
     kind: 'refused',
     error: { message: 'Use a whole number of shares.' },
   });
   const blank = entries.find((entry) => entry.id === 'shares-all-blank')!;
-  expect(readExpenseEntry(blank, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+  expect(readExpenseEntry(blank, { kind: 'new' }).result).toMatchObject({
     kind: 'refused',
     problems: [{ field: 'split', message: 'Give at least one person a share.' }],
   });
   const partial = entries.find((entry) => entry.id === 'amounts-not-total')!;
-  expect(readExpenseEntry(partial, { kind: 'new' }, formSummaryPolicy).split.shares).toEqual(
+  expect(readExpenseEntry(partial, { kind: 'new' }).split.shares).toEqual(
     Object.fromEntries(partial.participantIds.map((id) => [id, 4000])),
   );
   const rounded = entries.find((entry) => entry.id === 'leftover-cent')!;
-  expect(readExpenseEntry(rounded, { kind: 'new' }, formSummaryPolicy).split.status).toEqual({
+  expect(readExpenseEntry(rounded, { kind: 'new' }).split.status).toEqual({
     kind: 'adds-up',
-    leftover: null,
+    leftover: { amountMinor: 1, users: [rounded.payerId] },
   });
 });
 
 it('drops unpaid rows and keeps saved zero rows only until money changes', () => {
   const zero = entries.find((entry) => entry.id === 'payers-zero')!;
-  expect(readExpenseEntry(zero, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+  expect(readExpenseEntry(zero, { kind: 'new' }).result).toMatchObject({
     kind: 'ready',
     money: { paidBy: [{ amountMinor: 10000 }] },
   });
   const blank = entries.find((entry) => entry.id === 'payers-partly-blank')!;
-  expect(readExpenseEntry(blank, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+  expect(readExpenseEntry(blank, { kind: 'new' }).result).toMatchObject({
     kind: 'ready',
   });
   const changed = entries.find((entry) => entry.id === 'saved-zero-payer-money-change')!;
   expect(
-    readExpenseEntry(changed, { kind: 'edit', saved: savedFor(changed) }, formSummaryPolicy).result,
+    readExpenseEntry(changed, { kind: 'edit', saved: savedFor(changed) }).result,
   ).toMatchObject({
     kind: 'ready',
     money: { paidBy: [{ amountMinor: 12000 }] },
   });
   const single = entries.find((entry) => entry.id === 'single-payer-field-differs')!;
-  expect(readExpenseEntry(single, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+  expect(readExpenseEntry(single, { kind: 'new' }).result).toMatchObject({
     kind: 'ready',
     money: { paidBy: [{ user: single.payerId }] },
   });
@@ -65,7 +65,6 @@ it('retains an existing zero payer while no money value changes', () => {
     readExpenseEntry(
       { ...original, payers: original.payers.slice(0, 1) },
       { kind: 'edit', saved: savedFor(original) },
-      formSummaryPolicy,
     ).result,
   ).toMatchObject({
     kind: 'ready',
@@ -91,11 +90,7 @@ it.each([
   ['unticked-typed-value', [10000], 1],
   ['single-payer-field-differs', [5000, 5000], 1],
 ] as const)('keeps the complete-form figures for %s', (id, shares, payerCount) => {
-  const { result } = readExpenseEntry(
-    entries.find((entry) => entry.id === id)!,
-    { kind: 'new' },
-    formSummaryPolicy,
-  );
+  const { result } = readExpenseEntry(entries.find((entry) => entry.id === id)!, { kind: 'new' });
   expect(result.kind).toBe('ready');
   if (result.kind !== 'ready') throw new Error('Expected accepted figures');
   expect(result.money.splitBetween.map((row) => row.amountMinor)).toEqual(shares);
@@ -116,11 +111,7 @@ it.each([
   ['unreadable-share', 'Use a whole number of shares.', 'split'],
   ['no-participants', 'Choose at least one person to share this Expense.', 'split'],
 ])('explains %s with the shared client correction', (id, message, field) => {
-  const reading = readExpenseEntry(
-    entries.find((row) => row.id === id)!,
-    { kind: 'new' },
-    formSummaryPolicy,
-  );
+  const reading = readExpenseEntry(entries.find((row) => row.id === id)!, { kind: 'new' });
   expect(reading.result).toMatchObject({
     kind: 'refused',
     error: { message },
@@ -143,7 +134,7 @@ it('keeps an empty unknown-currency preview as a refusal instead of throwing', a
 
 it('reads one payer from the payer field for the web command (#1117 decision 7)', () => {
   const entry = entries.find((row) => row.id === 'single-payer-field-differs')!;
-  expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+  expect(readExpenseEntry(entry, { kind: 'new' }).result).toMatchObject({
     kind: 'ready',
     money: { paidBy: [{ user: sam, amountMinor: 10000 }] },
   });
@@ -151,7 +142,7 @@ it('reads one payer from the payer field for the web command (#1117 decision 7)'
 
 it('saves a blank share as zero on the complete form (#1117 decision 1)', () => {
   const entry = entries.find((row) => row.id === 'shares-partly-blank')!;
-  expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+  expect(readExpenseEntry(entry, { kind: 'new' }).result).toMatchObject({
     kind: 'ready',
     money: { splitBetween: [{ amountMinor: 10000 }, { amountMinor: 0 }] },
   });
@@ -161,23 +152,23 @@ it.each(['payers-zero', 'payers-partly-blank'])(
   'leaves an unpaid row out of the web command for %s (#1117 decision 2)',
   (id) => {
     const entry = entries.find((row) => row.id === id)!;
-    expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+    expect(readExpenseEntry(entry, { kind: 'new' }).result).toMatchObject({
       kind: 'ready',
       money: { paidBy: [{ user: entry.payerId, amountMinor: 10000 }] },
     });
-    const result = readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).result;
+    const result = readExpenseEntry(entry, { kind: 'new' }).result;
     if (result.kind === 'ready') expect(result.money.paidBy).toHaveLength(1);
   },
 );
 
 it('does not show a whole-share total by truncating a fractional box (#1117 decision 5)', () => {
   const entry = entries.find((row) => row.id === 'shares-fractional')!;
-  expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).fields.sharesTotal).toBeNaN();
+  expect(readExpenseEntry(entry, { kind: 'new' }).fields.sharesTotal).toBeNaN();
 });
 
 it('uses the Split sheet’s no-shares correction for the complete form (#1117 decision 6)', () => {
   const row = entries.find((row) => row.id === 'shares-all-blank')!;
-  expect(readExpenseEntry(row, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+  expect(readExpenseEntry(row, { kind: 'new' }).result).toMatchObject({
     kind: 'refused',
     problems: [{ field: 'split', message: 'Give at least one person a share.' }],
     error: { message: 'Give at least one person a share.' },
@@ -190,7 +181,15 @@ it('keeps each split share visible while payer amounts need correcting (#1117 de
     multiPayer: true,
     payers: [{ user: entries[0].payerId, amount: '40' }],
   };
-  expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).split.shares).toEqual(
+  expect(readExpenseEntry(entry, { kind: 'new' }).split.shares).toEqual(
     Object.fromEntries(entry.participantIds.map((id) => [id, 5000])),
   );
+});
+
+it('keeps the leftover-cent explanation in the web reading (#1117 decision 9)', () => {
+  const row = entries.find((row) => row.id === 'leftover-cent')!;
+  expect(readExpenseEntry(row, { kind: 'new' }).split.status).toMatchObject({
+    kind: 'adds-up',
+    leftover: { amountMinor: 1 },
+  });
 });

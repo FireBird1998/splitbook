@@ -253,7 +253,13 @@ async function read(
     result: sent
       ? { kind: 'command', value: sent }
       : { kind: 'refusal', issues: errors.map((message) => ({ field: '', message })) },
-    shown: { methodOffered: method, fields, before, errors, roundingNote: null },
+    shown: {
+      methodOffered: method,
+      fields,
+      before,
+      errors,
+      roundingNote: before.match(/The leftover .*? so the total is exact\./)?.[0] ?? null,
+    },
   };
   expect(sent !== undefined || errors.length > 0, row.id).toBe(true);
   await act(async () => renderer!.unmount());
@@ -373,4 +379,17 @@ it('keeps entered split amounts visible while their total is incomplete (#1117 d
   expect(
     (await read(entries.find((row) => row.id === 'amounts-not-total')!, false)).shown,
   ).toMatchObject({ before: expect.stringContaining('₹40.00') });
+});
+
+it('explains the leftover cent on a recurring Expense (#1117 decision 9)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  expect(
+    (await read(entries.find((row) => row.id === 'leftover-cent')!, false)).shown,
+  ).toMatchObject({ before: expect.stringContaining('The leftover ₹0.01') });
 });

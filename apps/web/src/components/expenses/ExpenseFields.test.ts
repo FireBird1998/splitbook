@@ -257,3 +257,7 @@ it('shows both shares while the payer total is wrong (#1117 decision 8)', () => 
     ),
   ).toHaveLength(2);
 });
+
+it('shows the leftover-cent note on the new Expense form (#1117 decision 9)', () => {
+  expect(text(render('0.01'))).toContain('The leftover ₹0.01 goes to you so the total is exact.');
+});

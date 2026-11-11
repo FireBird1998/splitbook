@@ -50,27 +50,8 @@ export type IncompleteExpenseEntry = ExpenseEntry<ExpenseSplitMethod | ''>;
 
 export type ExpenseEntryPurpose = { kind: 'new' } | { kind: 'edit'; saved: StoredExpenseMoney };
 
-export interface ExpenseEntryPolicy {
-  roundingNote: 'show' | 'hide';
-}
-export const expenseEntryPolicy: ExpenseEntryPolicy = {
-  roundingNote: 'show',
-};
-export const formSummaryPolicy: ExpenseEntryPolicy = {
-  roundingNote: 'hide',
-};
-
-/** The recurring form reports the allocator's refusal without the whole-share guard. */
-export const recurringEntryPolicy: ExpenseEntryPolicy = {
-  ...formSummaryPolicy,
-};
-
 /** One entry supplies both the displayed split and the command; callers cannot supply an allocator. */
-export function readExpenseEntry(
-  entry: IncompleteExpenseEntry,
-  purpose: ExpenseEntryPurpose,
-  policy: ExpenseEntryPolicy = expenseEntryPolicy,
-) {
+export function readExpenseEntry(entry: IncompleteExpenseEntry, purpose: ExpenseEntryPurpose) {
   const countedPayers = enteredPayers(entry.payers);
   const singlePayer = entry.payerId;
   const payerIds = entry.multiPayer ? countedPayers.map((payer) => payer.user) : [singlePayer];
@@ -198,8 +179,6 @@ export function readExpenseEntry(
         : original;
     result = { kind: 'refused' as const, error, problems: [problem] };
   }
-  if (policy.roundingNote === 'hide' && split.status.kind === 'adds-up')
-    split.status = { kind: 'adds-up', leftover: null };
   const splitSummary = {
     participants: entry.participantIds.length,
     shares:

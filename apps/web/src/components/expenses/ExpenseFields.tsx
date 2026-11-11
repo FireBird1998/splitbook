@@ -600,6 +600,12 @@ export default function ExpenseFields({
         </Button>
       </Box>
 
+      {note && (
+        <Box role="status" sx={{ fontSize: 12, color: 'text.secondary' }}>
+          {note}
+        </Box>
+      )}
+
       {/* ─── TIER 2: Split Options ─────────────── */}
       <Collapse in={showSplitOptions}>
         <Stack
@@ -991,7 +997,6 @@ export default function ExpenseFields({
                     {percentagesBalanced && ' ✓'}
                   </Box>
                 )}
-                {note && <Box sx={{ fontSize: 12, color: 'text.secondary' }}>{note}</Box>}
                 {splitMethod === 'shares' && sharesTotal > 0 && (
                   <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
                     {counted(sharesTotal, 'share')}

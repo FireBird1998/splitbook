@@ -160,7 +160,7 @@
       }
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares = ₹66.67 Sam Chen ​ shares = ₹33.33 Priya Shah 3 shares · ₹33.33/share Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Less The leftover ₹0.01 goes to you so the total is exact. Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares = ₹66.67 Sam Chen ​ shares = ₹33.33 Priya Shah 3 shares · ₹33.33/share Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -174,7 +174,7 @@
         { "label": "Share with Priya Shah", "value": "", "type": "checkbox" },
         { "label": "", "value": "food" }
       ],
-      "roundingNote": null
+      "roundingNote": "The leftover ₹0.01 goes to you so the total is exact."
     }
   },
   "multiple-payers": {
@@ -237,7 +237,7 @@
       }
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split equally  · All 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹33.34 Sam Chen ₹33.33 Priya Shah ₹33.33 Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split equally  · All 3 members Less The leftover ₹0.01 goes to you so the total is exact. Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹33.34 Sam Chen ₹33.33 Priya Shah ₹33.33 Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -249,7 +249,7 @@
         { "label": "Share with Priya Shah", "value": "", "type": "checkbox" },
         { "label": "", "value": "food" }
       ],
-      "roundingNote": null
+      "roundingNote": "The leftover ₹0.01 goes to you so the total is exact."
     }
   },
   "shares-partly-blank": {
