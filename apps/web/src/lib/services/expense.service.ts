@@ -1,13 +1,11 @@
 import { Refusal, type RefusalCode } from '@splitbook/shared/refusals';
 import { inGroupCurrencyOrder } from '@splitbook/shared/group-currencies';
 import type { AssistantAttribution } from '@splitbook/shared/draft-attribution';
-import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
-import { recordLedger } from '@/lib/ledger-recording';
+import { changeLedgerExpense, recordLedger, type ExpenseAccess } from '@/lib/ledger-recording';
 import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
-import { activityService } from './activity.service';
 import type { CreateExpenseInput, UpdateExpenseInput } from '@splitbook/shared/validators/expense';
 import type { ExpenseFilters } from '@splitbook/shared/types';
 import { getQuickFilterDates, toInclusiveDateToBound } from '@splitbook/shared/date';
@@ -37,17 +35,7 @@ import {
   decideExpenseMoneyEdit,
   unsupportedCurrencyEditRefusal,
 } from '@splitbook/shared/expense-money-edit';
-import {
-  assertPendingActivityCapacity,
-  expenseChangeAlertsEnabled,
-  ledgerNotificationContext,
-  involvedMembers,
-  makePendingActivity,
-  requestTagForReplay,
-  type ExpenseNotificationKind,
-} from '@/lib/financial-write';
-import { lockLedgerCurrency, lockRestoredCurrency } from '@/lib/ledger-currency';
-import { assertExpectedRevision } from '@/lib/ledger-revision';
+import { involvedMembers, requestTagForReplay } from '@/lib/financial-write';
 import mongoose from 'mongoose';
 import {
   displayTagReference,
@@ -61,6 +49,8 @@ import type {
   ExpenseTagChangeRequest,
   ExpenseTagChangeResult,
 } from '@splitbook/shared/expense-tag-change';
+
+export type { ExpenseAccess } from '@/lib/ledger-recording';
 
 /** Why one Expense of a Tag change couldn't change, in member words, by the error that said so. */
 const tagChangeRefusals: Partial<Record<RefusalCode, string>> = {
@@ -99,13 +89,6 @@ export function expenseAmountRange(
   };
 }
 
-/** Single-expense access always pairs a trusted session actor with its requested group. */
-export interface ExpenseAccess {
-  actorId: string;
-  groupId: string;
-  expenseId: string;
-}
-
 export class ExpenseService {
   private async requireAccessGroup({ actorId, groupId }: ExpenseAccess, writing = false) {
     await connectDB();
@@ -114,37 +97,6 @@ export class ExpenseService {
     // An archived Group can still be read, but takes no more changes (#578).
     if (writing && group.isArchived) throw new Refusal('GROUP_ARCHIVED');
     return group;
-  }
-
-  /**
-   * Inside a financial commit: give its new Activity intent the private alert audience (#841),
-   * from the Group's members at this commit. The assignment is idempotent, so a retried
-   * transaction captures again from its own read. While the rollout switch is off nothing is
-   * captured, as before. Never refuses: an alert can't change what the save does.
-   */
-  private async captureAlertAudience(
-    expense: { _id: unknown; pendingActivity: Array<{ notificationContext?: unknown }> },
-    event: Parameters<typeof ledgerNotificationContext>[0] | undefined,
-    kind: ExpenseNotificationKind,
-    groupId: string,
-    involved: Iterable<string>,
-  ) {
-    if (!event || !expenseChangeAlertsEnabled()) return;
-    const committedGroup = await Group.findById(groupId).select('members').lean();
-    const membersAtCommit = new Set(
-      (committedGroup?.members ?? []).map((member) => String(member.user)),
-    );
-    const intent = expense.pendingActivity.find(
-      (pending) => String((pending as { _id?: unknown })._id) === String(event._id),
-    );
-    if (!intent) return;
-    intent.notificationContext = ledgerNotificationContext(
-      event,
-      kind,
-      { groupId, recordId: String(expense._id) },
-      involved,
-      membersAtCommit,
-    );
   }
 
   /**
@@ -500,106 +452,69 @@ export class ExpenseService {
    * Update an expense. Handles both edits and restore (isDeleted: false).
    */
   async update(access: ExpenseAccess, data: UpdateExpenseInput, expectedRevision?: number) {
-    const group = await this.requireAccessGroup(access, true);
-    // Old documents predate the revision field. Initialize atomically before loading for CAS.
-    await withGroupMutation(
-      access.groupId,
-      async (session) =>
-        Expense.collection.updateOne(
-          {
-            _id: new mongoose.Types.ObjectId(access.expenseId),
-            group: new mongoose.Types.ObjectId(access.groupId),
-            revision: { $exists: false },
-          },
-          { $set: { revision: 0 } },
-          { session },
-        ),
-      { ledger: true },
-    );
-    const expense = await Expense.findOne({ _id: access.expenseId, group: access.groupId }).select(
-      '+pendingActivity',
-    );
-    if (!expense) return null;
-    assertExpectedRevision(expense.revision, expectedRevision);
-    const original = expense.toObject();
-    // Money in a currency Splitbook no longer supports stays as it was recorded, with no
-    // position: such an Expense can be deleted, never changed (#820).
-    if (!getCurrency(original.currency))
-      throw new MoneyValidationError(
-        'UNSUPPORTED_CURRENCY',
-        unsupportedCurrencyEditRefusal(original.currency),
-      );
-    // Before the edit loses them: who paid and shared it until now (#841).
-    const involvedBefore = involvedMembers(original);
-    const { financialEdit, money } = decideExpenseMoneyEdit(original, data);
-    if (financialEdit)
-      assertExpenseParticipants(
-        new Set(group.members.map((member) => String(member.user))),
-        money.paidBy,
-        money.splitBetween,
-      );
-    if (data.currency !== undefined && data.currency !== original.currency)
-      assertGroupCurrency(group, data.currency);
-    const tagReference = resolveTagReference(group.tags, data, expense);
-    const changes: Record<string, { old: unknown; new: unknown }> = {};
-    const resultingChanges = { ...data, ...(financialEdit ? money : {}), ...tagReference };
-    for (const [key, value] of Object.entries(resultingChanges)) {
-      if (
-        key === 'isDeleted' ||
-        (!financialEdit &&
-          ['amount', 'currency', 'paidBy', 'splitBetween', 'splitMethod'].includes(key))
-      )
-        continue;
-      const oldValue = (original as unknown as Record<string, unknown>)[key];
-      if (JSON.stringify(oldValue) !== JSON.stringify(value))
-        changes[key] = { old: oldValue, new: value };
-    }
-    const restoring = data.isDeleted === false && expense.isDeleted;
-    Object.assign(expense, data, money, tagReference);
-    if (restoring) {
-      expense.deletedAt = null;
-      expense.deletedBy = null;
-    }
-    if (Object.keys(changes).length)
-      expense.editHistory.push({
-        editedBy: new mongoose.Types.ObjectId(access.actorId),
-        editedAt: new Date(),
-        changes,
-      });
-    let updated: ReturnType<typeof makePendingActivity> | undefined;
-    if (restoring || Object.keys(changes).length) {
-      assertPendingActivityCapacity(expense.pendingActivity);
-      updated = makePendingActivity(access.groupId, 'expense_updated', access.actorId, {
-        expenseId: access.expenseId,
-        description: expense.description,
-        ...(restoring ? { action: 'restored' } : { changes }),
-      });
-      expense.pendingActivity.push(updated);
-    }
-    // An edit alerts everyone it involved before or after; a restoration is this same event.
-    const involved = [...involvedBefore, ...involvedMembers(expense)];
-    // An edit that keeps an older Expense's currency stays allowed, as the check above says.
-    const currencyMoved = data.currency !== undefined && data.currency !== original.currency;
-    await withGroupMutation(
-      access.groupId,
-      async () => {
-        // A restored Expense, or one moved to another currency, needs its currency still the
-        // Group's (#721), checked in the save's own mutation so a removal can't come in between.
-        if (restoring)
-          await lockRestoredCurrency(access.groupId, expense.currency, access.expenseId);
-        else if (currencyMoved) await lockLedgerCurrency(access.groupId, expense.currency);
-        await this.captureAlertAudience(
-          expense,
-          updated,
-          'expense_updated',
-          access.groupId,
-          involved,
-        );
-        return expense.save();
+    const expense = await changeLedgerExpense({
+      access,
+      expectedRevision,
+      change(expense, group) {
+        const original = expense.toObject();
+        // Money in a currency Splitbook no longer supports stays as it was recorded, with no
+        // position: such an Expense can be deleted, never changed (#820).
+        if (!getCurrency(original.currency))
+          throw new MoneyValidationError(
+            'UNSUPPORTED_CURRENCY',
+            unsupportedCurrencyEditRefusal(original.currency),
+          );
+        const { financialEdit, money } = decideExpenseMoneyEdit(original, data);
+        if (financialEdit)
+          assertExpenseParticipants(
+            new Set(group.members.map((member) => String(member.user))),
+            money.paidBy,
+            money.splitBetween,
+          );
+        if (data.currency !== undefined && data.currency !== original.currency)
+          assertGroupCurrency(group, data.currency);
+        const tagReference = resolveTagReference(group.tags, data, expense);
+        const changes: Record<string, { old: unknown; new: unknown }> = {};
+        const resultingChanges = { ...data, ...(financialEdit ? money : {}), ...tagReference };
+        for (const [key, value] of Object.entries(resultingChanges)) {
+          if (
+            key === 'isDeleted' ||
+            (!financialEdit &&
+              ['amount', 'currency', 'paidBy', 'splitBetween', 'splitMethod'].includes(key))
+          )
+            continue;
+          const oldValue = (original as unknown as Record<string, unknown>)[key];
+          if (JSON.stringify(oldValue) !== JSON.stringify(value))
+            changes[key] = { old: oldValue, new: value };
+        }
+        const restoring = data.isDeleted === false && expense.isDeleted;
+        Object.assign(expense, data, money, tagReference);
+        if (restoring) {
+          expense.deletedAt = null;
+          expense.deletedBy = null;
+        }
+        if (Object.keys(changes).length)
+          expense.editHistory.push({
+            editedBy: new mongoose.Types.ObjectId(access.actorId),
+            editedAt: new Date(),
+            changes,
+          });
+        return {
+          activity:
+            restoring || Object.keys(changes).length
+              ? {
+                  type: 'expense_updated',
+                  metadata: {
+                    expenseId: access.expenseId,
+                    description: expense.description,
+                    ...(restoring ? { action: 'restored' } : { changes }),
+                  },
+                }
+              : undefined,
+        };
       },
-      { ledger: true },
-    );
-    await activityService.publishPending('expenses', expense._id, expense.pendingActivity);
+    });
+    if (!expense) return null;
     return expense.populate([
       { path: 'paidBy.user', select: PERSON_FIELDS },
       { path: 'splitBetween.user', select: PERSON_FIELDS },
@@ -670,53 +585,22 @@ export class ExpenseService {
 
   /** Soft deletion preserves identity, request keys and all audit history. */
   async delete(access: ExpenseAccess, expectedRevision?: number) {
-    await this.requireAccessGroup(access, true);
-    // Old documents predate the revision field. Initialize atomically before loading for CAS.
-    await withGroupMutation(
-      access.groupId,
-      async (session) =>
-        Expense.collection.updateOne(
-          {
-            _id: new mongoose.Types.ObjectId(access.expenseId),
-            group: new mongoose.Types.ObjectId(access.groupId),
-            revision: { $exists: false },
+    return changeLedgerExpense({
+      access,
+      expectedRevision,
+      change(expense) {
+        if (expense.isDeleted) return null;
+        expense.isDeleted = true;
+        expense.deletedAt = new Date();
+        expense.deletedBy = new mongoose.Types.ObjectId(access.actorId);
+        return {
+          activity: {
+            type: 'expense_deleted',
+            metadata: { expenseId: access.expenseId, description: expense.description },
           },
-          { $set: { revision: 0 } },
-          { session },
-        ),
-      { ledger: true },
-    );
-    const expense = await Expense.findOne({ _id: access.expenseId, group: access.groupId }).select(
-      '+pendingActivity',
-    );
-    if (!expense) return null;
-    assertExpectedRevision(expense.revision, expectedRevision);
-    if (expense.isDeleted) return expense;
-    assertPendingActivityCapacity(expense.pendingActivity);
-    expense.isDeleted = true;
-    expense.deletedAt = new Date();
-    expense.deletedBy = new mongoose.Types.ObjectId(access.actorId);
-    const deleted = makePendingActivity(access.groupId, 'expense_deleted', access.actorId, {
-      expenseId: access.expenseId,
-      description: expense.description,
-    });
-    expense.pendingActivity.push(deleted);
-    await withGroupMutation(
-      access.groupId,
-      async () => {
-        await this.captureAlertAudience(
-          expense,
-          deleted,
-          'expense_deleted',
-          access.groupId,
-          involvedMembers(expense),
-        );
-        return expense.save();
+        };
       },
-      { ledger: true },
-    );
-    await activityService.publishPending('expenses', expense._id, expense.pendingActivity);
-    return expense;
+    });
   }
 
   /**
