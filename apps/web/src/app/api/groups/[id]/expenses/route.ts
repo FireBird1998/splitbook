@@ -12,7 +12,7 @@ import {
 import { z } from 'zod';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
-import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import { recurringExpensesEnabled } from '@/lib/recurring-expenses-switch';
 import { createExpenseSchema } from '@splitbook/shared/validators/expense';
 import {
@@ -101,20 +101,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await routeIds(params);
 
-    const isMember = await groupService.isMember(id, user.id!);
-    if (!isMember) return forbidden();
-
     const { searchParams } = new URL(req.url);
     const added = addedFilters.safeParse({
       involvesUser: searchParams.get('involvesUser') || undefined,
       amountMin: searchParams.get('amountMin') || undefined,
       amountMax: searchParams.get('amountMax') || undefined,
     });
-    if (!added.success) return validationError(added.error);
-
-    // Lazy-on-read: materialize due recurring expenses before listing, so the
-    // response includes rows that fell due since the last read.
-    await recurringExpenseService.generateDueExpenses(id);
 
     const filters: ExpenseFilters = {
       quickFilter: searchParams.get('quickFilter') || undefined,
@@ -139,9 +131,20 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         undefined,
     };
 
-    const result = await expenseService.getGroupExpenses(id, filters, user.id!);
-    return success(result);
+    return success(
+      await readGroupLedger({
+        actor: { kind: 'member', id: user.id! },
+        groupId: id,
+        deletionMarker: 'allow-retained-members',
+        recurring: 'materialize',
+        validate: () => {
+          if (!added.success) throw added.error;
+        },
+        read: (group) => expenseService.getGroupExpenses(group, filters, user.id!),
+      }),
+    );
   } catch (err) {
+    if (err instanceof z.ZodError) return validationError(err);
     return failedRead(err, req);
   }
 }

@@ -3,15 +3,13 @@ import {
   unauthorized,
   success,
   notFound,
-  forbidden,
   serverError,
   validationError,
   readJson,
   routeIds,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
-import { isGroupAdmin, withMemberEmails } from '@/lib/group-member-emails';
-import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import { updateGroupSchema } from '@splitbook/shared/validators/group';
 
 // GET /api/groups/[id] — Get group detail
@@ -21,27 +19,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!user) return unauthorized();
 
     const { id } = await routeIds(params);
-    const group = await groupService.getById(id, user.id!);
-    if (!group) return notFound('Group');
-
-    // Check membership
-    const isMember = group.members.some((m) => {
-      const memberUser = m.user as unknown as { _id: { toString(): string } };
-      return memberUser._id.toString() === user.id;
-    });
-    if (!isMember) return forbidden();
-
-    // Lazy-on-read: materialize due recurring expenses (no-op for
-    // non-Household themes and when nothing is due).
-    await recurringExpenseService.generateDueExpenses(id);
-
-    // Its admin gets every member's address, for Settings; any other member only their own (#517).
     return success(
-      await withMemberEmails(
-        group,
-        { id: user.id!, email: user.email },
-        isGroupAdmin(group, user.id!),
-      ),
+      await readGroupLedger({
+        actor: { kind: 'member', id: user.id! },
+        groupId: id,
+        missingGroup: 'not-found',
+        deletionMarker: 'allow-retained-members',
+        recurring: 'materialize',
+        read: (group) => groupService.readForMember(group, { id: user.id!, email: user.email }),
+      }),
     );
   } catch (err) {
     return serverError(err);

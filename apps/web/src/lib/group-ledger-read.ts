@@ -51,7 +51,7 @@ export async function readGroupLedger<T>({
     ...(actor.kind === 'member' && deletionMarker === 'allow-retained-members'
       ? {}
       : { deletionRequestedAt: null }),
-    ...(actor.kind === 'assistant' ? { assistantRule: { $ne: 'not_allowed' } } : {}),
+    ...(actor.kind === 'assistant' ? { assistantRule: { $ne: 'not_allowed' as const } } : {}),
   };
   const group = await Group.findOne(access)
     .populate<{ members: LedgerReadGroup['members'] }>('members.user', PERSON_FIELDS)

@@ -1,3 +1,4 @@
+import type { LedgerReadGroup } from '@/lib/group-ledger-read';
 import { Refusal, type RefusalCode } from '@splitbook/shared/refusals';
 import { inGroupCurrencyOrder } from '@splitbook/shared/group-currencies';
 import type { AssistantAttribution } from '@splitbook/shared/draft-attribution';
@@ -186,12 +187,18 @@ export class ExpenseService {
    * Get expenses for a group with filters and pagination.
    * Optionally computes a summary (total, user owe/get-back) for the filtered set.
    */
-  async getGroupExpenses(groupId: string, filters: ExpenseFilters = {}, userId?: string) {
+  async getGroupExpenses(
+    groupOrId: string | LedgerReadGroup,
+    filters: ExpenseFilters = {},
+    userId?: string,
+  ) {
+    const groupId = typeof groupOrId === 'string' ? groupOrId : String(groupOrId._id);
+    const admittedGroup = typeof groupOrId === 'string' ? undefined : groupOrId;
     await connectDB();
 
-    const tagGroup = await Group.findById(groupId)
-      .select('tags defaultCurrency alternateCurrencies')
-      .lean();
+    const tagGroup =
+      admittedGroup ??
+      (await Group.findById(groupId).select('tags defaultCurrency alternateCurrencies').lean());
     const groupTags = tagGroup?.tags ?? [];
     const page = filters.page || 1;
     const limit = filters.limit || 20;
@@ -342,10 +349,12 @@ export class ExpenseService {
       }
 
       if (filters.includeMemberBreakdown) {
-        const group = await Group.findById(groupId)
-          .select('members')
-          .populate('members.user', 'name image')
-          .lean();
+        const group =
+          admittedGroup ??
+          (await Group.findById(groupId)
+            .select('members')
+            .populate('members.user', 'name image')
+            .lean());
         const members = (group?.members || []) as Array<{
           user: { _id: unknown; name?: string; image?: string };
         }>;
