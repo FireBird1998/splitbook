@@ -134,8 +134,9 @@ export const assistantLedgerService = {
       archived: 'include',
       recurring: 'recorded-only',
       sort: { _id: 1 },
-      read: async (groups) => {
-        const page = groups.filter((group) => !cursor || String(group._id) > cursor).slice(0, 51);
+      page: { after: cursor, limit: 51 },
+      fields: ['name', 'defaultCurrency', 'alternateCurrencies', 'category', 'isArchived'],
+      read: async (page) => {
         return {
           groups: page.slice(0, 50).map((group) => ({
             ...assistantGroup(group),
