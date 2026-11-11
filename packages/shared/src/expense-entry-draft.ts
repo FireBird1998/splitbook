@@ -18,11 +18,9 @@ type DraftEntries = Record<string, string>;
 
 export interface ExpenseDraftEntryPolicy {
   singlePayer: ExpenseEntryPolicy['singlePayer'];
-  tagReference?: 'identity' | 'identity-or-name';
 }
 export const fieldDraftEntryPolicy: ExpenseDraftEntryPolicy = {
   singlePayer: 'first-row',
-  tagReference: 'identity-or-name',
 };
 
 /** An incomplete Draft is kept as typed text; no amount is filled in for the member. */
@@ -77,12 +75,7 @@ export function draftForExpenseEntry(
   for (const key of ['description', 'amount', 'currency', 'date', 'category', 'notes'] as const)
     if (!update || update.changed[key]) fields[key] = entry[key];
   if (!update) {
-    Object.assign(
-      fields,
-      policy.tagReference === 'identity-or-name' && !/^[a-f0-9]{24}$/i.test(entry.tagId)
-        ? { tag: entry.tagId }
-        : { tagId: entry.tagId },
-    );
+    fields.tagId = entry.tagId;
     fields.splitMethod = entry.splitMethod;
   } else if (update.changed.tagId) {
     delete fields.tag;

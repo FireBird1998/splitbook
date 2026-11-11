@@ -1,3 +1,4 @@
+import { recording } from './test-support/expense-entry-recording';
 import { expect, it } from 'vitest';
 import { draftForExpenseEntry, entryForExpenseDraft } from './expense-entry-draft';
 import { expenseEntryPolicy } from './expense-entry';
@@ -112,12 +113,12 @@ it('keeps existing row positions when a field unticks and reticks a participant'
   ).toEqual([{ user: alex }, { user: sam }]);
 });
 
-it('keeps a phone Tag identity distinct from a form’s legacy named Tag', () => {
+it('requires a Tag identity in every new entry (#1117 decision 12)', () => {
   const entry = { ...entries[0], tagId: 'Food' };
   expect(() => draftForExpenseEntry(entry)).toThrow('tagId: Invalid Tag identity');
-  expect(
-    draftForExpenseEntry(entry, { ...expenseEntryPolicy, tagReference: 'identity-or-name' }),
-  ).toMatchObject({ tag: 'Food' });
+  expect(() => draftForExpenseEntry(entry, expenseEntryPolicy)).toThrow(
+    'tagId: Invalid Tag identity',
+  );
 });
 
 it('retains assistant split facts a sheet did not edit (#1117 decision 10)', () => {
@@ -157,4 +158,18 @@ it('shows a repeated person once using the later facts without rewriting the sou
     splitValues: { [alex]: '3' },
   });
   expect(JSON.stringify(from)).toBe(before);
+});
+
+it('records identity-only new entries, including the former name-classification path', async () => {
+  const refused = () => {
+    try {
+      draftForExpenseEntry({ ...entries[0], tagId: 'Food' });
+      return { kind: 'draft' };
+    } catch (error) {
+      return { kind: 'refused', message: (error as Error).message };
+    }
+  };
+  await expect(await recording({ tagId: refused(), tag: refused() })).toMatchFileSnapshot(
+    '../../../test/expense-entry-readings/supplemental/tag-reference.json',
+  );
 });
