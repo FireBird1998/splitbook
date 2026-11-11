@@ -36,8 +36,8 @@ vi.mock('@/lib/ledger-currency', async (original) => {
   const actual = await original<typeof import('@/lib/ledger-currency')>();
   return {
     ...actual,
-    lockRestoredCurrency: async (...args: Parameters<typeof actual.lockRestoredCurrency>) => {
-      await actual.lockRestoredCurrency(...args);
+    lockLedgerCurrency: async (...args: Parameters<typeof actual.lockLedgerCurrency>) => {
+      await actual.lockLedgerCurrency(...args);
       if (restoreCheckHold.ms)
         await new Promise((resolve) => setTimeout(resolve, restoreCheckHold.ms));
     },
