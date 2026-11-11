@@ -416,7 +416,7 @@ function ReviewRunContent({
   const change = (patch: Partial<ExpenseDraft>) => {
     if (locked) return;
     try {
-      void machine.change(reviewFormChange(values, patch, form.currency));
+      void machine.change(reviewFormChange(values, patch));
       setInvalid(null);
     } catch {
       setInvalid('Correct the entered amount or details before saving.');

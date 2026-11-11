@@ -287,8 +287,8 @@ async function reviewFeedback(row: TypedEntry, values: ExpenseDraftValues, rejec
     changedBy: { kind: 'member' },
     values,
     missingFields: parsed.success ? [] : missingDraftFields(values, parsed.error.issues),
-    createdAt: day + 'T00:00:00.000Z',
-    updatedAt: day + 'T00:00:00.000Z',
+    createdAt: new Date(day + 'T00:00:00').toISOString(),
+    updatedAt: new Date(day + 'T00:00:00').toISOString(),
   };
   const reviewed = {
     draft,
@@ -325,7 +325,7 @@ async function reviewFeedback(row: TypedEntry, values: ExpenseDraftValues, rejec
   server.reply('POST', '/api/groups/' + groupId + '/drafts/review', () =>
     Response.json({ status: 200, data: [reviewed] }),
   );
-  const phone = testPhone(server, { now: Date.parse(day + 'T12:00:00Z') });
+  const phone = testPhone(server, { now: new Date(day + 'T12:00:00').getTime() });
   const app = phone.open();
   await app.signIn('alex');
   await app.refreshToReview();
@@ -399,7 +399,7 @@ it('records Android To review changes through its existing form conversion (#111
     let value: ExpenseDraftValues;
     try {
       // A member edits the typed fields of an initially incomplete stored item.
-      value = reviewFormChange({}, row, row.currency);
+      value = reviewFormChange({}, row);
     } catch (error) {
       // Start from another real entry in the one case list, then try the rejected picker change.
       const control = entries.find(
@@ -415,7 +415,7 @@ it('records Android To review changes through its existing form conversion (#111
                   ? 'amounts'
                   : 'equal'),
       )!;
-      const base = reviewFormChange({}, control, row.currency);
+      const base = reviewFormChange({}, control);
       cells[row.id] = {
         result: refusal(error),
         shown: { reviewScreen: await reviewFeedback(row, base, true) },
@@ -444,7 +444,6 @@ it('records review edits of extra split facts and repeated people (#1115)', asyn
       row.change === 'shares'
         ? { splitValues: { [alex]: '2', [people[1].id]: '1' } }
         : { notes: 'Checked' },
-      'INR',
     );
     cells[row.id] = { payers: form.payers, result };
   }

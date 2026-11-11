@@ -16,7 +16,6 @@ export function reviewForm(values: ExpenseDraftValues, currency: string): Expens
 export function reviewFormChange(
   values: ExpenseDraftValues,
   patch: Partial<ExpenseDraft>,
-  _currency: string,
 ): ExpenseDraftValues {
   const entry = { ...entryForExpenseDraft(values), ...patch };
   return draftForExpenseEntry(entry, expenseEntryPolicy, {

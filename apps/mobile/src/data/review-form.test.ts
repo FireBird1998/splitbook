@@ -3,7 +3,7 @@ import { reviewForm, reviewFormChange } from './review-form';
 const member = 'a00000000000000000000001';
 describe('review picker changes', () => {
   it('keeps unknown facts omitted when a member chooses a date', () => {
-    expect(reviewFormChange({ description: 'Lunch' }, { date: '2026-10-14' }, 'INR')).toEqual({
+    expect(reviewFormChange({ description: 'Lunch' }, { date: '2026-10-14' })).toEqual({
       description: 'Lunch',
       date: '2026-10-14',
     });
@@ -13,7 +13,6 @@ describe('review picker changes', () => {
       reviewFormChange(
         { amount: 12.34, currency: 'INR', paidBy: [{ user: member, amount: 12.34 }] },
         { amount: '23.45' },
-        'INR',
       ),
     ).toEqual({ amount: 23.45, currency: 'INR', paidBy: [{ user: member, amount: 23.45 }] });
   });
@@ -24,25 +23,21 @@ describe('review picker changes', () => {
       payerId: member,
       multiPayer: false,
     });
-    expect(reviewFormChange(claude, { date: '2026-10-16' }, 'INR')).not.toHaveProperty('category');
-    expect(reviewFormChange(claude, { category: 'food' }, 'INR')).toMatchObject({
+    expect(reviewFormChange(claude, { date: '2026-10-16' })).not.toHaveProperty('category');
+    expect(reviewFormChange(claude, { category: 'food' })).toMatchObject({
       category: 'food',
     });
   });
   it('clears the name representation when choosing a Tag', () => {
-    expect(
-      reviewFormChange({ tag: 'General' }, { tagId: 'b00000000000000000000001' }, 'INR'),
-    ).toEqual({ tagId: 'b00000000000000000000001' });
+    expect(reviewFormChange({ tag: 'General' }, { tagId: 'b00000000000000000000001' })).toEqual({
+      tagId: 'b00000000000000000000001',
+    });
   });
 });
 
 it('keeps the shown Equal choice when a member edits an otherwise unspecified split', () => {
   expect(
-    reviewFormChange(
-      { description: 'Lunch' },
-      { participantIds: ['a00000000000000000000001'] },
-      'INR',
-    ),
+    reviewFormChange({ description: 'Lunch' }, { participantIds: ['a00000000000000000000001'] }),
   ).toEqual({
     description: 'Lunch',
     splitMethod: 'equal',
