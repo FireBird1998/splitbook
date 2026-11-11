@@ -619,9 +619,9 @@ the main currency dropped, and the first 4 kept.
 
 ### GET /api/groups/[id]
 
-Returns the populated group. **Side effect:** this handler calls
-`recurringExpenseService.generateDueExpenses` before responding, so a read can
-create expenses while recurring Expenses are switched on (see
+Returns the populated group. **Side effect:** the Group ledger read module adds
+due recurring Expenses after admitting the member and before reading the ledger,
+so this read can create Expenses while recurring Expenses are switched on (see
 [Recurring expenses](#recurring-expenses)).
 
 ### PATCH /api/groups/[id]
@@ -1430,9 +1430,16 @@ Recurring generation recognises an already recorded template/Month before refusi
 
 Generation rechecks that the Group is open at the Expense commit. If an archive wins that race, the triggering read still answers normally, adds no Expense for that Month and leaves its marker unchanged so a later eligible read can retry it. The template's creator remains the recorded actor and receives no alert for that Expense. Payers and split participants are checked again at commit. If a participant leaves before that point, the read still succeeds without that Expense or a marker advance; a later eligible read can add the Month.
 
-Household-themed groups only (`category: "home"`). Templates materialize
-expenses lazily when the group, its expense list or its balances are read, and
-before a member's leave or removal is checked. An archived Group materializes
+Household-themed Groups only (`category: "home"`). The Group ledger read module
+currently invokes lazy generation for Group details, Expenses, Balances, Insights,
+Trip summary (whose Theme adds nothing), Home balances, member spending, and
+export including the statement. The Groups list, Group/Home Activity, search,
+one Expense, duplicate warnings, recurring-template lists, currency settings,
+rate suggestions, Tags, Draft reads, page titles, invite links and assistant reach
+read recorded data only. Connected assistants also still read recorded data only.
+These are the preserved part-one choices of #1119, not the part-two rule.
+
+Generation also runs on template creation/edit and before a member's leave or removal is checked. An archived Group materializes
 nothing. A template in its problem state that includes a member keeps them in the
 Group until it is repaired or they are taken out of it (#257, see
 [leaving](#post-apigroupsidleave)).

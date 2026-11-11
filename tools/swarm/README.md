@@ -70,7 +70,7 @@ The backend's own scripts keep their rules: they refuse root and `apps/web` `.en
 | Each push to a pull request, and each push to `main` or `pilot/tanstack-reads` | **PR checks**                    |
 | Nightly at 04:17 UTC, a manual run, and a pull request labelled **`full-ci`**  | **PR checks** and the full suite |
 
-- **PR checks** (`pr-checks`) is one job that installs once, then runs the format check, lint, typecheck, the source contracts (`pnpm check:refusals`, `pnpm check:recordings`), the design-system style policy (`pnpm web check:design-system`), the workspace unit tests in UTC, the web integration suite against real Mongo (#469), every mobile HTTP verifier (below) and, last, on a pull request, the ceilings ratchet (below). That is the gate without its install check, plus the style policy and the web integration suite. **The gate never runs the integration suite** (see [the gate](#pnpm-swarm-gate)), so a branch can pass the gate and fail PR checks: run `pnpm web test:integration` yourself ([docs/testing.md](../../docs/testing.md#running-it)) when a change touches the database, the routes or money. PR checks is the one check branch protection requires, so its name, `PR checks`, must not change.
+- **PR checks** (`pr-checks`) is one job that installs once, then runs the format check, lint, typecheck, the source contracts (`pnpm check:refusals`, `pnpm check:recordings`, `pnpm check:reads`), the design-system style policy (`pnpm web check:design-system`), the workspace unit tests in UTC, the web integration suite against real Mongo (#469), every mobile HTTP verifier (below) and, last, on a pull request, the ceilings ratchet (below). That is the gate without its install check, plus the style policy and the web integration suite. **The gate never runs the integration suite** (see [the gate](#pnpm-swarm-gate)), so a branch can pass the gate and fail PR checks: run `pnpm web test:integration` yourself ([docs/testing.md](../../docs/testing.md#running-it)) when a change touches the database, the routes or money. PR checks is the one check branch protection requires, so its name, `PR checks`, must not change.
 - **The full suite** adds `verify` (the unit and integration tests again, the Google sign-in recovery suite and the build), `expense-access` (the authenticated expense-access suite), `journeys` (the browser journeys, one job per Playwright project, side by side, each on a freshly seeded database), `playwright` (the Google sign-in journeys and the visual comparisons) and the unit tests in three more time zones.
 - **A docs-only pull request,** one that changes only Markdown, `docs/` or `.claude/` files, passes PR checks after the format check alone. Prettier formats Markdown and the `docs/` mockups, so that check still runs.
 - **A push to `main` runs PR checks only,** on the merged result, since branches needn't be up to date with `main` to merge. The full suite never runs on a push: a merge reaches it in that night's run.
@@ -159,6 +159,7 @@ Runs these steps in the worktree, in order, and prints one verdict:
 | lint, typecheck, format check | `pnpm lint`, `pnpm typecheck`, `pnpm format:check`            | 15, 15, 5 min |
 | refusal contract              | `pnpm check:refusals`                                         | 2 min         |
 | ledger recording contract     | `pnpm check:recordings`                                       | 2 min         |
+| Group ledger read contract    | `pnpm check:reads`                                            | 2 min         |
 | unit tests                    | `pnpm --recursive --workspace-concurrency=1 test:unit`        | 20 min        |
 | ceilings                      | `pnpm --dir apps/mobile run ceilings:compare --base <base>`   | 5 min         |
 | backend                       | a new backend for this run, serving `next dev`                | 3 min         |
@@ -253,3 +254,14 @@ The nine retained sites and their reasons live in
 `src/refusal-exceptions.ts`. Each exception matches its file, enclosing function,
 code and guard condition once. An unused or moved exception fails the check.
 The gate, PR checks and the full CI verification job run the same root command.
+
+### Group ledger read contract
+
+`pnpm check:reads` binds production sources with the same source reader as the recording
+contract. It rejects local membership gates/filters, recurring generator calls and
+unadmitted Insights/Trip-summary calls outside `group-ledger-read.ts`. Read projections
+use the Group supplied to the module's callback. Tests/fixtures are outside the scan.
+`src/read-exceptions.ts` pins each permitted write, projection, notification, maintenance
+or demo site by file, owner and tokenized expression. A missing, changed or duplicated
+site fails. Dated assistant exceptions say “moves with #1124”; remove them as that move
+lands. They are not path-wide permissions for new reads.

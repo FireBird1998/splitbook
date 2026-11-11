@@ -9,14 +9,14 @@ The product's promise: a member's ledger is exact, recorded once, and only ever 
 - **Writes are Member-started and online.** An Expense, Settlement, Group or Draft save is sent only when a member starts it, and only while online. Nothing queues, resumes or replays a write (ADR 0004, ADR 0006).
 - **One retry identity per save.** A create sends an `Idempotency-Key` and an edit or delete sends `X-Splitbook-Revision`. The device stores both before sending, and a retry reuses them unchanged, so a lost reply can never record twice.
 - **Exact money.** Amounts are integer minor units through `@splitbook/shared/exact-money`, both when shown and when sent.
-- **Balances follow Expense reads.** Any read that shows totals adds due recurring Expenses first, so every view agrees.
+- **Balances follow Expense reads.** The Group ledger read module owns recurring materialization. Part one of #1119 preserves which reads add due Expenses and which read recorded data only, as listed in `docs/architecture.md`; the owner's part-two changes have not landed. Do not infer a new materialization rule in a caller.
 - **A Connected assistant writes only Drafts.** A member saves them (ADR 0008).
 
 ## Accounts and access
 
 - **One account's data per screen.** Sign-out and an account change purge account-local storage; losing access to a Group removes its cached and saved copies (ADR 0006).
 - **Saved copies show their age.** A saved copy keeps its verification time and is never presented as current.
-- **Every API route authenticates,** and every route that touches a Group checks membership before reading or writing its ledger.
+- **Every API route authenticates.** Group ledger reads use `apps/web/src/lib/group-ledger-read.ts` for actor admission, the admitted Group and delivery-time access checks. Review the read's named settings against the read record; do not add a route/service membership gate or a read-time generator call. `pnpm check:reads` enforces the boundary with site-specific, stale-checked exceptions (including the pending #1124 assistant move). Writes keep access checks in their own recording or Group mutation.
 
 ## Structure
 
