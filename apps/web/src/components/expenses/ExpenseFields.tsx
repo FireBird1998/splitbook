@@ -186,13 +186,18 @@ export default function ExpenseFields({
   };
 
   // ─── Summary Line ──────────────────────────────────
-  const payerName = memberName(payers[0]?.user || userId);
+  const countedPayers = multiPayer ? reading.payers.entries : payers;
+  const payerName = memberName((multiPayer ? countedPayers[0]?.user : entry.payerId) || userId);
   // One payer is named even among several rows' mode, never "1 people paid" (#894).
-  const payerSummary = !payers.length
-    ? 'Who paid?'
-    : multiPayer && payers.length > 1
-      ? `${payers.length}${NO_BREAK_SPACE}people paid`
-      : `${payerName} paid`;
+  const payerSummary = !multiPayer
+    ? entry.payerId
+      ? `${payerName} paid`
+      : 'Who paid?'
+    : !countedPayers.length
+      ? 'Who paid?'
+      : multiPayer && countedPayers.length > 1
+        ? `${countedPayers.length}${NO_BREAK_SPACE}people paid`
+        : `${payerName} paid`;
 
   const splitMethodLabel: Record<string, string> = {
     equal: 'Split equally',
@@ -231,6 +236,9 @@ export default function ExpenseFields({
 
   const handleMemberToggle = (memberId: string, checked: boolean) =>
     edit({
+      ...(checked && splitMethod === 'shares' && !splitValues[memberId]
+        ? { splitValues: { ...splitValues, [memberId]: '1' } }
+        : {}),
       participantIds: checked
         ? [...participantIds, memberId]
         : participantIds.filter((id) => id !== memberId),
@@ -255,6 +263,7 @@ export default function ExpenseFields({
 
   const updatePayer = (index: number, field: 'user' | 'amount', value: string) => {
     edit({
+      ...(index === 0 && field === 'user' ? { payerId: value } : {}),
       payers: (payers.length ? payers : [{ user: '', amount: '' }]).map((p, i) =>
         i === index ? { ...p, [field]: value } : p,
       ),
@@ -272,7 +281,7 @@ export default function ExpenseFields({
     selectedMemberCount: participantIds.length,
     memberCount: members.length,
     multiPayerMode: multiPayer,
-    primaryPayerId: payers[0]?.user || userId,
+    primaryPayerId: (multiPayer ? payers[0]?.user : entry.payerId) || userId,
     currentUserId: userId,
   });
 
@@ -595,6 +604,12 @@ export default function ExpenseFields({
         </Button>
       </Box>
 
+      {note && (
+        <Box role="status" sx={{ fontSize: 12, color: 'text.secondary' }}>
+          {note}
+        </Box>
+      )}
+
       {/* ─── TIER 2: Split Options ─────────────── */}
       <Collapse in={showSplitOptions}>
         <Stack
@@ -631,7 +646,7 @@ export default function ExpenseFields({
                 <TextField
                   select
                   label={review ? 'Paid by' : undefined}
-                  value={payers[0]?.user || userId}
+                  value={entry.payerId}
                   onChange={(e) => updatePayer(0, 'user', e.target.value)}
                   size="small"
                   fullWidth
@@ -676,6 +691,8 @@ export default function ExpenseFields({
                     <MoneyTextField
                       currency={currency}
                       value={payer.amount}
+                      error={!!reading.payers.errors[payer.user]}
+                      helperText={reading.payers.errors[payer.user]}
                       onValueChange={(value) => updatePayer(i, 'amount', value)}
                       size="small"
                       placeholder="Amount"
@@ -733,6 +750,7 @@ export default function ExpenseFields({
                     onClick={() => {
                       edit({
                         multiPayer: false,
+                        payerId: payers[0]?.user || userId,
                         payers: [{ user: payers[0]?.user || userId, amount: '' }],
                       });
                     }}
@@ -847,6 +865,8 @@ export default function ExpenseFields({
                       <MoneyTextField
                         currency={currency}
                         value={splitValues[id] || ''}
+                        error={!!reading.split.errors[id]}
+                        helperText={reading.split.errors[id]}
                         onValueChange={(value) =>
                           edit({
                             splitValues: {
@@ -878,6 +898,8 @@ export default function ExpenseFields({
                       >
                         <TextField
                           value={splitValues[id] || ''}
+                          error={!!reading.split.errors[id]}
+                          helperText={reading.split.errors[id]}
                           onChange={(e) =>
                             edit({
                               splitValues: {
@@ -917,6 +939,8 @@ export default function ExpenseFields({
                       >
                         <TextField
                           value={splitValues[id] || ''}
+                          error={!!reading.split.errors[id]}
+                          helperText={reading.split.errors[id]}
                           onChange={(e) =>
                             edit({
                               splitValues: {
@@ -971,11 +995,12 @@ export default function ExpenseFields({
                       color: !percentagesBalanced ? 'status.negative' : 'status.positive',
                     }}
                   >
-                    Total: {percentageTotal.toFixed(2)}% / 100%
+                    Total:{' '}
+                    {Number.isFinite(percentageTotal) ? percentageTotal.toFixed(2) + '%' : '—'} /
+                    100%
                     {percentagesBalanced && ' ✓'}
                   </Box>
                 )}
-                {note && <Box sx={{ fontSize: 12, color: 'text.secondary' }}>{note}</Box>}
                 {splitMethod === 'shares' && sharesTotal > 0 && (
                   <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
                     {counted(sharesTotal, 'share')}

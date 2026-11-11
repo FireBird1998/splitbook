@@ -604,7 +604,8 @@ test('payer problems use names; split, Tag and optional detail pickers keep thei
   await page.reload();
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   const review = panel(page);
-  await expect(review).toContainText('The amount paid by Sam Chen?');
+  await expect(review).toContainText('Still needs the amounts paid to add up to the total.');
+  await expect(review.getByLabel('Paid by Sam Chen', { exact: true })).toBeVisible();
   await expect(page.locator('body')).not.toContainText(
     /paidBy\.|splitBetween\.|\(YYYY-MM-DD\)|\(e.g. INR\)/,
   );
@@ -979,7 +980,8 @@ test('says You for the viewer by id, beside another member of the same name (#44
     });
     await page.reload();
     await page.getByRole('button', { name: 'Review Review meal 2', exact: true }).click();
-    await expect(panel(page)).toContainText('The amount paid by you?');
+    await expect(panel(page)).toContainText('Still needs the amounts paid to add up to the total.');
+    await expect(panel(page).getByLabel('Paid by You', { exact: true })).toBeVisible();
     await expect(panel(page)).not.toContainText('The amount paid by Ankit Das');
     await page.getByRole('button', { name: 'Close review', exact: true }).click();
     await page.getByRole('button', { name: 'Save 1 ready', exact: true }).click();
@@ -989,4 +991,35 @@ test('says You for the viewer by id, beside another member of the same name (#44
   } finally {
     await restore();
   }
+});
+
+test('a note edit leaves a person listed twice as given, and Save stays blocked (#1117)', async ({
+  page,
+}) => {
+  await open(page, ['ready']);
+  const current = (await rows(page))[0];
+  const payer = current.values.paidBy[0].user;
+  const changed = await page.request.put(`/api/groups/${DEMO_GROUP_ID}/drafts/${current.id}`, {
+    headers: { 'X-Splitbook-Revision': String(current.revision) },
+    data: {
+      values: {
+        ...current.values,
+        paidBy: [{ user: payer, amount: current.values.amount }, { user: payer }],
+      },
+    },
+  });
+  expect(changed.ok(), await changed.text()).toBe(true);
+  await page.reload();
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  await expect(panel(page)).toContainText('The same person is listed twice. Choose who paid.');
+  const save = panel(page).getByRole('button', { name: 'Save expense', exact: true });
+  await expect(save).toBeDisabled();
+  await panel(page).getByLabel('Notes (optional)').fill('Checked the receipt');
+  await expect.poll(async () => (await rows(page))[0].values.notes).toBe('Checked the receipt');
+  expect((await rows(page))[0].values.paidBy).toEqual([
+    { user: payer, amount: current.values.amount },
+    { user: payer },
+  ]);
+  await expect(panel(page)).toContainText('The same person is listed twice. Choose who paid.');
+  await expect(save).toBeDisabled();
 });

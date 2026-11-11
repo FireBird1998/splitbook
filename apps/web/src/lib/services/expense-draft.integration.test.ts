@@ -1,3 +1,4 @@
+import { draftForExpenseEntry, entryForExpenseDraft } from '@splitbook/shared/expense-entry-draft';
 import {
   GET as expenseRecordRoute,
   PATCH as editExpenseRoute,
@@ -524,6 +525,59 @@ describe('persistent private expense Drafts', () => {
       changedBy: { kind: 'member' },
     });
   });
+
+  it.each([0, undefined])(
+    'records no unpaid row when completing a Draft (%s, #1117 decision 2)',
+    async (amount) => {
+      const [complete] = await completeDrafts();
+      const values = {
+        ...complete.values!,
+        paidBy: [
+          { user: alice.id, amount: 450 },
+          { user: bob.id, ...(amount === undefined ? {} : { amount }) },
+        ],
+      };
+      const changed = await drafts.replace(alice, groupId, complete.id, values, complete.revision);
+      const reviewed = await drafts.review(alice, groupId, changed.id);
+      expect(reviewed.problems).toEqual([]);
+      expect((await drafts.save(alice, groupId, saveCommand(reviewed)))[0].status).toBe('saved');
+      const expense = await db().collection('expenses').findOne({ group });
+      expect(expense!.paidBy).toHaveLength(1);
+      expect(String(expense!.paidBy[0].user)).toBe(alice.id);
+      expect(expense!.paidBy[0].amountMinor).toBe(45000);
+    },
+  );
+
+  it.each([0, undefined])(
+    'keeps an unpaid duplicate blocked without rewriting its Draft (%s, #1117 decision 11)',
+    async (amount) => {
+      const [complete] = await completeDrafts();
+      const values = {
+        ...complete.values!,
+        paidBy: [
+          { user: alice.id, amount: 450 },
+          { user: alice.id, ...(amount === undefined ? {} : { amount }) },
+        ],
+      };
+      const changed = await drafts.replace(alice, groupId, complete.id, values, complete.revision);
+      const reviewed = await drafts.review(alice, groupId, changed.id);
+      expect(reviewed.problems).toContain('paidBy: Each person can appear only once');
+      expect((await drafts.list(alice, groupId))[0].values).toEqual(values);
+      expect((await drafts.save(alice, groupId, saveCommand(reviewed)))[0].status).toBe('failed');
+      expect(await db().collection('expenses').countDocuments()).toBe(0);
+      // A note edit leaves the repeated rows as the assistant gave them, so the item stays
+      // blocked until the member says who paid (#1117).
+      const edited = draftForExpenseEntry(
+        { ...entryForExpenseDraft(values), notes: 'Checked the receipt' },
+        { from: values, changed: { notes: true } },
+      );
+      expect(edited.paidBy).toEqual(values.paidBy);
+      const kept = await drafts.replace(alice, groupId, changed.id, edited, changed.revision);
+      const nextReview = await drafts.review(alice, groupId, kept.id);
+      expect((await drafts.save(alice, groupId, saveCommand(nextReview)))[0].status).toBe('failed');
+      expect(await db().collection('expenses').countDocuments()).toBe(0);
+    },
+  );
 
   it('saves an unspecified Category as Other, as Add expense does, without rewriting the item', async () => {
     const [complete] = await completeDrafts();

@@ -358,20 +358,14 @@
   "shares-partly-blank": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit"],
-        "reading": {
-          "kind": "allocation",
-          "amountMinor": 10000,
-          "currency": "INR",
-          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
-          "splitBetween": [
-            { "user": "a00000000000000000000001", "amountMinor": 6667, "shares": 2 },
-            { "user": "a00000000000000000000002", "amountMinor": 3333, "shares": 1 }
-          ]
-        }
-      },
-      {
-        "columns": ["web-recurring", "web-recurring.edit", "android-new", "android-edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "web-recurring",
+          "web-recurring.edit",
+          "android-new",
+          "android-edit"
+        ],
         "reading": {
           "kind": "allocation",
           "amountMinor": 10000,
@@ -428,23 +422,21 @@
   "shares-all-blank": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit"],
+        "columns": ["web-new", "web-edit", "web-recurring", "web-recurring.edit"],
         "reading": {
           "kind": "refusal",
-          "issues": [{ "field": "", "message": "Each member needs at least 1 share" }]
+          "issues": [{ "field": "", "message": "Give at least one person a share." }]
         }
       },
       {
-        "columns": ["web-recurring", "web-recurring.edit"],
+        "columns": ["android-new", "android-edit"],
         "reading": {
           "kind": "refusal",
-          "issues": [{ "field": "", "message": "Total split weight must be positive" }]
+          "issues": [{ "field": "splitBetween", "message": "Give at least one person a share." }]
         }
       },
       {
         "columns": [
-          "android-new",
-          "android-edit",
           "server-complete",
           "web-finish-later",
           "android-finish-later",
@@ -458,9 +450,9 @@
       }
     ],
     "wireResults": [
-      ["web-new", "web-edit"],
-      ["web-recurring", "web-recurring.edit"],
-      ["android-new", "android-edit", "server-complete"],
+      ["web-new", "web-edit", "web-recurring", "web-recurring.edit"],
+      ["android-new", "android-edit"],
+      ["server-complete"],
       ["web-finish-later", "android-finish-later", "web-review", "android-review"]
     ],
     "displays": [
@@ -530,23 +522,21 @@
   "shares-all-zero": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit"],
+        "columns": ["web-new", "web-edit", "web-recurring", "web-recurring.edit"],
         "reading": {
           "kind": "refusal",
-          "issues": [{ "field": "", "message": "Each member needs at least 1 share" }]
+          "issues": [{ "field": "", "message": "Give at least one person a share." }]
         }
       },
       {
-        "columns": ["web-recurring", "web-recurring.edit"],
+        "columns": ["android-new", "android-edit"],
         "reading": {
           "kind": "refusal",
-          "issues": [{ "field": "", "message": "Total split weight must be positive" }]
+          "issues": [{ "field": "splitBetween", "message": "Give at least one person a share." }]
         }
       },
       {
         "columns": [
-          "android-new",
-          "android-edit",
           "server-complete",
           "web-finish-later",
           "android-finish-later",
@@ -560,9 +550,9 @@
       }
     ],
     "wireResults": [
-      ["web-new", "web-edit"],
-      ["web-recurring", "web-recurring.edit"],
-      ["android-new", "android-edit", "server-complete"],
+      ["web-new", "web-edit", "web-recurring", "web-recurring.edit"],
+      ["android-new", "android-edit"],
+      ["server-complete"],
       ["web-finish-later", "android-finish-later", "web-review", "android-review"]
     ],
     "displays": [
@@ -582,19 +572,17 @@
   "shares-fractional": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit", "web-recurring", "web-recurring.edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "web-recurring",
+          "web-recurring.edit",
+          "android-new",
+          "android-edit"
+        ],
         "reading": {
           "kind": "refusal",
-          "issues": [
-            { "field": "", "message": "Shares must be whole numbers within the supported range" }
-          ]
-        }
-      },
-      {
-        "columns": ["android-new", "android-edit"],
-        "reading": {
-          "kind": "refusal",
-          "issues": [{ "field": "", "message": "Amount supports at most 0 decimal places" }]
+          "issues": [{ "field": "", "message": "Use a whole number of shares." }]
         }
       },
       {
@@ -647,8 +635,7 @@
       }
     ],
     "wireResults": [
-      ["web-new", "web-edit", "web-recurring", "web-recurring.edit"],
-      ["android-new", "android-edit"],
+      ["web-new", "web-edit", "web-recurring", "web-recurring.edit", "android-new", "android-edit"],
       ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
@@ -671,21 +658,17 @@
   "payers-partly-blank": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit"],
-        "reading": {
-          "kind": "refusal",
-          "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
-        }
-      },
-      {
-        "columns": ["web-recurring", "web-recurring.edit"],
-        "reading": {
-          "kind": "unsupported",
-          "reason": "The recurring form has one payer and no separate payer-amount entry or multi-payer mode."
-        }
-      },
-      {
-        "columns": ["android-new", "android-edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "android-new",
+          "android-edit",
+          "server-complete",
+          "web-finish-later",
+          "android-finish-later",
+          "web-review",
+          "android-review"
+        ],
         "reading": {
           "kind": "allocation",
           "amountMinor": 10000,
@@ -698,21 +681,10 @@
         }
       },
       {
-        "columns": [
-          "server-complete",
-          "web-finish-later",
-          "android-finish-later",
-          "web-review",
-          "android-review"
-        ],
+        "columns": ["web-recurring", "web-recurring.edit"],
         "reading": {
-          "kind": "refusal",
-          "issues": [
-            {
-              "field": "paidBy.1.amount",
-              "message": "Invalid input: expected number, received undefined"
-            }
-          ]
+          "kind": "unsupported",
+          "reason": "The recurring form has one payer and no separate payer-amount entry or multi-payer mode."
         }
       }
     ],
@@ -727,9 +699,10 @@
     "displays": [
       ["web-new"],
       ["web-edit"],
-      ["web-recurring", "web-recurring.edit", "server-complete"],
+      ["web-recurring", "web-recurring.edit"],
       ["android-new"],
       ["android-edit"],
+      ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
       ["web-review"],
@@ -742,6 +715,8 @@
         "columns": [
           "web-new",
           "web-edit",
+          "android-new",
+          "android-edit",
           "server-complete",
           "web-finish-later",
           "android-finish-later",
@@ -752,10 +727,7 @@
           "kind": "allocation",
           "amountMinor": 10000,
           "currency": "INR",
-          "paidBy": [
-            { "user": "a00000000000000000000001", "amountMinor": 10000 },
-            { "user": "a00000000000000000000002", "amountMinor": 0 }
-          ],
+          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
           "splitBetween": [
             { "user": "a00000000000000000000001", "amountMinor": 5000 },
             { "user": "a00000000000000000000002", "amountMinor": 5000 }
@@ -767,19 +739,6 @@
         "reading": {
           "kind": "unsupported",
           "reason": "The recurring form has one payer and no separate payer-amount entry or multi-payer mode."
-        }
-      },
-      {
-        "columns": ["android-new", "android-edit"],
-        "reading": {
-          "kind": "allocation",
-          "amountMinor": 10000,
-          "currency": "INR",
-          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
-          "splitBetween": [
-            { "user": "a00000000000000000000001", "amountMinor": 5000 },
-            { "user": "a00000000000000000000002", "amountMinor": 5000 }
-          ]
         }
       }
     ],
@@ -857,11 +816,8 @@
   "lone-listed-payer-blank": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit"],
-        "reading": {
-          "kind": "refusal",
-          "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
-        }
+        "columns": ["web-new", "web-edit", "android-new", "android-edit"],
+        "reading": { "kind": "refusal", "issues": [{ "field": "", "message": "Choose who paid." }] }
       },
       {
         "columns": ["web-recurring", "web-recurring.edit"],
@@ -871,20 +827,7 @@
         }
       },
       {
-        "columns": ["android-new", "android-edit"],
-        "reading": {
-          "kind": "refusal",
-          "issues": [{ "field": "", "message": "At least one payer and participant are required" }]
-        }
-      },
-      {
-        "columns": [
-          "server-complete",
-          "web-finish-later",
-          "android-finish-later",
-          "web-review",
-          "android-review"
-        ],
+        "columns": ["server-complete"],
         "reading": {
           "kind": "allocation",
           "amountMinor": 10000,
@@ -895,12 +838,20 @@
             { "user": "a00000000000000000000002", "amountMinor": 5000 }
           ]
         }
+      },
+      {
+        "columns": ["web-finish-later", "android-finish-later", "web-review", "android-review"],
+        "reading": {
+          "kind": "refusal",
+          "issues": [
+            { "field": "paidBy", "message": "Invalid input: expected array, received undefined" }
+          ]
+        }
       }
     ],
     "wireResults": [
-      ["web-new", "web-edit"],
+      ["web-new", "web-edit", "android-new", "android-edit"],
       ["web-recurring", "web-recurring.edit"],
-      ["android-new", "android-edit"],
       ["server-complete"],
       ["web-finish-later", "android-finish-later", "web-review", "android-review"]
     ],
@@ -920,7 +871,14 @@
   "amounts-partly-blank": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit", "android-new", "android-edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "web-recurring",
+          "web-recurring.edit",
+          "android-new",
+          "android-edit"
+        ],
         "reading": {
           "kind": "allocation",
           "amountMinor": 10000,
@@ -930,13 +888,6 @@
             { "user": "a00000000000000000000001", "amountMinor": 10000 },
             { "user": "a00000000000000000000002", "amountMinor": 0 }
           ]
-        }
-      },
-      {
-        "columns": ["web-recurring", "web-recurring.edit"],
-        "reading": {
-          "kind": "refusal",
-          "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
         }
       },
       {
@@ -1150,7 +1101,9 @@
         ],
         "reading": {
           "kind": "refusal",
-          "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+          "issues": [
+            { "field": "", "message": "Use digits and one decimal point, such as 250.50." }
+          ]
         }
       },
       {
@@ -1219,7 +1172,9 @@
         "columns": ["web-new", "web-edit"],
         "reading": {
           "kind": "refusal",
-          "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+          "issues": [
+            { "field": "", "message": "Use digits and one decimal point, such as 250.50." }
+          ]
         }
       },
       {
@@ -1233,7 +1188,12 @@
         "columns": ["android-new", "android-edit"],
         "reading": {
           "kind": "refusal",
-          "issues": [{ "field": "paidBy.1.amount", "message": "Enter a valid decimal amount" }]
+          "issues": [
+            {
+              "field": "paidBy.1.amount",
+              "message": "Use digits and one decimal point, such as 250.50."
+            }
+          ]
         }
       },
       {
@@ -1307,7 +1267,9 @@
         "columns": ["web-new", "web-edit", "web-recurring", "web-recurring.edit"],
         "reading": {
           "kind": "refusal",
-          "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+          "issues": [
+            { "field": "", "message": "Use digits and one decimal point, such as 250.50." }
+          ]
         }
       },
       {
@@ -1315,7 +1277,10 @@
         "reading": {
           "kind": "refusal",
           "issues": [
-            { "field": "splitBetween.1.amount", "message": "Enter a valid decimal amount" }
+            {
+              "field": "splitBetween.1.amount",
+              "message": "Use digits and one decimal point, such as 250.50."
+            }
           ]
         }
       },
@@ -1388,23 +1353,17 @@
   "unreadable-percentage": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit", "android-new", "android-edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "web-recurring",
+          "web-recurring.edit",
+          "android-new",
+          "android-edit"
+        ],
         "reading": {
           "kind": "refusal",
-          "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
-        }
-      },
-      {
-        "columns": ["web-recurring", "web-recurring.edit"],
-        "reading": {
-          "kind": "allocation",
-          "amountMinor": 10000,
-          "currency": "INR",
-          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
-          "splitBetween": [
-            { "user": "a00000000000000000000001", "amountMinor": 10000, "percentage": 100 },
-            { "user": "a00000000000000000000002", "amountMinor": 0, "percentage": 0 }
-          ]
+          "issues": [{ "field": "", "message": "Use digits and one decimal point, such as 33.5." }]
         }
       },
       {
@@ -1452,8 +1411,7 @@
       }
     ],
     "wireResults": [
-      ["web-new", "web-edit", "android-new", "android-edit"],
-      ["web-recurring", "web-recurring.edit"],
+      ["web-new", "web-edit", "web-recurring", "web-recurring.edit", "android-new", "android-edit"],
       ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
@@ -1476,32 +1434,17 @@
   "unreadable-share": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "web-recurring",
+          "web-recurring.edit",
+          "android-new",
+          "android-edit"
+        ],
         "reading": {
           "kind": "refusal",
-          "issues": [
-            { "field": "", "message": "Shares must be whole numbers within the supported range" }
-          ]
-        }
-      },
-      {
-        "columns": ["web-recurring", "web-recurring.edit"],
-        "reading": {
-          "kind": "allocation",
-          "amountMinor": 10000,
-          "currency": "INR",
-          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
-          "splitBetween": [
-            { "user": "a00000000000000000000001", "amountMinor": 10000, "shares": 2 },
-            { "user": "a00000000000000000000002", "amountMinor": 0, "shares": 0 }
-          ]
-        }
-      },
-      {
-        "columns": ["android-new", "android-edit"],
-        "reading": {
-          "kind": "refusal",
-          "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+          "issues": [{ "field": "", "message": "Use a whole number of shares." }]
         }
       },
       {
@@ -1549,9 +1492,7 @@
       }
     ],
     "wireResults": [
-      ["web-new", "web-edit"],
-      ["web-recurring", "web-recurring.edit"],
-      ["android-new", "android-edit"],
+      ["web-new", "web-edit", "web-recurring", "web-recurring.edit", "android-new", "android-edit"],
       ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
@@ -1623,17 +1564,19 @@
   "no-participants": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit", "android-new", "android-edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "web-recurring",
+          "web-recurring.edit",
+          "android-new",
+          "android-edit"
+        ],
         "reading": {
           "kind": "refusal",
-          "issues": [{ "field": "", "message": "At least one payer and participant are required" }]
-        }
-      },
-      {
-        "columns": ["web-recurring", "web-recurring.edit"],
-        "reading": {
-          "kind": "refusal",
-          "issues": [{ "field": "", "message": "Include at least one person in the split" }]
+          "issues": [
+            { "field": "", "message": "Choose at least one person to share this Expense." }
+          ]
         }
       },
       {
@@ -1660,8 +1603,7 @@
       }
     ],
     "wireResults": [
-      ["web-new", "web-edit", "android-new", "android-edit"],
-      ["web-recurring", "web-recurring.edit"],
+      ["web-new", "web-edit", "web-recurring", "web-recurring.edit", "android-new", "android-edit"],
       ["server-complete"],
       ["web-finish-later", "android-finish-later", "web-review", "android-review"]
     ],
@@ -1682,25 +1624,16 @@
   "single-payer-field-differs": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit", "server-complete", "web-finish-later", "web-review"],
-        "reading": {
-          "kind": "allocation",
-          "amountMinor": 10000,
-          "currency": "INR",
-          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
-          "splitBetween": [
-            { "user": "a00000000000000000000001", "amountMinor": 5000 },
-            { "user": "a00000000000000000000002", "amountMinor": 5000 }
-          ]
-        }
-      },
-      {
         "columns": [
+          "web-new",
+          "web-edit",
           "web-recurring",
           "web-recurring.edit",
           "android-new",
           "android-edit",
+          "web-finish-later",
           "android-finish-later",
+          "web-review",
           "android-review"
         ],
         "reading": {
@@ -1708,6 +1641,19 @@
           "amountMinor": 10000,
           "currency": "INR",
           "paidBy": [{ "user": "a00000000000000000000002", "amountMinor": 10000 }],
+          "splitBetween": [
+            { "user": "a00000000000000000000001", "amountMinor": 5000 },
+            { "user": "a00000000000000000000002", "amountMinor": 5000 }
+          ]
+        }
+      },
+      {
+        "columns": ["server-complete"],
+        "reading": {
+          "kind": "allocation",
+          "amountMinor": 10000,
+          "currency": "INR",
+          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
           "splitBetween": [
             { "user": "a00000000000000000000001", "amountMinor": 5000 },
             { "user": "a00000000000000000000002", "amountMinor": 5000 }
@@ -1721,8 +1667,7 @@
       ["android-new"],
       ["android-edit"],
       ["server-complete"],
-      ["web-finish-later", "web-review"],
-      ["android-finish-later", "android-review"]
+      ["web-finish-later", "android-finish-later", "web-review", "android-review"]
     ],
     "displays": [
       ["web-new"],
@@ -1819,15 +1764,12 @@
         }
       },
       {
-        "columns": ["web-edit"],
+        "columns": ["web-edit", "android-edit"],
         "reading": {
           "kind": "allocation",
           "amountMinor": 12000,
           "currency": "INR",
-          "paidBy": [
-            { "user": "a00000000000000000000001", "amountMinor": 12000 },
-            { "user": "a00000000000000000000002", "amountMinor": 0 }
-          ],
+          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 12000 }],
           "splitBetween": [
             { "user": "a00000000000000000000001", "amountMinor": 6000 },
             { "user": "a00000000000000000000002", "amountMinor": 6000 }
@@ -1846,19 +1788,6 @@
         "reading": {
           "kind": "unsupported",
           "reason": "This entry requires a saved Expense; this column creates one."
-        }
-      },
-      {
-        "columns": ["android-edit"],
-        "reading": {
-          "kind": "allocation",
-          "amountMinor": 12000,
-          "currency": "INR",
-          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 12000 }],
-          "splitBetween": [
-            { "user": "a00000000000000000000001", "amountMinor": 6000 },
-            { "user": "a00000000000000000000002", "amountMinor": 6000 }
-          ]
         }
       },
       {

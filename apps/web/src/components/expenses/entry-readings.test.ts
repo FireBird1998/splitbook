@@ -8,11 +8,7 @@ import { SWRConfig } from 'swr';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ExpenseDraft } from '@splitbook/shared/expense-draft';
 import { formatCurrency } from '@splitbook/shared/currency';
-import {
-  entryForExpenseDraft,
-  draftForExpenseEntry,
-  fieldDraftEntryPolicy,
-} from '@splitbook/shared/expense-entry-draft';
+import { entryForExpenseDraft, draftForExpenseEntry } from '@splitbook/shared/expense-entry-draft';
 import type { IncompleteExpenseEntry } from '@splitbook/shared/expense-entry';
 import type { ExpenseDraftValues as NumericDraft } from '@splitbook/shared/validators/expense-draft';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
@@ -38,7 +34,7 @@ type ReviewInput = {
   changed: Partial<Record<keyof IncompleteExpenseEntry, boolean>>;
 };
 const reviewInput = (from: NumericDraft = {}): ReviewInput => ({
-  entry: entryForExpenseDraft(from, fieldDraftEntryPolicy),
+  entry: entryForExpenseDraft(from),
   from,
   changed: {},
 });
@@ -50,8 +46,7 @@ const changeReview = (prior: ReviewInput, patch: Partial<IncompleteExpenseEntry>
     ...Object.fromEntries(Object.keys(patch).map((key) => [key, true])),
   },
 });
-const reviewValue = (input: ReviewInput) =>
-  draftForExpenseEntry(input.entry, fieldDraftEntryPolicy, input);
+const reviewValue = (input: ReviewInput) => draftForExpenseEntry(input.entry, input);
 
 const context = {
   groupId,
@@ -86,7 +81,7 @@ function renderFields(draft: ExpenseDraft, edit: boolean) {
       return row ? formatCurrency(row.amount, draft.entry.currency) : '—';
     })(),
   }));
-  return {
+  const shown = {
     preview,
     perPerson,
     advancedInitiallyOpen: edit,
@@ -109,7 +104,10 @@ function renderFields(draft: ExpenseDraft, edit: boolean) {
         ),
       ),
     ),
-    roundingNote: null,
+  };
+  return {
+    ...shown,
+    roundingNote: shown.formContents.match(/The leftover .*? so the total is exact\./)?.[0] ?? null,
   };
 }
 for (const edit of [false, true]) {
@@ -213,7 +211,8 @@ it('records the web To review editor and the Draft it reads (#1111)', async () =
           value: n.props.value ?? '',
           type: n.props.type,
         })),
-        roundingNote: null,
+        roundingNote:
+          words(renderer!.root).match(/The leftover .*? so the total is exact\./)?.[0] ?? null,
       },
     };
     await act(async () => renderer!.unmount());
@@ -351,4 +350,47 @@ it('records review edits of extra split facts and repeated people (#1115)', asyn
   await expect(await recording(cells)).toMatchFileSnapshot(
     '../../../../../test/expense-entry-readings/supplemental/web-review.json',
   );
+});
+
+it('starts review Shares at one and fills a newly ticked person’s box (#1117 decision 1)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', { addEventListener() {}, removeEventListener() {} });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  let tree!: ReactTestRenderer;
+  function Form() {
+    const [entry, setEntry] = useState(() =>
+      entryForExpenseDraft({
+        amount: 100,
+        currency: 'INR',
+        splitMethod: 'equal',
+        paidBy: [{ user: alex, amount: 100 }],
+        splitBetween: [{ user: alex }],
+      }),
+    );
+    return createElement(ReviewExpenseFields, {
+      entry,
+      original: {},
+      context: { members: people, tags: [], currency: 'INR' },
+      onChange: (patch) => setEntry((prior) => ({ ...prior, ...patch })),
+    });
+  }
+  await act(async () => {
+    tree = create(
+      createElement(ThemeProvider, { theme: createAppTheme('light') }, createElement(Form)),
+    );
+  });
+  try {
+    await act(async () => tree.root.findByType(ExpenseFields).props.chooseSplitMethod('shares'));
+    expect(tree.root.findByType(ExpenseFields).props.entry.splitValues[alex]).toBe('1');
+    const check = tree.root.findAll(
+      (node) =>
+        typeof node.props.onChange === 'function' &&
+        node.props.checked === false &&
+        node.props.slotProps?.input?.['aria-label'] === `Share with ${people[1].name}`,
+    )[0];
+    await act(async () => check.props.onChange({ target: { checked: true } }));
+    expect(tree.root.findByType(ExpenseFields).props.entry.splitValues[people[1].id]).toBe('1');
+  } finally {
+    await act(async () => tree.unmount());
+  }
 });

@@ -146,13 +146,14 @@ it('blocks invalid stored money and preserves the draft on an invalid reload', (
   expect(entered.error).toMatch(/invalid stored amounts/);
 });
 
-it('requires entered shares before submitting the Shares method', () => {
+it('requires a share after the member clears the starting ones', () => {
   const draft = ExpenseDraft.open(context)
     .change({ description: 'Lunch', amount: '10' })
-    .chooseSplitMethod('shares');
+    .chooseSplitMethod('shares')
+    .change({ splitValues: { alice: '', bob: '' } });
   const prepared = draft.prepare(['general-id'], 'shares');
   expect(prepared.submission).toBeUndefined();
-  expect(prepared.draft.error).toContain('at least 1 share');
+  expect(prepared.draft.error).toBe('Give at least one person a share.');
 });
 
 it.each(['paidBy', 'splitBetween'])('shows an editing error for malformed stored %s', (field) => {
@@ -328,4 +329,11 @@ it('keeps the payer-total refusal for yen, never the whole-unit words (#755)', (
   expect(error).toBeTruthy();
   expect(error).not.toContain('no smaller unit');
   expect(yen.prepare(['general-id'], 'key-1').draft.error).toBe(error);
+});
+
+it('writes a real one into every selected share box when Shares is chosen (#1117 decision 1)', () => {
+  expect(ExpenseDraft.open(context).chooseSplitMethod('shares').entry.splitValues).toEqual({
+    alice: '1',
+    bob: '1',
+  });
 });

@@ -5,7 +5,7 @@ import {
   unsupportedCurrencyEditRefusal,
   type StoredExpenseMoney,
 } from './expense-money-edit';
-import { readExpenseEntry, formSummaryPolicy, type ExpenseEntry } from './expense-entry';
+import { readExpenseEntry, type ExpenseEntry } from './expense-entry';
 import type { ExpenseSplitMethod } from './split-calculation';
 
 export interface ExpenseDraftContext {
@@ -218,14 +218,19 @@ export class ExpenseDraft {
   }
 
   chooseSplitMethod(splitMethod: ExpenseSplitMethod) {
-    return this.change({ splitMethod, splitValues: {} });
+    return this.change({
+      splitMethod,
+      splitValues:
+        splitMethod === 'shares'
+          ? Object.fromEntries(this.entry.participantIds.map((id) => [id, '1']))
+          : {},
+    });
   }
 
   reading() {
     return readExpenseEntry(
       this.entry,
       this.base ? { kind: 'edit', saved: this.base } : { kind: 'new' },
-      formSummaryPolicy,
     );
   }
 

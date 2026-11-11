@@ -47,13 +47,9 @@ import {
 } from '@/components/expenses/expense-form-helpers';
 import type { GroupReadMember, GroupReadTag } from '@splitbook/shared/group-read';
 import type { IRecurringExpense, SplitMethod } from '@splitbook/shared/types';
-import {
-  readExpenseEntry,
-  recurringEntryPolicy,
-  type ExpenseEntry,
-} from '@splitbook/shared/expense-entry';
+import { readExpenseEntry, roundingNote, type ExpenseEntry } from '@splitbook/shared/expense-entry';
 import { formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
-import { assertStoredExpenseMoney } from '@splitbook/shared/exact-money';
+import { assertStoredExpenseMoney, toMajorAmount } from '@splitbook/shared/exact-money';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { recurringRefusal } from '@/components/groups/recurring-refusal';
 import { RECURRING_SECTION_ID } from '@/components/groups/group-tabs';
@@ -286,13 +282,10 @@ export default function RecurringExpensesSection({
   const reading = readExpenseEntry(
     currentEntry,
     editing ? { kind: 'edit', saved: editing } : { kind: 'new' },
-    recurringEntryPolicy,
   );
   const validateForm = (): string | null => {
     if (!entry.description.trim()) return 'Description is required';
     if (!entry.tagId) return 'Tag is required';
-    if (!entry.payerId) return 'Choose who pays';
-    if (!currentEntry.participantIds.length) return 'Include at least one person in the split';
     if (reading.result.kind === 'refused') return reading.result.problems[0].message;
     const day = Number(schedule.dayOfMonth);
     if (!Number.isInteger(day) || day < 1 || day > 31) return 'Day of month must be 1–31';
@@ -301,8 +294,18 @@ export default function RecurringExpensesSection({
       return 'End date must be on or after the start date';
     return null;
   };
-  const splitPreview = reading.result.kind === 'ready' ? reading.result.money.splitBetween : [];
+  const splitPreview = Object.entries(reading.split.shares).flatMap(([user, minor]) =>
+    minor === undefined ? [] : [{ user, amount: toMajorAmount(minor, defaultCurrency) }],
+  );
   const previewError = reading.result.kind === 'refused' ? reading.result.problems[0].message : '';
+  const leftover = reading.split.status.kind === 'adds-up' ? reading.split.status.leftover : null;
+  const note = leftover
+    ? roundingNote(
+        leftover,
+        (id) => (id === viewerId ? 'you' : memberName(id)),
+        (minor) => formatCurrency(toMajorAmount(minor, defaultCurrency), defaultCurrency),
+      )
+    : null;
 
   const reloadLatest = async (target: 'form' | 'action') => {
     const id = target === 'form' ? editing?._id : selected?._id;
@@ -695,6 +698,7 @@ export default function RecurringExpensesSection({
                 currency={defaultCurrency}
                 label="Amount"
                 value={entry.amount}
+                error={!!reading.amount.error}
                 onValueChange={(value) => setEntry({ ...entry, amount: value })}
                 fullWidth
                 size="small"
@@ -707,9 +711,10 @@ export default function RecurringExpensesSection({
                   htmlInput: { inputMode: precision === 0 ? 'numeric' : 'decimal' },
                 }}
                 helperText={
-                  precision === 0
+                  reading.amount.error ??
+                  (precision === 0
                     ? `${defaultCurrency} uses whole amounts`
-                    : `Up to ${precision} decimal places`
+                    : `Up to ${precision} decimal places`)
                 }
               />
               <TextField
@@ -818,6 +823,8 @@ export default function RecurringExpensesSection({
                             size="small"
                             label="Amount"
                             value={value}
+                            error={!!reading.split.errors[member.user._id]}
+                            helperText={reading.split.errors[member.user._id]}
                             onValueChange={(value) => setSplit(member.user._id, value)}
                             sx={{ width: 120 }}
                             slotProps={{
@@ -831,6 +838,8 @@ export default function RecurringExpensesSection({
                           size="small"
                           label="%"
                           value={value}
+                          error={!!reading.split.errors[member.user._id]}
+                          helperText={reading.split.errors[member.user._id]}
                           onChange={(e) => setSplit(member.user._id, e.target.value)}
                           sx={{ width: 96 }}
                           slotProps={{ htmlInput: { min: 0, max: 100 } }}
@@ -842,6 +851,8 @@ export default function RecurringExpensesSection({
                           size="small"
                           label="Shares"
                           value={value}
+                          error={!!reading.split.errors[member.user._id]}
+                          helperText={reading.split.errors[member.user._id]}
                           onChange={(e) => setSplit(member.user._id, e.target.value)}
                           sx={{ width: 96 }}
                           slotProps={{ htmlInput: { min: 0, step: '1' } }}
@@ -855,6 +866,11 @@ export default function RecurringExpensesSection({
                 <Box role="status" sx={{ color: 'status.negative' }}>
                   {previewError}
                 </Box>
+              )}
+              {note && (
+                <Typography role="status" variant="caption" component="p" color="text.secondary">
+                  {note}
+                </Typography>
               )}
               {splitPreview.length > 0 && (
                 <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1 }}>

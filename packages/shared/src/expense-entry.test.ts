@@ -134,20 +134,20 @@ it.each([
 );
 
 it.each([
-  ['shares-all-blank', 'Total split weight must be positive'],
-  ['shares-all-zero', 'Total split weight must be positive'],
-  ['shares-fractional', 'Amount supports at most 0 decimal places'],
-  ['lone-listed-payer-blank', 'At least one payer and participant are required'],
+  ['shares-all-blank', 'Give at least one person a share.'],
+  ['shares-all-zero', 'Give at least one person a share.'],
+  ['shares-fractional', 'Use a whole number of shares.'],
+  ['lone-listed-payer-blank', 'Choose who paid.'],
   ['amounts-not-total', 'Split amounts must add up to the expense amount'],
   ['percentage-not-total', 'Percentages must add up to 100'],
-  ['unreadable-amount', 'Enter a valid decimal amount'],
-  ['unreadable-payer', 'Enter a valid decimal amount'],
-  ['unreadable-split-amount', 'Enter a valid decimal amount'],
-  ['unreadable-percentage', 'Enter a valid decimal amount'],
-  ['unreadable-share', 'Enter a valid decimal amount'],
-  ['no-participants', 'At least one payer and participant are required'],
-])('refuses %s with the existing money rule words', (id, message) => {
-  const reading = readExpenseEntry(entries.find((entry) => entry.id === id)!, { kind: 'new' });
+  ['unreadable-amount', 'Use digits and one decimal point, such as 250.50.'],
+  ['unreadable-payer', 'Use digits and one decimal point, such as 250.50.'],
+  ['unreadable-split-amount', 'Use digits and one decimal point, such as 250.50.'],
+  ['unreadable-percentage', 'Use digits and one decimal point, such as 33.5.'],
+  ['unreadable-share', 'Use a whole number of shares.'],
+  ['no-participants', 'Choose at least one person to share this Expense.'],
+])('explains %s with the shared client correction', (id, message) => {
+  const reading = readExpenseEntry(entries.find((row) => row.id === id)!, { kind: 'new' });
   expect(reading.result).toMatchObject({ kind: 'refused', error: { message } });
 });
 
@@ -211,4 +211,13 @@ it('keeps a duplicate payer’s first visible box separate from the footer’s a
   expect(reading.payers.errors).toEqual({});
   expect(reading.payers.problems).toEqual({ [alex]: 'invalid' });
   expect(reading.result.kind).toBe('refused');
+});
+
+it('uses one no-shares sentence in the Split sheet and its save correction (#1117 decision 6)', () => {
+  const row = entries.find((row) => row.id === 'shares-all-zero')!;
+  const reading = readExpenseEntry(row, { kind: 'new' });
+  expect(reading.result).toMatchObject({
+    kind: 'refused',
+    problems: [{ field: 'split', message: 'Give at least one person a share.' }],
+  });
 });

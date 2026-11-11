@@ -213,9 +213,9 @@ it('records every column and every differing reading by entry (#1111)', async ()
   );
 });
 
-it('shows a partly blank share saved as one on the web, despite its two-share line (#1111 claim 1)', () => {
+it('shows a partly blank share saved as zero everywhere (#1117 decision 1)', () => {
   expect(money('web-new', 'shares-partly-blank').splitBetween.map((p) => p.amountMinor)).toEqual([
-    6667, 3333,
+    10000, 0,
   ]);
   for (const column of [
     'android-new',
@@ -234,20 +234,20 @@ it('shows a partly blank share saved as one on the web, despite its two-share li
     formContents: expect.stringContaining('2\u00a0shares\u00a0· ₹50.00/share'),
   });
 });
-it('shows a zero payer sent or retained except by Android save (#1111 claim 2)', () => {
-  expect(resultValue('web-new', 'payers-zero').paidBy.map((p) => p.user)).toEqual([alex, sam]);
-  expect(resultValue('android-new', 'payers-zero').paidBy.map((p) => p.user)).toEqual([alex]);
+it('leaves unpaid people out of every new command and edited Draft (#1117 decision 2)', () => {
   for (const column of [
+    'web-new',
+    'android-new',
     'server-complete',
     'web-finish-later',
     'android-finish-later',
     'web-review',
     'android-review',
   ])
-    expect(resultValue(column, 'payers-zero').paidBy, column).toContainEqual({
-      user: sam,
-      amount: 0,
-    });
+    expect(
+      resultValue(column, 'payers-zero').paidBy.map((p) => p.user),
+      column,
+    ).toEqual([alex]);
 });
 it('shows a blank split amount as zero, missing, or invalid (#1111 claim 3)', () => {
   for (const column of ['web-new', 'android-new'])
@@ -260,27 +260,27 @@ it('shows a blank split amount as zero, missing, or invalid (#1111 claim 3)', ()
       { field: 'splitBetween.1.amount', message: 'Enter an amount for each person in the split' },
     ],
   });
-  expect(cell('web-recurring', 'amounts-partly-blank').result).toEqual({
-    kind: 'refusal',
-    issues: [{ field: '', message: 'Enter a valid decimal amount' }],
-  });
+  expect(
+    money('web-recurring', 'amounts-partly-blank').splitBetween.map((row) => row.amountMinor),
+  ).toEqual([10000, 0]);
 });
 it('shows blank payer refusal, dropping, and the lone-payer completion (#1111 claim 4)', () => {
-  expect(cell('web-new', 'payers-partly-blank').result.kind).toBe('refusal');
+  expect(money('web-new', 'payers-partly-blank').paidBy).toEqual([
+    { user: alex, amountMinor: 10000 },
+  ]);
   expect(money('android-new', 'payers-partly-blank').paidBy).toEqual([
     { user: alex, amountMinor: 10000 },
   ]);
-  expect(cell('server-complete', 'payers-partly-blank').result).toMatchObject({
-    kind: 'refusal',
-    issues: [{ field: 'paidBy.1.amount' }],
-  });
+  expect(money('server-complete', 'payers-partly-blank').paidBy).toEqual([
+    { user: alex, amountMinor: 10000 },
+  ]);
   expect(money('server-complete', 'lone-listed-payer-blank').paidBy).toEqual([
     { user: alex, amountMinor: 10000 },
   ]);
 });
-it('limits recurring unreadable-to-zero coercion to percentages and shares (#1111 claim 5)', () => {
+it('refuses unreadable percentages and shares in every complete form (#1117 decision 4)', () => {
   for (const id of ['unreadable-percentage', 'unreadable-share']) {
-    expect(money('web-recurring', id).splitBetween.map((p) => p.amountMinor)).toEqual([10000, 0]);
+    expect(cell('web-recurring', id).result.kind).toBe('refusal');
     for (const column of [
       'web-new',
       'android-new',
@@ -298,32 +298,32 @@ it('shows fractional shares in the web total while both preview and save refuse 
   expect(cell('web-new', 'shares-fractional')).toMatchObject({
     result: {
       kind: 'refusal',
-      issues: [{ message: 'Shares must be whole numbers within the supported range' }],
+      issues: [{ message: 'Use a whole number of shares.' }],
     },
     shown: {
-      formContents: expect.stringContaining('2\u00a0shares'),
-      preview: { error: 'Shares must be whole numbers within the supported range' },
+      formContents: expect.stringContaining('Use a whole number of shares.'),
+      preview: { error: 'Use a whole number of shares.' },
     },
   });
 });
 it('shows the three no-share wordings, including both Android correction surfaces (#1111 claim 7)', () => {
   expect(cell('web-new', 'shares-all-blank').result).toMatchObject({
-    issues: [{ message: 'Each member needs at least 1 share' }],
+    issues: [{ message: 'Give at least one person a share.' }],
   });
   expect(cell('web-recurring', 'shares-all-blank').result).toMatchObject({
-    issues: [{ message: 'Total split weight must be positive' }],
+    issues: [{ message: 'Give at least one person a share.' }],
   });
   expect(cell('server-complete', 'shares-all-blank').result).toMatchObject({
     issues: [{ message: 'Total split weight must be positive' }],
   });
   expect(cell('android-new', 'shares-all-blank').shown).toMatchObject({
     split: { status: { message: 'Give at least one person a share.' } },
-    corrections: { split: 'Total split weight must be positive' },
+    corrections: { split: 'Give at least one person a share.' },
   });
 });
 it('shows the separate single-payer field and the zero-payer conflict comparison (#1111)', () => {
   expect(money('web-new', 'single-payer-field-differs').paidBy).toEqual([
-    { user: alex, amountMinor: 10000 },
+    { user: sam, amountMinor: 10000 },
   ]);
   expect(money('android-new', 'single-payer-field-differs').paidBy).toEqual([
     { user: sam, amountMinor: 10000 },
@@ -382,7 +382,6 @@ it('keeps a historical zero payer through a notes edit and records the money-cha
   });
   expect(money('web-edit', 'saved-zero-payer-money-change').paidBy).toEqual([
     { user: alex, amountMinor: 12000 },
-    { user: sam, amountMinor: 0 },
   ]);
   expect(money('android-edit', 'saved-zero-payer-money-change').paidBy).toEqual([
     { user: alex, amountMinor: 12000 },

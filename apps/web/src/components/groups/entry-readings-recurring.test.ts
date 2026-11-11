@@ -253,7 +253,13 @@ async function read(
     result: sent
       ? { kind: 'command', value: sent }
       : { kind: 'refusal', issues: errors.map((message) => ({ field: '', message })) },
-    shown: { methodOffered: method, fields, before, errors, roundingNote: null },
+    shown: {
+      methodOffered: method,
+      fields,
+      before,
+      errors,
+      roundingNote: before.match(/The leftover .*? so the total is exact\./)?.[0] ?? null,
+    },
   };
   expect(sent !== undefined || errors.length > 0, row.id).toBe(true);
   await act(async () => renderer!.unmount());
@@ -311,4 +317,79 @@ it('uses the current Group currency and members if its read changes while the di
     kind: 'command',
     value: { currency: 'JPY', splitBetween: [{ user: people[1].id }] },
   });
+});
+
+it('submits a recurring split with a cleared amount as zero (#1117 decision 3)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  expect(
+    (await read(entries.find((row) => row.id === 'amounts-partly-blank')!, false)).result,
+  ).toMatchObject({ kind: 'command', value: { splitBetween: [{ amount: 100 }, { amount: 0 }] } });
+});
+
+it.each(['unreadable-share', 'unreadable-percentage', 'shares-fractional'])(
+  'marks the recurring %s box and sends nothing (#1117 decisions 4–5)',
+  async (id) => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('window', {
+      location: { hash: '' },
+      addEventListener() {},
+      removeEventListener() {},
+    });
+    vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+    const reading = await read(entries.find((row) => row.id === id)!, false);
+    expect(reading.result.kind).toBe('refusal');
+    expect(reading.shown).toMatchObject({
+      before: expect.stringContaining(
+        id === 'unreadable-percentage'
+          ? 'Use digits and one decimal point, such as 33.5.'
+          : 'Use a whole number of shares.',
+      ),
+    });
+  },
+);
+
+it('uses the shared no-shares correction for recurring Save (#1117 decision 6)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  expect((await read(entries.find((row) => row.id === 'shares-all-zero')!, false)).result).toEqual({
+    kind: 'refusal',
+    issues: [{ field: '', message: 'Give at least one person a share.' }],
+  });
+});
+
+it('keeps entered split amounts visible while their total is incomplete (#1117 decision 8)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  expect(
+    (await read(entries.find((row) => row.id === 'amounts-not-total')!, false)).shown,
+  ).toMatchObject({ before: expect.stringContaining('₹40.00') });
+});
+
+it('explains the leftover cent on a recurring Expense (#1117 decision 9)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  expect(
+    (await read(entries.find((row) => row.id === 'leftover-cent')!, false)).shown,
+  ).toMatchObject({ before: expect.stringContaining('The leftover ₹0.01') });
 });

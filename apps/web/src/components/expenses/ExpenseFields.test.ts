@@ -28,6 +28,9 @@ function render(
     currency?: string;
     currencyChoices?: ExpenseCurrencyChoice[];
     currencyHint?: string | null;
+    splitMethod?: 'shares' | 'percentage' | 'unequal';
+    splitValues?: Record<string, string>;
+    payerId?: string;
     payers?: Array<{ user: string; amount: string }>;
   } = {},
 ) {
@@ -40,6 +43,10 @@ function render(
     date: '2026-10-18',
   }).change({
     description: 'Chai',
+    ...(mode.splitMethod
+      ? { splitMethod: mode.splitMethod, splitValues: mode.splitValues ?? {} }
+      : {}),
+    payerId: mode.payerId ?? YOU,
     amount,
     multiPayer: mode.multiPayerMode ?? false,
     payers: mode.payers ?? [{ user: YOU, amount }],
@@ -222,4 +229,39 @@ describe('who paid, in the summary (#894)', () => {
       ]),
     ).toContain('2 people paid');
   });
+});
+
+it('shows the selected payer field even if the remembered payer row differs (#1117 decision 7)', () => {
+  expect(text(render('100', { payerId: SAM, payers: [{ user: YOU, amount: '100' }] }))).toContain(
+    'Sam Chen paid',
+  );
+});
+
+it.each([
+  ['shares', '1.5', 'Use a whole number of shares.'],
+  ['percentage', 'word', 'Use digits and one decimal point, such as 33.5.'],
+  ['unequal', 'word', 'Use digits and one decimal point, such as 250.50.'],
+] as const)(
+  'marks the %s box for %s while typing (#1117 decisions 4–5)',
+  (splitMethod, value, words) => {
+    expect(
+      text(render('100', { splitMethod, splitValues: { [YOU]: value, [SAM]: '1' } })),
+    ).toContain(words);
+  },
+);
+
+it('shows both shares while the payer total is wrong (#1117 decision 8)', () => {
+  expect(
+    text(render('100', { multiPayerMode: true, payers: [{ user: YOU, amount: '40' }] })).match(
+      /₹50\.00/g,
+    ),
+  ).toHaveLength(2);
+});
+
+it('shows the leftover-cent note on the new Expense form (#1117 decision 9)', () => {
+  expect(text(render('0.01'))).toContain('The leftover ₹0.01 goes to you so the total is exact.');
+});
+
+it('names the payer field even when no multiple-payer rows were remembered (#1117 decision 7)', () => {
+  expect(text(render('100', { payerId: SAM, payers: [] }))).toContain('Sam Chen paid');
 });

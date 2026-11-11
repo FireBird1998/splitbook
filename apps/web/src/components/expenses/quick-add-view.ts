@@ -13,7 +13,7 @@ import {
   type QuickAddProblemCode,
   type QuickAddRead,
 } from '@splitbook/shared/quick-add';
-import { readExpenseEntry, formSummaryPolicy } from '@splitbook/shared/expense-entry';
+import { readExpenseEntry } from '@splitbook/shared/expense-entry';
 import { SEPARATOR } from '@splitbook/shared/separator';
 
 export type QuickAddChipKey = 'description' | 'amount' | 'payer' | 'split' | 'date' | 'tag';
@@ -269,7 +269,7 @@ export function quickAddModel({
       { payerId: paidBy, tagId: tag?.id ?? '' },
       { currency, viewerId, members },
     );
-    const { result } = readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy);
+    const { result } = readExpenseEntry(entry, { kind: 'new' });
     if (result.kind === 'refused') throw result.error;
     const shares = new Map(
       result.money.splitBetween.map((row) => [String(row.user), row.amountMinor]),

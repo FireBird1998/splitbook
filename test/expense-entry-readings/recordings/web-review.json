@@ -160,7 +160,7 @@
       }
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares = ₹66.67 Sam Chen ​ shares = ₹33.33 Priya Shah 3 shares · ₹33.33/share Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Less The leftover ₹0.01 goes to you so the total is exact. Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares = ₹66.67 Sam Chen ​ shares = ₹33.33 Priya Shah 3 shares · ₹33.33/share Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -174,7 +174,7 @@
         { "label": "Share with Priya Shah", "value": "", "type": "checkbox" },
         { "label": "", "value": "food" }
       ],
-      "roundingNote": null
+      "roundingNote": "The leftover ₹0.01 goes to you so the total is exact."
     }
   },
   "multiple-payers": {
@@ -237,7 +237,7 @@
       }
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split equally  · All 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹33.34 Sam Chen ₹33.33 Priya Shah ₹33.33 Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split equally  · All 3 members Less The leftover ₹0.01 goes to you so the total is exact. Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹33.34 Sam Chen ₹33.33 Priya Shah ₹33.33 Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -249,7 +249,7 @@
         { "label": "Share with Priya Shah", "value": "", "type": "checkbox" },
         { "label": "", "value": "food" }
       ],
-      "roundingNote": null
+      "roundingNote": "The leftover ₹0.01 goes to you so the total is exact."
     }
   },
   "shares-partly-blank": {
@@ -407,7 +407,7 @@
       ]
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares = — Sam Chen ​ shares = — Priya Shah 2 shares · ₹50.00/share Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ Use a whole number of shares. shares Sam Chen ​ shares Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -433,10 +433,7 @@
         "currency": "INR",
         "category": "food",
         "date": "2026-11-10",
-        "paidBy": [
-          { "user": "a00000000000000000000001", "amount": 100 },
-          { "user": "a00000000000000000000002" }
-        ],
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
         "splitMethod": "equal",
         "splitBetween": [
           { "user": "a00000000000000000000001" },
@@ -446,7 +443,7 @@
       }
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared 2 people paid  · Split equally  · 2 of 3 members Less Paid by Paid by You Paid by ​ Paid by Sam Chen Paid by ​ Total: ₹100.00 / ₹100.00 ✓ Add payer Single payer Split method Equal Unequal % Shares Split between You — Sam Chen — Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split equally  · 2 of 3 members Less Paid by Paid by You Paid by ​ Paid by Sam Chen Paid by ​ Total: ₹100.00 / ₹100.00 ✓ Add payer Single payer Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -473,10 +470,7 @@
         "currency": "INR",
         "category": "food",
         "date": "2026-11-10",
-        "paidBy": [
-          { "user": "a00000000000000000000001", "amount": 100 },
-          { "user": "a00000000000000000000002", "amount": 0 }
-        ],
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
         "splitMethod": "equal",
         "splitBetween": [
           { "user": "a00000000000000000000001" },
@@ -486,7 +480,7 @@
       }
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared 2 people paid  · Split equally  · 2 of 3 members Less Paid by Paid by You Paid by ​ Paid by Sam Chen Paid by ​ Total: ₹100.00 / ₹100.00 ✓ Add payer Single payer Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split equally  · 2 of 3 members Less Paid by Paid by You Paid by ​ Paid by Sam Chen Paid by ​ Total: ₹100.00 / ₹100.00 ✓ Add payer Single payer Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -547,7 +541,6 @@
         "currency": "INR",
         "category": "food",
         "date": "2026-11-10",
-        "paidBy": [{ "user": "a00000000000000000000001" }],
         "splitMethod": "equal",
         "splitBetween": [
           { "user": "a00000000000000000000001" },
@@ -557,7 +550,7 @@
       }
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split equally  · 2 of 3 members Less Paid by Paid by You Paid by ​ Total: ₹0.00 / ₹100.00 Add payer Single payer Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared Who paid?  · Split equally  · 2 of 3 members Less Paid by Paid by You Paid by ​ Total: ₹0.00 / ₹100.00 Add payer Single payer Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -700,7 +693,7 @@
       }
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by %  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ % = — Sam Chen ​ % = — Priya Shah Total: 80.00% / 100% Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by %  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ % = ₹40.00 Sam Chen ​ % = ₹40.00 Priya Shah Total: 80.00% / 100% Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -751,7 +744,7 @@
       ]
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared 2 people paid  · Split equally  · 2 of 3 members Less Paid by Paid by You Paid by ​ Paid by Sam Chen Paid by ​ Total: — / ₹100.00 Add payer Single payer Split method Equal Unequal % Shares Split between You — Sam Chen — Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared 2 people paid  · Split equally  · 2 of 3 members Less Paid by Paid by You Paid by ​ Paid by Sam Chen Paid by ​ Use digits and one decimal point, such as 250.50. Total: — / ₹100.00 Add payer Single payer Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -780,7 +773,7 @@
       ]
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by amounts  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ Sam Chen ​ Priya Shah Total: — / ₹100.00 Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by amounts  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ Sam Chen ​ Use digits and one decimal point, such as 250.50. Priya Shah Total: — / ₹100.00 Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -808,7 +801,7 @@
       ]
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by %  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ % = — Sam Chen ​ % = — Priya Shah Total: 100.00% / 100% Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by %  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ % = — Sam Chen ​ Use digits and one decimal point, such as 33.5. % = — Priya Shah Total: — / 100% Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -836,7 +829,7 @@
       ]
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares = — Sam Chen ​ shares = — Priya Shah 2 shares · ₹50.00/share Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares Sam Chen ​ Use a whole number of shares. shares Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
@@ -924,7 +917,7 @@
         "currency": "INR",
         "category": "food",
         "date": "2026-11-10",
-        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "paidBy": [{ "user": "a00000000000000000000002", "amount": 100 }],
         "splitMethod": "equal",
         "splitBetween": [
           { "user": "a00000000000000000000001" },
@@ -934,13 +927,13 @@
       }
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split equally  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared Sam Chen paid  · Split equally  · 2 of 3 members Less Paid by Paid by Sam Chen Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
         { "label": "", "value": "INR" },
         { "label": "", "value": "2026-11-10", "type": "date" },
-        { "label": "", "value": "a00000000000000000000001" },
+        { "label": "", "value": "a00000000000000000000002" },
         { "label": "Share with You", "value": "", "type": "checkbox" },
         { "label": "Share with Sam Chen", "value": "", "type": "checkbox" },
         { "label": "Share with Priya Shah", "value": "", "type": "checkbox" },

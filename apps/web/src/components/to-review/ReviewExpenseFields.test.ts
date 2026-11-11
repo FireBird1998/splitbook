@@ -2,7 +2,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import Chip from '@mui/material/Chip';
 import Checkbox from '@mui/material/Checkbox';
 import ExpenseFields from '@/components/expenses/ExpenseFields';
-import { entryForExpenseDraft, fieldDraftEntryPolicy } from '@splitbook/shared/expense-entry-draft';
+import { entryForExpenseDraft } from '@splitbook/shared/expense-entry-draft';
 import { createElement, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider } from '@mui/material/styles';
@@ -29,7 +29,7 @@ function render(values: ExpenseDraftValues) {
       ThemeProvider,
       { theme: createAppTheme('light') },
       createElement(ReviewExpenseFields, {
-        entry: entryForExpenseDraft(values, fieldDraftEntryPolicy),
+        entry: entryForExpenseDraft(values),
         original: values,
         context: {
           currency: 'INR',
@@ -111,7 +111,7 @@ it('keeps a cleared named Tag unselected while the changed entry is being kept',
   };
   let renderer: ReactTestRenderer | undefined;
   function Form() {
-    const [entry, setEntry] = useState(() => entryForExpenseDraft(original, fieldDraftEntryPolicy));
+    const [entry, setEntry] = useState(() => entryForExpenseDraft(original));
     const [changed, setChanged] = useState(false);
     return createElement(ReviewExpenseFields, {
       entry,
@@ -157,4 +157,32 @@ it('keeps a cleared named Tag unselected while the changed entry is being kept',
     if (renderer) await act(async () => renderer!.unmount());
     vi.unstubAllGlobals();
   }
+});
+
+it('keeps a complete split visible while Who paid needs correction (#1117 decision 8)', () => {
+  expect(
+    text(
+      render({
+        amount: 100,
+        currency: 'INR',
+        paidBy: [{ user: viewer, amount: 40 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: viewer }, { user: sam }],
+      }),
+    ).match(/₹50\.00/g),
+  ).toHaveLength(2);
+});
+
+it('shows the leftover-cent note while reviewing (#1117 decision 9)', () => {
+  expect(
+    text(
+      render({
+        amount: 0.01,
+        currency: 'INR',
+        paidBy: [{ user: viewer, amount: 0.01 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: viewer }, { user: sam }],
+      }),
+    ),
+  ).toContain('The leftover ₹0.01 goes to you so the total is exact.');
 });

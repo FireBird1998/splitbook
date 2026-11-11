@@ -18,6 +18,7 @@ import { clockTime } from './activity-format';
 import { ToReviewHomeCard, ToReviewOverlay } from './to-review';
 import { GroupMembers } from './group-members';
 import { ReviewRunOverlay } from './review-run';
+import { PayerSheet } from './payer-sheet';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const user = {
@@ -731,10 +732,10 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
   });
   it('says the same person is listed twice, not that Claude didn’t know who paid (#716)', async () => {
     const f = fixture({ one: true });
-    // ₹12.34 paid as ₹6.17 + ₹6.17, both by Alex.
+    // The assistant listed Alex twice: show the later ₹8.34, never the sum.
     f.items()[0].draft.values!.paidBy = [
-      { user: user.id, amount: 6.17 },
-      { user: user.id, amount: 6.17 },
+      { user: user.id, amount: 4 },
+      { user: user.id, amount: 8.34 },
     ];
     await signIn(f);
     await act(async () => {
@@ -748,6 +749,19 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(text(tree)).not.toContain('didn’t know who paid');
     // The tile still asks for the payer, and saving stays off until they're chosen.
     expect(text(tree)).toContain('Who paid?\u00a0· Choose');
+    expect(button(tree, 'Save expense').props.disabled).toBe(true);
+    const before = JSON.stringify(f.items()[0].draft.values);
+    const paidTile = tree.root.findAll(
+      (node) =>
+        String(node.type) === 'Pressable' &&
+        String(node.props.accessibilityLabel).startsWith('Paid by'),
+    )[0];
+    await act(async () => paidTile.props.onPress());
+    expect(tree.root.findByType(PayerSheet).props.draft.multiPayer).toBe(true);
+    expect(tree.root.findByType(PayerSheet).props.draft.payers).toEqual([
+      { user: user.id, amount: '8.34' },
+    ]);
+    expect(JSON.stringify(f.items()[0].draft.values)).toBe(before);
     expect(button(tree, 'Save expense').props.disabled).toBe(true);
   });
   it('names a split that does not add up, not a missing amount (#506)', async () => {
