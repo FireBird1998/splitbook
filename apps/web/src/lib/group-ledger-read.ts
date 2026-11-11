@@ -23,9 +23,11 @@ export interface GroupLedgerRead<T> {
   missingGroup?: 'forbidden' | 'not-found';
   deletionMarker?: 'refuse' | 'allow-retained-members';
   recurring?: 'materialize' | 'recorded-only';
+  /** Minimum Group role for this read. */
+  requiredRole?: 'member' | 'admin';
   /** Preserve admission before request validation, and validation before any materialization. */
   validate?: () => void;
-  read: (group: LedgerReadGroup) => Promise<T>;
+  read: (group: LedgerReadGroup, storedGroup: IGroupDocument) => Promise<T>;
 }
 
 /** Supply the admitted Group to the read; refuse access revoked while it was running. */
@@ -35,6 +37,7 @@ export async function readGroupLedger<T>({
   missingGroup = 'forbidden',
   deletionMarker = 'refuse',
   recurring = 'materialize',
+  requiredRole = 'member',
   validate,
   read,
 }: GroupLedgerRead<T>): Promise<T> {
@@ -48,16 +51,16 @@ export async function readGroupLedger<T>({
   await connectDB();
   const access = {
     _id: groupId,
-    'members.user': actor.id,
+    ...(requiredRole === 'admin'
+      ? { members: { $elemMatch: { user: actor.id, role: 'admin' as const } } }
+      : { 'members.user': actor.id }),
     ...(actor.kind === 'member' && deletionMarker === 'allow-retained-members'
       ? {}
       : { deletionRequestedAt: null }),
     ...(actor.kind === 'assistant' ? { assistantRule: { $ne: 'not_allowed' as const } } : {}),
   };
-  const group = await Group.findOne(access)
-    .populate<{ members: LedgerReadGroup['members'] }>('members.user', PERSON_FIELDS)
-    .lean();
-  if (!group) {
+  const storedGroup = await Group.findOne(access).lean();
+  if (!storedGroup) {
     if (
       actor.kind === 'member' &&
       missingGroup === 'not-found' &&
@@ -66,9 +69,14 @@ export async function readGroupLedger<T>({
       throw new Refusal('NOT_FOUND', { resource: 'Group' });
     throw new Refusal('FORBIDDEN');
   }
+  // Keep stored member identities for review fingerprints and member-id computations.
+  const group = await Group.populate<{ members: LedgerReadGroup['members'] }>(
+    { ...storedGroup, members: storedGroup.members.map((member) => ({ ...member })) },
+    { path: 'members.user', select: PERSON_FIELDS, options: { lean: true } },
+  );
   validate?.();
   if (recurring === 'materialize') await recurringExpenseService.generateDueExpenses(groupId);
-  const result = await read(group);
+  const result = await read(group, storedGroup);
   if (!(await Group.exists(access))) throw new Refusal('FORBIDDEN');
   return result;
 }
