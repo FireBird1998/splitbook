@@ -256,7 +256,7 @@ export const readExceptions = [
     operation: 'membership',
     site: 'assistantGroupFilter({memberId:scope.owner,...reach})',
     reason:
-      '2026-11-11: moves with #1124; the shared Draft gate still serves the assistant read branch. Member read paths already use the module.',
+      'Shared Draft mutation admission still needs this helper after #1124. The assistant list read is permitted only at its separately dated call site; new helper callers are checked individually.',
   },
   {
     path: 'apps/web/src/lib/services/expense-draft.service.ts',
@@ -264,7 +264,7 @@ export const readExceptions = [
     operation: 'membership',
     site: "mongoose.connection.db!.collection('groups').findOne(filter?{...filter,_id:{...filter._id,$eq:scope.group}}:{_id:scope.group,'members.user':scope.owner,deletionRequestedAt:null},{session,projection:{_id:1,defaultCurrency:1,alternateCurrencies:1,isArchived:1},},)",
     reason:
-      '2026-11-11: moves with #1124; the shared Draft gate still serves the assistant read branch. Member read paths already use the module.',
+      'Shared Draft mutation admission still needs this helper after #1124. The assistant list read is permitted only at its separately dated call site; new helper callers are checked individually.',
   },
   {
     path: 'apps/web/src/lib/services/expense-draft.service.ts',
