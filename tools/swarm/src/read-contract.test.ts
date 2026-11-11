@@ -164,3 +164,26 @@ it('permits the module, tests and fixtures, and ignores population rather than t
     ]),
   ).toEqual([]);
 });
+
+it('keeps membership checks visible through a local member-list alias', () => {
+  expect(
+    checkReadSources([
+      route(
+        'export async function GET() { const members = group.members; return members.some(m => m.user === actor); }',
+      ),
+    ]),
+  ).toMatchObject([{ operation: 'membership' }]);
+});
+it('inventories membership fences on Group writes too, so they require an exact exception', () => {
+  expect(
+    checkReadSources([
+      {
+        path: 'apps/web/src/lib/models/Group.ts',
+        source: 'const Group = {}; export default Group;',
+      },
+      route(
+        "import Group from '@/lib/models/Group'; Group.updateOne({'members.user': actor}, {$set: {name}});",
+      ),
+    ]),
+  ).toMatchObject([{ operation: 'membership' }]);
+});

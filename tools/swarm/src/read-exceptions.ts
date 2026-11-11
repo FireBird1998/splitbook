@@ -658,4 +658,60 @@ export const readExceptions = [
     reason:
       'Membership or role validation for this member-started write (including its replay/response); not a ledger read entry point.',
   },
+  {
+    path: 'apps/web/src/components/groups/GroupSettingsView.tsx',
+    within: 'GroupSettingsContent',
+    operation: 'membership',
+    site: 'members.find((m)=>m.user._id===userId)',
+    reason:
+      'Choose controls and member labels from an already delivered Group; no server read is admitted.',
+  },
+  {
+    path: 'apps/web/src/components/groups/GroupSettingsView.tsx',
+    within: 'GroupSettingsContent',
+    operation: 'membership',
+    site: "members.filter((m)=>m.role==='admin'&&m.user._id!==userId)",
+    reason:
+      'Choose controls and member labels from an already delivered Group; no server read is admitted.',
+  },
+  {
+    path: 'apps/web/src/components/groups/GroupSettingsView.tsx',
+    within: 'GroupSettingsContent',
+    operation: 'membership',
+    site: 'members.find((m)=>m.user._id===selectedMember)',
+    reason:
+      'Choose controls and member labels from an already delivered Group; no server read is admitted.',
+  },
+  {
+    path: 'apps/web/src/lib/services/group-cleanup.service.ts',
+    within: 'requestGroupDeletion',
+    operation: 'membership',
+    site: "db.collection('groups').updateOne({_id:id,members:{$size:1},'members.user':newmongoose.Types.ObjectId(actorId),deletionRequestedAt:null,},{$set:{members:[],isArchived:true,deletionRequestedAt:newDate(),inviteCode:null,inviteCodeExpiresAt:null,},$inc:{__v:1},},{session},)",
+    reason:
+      'Confirmed Group deletion or orphan maintenance uses this membership fence; no ledger read is delivered.',
+  },
+  {
+    path: 'apps/web/src/lib/services/group-cleanup.service.ts',
+    within: 'resumeGroupDeletion',
+    operation: 'membership',
+    site: "db.collection('groups').updateOne({_id:id,members:{$type:'array',$size:0},deletionRequestedAt:{$type:'date'},},{$inc:{mutationSequence:1}},{session},)",
+    reason:
+      'Confirmed Group deletion or orphan maintenance uses this membership fence; no ledger read is delivered.',
+  },
+  {
+    path: 'apps/web/src/lib/services/group-cleanup.service.ts',
+    within: 'resumeGroupDeletion',
+    operation: 'membership',
+    site: "db.collection('groups').deleteOne({_id:id,members:{$size:0}},{session})",
+    reason:
+      'Confirmed Group deletion or orphan maintenance uses this membership fence; no ledger read is delivered.',
+  },
+  {
+    path: 'apps/web/src/lib/services/group-cleanup.service.ts',
+    within: 'applyOrphanGroupManifest',
+    operation: 'membership',
+    site: "db.collection('groups').updateOne({_id:id,members:{$type:'array',$size:0},deletionRequestedAt:null},{$set:{isArchived:true,deletionRequestedAt:newDate(),inviteCode:null,inviteCodeExpiresAt:null,},$inc:{__v:1},},{session},)",
+    reason:
+      'Confirmed Group deletion or orphan maintenance uses this membership fence; no ledger read is delivered.',
+  },
 ] satisfies readonly AllowedReadSite[];

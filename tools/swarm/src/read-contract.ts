@@ -235,14 +235,22 @@ export function checkReadSources(
     else if (
       (ts.isPropertyAccessExpression(node.expression) ||
         ts.isElementAccessExpression(node.expression)) &&
-      ((['find', 'findOne', 'exists', 'findOneAndUpdate', 'countDocuments'].some((name) =>
-        property(node.expression, name),
-      ) &&
+      (([
+        'find',
+        'findOne',
+        'exists',
+        'findOneAndUpdate',
+        'countDocuments',
+        'updateOne',
+        'updateMany',
+        'deleteOne',
+        'deleteMany',
+      ].some((name) => property(node.expression, name)) &&
         groupModel(node.expression.expression) &&
         !!node.arguments[0] &&
         membershipFilter(node.arguments[0])) ||
         (['some', 'find', 'filter', 'every'].some((name) => property(node.expression, name)) &&
-          property(node.expression.expression, 'members')))
+          origins(node.expression.expression, (value) => property(value, 'members'))))
     )
       report(node, 'membership');
   }
