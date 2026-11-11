@@ -954,7 +954,11 @@ describe('payers that name the same person twice (#716)', () => {
         // Someone in the split twice keeps its own words.
         'splitBetween: Each person can appear only once',
       ].map((problem) => reviewProblem(problem)),
-    ).toEqual([PAYER_LISTED_TWICE, PAYER_LISTED_TWICE, 'Choose each member only once.']);
+    ).toEqual([
+      PAYER_LISTED_TWICE,
+      PAYER_LISTED_TWICE,
+      'The same person is listed twice. Choose who shared it.',
+    ]);
   });
 });
 

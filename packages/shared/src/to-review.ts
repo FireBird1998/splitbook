@@ -86,9 +86,13 @@ const labels: Record<ToReviewState, string> = {
 };
 /** What To review says when the payers name the same member twice (#716, the owner's words). */
 export const PAYER_LISTED_TWICE = 'The same person is listed twice. Choose who paid.';
+/** A repeated split needs a participant choice, not a missing fact (#1152). */
+export const SPLIT_LISTED_TWICE = 'The same person is listed twice. Choose who shared it.';
 /** Whether the payers name the same member twice: not a payer an assistant didn't know (#716). */
 export const payerListedTwice = (needs: readonly ReviewNeed[]) =>
   needs.some((need) => need.field === 'paidBy' && need.reason === 'listed-twice');
+export const splitListedTwice = (needs: readonly ReviewNeed[]) =>
+  needs.some((need) => need.field === 'splitBetween' && need.reason === 'listed-twice');
 /** Whether an item's missing facts ask for its amount: missing, or with too many decimals. */
 export const needsAmount = (needs: readonly ReviewNeed[]) =>
   needs.some((need) => need.field === 'amount');
@@ -120,7 +124,8 @@ function validationNeed(reason: string, path: readonly PropertyKey[]): ReviewNee
     return { field: 'paidBy', reason: 'payer-total' };
   if (reason === 'Percentages must add up to 100')
     return { field: 'splitBetween', reason: 'percentage-total' };
-  if (reason === 'Each person can appear only once' && field === 'paidBy')
+  if (reason === 'Each person can appear only once' &&
+    (field === 'paidBy' || field === 'splitBetween'))
     return { field, reason: 'listed-twice' };
   const precision = reason.match(DECIMALS)?.[1];
   return {
@@ -142,7 +147,8 @@ function needSentence(need: ReviewNeed): string {
   if (need.reason === 'split-total') return 'The split must add up to the total.';
   if (need.reason === 'payer-total') return 'The amounts paid must add up to the total.';
   if (need.reason === 'percentage-total') return 'The percentages must add up to 100%.';
-  if (need.reason === 'listed-twice') return PAYER_LISTED_TWICE;
+  if (need.reason === 'listed-twice')
+    return need.field === 'splitBetween' ? SPLIT_LISTED_TWICE : PAYER_LISTED_TWICE;
   const places = need.precision === 0 ? undefined : `at most ${need.precision} decimal places`;
   if (need.field === 'splitBetween')
     return places ? `Each share can have ${places}.` : 'Each share must be a whole number.';
