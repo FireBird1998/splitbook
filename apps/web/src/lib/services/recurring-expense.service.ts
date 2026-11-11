@@ -485,13 +485,12 @@ export class RecurringExpenseService {
                   throw new Refusal('RECURRING_EXPENSE_PROBLEM', { recurringExpenses: [] });
                 return { period };
               },
-              currencies: [{ currency: template.currency, rule: 'listed' }],
+              currencies: [{ currency: template.currency, rule: 'new-money' }],
               checkPeople(members) {
                 assertExpenseParticipants(members, money!.paidBy, money!.splitBetween);
               },
               async prepare(command): ReturnType<LedgerRecording<IExpenseDocument>['prepare']> {
                 const expenseId = new mongoose.Types.ObjectId();
-                const occurredAt = new Date();
                 return [
                   {
                     id: expenseId,
@@ -507,7 +506,6 @@ export class RecurringExpenseService {
                         },
                         activity: {
                           type: 'expense_added',
-                          occurredAt,
                           metadata: {
                             expenseId: String(expenseId),
                             description: template.description,

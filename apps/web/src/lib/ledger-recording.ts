@@ -36,7 +36,6 @@ interface NewLedgerRecord<T> {
   document: Parameters<Model<T>['create']>[0] & object;
   activity: {
     type: ActivityType;
-    occurredAt?: Date;
     metadata: Record<string, unknown>;
     alert: {
       kind: NotificationKind;
@@ -45,7 +44,7 @@ interface NewLedgerRecord<T> {
     };
   };
 }
-type CurrencyUse = { currency: string; rule: 'listed' | 'held-by-ledger' };
+type CurrencyUse = { currency: string; rule: 'new-money' | 'existing-debt' };
 export interface LedgerRecordDescription<T> {
   id: Types.ObjectId;
   currencies?: readonly CurrencyUse[];
@@ -53,9 +52,9 @@ export interface LedgerRecordDescription<T> {
 }
 interface SubmissionRetry {
   key: string;
-  receipt?: 'ordered-records';
-  atCommit?: true;
-  legacyTagAlias?: string;
+  receipt?: 'ordered-batch';
+  confirmCompetingBatchBeforeRows?: true;
+  submittedTagAlias?: string;
 }
 interface TemplateMonthRetry {
   template: Types.ObjectId;
@@ -73,8 +72,6 @@ export interface LedgerRecording<
   command: (context: { group?: IGroupDocument; receipt?: HydratedDocument<T> }) => Command;
   currencies: readonly CurrencyUse[];
   checkPeople?: (members: Set<string>) => void;
-  /** The batch reads presentation data after its commit-time replay; other writers prepare before the fence. */
-  prepareAt?: 'commit';
   prepareResponseRecord?: (
     record: HydratedDocument<T>,
     context: {
@@ -101,7 +98,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
     throw new Error('Ledger recording needs an Expense or Settlement model');
   const lockCurrencies = async (currencies: readonly CurrencyUse[]) => {
     for (const use of currencies) {
-      if (use.rule === 'held-by-ledger') await lockClearedCurrency(groupId, use.currency);
+      if (use.rule === 'existing-debt') await lockClearedCurrency(groupId, use.currency);
       else await lockLedgerCurrency(groupId, use.currency);
     }
   };
@@ -144,33 +141,26 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
       throw new Error('Incomplete stored Settlement batch');
     return first.batchSettlementIds.map((id) => saved.find((row) => row._id.equals(id))!);
   };
-  const publish = async (
-    rows: HydratedDocument<T>[],
-    outcome: 'created' | 'replayed' | 'raced',
-  ) => {
+  const publish = async (rows: HydratedDocument<T>[], created: boolean) => {
     for (const row of rows) {
       await afterGroupCommit(() =>
         activityService.publishPending(source, row._id, row.pendingActivity),
       );
       await description.prepareResponseRecord?.(row, { group: admittedGroup });
     }
-    return { records: rows, created: outcome === 'created' };
+    return { records: rows, created };
   };
   const first = await lookup();
   const command = normalize(first);
   const existing = await confirm(first, command);
-  if (existing) return publish(existing, 'replayed');
+  if (existing) return publish(existing, false);
   await ensureLedgerWriteIndexes();
-  let committed: { records: HydratedDocument<T>[]; outcome: 'created' | 'replayed' };
+  let committed: { records: HydratedDocument<T>[]; created: boolean };
   try {
     if (description.transactions !== 'allow-standalone' && !(await supportsGroupTransactions()))
       throw description.transactions.required;
     if (admittedGroup.isArchived) throw new Refusal('GROUP_ARCHIVED');
     checkMembers(admittedGroup);
-    const prepared =
-      description.prepareAt === 'commit'
-        ? undefined
-        : await description.prepare(command, admittedGroup);
     committed = await withGroupMutation(
       groupId,
       async (session) => {
@@ -183,13 +173,13 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
           throw new Refusal('GROUP_ARCHIVED');
         }
         checkMembers(group, false);
-        if (submission?.atCommit) {
+        if (submission?.confirmCompetingBatchBeforeRows) {
           const receipt = await lookup();
           const concurrent = receipt ? await confirm(receipt, normalize(receipt)) : null;
-          if (concurrent) return { records: concurrent, outcome: 'replayed' as const };
+          if (concurrent) return { records: concurrent, created: false };
         }
         checkMembers(group);
-        const descriptions = prepared ?? (await description.prepare(command, admittedGroup));
+        const descriptions = await description.prepare(command, admittedGroup);
         const result: HydratedDocument<T>[] = [];
         for (const [index, entry] of descriptions.entries()) {
           await lockCurrencies(entry.currencies ?? []);
@@ -199,7 +189,6 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
             record.activity.type,
             actorId,
             record.activity.metadata,
-            record.activity.occurredAt,
           );
           const alert = record.activity.alert;
           const capture =
@@ -221,10 +210,10 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
               createdBy: actorId,
               creationRequest:
                 index === 0 && submission
-                  ? createRequestMetadata(submission.key, command, submission.legacyTagAlias)
+                  ? createRequestMetadata(submission.key, command, submission.submittedTagAlias)
                   : undefined,
               batchSettlementIds:
-                index === 0 && submission?.receipt === 'ordered-records'
+                index === 0 && submission?.receipt === 'ordered-batch'
                   ? descriptions.map((entry) => entry.id)
                   : undefined,
               ...(month ? { recurringExpense: month.template, period: month.period } : {}),
@@ -232,7 +221,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
             }),
           );
         }
-        return { records: result, outcome: 'created' as const };
+        return { records: result, created: true };
       },
       { ledger: true },
     );
@@ -247,11 +236,11 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
       admittedGroup = current;
       const receipt = await lookup();
       const raced = receipt ? await confirm(receipt, normalize(receipt)) : null;
-      if (raced) return publish(raced, 'raced');
+      if (raced) return publish(raced, false);
     }
     throw error;
   }
-  return publish(committed.records, committed.outcome);
+  return publish(committed.records, committed.created);
 }
 
 /** The trusted session actor and the requested Expense's Group always travel together. */
@@ -342,11 +331,13 @@ export async function changeLedgerExpense({
       const { members } = await requireCommitGroup(groupId, actorId);
       if (prepared.financialEdit || (wasDeleted && !expense.isDeleted))
         assertExpenseParticipants(members, expense.paidBy, expense.splitBetween);
-      if (event && expenseChangeAlertsEnabled()) {
+      if (event) {
         const intent = expense.pendingActivity.find(
           (pending) => String(pending._id) === String(event._id),
         );
-        if (intent)
+        event.occurredAt = new Date();
+        if (intent) intent.occurredAt = event.occurredAt;
+        if (intent && expenseChangeAlertsEnabled())
           intent.notificationContext = ledgerNotificationContext(
             event,
             prepared.activity!.type,
@@ -371,14 +362,13 @@ function makePendingActivity(
   type: ActivityType,
   actorId: string,
   metadata: Record<string, unknown> = {},
-  occurredAt: Date = new Date(),
 ): IPendingActivity {
   return {
     _id: new Types.ObjectId(),
     group: new Types.ObjectId(groupId),
     type,
     actor: new Types.ObjectId(actorId),
-    occurredAt: new Date(occurredAt),
+    occurredAt: new Date(),
     // Snapshot now: callers may subsequently mutate an expense or a changes object.
     metadata: JSON.parse(JSON.stringify(metadata)) as Record<string, unknown>,
   };

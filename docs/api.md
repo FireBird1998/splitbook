@@ -1108,6 +1108,8 @@ No body needed. Adds the current user to the group. Returns `201` on join, or
 
 ## Expenses
 
+An Expense retry uses its immutable original Tag alias to recognise the recorded submission, including a duplicate race after that name is reused. Both a duplicate-race response and an ordinary retry show the recorded Tag identity's current label; neither creates another Expense. Creation retries use the actor/receipt/new-save order described under Settlements.
+
 An edit, delete or restore checks the actor's current membership again at each write, including legacy revision initialization and the financial save. If the actor left after admission, it answers **403 `FORBIDDEN`** and does not apply the change. A financial edit or restoration also rechecks its resulting payers and split participants at commit; a departed participant answers **422 `INVALID_MEMBERS`**. Notes-only and Tag-only edits keep historical money naming former members.
 
 | Method | Path                                        | Description                |
@@ -1424,6 +1426,8 @@ an outcome for each, in the order asked:
 
 ## Recurring expenses
 
+Recurring generation recognises an already recorded template/Month before refusing new work on a drifted template. It confirms that record and can publish its pending Activity without another Expense or currency lock. For a new Month on a replica set, its currency lock and Expense commit together: a failed insertion leaves neither. Ordinary standalone writes retain ADR 0007’s lack of transaction rollback; a failed insert there can leave the currency locked.
+
 Generation rechecks that the Group is open at the Expense commit. If an archive wins that race, the triggering read still answers normally, adds no Expense for that Month and leaves its marker unchanged so a later eligible read can retry it. The template's creator remains the recorded actor and receives no alert for that Expense. Payers and split participants are checked again at commit. If a participant leaves before that point, the read still succeeds without that Expense or a marker advance; a later eligible read can add the Month.
 
 Household-themed groups only (`category: "home"`). Templates materialize
@@ -1534,6 +1538,8 @@ switch off has no such document and generates exactly as before.
 ---
 
 ## Settlements
+
+Payment and Expense creation retries first admit the current actor, then recognise the matching stored receipt, before checking a new save. A named party's departure or a later archive does not refuse an already recorded payment: the retry confirms it with **201** and its original IDs. A departed actor still answers **403 `FORBIDDEN`**. For new saves, archive refusal precedes participant validation; for an existing key, a changed body answers **409 `IDEMPOTENCY_CONFLICT`** before participant validation.
 
 A Group that disappears after route admission is refused with **403 `FORBIDDEN`**, including a single payment; it is not a server fault.
 
@@ -2109,6 +2115,8 @@ longer than 120 days is counted but not listed (`tooManyDays`, `days: []`).
 ---
 
 ## Activity Feed
+
+Activity captures its names and occurrence time inside the ledger commit, for payment and Expense recording, edits, deletion, restoration and recurring generation. Waiting for a write does not freeze an earlier Activity time or payment name. Expense history and deletion timestamps keep their existing meaning.
 
 | Method | Path                        | Description                                |
 | ------ | --------------------------- | ------------------------------------------ |
@@ -2809,9 +2817,3 @@ temporary failure still records its next attempt time, so turning recovery on wi
 retries it. Unsetting `ANDROID_NOTIFICATION_SENDS_ENABLED` pauses every send, recovery included,
 and keeps the work for later; neither switch changes any financial save. Scheduling is external
 (`docs/runbooks/android-notifications.md`, "Recovery trigger").
-
-Payment and Expense creation retries first admit the current actor, then recognise the matching stored receipt, before checking a new save. A named party's departure or a later archive does not refuse an already recorded payment: the retry confirms it with **201** and its original IDs. A departed actor still answers **403 `FORBIDDEN`**. For new saves, archive refusal precedes participant validation; for an existing key, a changed body answers **409 `IDEMPOTENCY_CONFLICT`** before participant validation.
-
-An Expense retry uses its immutable original Tag alias to recognise the recorded submission, including a duplicate race after that name is reused. Both a duplicate-race response and an ordinary retry show the recorded Tag identity's current label; neither creates another Expense.
-
-Recurring generation recognises an already recorded template/Month before refusing new work on a drifted template. It confirms that record and can publish its pending Activity without another Expense or currency lock. For a new Month, its currency lock and Expense commit together: a failed insertion leaves neither.

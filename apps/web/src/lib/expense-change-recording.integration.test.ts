@@ -11,9 +11,9 @@ vi.mock('next/server', async (original) =>
   (await import('./test-utils/signed-in-route')).nextServer(original),
 );
 
-const fixture = recordingFixture('edit', 'expense-change-order');
+const fixture = recordingFixture('edit', 'expense-change-order', new Date(2026, 10, 11, 12));
 it.each(['edit', 'delete', 'restore'] as const)(
-  '%s captures Activity and history or deletion time before waiting for the save fence',
+  '%s captures Activity at commit while keeping its history or deletion time',
   async (writer) => {
     if (writer === 'restore')
       await Expense.collection.updateOne(
@@ -58,7 +58,9 @@ it.each(['edit', 'delete', 'restore'] as const)(
     expect(state.expenses[0].updatedAt.toISOString()).toBe(
       new Date(fixture.clock.getTime() + 500).toISOString(),
     );
-    expect(state.activities[0].createdAt.toISOString()).toBe(fixture.clock.toISOString());
+    expect(state.activities[0].createdAt.toISOString()).toBe(
+      new Date(fixture.clock.getTime() + 500).toISOString(),
+    );
     if (writer === 'delete')
       expect(state.expenses[0].deletedAt.toISOString()).toBe(fixture.clock.toISOString());
     else

@@ -55,8 +55,8 @@ export class SettlementService {
       command: () => command,
       retry: requestKey ? { key: requestKey } : undefined,
       currencies: [
-        { currency: data.currency, rule: 'held-by-ledger' },
-        ...(data.paidCurrency ? [{ currency: data.paidCurrency, rule: 'listed' as const }] : []),
+        { currency: data.currency, rule: 'existing-debt' },
+        ...(data.paidCurrency ? [{ currency: data.paidCurrency, rule: 'new-money' as const }] : []),
       ],
       checkPeople(memberIds) {
         assertSettlementMembers(memberIds, paidBy, data.paidTo);

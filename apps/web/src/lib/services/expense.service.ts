@@ -116,7 +116,7 @@ export class ExpenseService {
       actor: { id: userId, source: 'member' },
       model: Expense,
       transactions: 'allow-standalone',
-      retry: requestKey ? { key: requestKey, legacyTagAlias: data.tag } : undefined,
+      retry: requestKey ? { key: requestKey, submittedTagAlias: data.tag } : undefined,
       command({ group, receipt }) {
         const incoming = receipt ? requestTagForReplay(data, receipt) : data;
         const money = normalizeExpenseMoney(incoming);
@@ -132,7 +132,7 @@ export class ExpenseService {
           predefinedItem: incoming.predefinedItem ?? null,
         };
       },
-      currencies: [{ currency: data.currency, rule: 'listed' }],
+      currencies: [{ currency: data.currency, rule: 'new-money' }],
       checkPeople(members) {
         assertExpenseParticipants(members, data.paidBy, data.splitBetween);
       },
@@ -144,7 +144,6 @@ export class ExpenseService {
         );
         assertGroupCurrency(group!, data.currency);
         const id = new mongoose.Types.ObjectId();
-        const occurredAt = new Date();
         return [
           {
             id,
@@ -153,7 +152,6 @@ export class ExpenseService {
                 document: { ...command, preparedBy: options?.preparedBy },
                 activity: {
                   type: 'expense_added',
-                  occurredAt,
                   metadata: {
                     ...(options?.preparedBy ? { preparedBy: options.preparedBy } : {}),
                     expenseId: String(id),

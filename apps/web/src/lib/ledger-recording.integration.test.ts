@@ -32,6 +32,7 @@ beforeEach(async () => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 afterAll(db.teardown);
 
@@ -41,7 +42,7 @@ function recordResult(
   overrides: Partial<LedgerRecording<IExpenseDocument>> = {},
   alertSwitch: 'always' | 'payments' | 'expense-changes' = 'always',
   documentOverrides: Partial<IExpenseDocument> = {},
-  event?: { metadata: Record<string, unknown>; occurredAt: Date },
+  event?: { metadata: Record<string, unknown> },
 ) {
   return recordLedger({
     groupId,
@@ -50,7 +51,7 @@ function recordResult(
     transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
     command: () => ({ description: 'A record', amount: 10 }),
     retry: { key },
-    currencies: [{ currency: 'INR', rule: 'listed' }],
+    currencies: [{ currency: 'INR', rule: 'new-money' }],
     checkPeople(members) {
       if (!members.has(bob)) throw new Refusal('INVALID_MEMBERS');
     },
@@ -78,7 +79,6 @@ function recordResult(
               activity: {
                 type: 'expense_added',
                 metadata: event?.metadata ?? { expenseId: String(id), description: 'A record' },
-                occurredAt: event?.occurredAt,
                 alert: {
                   kind: 'expense_added',
                   involved: [alice, bob, bob, carol],
@@ -374,31 +374,27 @@ describe('changing a ledger Expense', () => {
 });
 
 describe('private recording intent', () => {
-  it('keeps the original event payload and timestamp after caller values change', async () => {
-    const when = new Date('2026-09-16T12:00:00Z');
+  it('keeps its commit timestamp and original payload after caller values change', async () => {
+    const when = new Date(2026, 8, 16, 12);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(when);
     const metadata = { description: 'Original', changes: { amount: { old: 10, new: 20 } } };
-    const result = await recordResult(
-      randomUUID(),
-      {},
-      'always',
-      {},
-      { metadata, occurredAt: when },
-    );
+    const result = await recordResult(randomUUID(), {}, 'always', {}, { metadata });
     metadata.description = 'Changed later';
     metadata.changes.amount.new = 99;
-    when.setUTCFullYear(2030);
+    vi.setSystemTime(new Date(2030, 8, 16, 12));
     const intent = result.records[0].pendingActivity[0];
     expect(intent.metadata).toEqual({
       description: 'Original',
       changes: { amount: { old: 10, new: 20 } },
     });
-    expect(intent.occurredAt.toISOString()).toBe('2026-09-16T12:00:00.000Z');
+    expect(intent.occurredAt.toISOString()).toBe(when.toISOString());
     const activity = await Activity.findOne({ type: 'expense_added' });
     expect(activity!.metadata).toEqual({
       description: 'Original',
       changes: { amount: { old: 10, new: 20 } },
     });
-    expect(activity!.createdAt.toISOString()).toBe('2026-09-16T12:00:00.000Z');
+    expect(activity!.createdAt.toISOString()).toBe(when.toISOString());
   });
   it('accepts the hundredth pending event and refuses another without dropping any', async () => {
     const [saved] = await record();

@@ -10,9 +10,9 @@ vi.mock('next/headers', async () => (await import('./test-utils/signed-in-route'
 vi.mock('next/server', async (original) =>
   (await import('./test-utils/signed-in-route')).nextServer(original),
 );
-const fixture = recordingFixture('manual-expense', 'expense-order');
+const fixture = recordingFixture('manual-expense', 'expense-order', new Date(2026, 10, 11, 12));
 
-it('keeps the Expense Activity time captured before waiting for its fence', async () => {
+it('captures Expense Activity time at its commit', async () => {
   const pause = fixture.holdFence(1);
   const pending = fixture.send();
   try {
@@ -32,7 +32,9 @@ it('keeps the Expense Activity time captured before waiting for its fence', asyn
   expect(answer.status).toBe(201);
   expect(answer.body.data.createdAt).toBe(new Date(fixture.clock.getTime() + 500).toISOString());
   const feed = await fixture.http(fixture.routes.feed.GET, 'GET', 'activity');
-  expect(feed.body.data.activities[0].createdAt).toBe(fixture.clock.toISOString());
+  expect(feed.body.data.activities[0].createdAt).toBe(
+    new Date(fixture.clock.getTime() + 500).toISOString(),
+  );
 });
 
 it('refuses a standalone Expense when an archive commits after its fence check', async () => {

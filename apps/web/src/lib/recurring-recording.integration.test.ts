@@ -10,7 +10,11 @@ vi.mock('next/headers', async () => (await import('./test-utils/signed-in-route'
 vi.mock('next/server', async (original) =>
   (await import('./test-utils/signed-in-route')).nextServer(original),
 );
-const fixture = recordingFixture('recurring-expense', 'recurring-order');
+const fixture = recordingFixture(
+  'recurring-expense',
+  'recurring-order',
+  new Date(2026, 10, 11, 12),
+);
 
 it('recognises a recorded Month before validating a drifted template', async () => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -33,7 +37,7 @@ it('recognises a recorded Month before validating a drifted template', async () 
   expect((await RecurringExpense.findById(fixture.templateId))!.lastGeneratedFor).toBe('2026-11');
 });
 
-it('captures recurring Activity time after the currency lock and before waiting for the write', async () => {
+it('captures recurring Activity time at its commit', async () => {
   const pause = fixture.holdFence(1);
   const pending = fixture.send();
   try {
@@ -55,7 +59,9 @@ it('captures recurring Activity time after the currency lock and before waiting 
     new Date(fixture.clock.getTime() + 500).toISOString(),
   );
   const feed = await fixture.http(fixture.routes.feed.GET, 'GET', 'activity');
-  expect(feed.body.data.activities[0].createdAt).toBe(fixture.clock.toISOString());
+  expect(feed.body.data.activities[0].createdAt).toBe(
+    new Date(fixture.clock.getTime() + 500).toISOString(),
+  );
 });
 
 it('keeps an archived-at-commit Month for the next read without failing the read', async () => {

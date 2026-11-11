@@ -10,9 +10,13 @@ vi.mock('next/headers', async () => (await import('./test-utils/signed-in-route'
 vi.mock('next/server', async (original) =>
   (await import('./test-utils/signed-in-route')).nextServer(original),
 );
-const fixture = recordingFixture('single-settlement', 'settlement-names');
+const fixture = recordingFixture(
+  'single-settlement',
+  'settlement-names',
+  new Date(2026, 10, 11, 12),
+);
 
-it('keeps the payment names read before the recording waits for its fence', async () => {
+it('captures payment names at its commit', async () => {
   const pause = fixture.holdFence(1);
   const pending = fixture.send();
   try {
@@ -33,7 +37,7 @@ it('keeps the payment names read before the recording waits for its fence', asyn
   expect(feed.status).toBe(200);
   expect(feed.body.data.activities[0].metadata).toMatchObject({
     paidByName: 'Alex Rivera',
-    paidToName: 'Sam Chen',
+    paidToName: 'A new name',
   });
 });
 
