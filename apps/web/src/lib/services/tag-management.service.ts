@@ -1,3 +1,4 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import { Refusal } from '@splitbook/shared/refusals';
 import 'server-only';
 import mongoose from 'mongoose';
@@ -79,7 +80,12 @@ function applied(receipt: Receipt, current: TagSnapshot): TagActionResult {
 }
 export const tagManagementService = {
   async snapshot(groupId: string, actorId: string): Promise<TagSnapshot> {
-    return snapshot(await accessibleGroup(groupId, actorId), actorId);
+    return readGroupLedger({
+      actor: { kind: 'member', id: actorId },
+      groupId,
+      recurring: 'recorded-only',
+      read: async (_group, storedGroup) => snapshot(storedGroup, actorId),
+    });
   },
   async check(groupId: string, actorId: string, requestId: string): Promise<TagActionResult> {
     await connectDB();
@@ -88,11 +94,17 @@ export const tagManagementService = {
       actor: new mongoose.Types.ObjectId(actorId),
       requestId,
     });
-    const group = await accessibleGroup(groupId, actorId);
-    const current = snapshot(group, actorId);
-    return receipt
-      ? applied(receipt, current)
-      : { state: 'not-applied', requestId, snapshot: current };
+    return readGroupLedger<TagActionResult>({
+      actor: { kind: 'member', id: actorId },
+      groupId,
+      recurring: 'recorded-only',
+      read: async (_group, storedGroup) => {
+        const current = snapshot(storedGroup, actorId);
+        return receipt
+          ? applied(receipt, current)
+          : { state: 'not-applied', requestId, snapshot: current };
+      },
+    });
   },
   async submit(groupId: string, actorId: string, command: TagCommand): Promise<TagActionResult> {
     const parsed = tagCommandSchema.safeParse(command);
