@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import mongoose, { Types } from 'mongoose';
 import { createRequestMetadata } from './financial-write';
+import { pendingActivityFixture } from './test-utils/pending-activity';
 import { withGroupMutation } from './group-mutation';
 import { Refusal } from '@splitbook/shared/refusals';
 import { recordLedger, changeLedgerExpense, type LedgerRecording } from './ledger-recording';
@@ -40,6 +41,7 @@ function recordResult(
   overrides: Partial<LedgerRecording<IExpenseDocument>> = {},
   alertSwitch: 'always' | 'payments' | 'expense-changes' = 'always',
   documentOverrides: Partial<IExpenseDocument> = {},
+  event?: { metadata: Record<string, unknown>; occurredAt: Date },
 ) {
   return recordLedger({
     groupId,
@@ -75,7 +77,8 @@ function recordResult(
               },
               activity: {
                 type: 'expense_added',
-                metadata: { expenseId: String(id), description: 'A record' },
+                metadata: event?.metadata ?? { expenseId: String(id), description: 'A record' },
+                occurredAt: event?.occurredAt,
                 alert: {
                   kind: 'expense_added',
                   involved: [alice, bob, bob, carol],
@@ -335,5 +338,58 @@ describe('changing a ledger Expense', () => {
     );
     expect(activity!.metadata.description).toBe('Changed through the module');
     expect(activity!.notificationContext!.recipientIds).toEqual([bob]);
+  });
+});
+
+describe('private recording intent', () => {
+  it('keeps the original event payload and timestamp after caller values change', async () => {
+    const when = new Date('2026-09-16T12:00:00Z');
+    const metadata = { description: 'Original', changes: { amount: { old: 10, new: 20 } } };
+    await recordResult(randomUUID(), {}, 'always', {}, { metadata, occurredAt: when });
+    metadata.description = 'Changed later';
+    metadata.changes.amount.new = 99;
+    when.setUTCFullYear(2030);
+    const activity = await Activity.findOne({ type: 'expense_added' });
+    expect(activity!.metadata).toEqual({
+      description: 'Original',
+      changes: { amount: { old: 10, new: 20 } },
+    });
+    expect(activity!.createdAt.toISOString()).toBe('2026-09-16T12:00:00.000Z');
+  });
+  it('accepts the hundredth pending event and refuses another without dropping any', async () => {
+    const [saved] = await record();
+    const pending = Array.from({ length: 99 }, () =>
+      pendingActivityFixture(groupId, 'expense_updated', alice),
+    );
+    await Expense.collection.updateOne({ _id: saved._id }, { $set: { pendingActivity: pending } });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(Activity, 'updateOne').mockImplementation(() => {
+      throw new Error('Activity unavailable');
+    });
+    const description = {
+      access: { actorId: alice, groupId, expenseId: String(saved._id) },
+      change(expense: mongoose.HydratedDocument<IExpenseDocument>) {
+        expense.description = 'Hundredth event';
+        return {
+          activity: {
+            type: 'expense_updated' as const,
+            metadata: { description: expense.description },
+          },
+        };
+      },
+    };
+    await changeLedgerExpense({ ...description, expectedRevision: 0 });
+    expect(
+      (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity,
+    ).toHaveLength(100);
+    await expect(
+      changeLedgerExpense({ ...description, expectedRevision: 1 }),
+    ).rejects.toMatchObject({ message: 'ACTIVITY_BACKLOG_FULL' });
+    await expect(
+      changeLedgerExpense({ ...description, expectedRevision: 1 }),
+    ).rejects.toBeInstanceOf(Refusal);
+    expect(
+      (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity,
+    ).toHaveLength(100);
   });
 });

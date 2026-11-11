@@ -1,3 +1,4 @@
+import { pendingActivityFixture as makePendingActivity } from '@/lib/test-utils/pending-activity';
 /**
  * Integration tests for Home's latest changes (`GET /api/user/activity`, #309) against a real,
  * isolated MongoDB database (`splitbook-test-user-activity-route`). Only the session is a
@@ -11,7 +12,6 @@ import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { settlementService } from '@/lib/services/settlement.service';
 import { activityService } from '@/lib/services/activity.service';
-import { makePendingActivity } from '@/lib/financial-write';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
 import { formatActivityAmount } from '@splitbook/shared/activity-timeline';

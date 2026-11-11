@@ -1,7 +1,7 @@
+import { pendingActivityFixture as makePendingActivity } from '@/lib/test-utils/pending-activity';
 import { describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
 import Expense from './models/Expense';
-import { makePendingActivity } from './financial-write';
 import { DEMO_PERSONA_IDS } from './demo-personas';
 import { recordingFixture } from './test-utils/recordings/fixture';
 

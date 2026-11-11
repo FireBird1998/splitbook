@@ -5,21 +5,21 @@ import { Types, type HydratedDocument, type Model } from 'mongoose';
 import connectDB from './db';
 import { afterGroupCommit, supportsGroupTransactions, withGroupMutation } from './group-mutation';
 import { ensureLedgerWriteIndexes } from './ledger-indexes';
-import { lockClearedCurrency, lockLedgerCurrency, lockRestoredCurrency } from './ledger-currency';
+import { lockLedgerCurrency } from './ledger-currency';
+import Settlement from './models/Settlement';
+import { MoneyValidationError } from '@splitbook/shared/exact-money';
 import { assertExpectedRevision } from './ledger-revision';
 import Expense, { type IExpenseDocument } from './models/Expense';
 import {
   assertCreateReplay,
-  assertPendingActivityCapacity,
   involvedMembers,
   createRequestMetadata,
-  makePendingActivity,
-  ledgerNotificationContext,
   expenseChangeAlertsEnabled,
   paymentAlertsEnabled,
   type ICreationRequest,
   type IPendingActivity,
   type NotificationKind,
+  type NotificationContext,
 } from './financial-write';
 import Group, { type IGroupDocument } from './models/Group';
 import { activityService } from './services/activity.service';
@@ -382,4 +382,112 @@ export async function changeLedgerExpense({
   // Changes historically publish directly after their save, unlike nested creation recordings.
   await activityService.publishPending('expenses', expense._id, expense.pendingActivity);
   return expense;
+}
+
+const PENDING_ACTIVITY_LIMIT = 100;
+
+function makePendingActivity(
+  groupId: string,
+  type: ActivityType,
+  actorId: string,
+  metadata: Record<string, unknown> = {},
+  occurredAt: Date = new Date(),
+): IPendingActivity {
+  return {
+    _id: new Types.ObjectId(),
+    group: new Types.ObjectId(groupId),
+    type,
+    actor: new Types.ObjectId(actorId),
+    occurredAt: new Date(occurredAt),
+    // Snapshot now: callers may subsequently mutate an expense or a changes object.
+    metadata: JSON.parse(JSON.stringify(metadata)) as Record<string, unknown>,
+  };
+}
+
+/**
+ * The private immutable alert context for one Expense or Settlement event, captured inside the
+ * financial commit: its involved members (an Expense's payers and split participants, before and
+ * after for an edit; a Settlement's payer and recipient) who are Group members at that commit,
+ * without the event's actor.
+ */
+function ledgerNotificationContext(
+  event: Pick<IPendingActivity, '_id' | 'actor' | 'occurredAt'>,
+  kind: NotificationKind,
+  record: { groupId: string; recordId: string },
+  involved: Iterable<unknown>,
+  membersAtCommit: ReadonlySet<string>,
+): NotificationContext {
+  const actor = String(event.actor);
+  return {
+    version: 2,
+    eventId: String(event._id),
+    kind,
+    groupId: record.groupId,
+    recordId: record.recordId,
+    occurredAt: event.occurredAt,
+    recipientIds: [...new Set(Array.from(involved, String))]
+      .filter((candidate) => candidate !== actor && membersAtCommit.has(candidate))
+      .sort(),
+  };
+}
+
+/** Refuse another mutation before committing if a sustained outage has filled this outbox. */
+function assertPendingActivityCapacity(events: readonly IPendingActivity[] = []): void {
+  if (events.length >= PENDING_ACTIVITY_LIMIT) throw new Refusal('ACTIVITY_BACKLOG_FULL');
+}
+
+/**
+ * Whether the Group's ledger still holds this currency: a live Expense (other than `except`) or a
+ * Settlement uses it, as an older Group's currency the list no longer names may be.
+ */
+async function ledgerStillUses(groupId: string, currency: string, except?: string) {
+  return Boolean(
+    (await Expense.exists({
+      group: groupId,
+      currency,
+      isDeleted: { $ne: true },
+      ...(except ? { _id: { $ne: except } } : {}),
+    })) || (await Settlement.exists({ group: groupId, currency })),
+  );
+}
+
+/**
+ * A Settlement clears a Debt in one of the Group's currencies, or in an older currency its
+ * ledger still holds (#727); either way it locks the main currency. Run inside the insert's own
+ * Group mutation, so a removal of the currency can't come in between (#721).
+ */
+async function lockClearedCurrency(groupId: string, currency: string): Promise<void> {
+  try {
+    await lockLedgerCurrency(groupId, currency);
+    return;
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== 'CURRENCY_MISMATCH') throw error;
+  }
+  if (!(await ledgerStillUses(groupId, currency))) throw new Refusal('CURRENCY_MISMATCH');
+  await withGroupMutation(groupId, async () =>
+    Group.updateOne({ _id: groupId }, { $set: { currencyLocked: true } }, { timestamps: false }),
+  );
+}
+
+/**
+ * A deleted Expense comes back in its currency while the Group lists it, or while the ledger
+ * still holds it otherwise. Otherwise the refusal says how to bring it back. Run inside the
+ * restore's own Group mutation.
+ */
+async function lockRestoredCurrency(
+  groupId: string,
+  currency: string,
+  expenseId: string,
+): Promise<void> {
+  try {
+    await lockLedgerCurrency(groupId, currency);
+    return;
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== 'CURRENCY_MISMATCH') throw error;
+  }
+  if (!(await ledgerStillUses(groupId, currency, expenseId)))
+    throw new MoneyValidationError(
+      'CURRENCY_MISMATCH',
+      `Add ${currency} to the Group’s currencies to restore it.`,
+    );
 }
