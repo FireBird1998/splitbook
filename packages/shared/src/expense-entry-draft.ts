@@ -74,13 +74,15 @@ export function draftForExpenseEntry(
     fields.tagId = entry.tagId;
   }
   const changed = update?.changed;
-  if (
+  const payersEdited =
     !update ||
     changed?.payerId ||
     changed?.payers ||
     changed?.multiPayer ||
-    (changed?.amount && update.from.paidBy?.length === 1)
-  ) {
+    (changed?.amount && update.from.paidBy?.length === 1);
+  const splitEdited =
+    !update || changed?.splitMethod || changed?.participantIds || changed?.splitValues;
+  if (payersEdited) {
     for (const key of Object.keys(fields)) if (key.startsWith('paidBy.')) delete fields[key];
     const payers = entry.multiPayer
       ? enteredPayers(entry.payers)
@@ -91,7 +93,7 @@ export function draftForExpenseEntry(
       fields[`paidBy.${payer.user}.amount`] = entry.multiPayer ? payer.amount : entry.amount;
     }
   }
-  if (!update || changed?.splitMethod || changed?.participantIds || changed?.splitValues) {
+  if (splitEdited) {
     const replace = !update;
     for (const key of Object.keys(fields)) {
       if (!key.startsWith('splitBetween.')) continue;
@@ -107,8 +109,17 @@ export function draftForExpenseEntry(
       for (const id of replace ? entry.participantIds : Object.keys(entry.splitValues))
         fields[`splitBetween.${id}.${part}`] = entry.splitValues[id] ?? '';
   }
-  return draftValues(fields, entry.multiPayer);
+  const values = draftValues(fields, entry.multiPayer);
+  // The codec holds one row per person. Editing something else must not settle a person an
+  // assistant listed twice: those rows stay as given, so the warning and the blocked Save stay
+  // until the member edits that part themselves (#1117 decision 11).
+  if (update && !payersEdited && repeats(update.from.paidBy)) values.paidBy = update.from.paidBy;
+  if (update && !splitEdited && repeats(update.from.splitBetween))
+    values.splitBetween = update.from.splitBetween;
+  return values;
 }
+const repeats = (rows: Array<{ user: string }> = []) =>
+  new Set(rows.map((row) => row.user)).size < rows.length;
 
 // Private codec: these temporary fields are never held by a form or persisted.
 function draftEntries(values: ExpenseDraftValues = {}): DraftEntries {

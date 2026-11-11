@@ -565,13 +565,13 @@ describe('persistent private expense Drafts', () => {
       expect((await drafts.list(alice, groupId))[0].values).toEqual(values);
       expect((await drafts.save(alice, groupId, saveCommand(reviewed)))[0].status).toBe('failed');
       expect(await db().collection('expenses').countDocuments()).toBe(0);
-      // A note edit resolves repeated boxes, but is not an instruction that this one person
-      // paid the entire Expense when their later amount was omitted (#1117).
+      // A note edit leaves the repeated rows as the assistant gave them, so the item stays
+      // blocked until the member says who paid (#1117).
       const edited = draftForExpenseEntry(
         { ...entryForExpenseDraft(values), notes: 'Checked the receipt' },
         { from: values, changed: { notes: true } },
       );
-      expect(edited).not.toHaveProperty('paidBy');
+      expect(edited.paidBy).toEqual(values.paidBy);
       const kept = await drafts.replace(alice, groupId, changed.id, edited, changed.revision);
       const nextReview = await drafts.review(alice, groupId, kept.id);
       expect((await drafts.save(alice, groupId, saveCommand(nextReview)))[0].status).toBe('failed');

@@ -192,8 +192,8 @@ it('omits unpaid people from Finish later and from a later note edit (#1117 deci
   ).toEqual([{ user: alex, amount: 100 }]);
 });
 
-it.each([0, undefined])(
-  'does not infer a whole payment after a note edit drops an unpaid duplicate (%s, #1117 decisions 2 and 11)',
+it.each([0, undefined, 30, 100])(
+  'a note edit leaves a person listed twice as the assistant gave them (later amount %s, #1117 decision 11)',
   (amount) => {
     const from = {
       ...draftForExpenseEntry(entries[0]),
@@ -205,7 +205,31 @@ it.each([0, undefined])(
     const entry = { ...entryForExpenseDraft(from), notes: 'Checked the receipt' };
     expect(entry.multiPayer).toBe(true);
     const kept = draftForExpenseEntry(entry, { from, changed: { notes: true } });
-    expect(kept).not.toHaveProperty('paidBy');
-    expect(from.paidBy).toHaveLength(2);
+    expect(kept.paidBy).toEqual(from.paidBy);
+    expect(kept.notes).toBe('Checked the receipt');
   },
 );
+
+it('a note edit leaves a split person listed twice as given, and editing the split settles them (#1117 decision 11)', () => {
+  const base = draftForExpenseEntry(entries[0]);
+  const person = base.splitBetween![0].user;
+  const from = {
+    ...base,
+    splitMethod: 'unequal' as const,
+    splitBetween: [
+      { user: person, amount: 30 },
+      { user: person, amount: 70 },
+    ],
+  };
+  const entry = entryForExpenseDraft(from);
+  const noted = draftForExpenseEntry(
+    { ...entry, notes: 'Checked' },
+    { from, changed: { notes: true } },
+  );
+  expect(noted.splitBetween).toEqual(from.splitBetween);
+  const settled = draftForExpenseEntry(
+    { ...entry, splitValues: { ...entry.splitValues, [person]: '100' } },
+    { from, changed: { splitValues: true } },
+  );
+  expect(settled.splitBetween).toEqual([{ user: person, amount: 100 }]);
+});
