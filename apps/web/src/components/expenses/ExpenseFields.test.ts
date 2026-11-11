@@ -28,6 +28,8 @@ function render(
     currency?: string;
     currencyChoices?: ExpenseCurrencyChoice[];
     currencyHint?: string | null;
+    splitMethod?: 'shares' | 'percentage' | 'unequal';
+    splitValues?: Record<string, string>;
     payerId?: string;
     payers?: Array<{ user: string; amount: string }>;
   } = {},
@@ -41,6 +43,9 @@ function render(
     date: '2026-10-18',
   }).change({
     description: 'Chai',
+    ...(mode.splitMethod
+      ? { splitMethod: mode.splitMethod, splitValues: mode.splitValues ?? {} }
+      : {}),
     payerId: mode.payerId ?? YOU,
     amount,
     multiPayer: mode.multiPayerMode ?? false,
@@ -231,3 +236,16 @@ it('shows the selected payer field even if the remembered payer row differs (#11
     'Sam Chen paid',
   );
 });
+
+it.each([
+  ['shares', '1.5', 'Use a whole number of shares.'],
+  ['percentage', 'word', 'Use digits and one decimal point, such as 33.5.'],
+  ['unequal', 'word', 'Use digits and one decimal point, such as 250.50.'],
+] as const)(
+  'marks the %s box for %s while typing (#1117 decisions 4–5)',
+  (splitMethod, value, words) => {
+    expect(
+      text(render('100', { splitMethod, splitValues: { [YOU]: value, [SAM]: '1' } })),
+    ).toContain(words);
+  },
+);

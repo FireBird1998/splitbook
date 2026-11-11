@@ -681,6 +681,8 @@ export default function ExpenseFields({
                     <MoneyTextField
                       currency={currency}
                       value={payer.amount}
+                      error={!!reading.payers.errors[payer.user]}
+                      helperText={reading.payers.errors[payer.user]}
                       onValueChange={(value) => updatePayer(i, 'amount', value)}
                       size="small"
                       placeholder="Amount"
@@ -853,6 +855,8 @@ export default function ExpenseFields({
                       <MoneyTextField
                         currency={currency}
                         value={splitValues[id] || ''}
+                        error={!!reading.split.errors[id]}
+                        helperText={reading.split.errors[id]}
                         onValueChange={(value) =>
                           edit({
                             splitValues: {
@@ -884,6 +888,8 @@ export default function ExpenseFields({
                       >
                         <TextField
                           value={splitValues[id] || ''}
+                          error={!!reading.split.errors[id]}
+                          helperText={reading.split.errors[id]}
                           onChange={(e) =>
                             edit({
                               splitValues: {
@@ -923,6 +929,8 @@ export default function ExpenseFields({
                       >
                         <TextField
                           value={splitValues[id] || ''}
+                          error={!!reading.split.errors[id]}
+                          helperText={reading.split.errors[id]}
                           onChange={(e) =>
                             edit({
                               splitValues: {
@@ -977,7 +985,9 @@ export default function ExpenseFields({
                       color: !percentagesBalanced ? 'status.negative' : 'status.positive',
                     }}
                   >
-                    Total: {percentageTotal.toFixed(2)}% / 100%
+                    Total:{' '}
+                    {Number.isFinite(percentageTotal) ? percentageTotal.toFixed(2) + '%' : '—'} /
+                    100%
                     {percentagesBalanced && ' ✓'}
                   </Box>
                 )}

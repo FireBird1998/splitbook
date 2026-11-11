@@ -695,6 +695,7 @@ export default function RecurringExpensesSection({
                 currency={defaultCurrency}
                 label="Amount"
                 value={entry.amount}
+                error={!!reading.amount.error}
                 onValueChange={(value) => setEntry({ ...entry, amount: value })}
                 fullWidth
                 size="small"
@@ -707,9 +708,10 @@ export default function RecurringExpensesSection({
                   htmlInput: { inputMode: precision === 0 ? 'numeric' : 'decimal' },
                 }}
                 helperText={
-                  precision === 0
+                  reading.amount.error ??
+                  (precision === 0
                     ? `${defaultCurrency} uses whole amounts`
-                    : `Up to ${precision} decimal places`
+                    : `Up to ${precision} decimal places`)
                 }
               />
               <TextField
@@ -818,6 +820,8 @@ export default function RecurringExpensesSection({
                             size="small"
                             label="Amount"
                             value={value}
+                            error={!!reading.split.errors[member.user._id]}
+                            helperText={reading.split.errors[member.user._id]}
                             onValueChange={(value) => setSplit(member.user._id, value)}
                             sx={{ width: 120 }}
                             slotProps={{
@@ -831,6 +835,8 @@ export default function RecurringExpensesSection({
                           size="small"
                           label="%"
                           value={value}
+                          error={!!reading.split.errors[member.user._id]}
+                          helperText={reading.split.errors[member.user._id]}
                           onChange={(e) => setSplit(member.user._id, e.target.value)}
                           sx={{ width: 96 }}
                           slotProps={{ htmlInput: { min: 0, max: 100 } }}
@@ -842,6 +848,8 @@ export default function RecurringExpensesSection({
                           size="small"
                           label="Shares"
                           value={value}
+                          error={!!reading.split.errors[member.user._id]}
+                          helperText={reading.split.errors[member.user._id]}
                           onChange={(e) => setSplit(member.user._id, e.target.value)}
                           sx={{ width: 96 }}
                           slotProps={{ htmlInput: { min: 0, step: '1' } }}

@@ -325,3 +325,25 @@ it('submits a recurring split with a cleared amount as zero (#1117 decision 3)',
     (await read(entries.find((row) => row.id === 'amounts-partly-blank')!, false)).result,
   ).toMatchObject({ kind: 'command', value: { splitBetween: [{ amount: 100 }, { amount: 0 }] } });
 });
+
+it.each(['unreadable-share', 'unreadable-percentage', 'shares-fractional'])(
+  'marks the recurring %s box and sends nothing (#1117 decisions 4–5)',
+  async (id) => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('window', {
+      location: { hash: '' },
+      addEventListener() {},
+      removeEventListener() {},
+    });
+    vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+    const reading = await read(entries.find((row) => row.id === id)!, false);
+    expect(reading.result.kind).toBe('refusal');
+    expect(reading.shown).toMatchObject({
+      before: expect.stringContaining(
+        id === 'unreadable-percentage'
+          ? 'Use digits and one decimal point, such as 33.5.'
+          : 'Use a whole number of shares.',
+      ),
+    });
+  },
+);

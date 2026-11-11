@@ -53,20 +53,17 @@ export type ExpenseEntryPurpose = { kind: 'new' } | { kind: 'edit'; saved: Store
 export interface ExpenseEntryPolicy {
   splitPreview: 'whole-expense' | 'independent-split';
   roundingNote: 'show' | 'hide';
-  weightInput: 'numbers' | 'numbers-or-zero' | 'decimal-units';
   /** A form summary prioritizes the empty whole-share count; entry corrections mark each box. */
   feedback: 'form-summary' | 'allocation-summary' | 'entry-corrections';
 }
 export const expenseEntryPolicy: ExpenseEntryPolicy = {
   splitPreview: 'independent-split',
   roundingNote: 'show',
-  weightInput: 'decimal-units',
   feedback: 'entry-corrections',
 };
 export const formSummaryPolicy: ExpenseEntryPolicy = {
   splitPreview: 'whole-expense',
   roundingNote: 'hide',
-  weightInput: 'numbers',
   feedback: 'form-summary',
 };
 
@@ -74,7 +71,6 @@ export const formSummaryPolicy: ExpenseEntryPolicy = {
 export const recurringEntryPolicy: ExpenseEntryPolicy = {
   ...formSummaryPolicy,
   feedback: 'allocation-summary',
-  weightInput: 'numbers-or-zero',
 };
 
 /** One entry supplies both the displayed split and the command; callers cannot supply an allocator. */
@@ -108,11 +104,7 @@ export function readExpenseEntry(
           : entry.amount;
       const weight = (user: string, digits: number) => {
         const text = entry.splitValues[user] || '0';
-        return policy.weightInput === 'numbers-or-zero'
-          ? Number(text) || 0
-          : policy.weightInput === 'numbers'
-            ? Number(text)
-            : parseDecimalUnits(text, digits) / (digits === 2 ? 100 : 1);
+        return parseDecimalUnits(text, digits) / (digits === 2 ? 100 : 1);
       };
       const input = {
         amount: total,
@@ -393,12 +385,12 @@ function enteredTotals(entry: IncompleteExpenseEntry) {
     : amountMinor;
   const sharesTotal =
     splitMethod === 'shares'
-      ? participantIds.reduce((total, id) => total + (parseInt(splitValues[id]) || 0), 0)
+      ? sum(
+          participantIds.map((id) => splitValues[id]),
+          0,
+        )
       : 0;
-  const percentageTotal =
-    splitMethod === 'percentage'
-      ? participantIds.reduce((total, id) => total + (parseFloat(splitValues[id]) || 0), 0)
-      : 0;
+  const percentageTotal = splitMethod === 'percentage' ? percentageUnits / 100 : 0;
   let parsedAmount = 0;
   try {
     parsedAmount = toMajorAmount(amountMinor, currency);

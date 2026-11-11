@@ -576,16 +576,14 @@
   "shares-fractional": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit", "web-recurring", "web-recurring.edit"],
-        "reading": {
-          "kind": "refusal",
-          "issues": [
-            { "field": "", "message": "Shares must be whole numbers within the supported range" }
-          ]
-        }
-      },
-      {
-        "columns": ["android-new", "android-edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "web-recurring",
+          "web-recurring.edit",
+          "android-new",
+          "android-edit"
+        ],
         "reading": {
           "kind": "refusal",
           "issues": [{ "field": "", "message": "Amount supports at most 0 decimal places" }]
@@ -641,8 +639,7 @@
       }
     ],
     "wireResults": [
-      ["web-new", "web-edit", "web-recurring", "web-recurring.edit"],
-      ["android-new", "android-edit"],
+      ["web-new", "web-edit", "web-recurring", "web-recurring.edit", "android-new", "android-edit"],
       ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
@@ -1349,23 +1346,17 @@
   "unreadable-percentage": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit", "android-new", "android-edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "web-recurring",
+          "web-recurring.edit",
+          "android-new",
+          "android-edit"
+        ],
         "reading": {
           "kind": "refusal",
           "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
-        }
-      },
-      {
-        "columns": ["web-recurring", "web-recurring.edit"],
-        "reading": {
-          "kind": "allocation",
-          "amountMinor": 10000,
-          "currency": "INR",
-          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
-          "splitBetween": [
-            { "user": "a00000000000000000000001", "amountMinor": 10000, "percentage": 100 },
-            { "user": "a00000000000000000000002", "amountMinor": 0, "percentage": 0 }
-          ]
         }
       },
       {
@@ -1413,8 +1404,7 @@
       }
     ],
     "wireResults": [
-      ["web-new", "web-edit", "android-new", "android-edit"],
-      ["web-recurring", "web-recurring.edit"],
+      ["web-new", "web-edit", "web-recurring", "web-recurring.edit", "android-new", "android-edit"],
       ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],
@@ -1437,29 +1427,14 @@
   "unreadable-share": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit"],
-        "reading": {
-          "kind": "refusal",
-          "issues": [
-            { "field": "", "message": "Shares must be whole numbers within the supported range" }
-          ]
-        }
-      },
-      {
-        "columns": ["web-recurring", "web-recurring.edit"],
-        "reading": {
-          "kind": "allocation",
-          "amountMinor": 10000,
-          "currency": "INR",
-          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
-          "splitBetween": [
-            { "user": "a00000000000000000000001", "amountMinor": 10000, "shares": 2 },
-            { "user": "a00000000000000000000002", "amountMinor": 0, "shares": 0 }
-          ]
-        }
-      },
-      {
-        "columns": ["android-new", "android-edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "web-recurring",
+          "web-recurring.edit",
+          "android-new",
+          "android-edit"
+        ],
         "reading": {
           "kind": "refusal",
           "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
@@ -1510,9 +1485,7 @@
       }
     ],
     "wireResults": [
-      ["web-new", "web-edit"],
-      ["web-recurring", "web-recurring.edit"],
-      ["android-new", "android-edit"],
+      ["web-new", "web-edit", "web-recurring", "web-recurring.edit", "android-new", "android-edit"],
       ["server-complete"],
       ["web-finish-later"],
       ["android-finish-later"],

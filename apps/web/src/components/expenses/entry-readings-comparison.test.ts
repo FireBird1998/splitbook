@@ -278,9 +278,9 @@ it('shows blank payer refusal, dropping, and the lone-payer completion (#1111 cl
     { user: alex, amountMinor: 10000 },
   ]);
 });
-it('limits recurring unreadable-to-zero coercion to percentages and shares (#1111 claim 5)', () => {
+it('refuses unreadable percentages and shares in every complete form (#1117 decision 4)', () => {
   for (const id of ['unreadable-percentage', 'unreadable-share']) {
-    expect(money('web-recurring', id).splitBetween.map((p) => p.amountMinor)).toEqual([10000, 0]);
+    expect(cell('web-recurring', id).result.kind).toBe('refusal');
     for (const column of [
       'web-new',
       'android-new',
@@ -298,11 +298,11 @@ it('shows fractional shares in the web total while both preview and save refuse 
   expect(cell('web-new', 'shares-fractional')).toMatchObject({
     result: {
       kind: 'refusal',
-      issues: [{ message: 'Shares must be whole numbers within the supported range' }],
+      issues: [{ message: 'Amount supports at most 0 decimal places' }],
     },
     shown: {
-      formContents: expect.stringContaining('2\u00a0shares'),
-      preview: { error: 'Shares must be whole numbers within the supported range' },
+      formContents: expect.stringContaining('Use a whole number of shares.'),
+      preview: { error: 'Amount supports at most 0 decimal places' },
     },
   });
 });

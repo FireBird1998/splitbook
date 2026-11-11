@@ -17,7 +17,7 @@ it('keeps complete-form refusals and numeric weights while withholding partial a
   const fractional = entries.find((entry) => entry.id === 'shares-fractional')!;
   expect(readExpenseEntry(fractional, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
     kind: 'refused',
-    error: { message: 'Shares must be whole numbers within the supported range' },
+    error: { message: 'Amount supports at most 0 decimal places' },
   });
   const blank = entries.find((entry) => entry.id === 'shares-all-blank')!;
   expect(readExpenseEntry(blank, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
@@ -103,7 +103,7 @@ it.each([
 it.each([
   ['shares-all-blank', 'Each member needs at least 1 share'],
   ['shares-all-zero', 'Each member needs at least 1 share'],
-  ['shares-fractional', 'Shares must be whole numbers within the supported range'],
+  ['shares-fractional', 'Amount supports at most 0 decimal places'],
   ['lone-listed-payer-blank', 'At least one payer and participant are required'],
   ['amounts-not-total', 'Split amounts must add up to the expense amount'],
   ['percentage-not-total', 'Percentages must add up to 100'],
@@ -111,7 +111,7 @@ it.each([
   ['unreadable-payer', 'Enter a valid decimal amount'],
   ['unreadable-split-amount', 'Enter a valid decimal amount'],
   ['unreadable-percentage', 'Enter a valid decimal amount'],
-  ['unreadable-share', 'Shares must be whole numbers within the supported range'],
+  ['unreadable-share', 'Enter a valid decimal amount'],
   ['no-participants', 'At least one payer and participant are required'],
 ])('keeps the complete-form refusal for %s', (id, message) => {
   expect(
@@ -161,3 +161,8 @@ it.each(['payers-zero', 'payers-partly-blank'])(
     if (result.kind === 'ready') expect(result.money.paidBy).toHaveLength(1);
   },
 );
+
+it('does not show a whole-share total by truncating a fractional box (#1117 decision 5)', () => {
+  const entry = entries.find((row) => row.id === 'shares-fractional')!;
+  expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).fields.sharesTotal).toBeNaN();
+});

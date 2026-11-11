@@ -11,12 +11,11 @@ it('reads a blank recurring split amount as zero', () => {
 });
 
 it.each(['unreadable-share', 'unreadable-percentage'])(
-  'keeps the recurring zero reading of %s',
+  'refuses the unreadable recurring box in %s',
   (id) => {
     const entry = entries.find((entry) => entry.id === id)!;
     expect(readExpenseEntry(entry, { kind: 'new' }, recurringEntryPolicy).result).toMatchObject({
-      kind: 'ready',
-      money: { splitBetween: [{ amountMinor: 10000 }, { amountMinor: 0 }] },
+      kind: 'refused',
     });
   },
 );
@@ -90,3 +89,16 @@ it('counts a blank recurring split amount as zero (#1117 decision 3)', () => {
     },
   });
 });
+
+it.each(['unreadable-share', 'unreadable-percentage', 'shares-fractional'])(
+  'refuses %s instead of completing a recurring entry (#1117 decisions 4–5)',
+  (id) => {
+    const read = readExpenseEntry(
+      entries.find((row) => row.id === id)!,
+      { kind: 'new' },
+      recurringEntryPolicy,
+    );
+    expect(read.result.kind).toBe('refused');
+    expect(Object.keys(read.split.errors)).toHaveLength(1);
+  },
+);

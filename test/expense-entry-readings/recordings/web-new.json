@@ -498,22 +498,17 @@
   "shares-fractional": {
     "result": {
       "kind": "refusal",
-      "issues": [
-        { "field": "", "message": "Shares must be whole numbers within the supported range" }
-      ]
+      "issues": [{ "field": "", "message": "Amount supports at most 0 decimal places" }]
     },
     "shown": {
-      "preview": {
-        "money": null,
-        "error": "Shares must be whole numbers within the supported range"
-      },
+      "preview": { "money": null, "error": "Amount supports at most 0 decimal places" },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },
         { "user": "a00000000000000000000003", "amount": "—" }
       ],
       "advancedInitiallyOpen": false,
-      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Change Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares = — Sam Chen ​ shares = — Priya Shah 2 shares · ₹50.00/share More options Notes (optional) Notes (optional)",
+      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Change Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ Use a whole number of shares. shares Sam Chen ​ shares Priya Shah More options Notes (optional) Notes (optional)",
       "roundingNote": null
     }
   },
@@ -838,7 +833,7 @@
         { "user": "a00000000000000000000003", "amount": "—" }
       ],
       "advancedInitiallyOpen": false,
-      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared 2 people paid  · Split equally  · 2 of 3 members Change Paid by You ​ ​ Sam Chen ​ ​ Total: — / ₹100.00 Add payer Single payer Split method Equal Unequal % Shares Split between You — Sam Chen — Priya Shah More options Notes (optional) Notes (optional)",
+      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared 2 people paid  · Split equally  · 2 of 3 members Change Paid by You ​ ​ Sam Chen ​ ​ Use digits and one decimal point, such as 250.50. Total: — / ₹100.00 Add payer Single payer Split method Equal Unequal % Shares Split between You — Sam Chen — Priya Shah More options Notes (optional) Notes (optional)",
       "roundingNote": null
     }
   },
@@ -855,7 +850,7 @@
         { "user": "a00000000000000000000003", "amount": "—" }
       ],
       "advancedInitiallyOpen": false,
-      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split by amounts  · 2 of 3 members Change Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ Sam Chen ​ Priya Shah Total: — / ₹100.00 More options Notes (optional) Notes (optional)",
+      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split by amounts  · 2 of 3 members Change Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ Sam Chen ​ Use digits and one decimal point, such as 250.50. Priya Shah Total: — / ₹100.00 More options Notes (optional) Notes (optional)",
       "roundingNote": null
     }
   },
@@ -872,29 +867,24 @@
         { "user": "a00000000000000000000003", "amount": "—" }
       ],
       "advancedInitiallyOpen": false,
-      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split by %  · 2 of 3 members Change Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ % = — Sam Chen ​ % = — Priya Shah Total: 100.00% / 100% More options Notes (optional) Notes (optional)",
+      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split by %  · 2 of 3 members Change Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ % = — Sam Chen ​ Use digits and one decimal point, such as 33.5. % = — Priya Shah Total: — / 100% More options Notes (optional) Notes (optional)",
       "roundingNote": null
     }
   },
   "unreadable-share": {
     "result": {
       "kind": "refusal",
-      "issues": [
-        { "field": "", "message": "Shares must be whole numbers within the supported range" }
-      ]
+      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
     },
     "shown": {
-      "preview": {
-        "money": null,
-        "error": "Shares must be whole numbers within the supported range"
-      },
+      "preview": { "money": null, "error": "Enter a valid decimal amount" },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },
         { "user": "a00000000000000000000003", "amount": "—" }
       ],
       "advancedInitiallyOpen": false,
-      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Change Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares = — Sam Chen ​ shares = — Priya Shah 2 shares · ₹50.00/share More options Notes (optional) Notes (optional)",
+      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Change Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares Sam Chen ​ Use a whole number of shares. shares Priya Shah More options Notes (optional) Notes (optional)",
       "roundingNote": null
     }
   },
