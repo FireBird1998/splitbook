@@ -272,6 +272,9 @@ export function expenseEntryLint(root) {
         'src/**/*.d.ts',
         'src/**/*.{test,spec}.{ts,tsx}',
         'src/**/{test-utils,test-support,fixtures,__fixtures__,__mocks__}/**',
+        // TypeScript's include globs skip dot directories, so these two routes are in the
+        // program only after Next has generated its types. They serve fixed app-link JSON.
+        'src/app/.well-known/**',
       ],
       languageOptions: {
         parserOptions: {
