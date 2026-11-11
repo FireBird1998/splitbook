@@ -36,3 +36,31 @@ for (const [name, query, status, body] of [
       );
       expect(await Expense.countDocuments({ recurringExpense: readIds.template })).toBe(0);
     });
+
+for (const parameter of ['page', 'limit'] as const)
+  it(`preserves accepted ${parameter}=garbage pagination and records due rent`, async () => {
+    const answer = await httpRead(
+      fixture,
+      groupReads.find((entry) => entry.name === 'Activity')!,
+      'member',
+      { path: `/api/groups/${readIds.group}/activity?${parameter}=garbage` },
+    );
+    expect(answer.status).toBe(200);
+    expect(answer.body.data.pagination[parameter]).toBeNull();
+    expect(JSON.stringify(answer.body)).toContain('Due rent');
+    expect(await Expense.countDocuments({ recurringExpense: readIds.template })).toBe(1);
+  });
+
+for (const limit of ['0', 'garbage'])
+  it(`preserves an overflowing page with the accepted limit=${limit}`, async () => {
+    const answer = await httpRead(
+      fixture,
+      groupReads.find((entry) => entry.name === 'Activity')!,
+      'member',
+      { path: `/api/groups/${readIds.group}/activity?page=${'9'.repeat(400)}&limit=${limit}` },
+    );
+    expect(answer.status).toBe(200);
+    expect(answer.body.data.pagination.page).toBeNull();
+    expect(JSON.stringify(answer.body)).toContain('Due rent');
+    expect(await Expense.countDocuments({ recurringExpense: readIds.template })).toBe(1);
+  });

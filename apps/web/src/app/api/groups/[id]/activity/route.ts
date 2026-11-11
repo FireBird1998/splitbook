@@ -28,12 +28,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         const expenseId = searchParams.get('expenseId') ?? undefined;
 
         query = [id, page, limit, expenseId];
+        const skip = (page - 1) * limit;
         // Keep legacy selectors and pagination answers, including driver faults, before generation.
         if (
           (expenseId !== undefined && !Types.ObjectId.isValid(expenseId)) ||
-          !Number.isFinite(page) ||
-          !Number.isFinite(limit) ||
-          (page - 1) * limit < 0
+          // Mongoose accepts NaN pagination by ignoring it. Keep that successful read path.
+          [limit, skip].some((value) => !Number.isNaN(value) && !Number.isFinite(value)) ||
+          skip < 0
         )
           return success(await activityService.getGroupActivity(...query));
       },
