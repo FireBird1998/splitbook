@@ -195,3 +195,20 @@ it.each([
     ],
   ).toBe(shown);
 });
+
+it('keeps a duplicate payer’s first visible box separate from the footer’s all-row problems', () => {
+  const entry = entries.find((entry) => entry.id === 'multiple-payers')!;
+  const reading = readExpenseEntry(
+    {
+      ...entry,
+      payers: [
+        { user: alex, amount: '40' },
+        { user: alex, amount: 'bad' },
+      ],
+    },
+    { kind: 'new' },
+  );
+  expect(reading.payers.errors).toEqual({});
+  expect(reading.payers.problems).toEqual({ [alex]: 'invalid' });
+  expect(reading.result.kind).toBe('refused');
+});

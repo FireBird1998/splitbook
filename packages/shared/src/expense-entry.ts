@@ -4,7 +4,12 @@ import {
   parseAmountMinor,
   parseDecimalUnits,
 } from './exact-money';
-import { enteredPayers, payerRemainder, payerEntryProblem } from './payer-remainder';
+import {
+  enteredPayers,
+  payerRemainder,
+  payerEntryProblem,
+  type PayerEntry,
+} from './payer-remainder';
 import {
   splitBreakdown,
   splitChoiceOf,
@@ -47,14 +52,14 @@ export type ExpenseEntryPurpose = { kind: 'new' } | { kind: 'edit'; saved: Store
 
 /** One entry supplies both the displayed split and the command; callers cannot supply an allocator. */
 export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpose) {
+  const countedPayers = enteredPayers(entry.payers);
+  const payerIds = entry.multiPayer ? countedPayers.map((payer) => payer.user) : [entry.payerId];
   const allocate = (multiPayer: boolean) => {
     try {
       const input = {
         amount: entry.amount,
         currency: entry.currency,
-        paidBy: multiPayer
-          ? enteredPayers(entry.payers)
-          : [{ user: entry.payerId, amount: entry.amount }],
+        paidBy: multiPayer ? countedPayers : [{ user: entry.payerId, amount: entry.amount }],
         splitMethod: entry.splitMethod,
         splitBetween: entry.participantIds.map((user) => ({
           user,
@@ -90,16 +95,19 @@ export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpo
         };
   const split = { ...breakdown, errors, status: splitStatus };
   const payerErrors: Record<string, string> = {};
+  const visiblePayers = new Set<string>();
   for (const payer of entry.payers) {
+    // The sheet shows each identity once, using its first stored row. A duplicate's later
+    // error still belongs to the all-row remainder below, not to that visible first box.
+    if (visiblePayers.has(payer.user)) continue;
+    visiblePayers.add(payer.user);
     const error = payerEntryError(payer.amount, entry.currency);
     if (error) payerErrors[payer.user] = error;
   }
   const payers = {
     ...payerRemainder(entry),
-    entries: enteredPayers(entry.payers),
-    ids: entry.multiPayer
-      ? enteredPayers(entry.payers).map((payer) => payer.user)
-      : [entry.payerId],
+    entries: countedPayers,
+    ids: payerIds,
     errors: payerErrors,
   };
   const amount = { minor: payers.totalMinor, error: amountError(entry.amount, entry.currency) };
@@ -122,7 +130,7 @@ export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpo
       problems: [
         amount.error
           ? { field: 'amount' as const, message: amount.error }
-          : allocationProblem(entry, error),
+          : allocationProblem(entry, error, payers),
       ],
     };
   }
@@ -144,18 +152,20 @@ export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpo
   return { amount, split, splitSummary, shareSteps, payers, result };
 }
 
-function allocationProblem(entry: ExpenseEntry, error: unknown) {
+function allocationProblem(
+  entry: ExpenseEntry,
+  error: unknown,
+  payers: { ids: string[]; entries: PayerEntry[] },
+) {
   const code = error instanceof MoneyValidationError ? error.code : '';
-  const payerIds = entry.multiPayer
-    ? enteredPayers(entry.payers).map((p) => p.user)
-    : [entry.payerId];
+  const payerIds = payers.ids;
   if (code === 'EMPTY_PARTICIPANTS')
     return payerIds.length
       ? { field: 'split' as const, message: 'Choose at least one person to share this Expense.' }
       : { field: 'payers' as const, message: 'Choose who paid.' };
   const unreadablePayer =
     entry.multiPayer &&
-    enteredPayers(entry.payers).some((p) => {
+    payers.entries.some((p) => {
       try {
         parseAmountMinor(p.amount, entry.currency);
         return false;
