@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import Group from './models/Group';
+import { Types } from 'mongoose';
 import { groupService } from './services/group.service';
 import { expect, it, vi } from 'vitest';
 import { DEMO_PERSONA_IDS } from './demo-personas';
@@ -104,3 +105,23 @@ it('refuses an archived Group before validating a missing Expense participant', 
   expect(answer.status).toBe(409);
   expect(answer.body.code).toBe('GROUP_ARCHIVED');
 });
+
+it.each([false, true])(
+  'keeps Group schema defaults when the stored Tags array is absent (retry: %s)',
+  async (retry) => {
+    if (retry) expect((await fixture.send()).status).toBe(201);
+    await Group.collection.updateOne(
+      { _id: new Types.ObjectId(fixture.groupId) },
+      { $unset: { tags: '' } },
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const answer = await fixture.send();
+    if (retry) {
+      expect(answer.status).toBe(201);
+      expect(answer.body.data.tag).toBe('Food');
+    } else {
+      expect(answer.status).toBe(422);
+      expect(answer.body.code).toBe('INVALID_TAG');
+    }
+  },
+);
