@@ -267,17 +267,13 @@ export default function RecurringExpensesSection({
     setEntry((prev) => ({ ...prev, splitValues: { ...prev.splitValues, [userId]: value } }));
   };
   const changeMethod = (method: SplitMethod) => {
-    const key = (value: SplitMethod) => (value === 'unequal' ? 'exact' : value);
+    const key = (value: Exclude<SplitMethod, 'equal'>) => (value === 'unequal' ? 'exact' : value);
     if (entry.splitMethod !== 'equal')
-      splitBookmarks.current[key(entry.splitMethod) as 'exact' | 'percentage' | 'shares'] =
-        entry.splitValues;
+      splitBookmarks.current[key(entry.splitMethod)] = entry.splitValues;
     setEntry({
       ...entry,
       splitMethod: method,
-      splitValues:
-        method === 'equal'
-          ? {}
-          : splitBookmarks.current[key(method) as 'exact' | 'percentage' | 'shares'],
+      splitValues: method === 'equal' ? {} : splitBookmarks.current[key(method)],
     });
   };
   const reading = readExpenseEntry(

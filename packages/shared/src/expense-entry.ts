@@ -119,6 +119,12 @@ export function readExpenseEntry(
         ) === 0
       )
         throw new Error('Each member needs at least 1 share');
+      // The allocation summary reads the total before the individual boxes; its refusal
+      // priority is kept even when a split box also contains an unreadable amount (#1114).
+      const total =
+        policy.feedback === 'allocation-summary'
+          ? toMajorAmount(parseAmountMinor(entry.amount, entry.currency), entry.currency)
+          : entry.amount;
       const weight = (user: string, digits: number) => {
         const text =
           entry.splitValues[user] || (digits === 0 && policy.blankShare === 'one' ? '1' : '0');
@@ -129,7 +135,7 @@ export function readExpenseEntry(
             : parseDecimalUnits(text, digits) / (digits === 2 ? 100 : 1);
       };
       const input = {
-        amount: entry.amount,
+        amount: total,
         currency: entry.currency,
         paidBy: multiPayer ? countedPayers : [{ user: singlePayer, amount: entry.amount }],
         splitMethod: entry.splitMethod,
