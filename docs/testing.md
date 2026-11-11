@@ -32,7 +32,7 @@ browser journeys) and `playwright.mcp-consent.config.ts`, which stops at load un
 - **`pnpm test:unit`** runs every package's unit tests: shared (with its coverage gate), web
   without the integration files, Android and the tooling. No database.
 - **`pnpm swarm gate`** before every push. It runs lint, typecheck, the format check, the unit
-  tests, the ceilings ratchet and every Android verifier on a backend of its own
+  tests, the refusal and ledger recording source contracts, the ceilings ratchet and every Android verifier on a backend of its own
   ([tools/swarm](../tools/swarm/README.md#pnpm-swarm-gate)). It never runs the web integration
   suite, which PR checks does, so a branch can pass the gate and fail PR checks: run the
   integration suite yourself when a change touches the database, the routes or money.
@@ -163,9 +163,20 @@ with no mocked models. Of the 60 files:
 - **16 service files** under `src/lib/services`: Groups and leaving them, invitations, Expense
   and Settlement rules with duplicates, date filters and the member breakdown, Drafts and To
   review, balances and ledger integrity, recurring generation and its switch, Tag identity,
-  ledger-creation recovery and the Activity outbox.
+  writer descriptions and the Activity outbox.
 - **The rest**: the four data migrations, the demo seed and its reset, Group cleanup (with the
   standalone-compatibility file), the MCP connection and the Auth.js to Better Auth migration.
+
+### Ledger recording contract
+
+Add a writer by describing its command, record and Activity metadata to
+[`recordLedger`](../apps/web/src/lib/ledger-recording.ts), or its field change to
+`changeLedgerExpense`; the module owns the write order. `pnpm check:recordings` uses AST and
+symbol binding to reject model/raw ledger writes, event/audience construction and ledger fences
+outside that module. Its exact-site maintenance/projection allow-list fails when an entry is stale.
+The gate and both CI check jobs run it beside `pnpm check:refusals`. Checker tests use source inputs;
+`ledger-recording.integration.test.ts` owns retry/recovery behavior, while each writer keeps a thin
+description check. The nine recording snapshots pin every writer's existing answers and storage.
 
 ### Demo seed checks under load
 

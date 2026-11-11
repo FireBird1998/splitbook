@@ -20,6 +20,8 @@ The product's promise: a member's ledger is exact, recorded once, and only ever 
 
 ## Structure
 
+- **Record the ledger through `ledger-recording.ts`.** A new Expense or Settlement writer supplies a description to `recordLedger`; an existing Expense changes through `changeLedgerExpense`. The module owns the fence, event, audience, persistence and publication order. Do not assemble that sequence in a writer. `pnpm check:recordings` enforces it in the gate and CI; reviewed maintenance/projection exceptions name one exact site and fail when stale.
+
 - **Android flows declare their transitions** in `apps/mobile/src/data/flow-transitions.ts`, and the controller snapshot is the only client-state store (ADR 0006).
 - **Pure domain logic lives in `@splitbook/shared`**, so web and Android compute money the same way (ADR 0002).
 - **A web model registers every model its schema's `ref`s name,** so a cold server instance can populate it whatever route loaded it first (#947). `apps/web/src/app/api/route-models.test.ts` checks every API route.
