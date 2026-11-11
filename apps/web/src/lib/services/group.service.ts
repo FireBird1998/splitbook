@@ -1,4 +1,4 @@
-import type { LedgerReadGroup } from '@/lib/group-ledger-read';
+import { readGroupLedgers, type LedgerReadGroup } from '@/lib/group-ledger-read';
 import { isGroupAdmin, withMemberEmails } from '@/lib/group-member-emails';
 import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
@@ -181,24 +181,20 @@ export class GroupService {
    * Get all groups the user is a member of.
    */
   async getUserGroups(userId: string, includeArchived: boolean = false) {
-    await connectDB();
-
-    const filter: Record<string, unknown> = {
-      'members.user': userId,
-    };
-    if (!includeArchived) {
-      filter.isArchived = false;
-    }
-
-    const groups = await Group.find(filter)
-      .populate('members.user', PERSON_FIELDS)
-      .sort({ updatedAt: -1 })
-      .lean();
-    const latest = await latestExpenseCurrencies(
-      groups.map((group) => group._id),
-      userId,
-    );
-    return groups.map((group) => readableFor(group, latest.get(String(group._id)) ?? null));
+    return readGroupLedgers({
+      actor: { kind: 'member', id: userId },
+      archived: includeArchived ? 'include' : 'exclude',
+      deletionMarker: 'allow-retained-members',
+      recurring: 'recorded-only',
+      sort: { updatedAt: -1 },
+      read: async (groups) => {
+        const latest = await latestExpenseCurrencies(
+          groups.map((group) => group._id),
+          userId,
+        );
+        return groups.map((group) => readableFor(group, latest.get(String(group._id)) ?? null));
+      },
+    });
   }
 
   /**

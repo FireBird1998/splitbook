@@ -1,12 +1,11 @@
+import { readGroupLedgers } from '@/lib/group-ledger-read';
 import { publicActivityProjection } from '@/lib/activity-boundary';
 import { settlementBatchActivityShape } from '@splitbook/shared/settlement-batch-activity';
 import { crossCurrencySettlementReadShape } from '@splitbook/shared/validators/settlement';
 import { assistantAttributionSchema } from '@splitbook/shared/draft-attribution';
 import { Types } from 'mongoose';
-import connectDB from '@/lib/db';
 import Activity from '@/lib/models/Activity';
 import Expense from '@/lib/models/Expense';
-import Group from '@/lib/models/Group';
 // Registers the model `populate('actor')` needs. A fresh server instance loads only the
 // modules of the route it serves, so this read must not rely on another route (#186).
 import '@/lib/models/User';
@@ -128,39 +127,42 @@ export class UserActivityService {
    */
   async getUserActivity(userId: string, limit: number) {
     const size = Math.max(1, Math.min(USER_ACTIVITY_MAX_LIMIT, Math.floor(limit)));
-    await connectDB();
+    return readGroupLedgers({
+      actor: { kind: 'member', id: userId },
+      archived: 'exclude',
+      deletionMarker: 'allow-retained-members',
+      recurring: 'recorded-only',
+      read: async (groups) => {
+        if (groups.length === 0) return { activities: [] as UserActivityEvent[], limit: size };
+        const groupsById = new Map(groups.map((group) => [String(group._id), group]));
+        const groupIds = groups.map((group) => group._id);
 
-    const groups = await Group.find({ 'members.user': userId, isArchived: false })
-      .select('name defaultCurrency')
-      .lean();
-    if (groups.length === 0) return { activities: [] as UserActivityEvent[], limit: size };
-    const groupsById = new Map(groups.map((group) => [String(group._id), group]));
-    const groupIds = groups.map((group) => group._id);
+        // The { group, createdAt, _id } index serves each Group's newest events in order.
+        const events = await Activity.find({ group: { $in: groupIds } })
+          .select(publicActivityProjection)
+          .sort({ createdAt: -1, _id: -1 })
+          .limit(size)
+          .populate<{ actor: { _id: Types.ObjectId; name?: string } | null }>('actor', 'name')
+          .lean();
 
-    // The { group, createdAt, _id } index serves each Group's newest events in order.
-    const events = await Activity.find({ group: { $in: groupIds } })
-      .select(publicActivityProjection)
-      .sort({ createdAt: -1, _id: -1 })
-      .limit(size)
-      .populate<{ actor: { _id: Types.ObjectId; name?: string } | null }>('actor', 'name')
-      .lean();
-
-    const activities = events.map((event): UserActivityEvent => {
-      const group = groupsById.get(String(event.group))!;
-      const metadata = publicMetadata(event.type, event.metadata);
-      const actor = isRecord(event.actor) ? event.actor : null;
-      return {
-        _id: String(event._id),
-        type: event.type,
-        createdAt: event.createdAt,
-        group: { _id: String(group._id), name: group.name },
-        actor: actor ? { _id: String(actor._id), name: actor.name ?? '' } : null,
-        ...(typeof metadata.currency === 'string' ? { currency: metadata.currency } : {}),
-        metadata,
-      };
+        const activities = events.map((event): UserActivityEvent => {
+          const group = groupsById.get(String(event.group))!;
+          const metadata = publicMetadata(event.type, event.metadata);
+          const actor = isRecord(event.actor) ? event.actor : null;
+          return {
+            _id: String(event._id),
+            type: event.type,
+            createdAt: event.createdAt,
+            group: { _id: String(group._id), name: group.name },
+            actor: actor ? { _id: String(actor._id), name: actor.name ?? '' } : null,
+            ...(typeof metadata.currency === 'string' ? { currency: metadata.currency } : {}),
+            metadata,
+          };
+        });
+        await this.resolveEditCurrencies(activities, groupIds, groupsById);
+        return { activities, limit: size };
+      },
     });
-    await this.resolveEditCurrencies(activities, groupIds, groupsById);
-    return { activities, limit: size };
   }
 
   /**
