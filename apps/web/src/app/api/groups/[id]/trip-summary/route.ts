@@ -35,18 +35,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!user) return unauthorized();
 
     const { id } = await routeIds(params);
+    let timeZone: string;
+    let currency: string | null;
     return await readGroupLedger({
       actor: { kind: 'member', id: user.id },
       groupId: id,
       deletionMarker: 'allow-retained-members',
       recurring: 'materialize',
-      validate: (group) =>
-        hasTripSummary(group.category)
-          ? undefined
-          : error('Only a Trip has a Trip summary.', 409, 'NOT_A_TRIP'),
-      read: async (group) => {
+      validate: (group) => {
         const { searchParams } = new URL(req.url);
-        let timeZone: string;
         try {
           timeZone = readTimeZone(searchParams.get('tz'));
         } catch (err) {
@@ -55,10 +52,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         }
 
         // Empty is unset. Any supported code is read, a currency nothing was spent in as zeros.
-        const currency = searchParams.get('currency') || null;
+        currency = searchParams.get('currency') || null;
         if (currency !== null && !CURRENCY_CODES.includes(currency))
           return error('Send a currency code, such as INR.', 400, 'INVALID_CURRENCY');
 
+        if (!hasTripSummary(group.category))
+          return error('Only a Trip has a Trip summary.', 409, 'NOT_A_TRIP');
+      },
+      read: async (group) => {
         const result = await getTripSummary(group, user.id, {
           timeZone,
           currency: currency ?? undefined,
