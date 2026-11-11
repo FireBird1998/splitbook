@@ -1,3 +1,4 @@
+import { readGroupLedgers } from '@/lib/group-ledger-read';
 import { Refusal } from '@splitbook/shared/refusals';
 import { buildBackup, type BackupGroupInput } from '@splitbook/shared/export-backup';
 import { buildStatement } from '@splitbook/shared/statement';
@@ -6,12 +7,9 @@ import { z } from 'zod';
 import { crossCurrencySettlementReadShape } from '@splitbook/shared/validators/settlement';
 import type { CrossCurrencySettlementFields } from '@splitbook/shared/cross-currency-settlement';
 import { zipSync } from 'fflate';
-import connectDB from '@/lib/db';
 import Expense, { type IExpenseDocument } from '@/lib/models/Expense';
-import Group from '@/lib/models/Group';
 import Settlement, { type ISettlementDocument } from '@/lib/models/Settlement';
 import User from '@/lib/models/User';
-import { recurringExpenseService } from './recurring-expense.service';
 import { getCurrency } from '@splitbook/shared/currency';
 import {
   assertStoredExpenseMoney,
@@ -274,97 +272,97 @@ export class ExportService {
 
   /** Load only after every requested Group passes the current-membership check. */
   private async load(userId: string, request: ExportRequest, maxRows: number) {
-    await connectDB();
-    const include = new Set(request.include);
+    return readGroupLedgers({
+      actor: { kind: 'member', id: userId },
+      archived: 'include',
+      deletionMarker: 'allow-retained-members',
+      recurring: 'materialize',
+      groupIds: request.groupIds,
+      read: async (_groups, ordered) => {
+        const include = new Set(request.include);
+        const groupIds = ordered.map((group) => group._id);
+        const expenseFilter: Record<string, unknown> = { group: { $in: groupIds } };
+        if (!include.has('deleted')) expenseFilter.isDeleted = false;
+        // Just these Expenses (#613): one that isn't the Group's, or is deleted, is left out.
+        if (request.expenseIds)
+          expenseFilter._id = { $in: request.expenseIds.map((id) => new Types.ObjectId(id)) };
+        if (request.from && request.to)
+          expenseFilter.date = {
+            $gte: utcMidnight(request.from),
+            $lt: new Date(utcMidnight(request.to).getTime() + DAY),
+          };
+        // Payments are kept by their day in the viewer's zone, which is never more than a day from
+        // UTC: read the days either side, then keep the ones in the window.
+        const paymentFilter: Record<string, unknown> = { group: { $in: groupIds } };
+        if (request.from && request.to)
+          paymentFilter.createdAt = {
+            $gte: new Date(utcMidnight(request.from).getTime() - DAY),
+            $lt: new Date(utcMidnight(request.to).getTime() + 2 * DAY),
+          };
 
-    const found = await Group.find({ _id: { $in: request.groupIds }, 'members.user': userId })
-      .select('name category defaultCurrency alternateCurrencies startDate endDate members tags')
-      .lean();
-    const groups = request.groupIds.map((id) => found.find((group) => String(group._id) === id));
-    if (groups.some((group) => !group)) throw new Refusal('FORBIDDEN');
-    const ordered = groups as NonNullable<(typeof groups)[number]>[];
-    const groupIds = ordered.map((group) => group._id);
+        const [expenseCount, editCount, paymentCount] = await Promise.all([
+          Expense.countDocuments(expenseFilter),
+          include.has('history')
+            ? Expense.aggregate<{ edits: number }>([
+                { $match: expenseFilter },
+                {
+                  $group: {
+                    _id: null,
+                    edits: { $sum: { $size: { $ifNull: ['$editHistory', []] } } },
+                  },
+                },
+              ]).then((result) => result[0]?.edits ?? 0)
+            : 0,
+          include.has('payments') ? Settlement.countDocuments(paymentFilter) : 0,
+        ]);
+        const rows = expenseCount + editCount + paymentCount;
+        if (rows > maxRows) throw new Refusal('EXPORT_TOO_LARGE', { rows, limit: maxRows });
 
-    for (const group of ordered)
-      await recurringExpenseService.generateDueExpenses(String(group._id));
+        const [expenses, settlements] = await Promise.all([
+          Expense.find(expenseFilter)
+            .select(
+              'group description amount amountMinor moneyVersion currency category date paidBy ' +
+                'splitMethod splitBetween tag tagId notes isDeleted deletedAt deletedBy createdBy createdAt updatedAt' +
+                (include.has('history') ? ' editHistory' : ''),
+            )
+            .sort({ date: -1, createdAt: -1, _id: -1 })
+            .lean<LeanExpense[]>(),
+          include.has('payments')
+            ? Settlement.find(paymentFilter).sort({ createdAt: -1, _id: -1 }).lean()
+            : Promise.resolve([]),
+        ]);
+        const payments =
+          request.from && request.to
+            ? settlements.filter((payment) => {
+                const day = zonedDay(payment.createdAt, request.timeZone);
+                return day >= request.from! && day <= request.to!;
+              })
+            : settlements;
 
-    const expenseFilter: Record<string, unknown> = { group: { $in: groupIds } };
-    if (!include.has('deleted')) expenseFilter.isDeleted = false;
-    // Just these Expenses (#613): one that isn't the Group's, or is deleted, is left out.
-    if (request.expenseIds)
-      expenseFilter._id = { $in: request.expenseIds.map((id) => new Types.ObjectId(id)) };
-    if (request.from && request.to)
-      expenseFilter.date = {
-        $gte: utcMidnight(request.from),
-        $lt: new Date(utcMidnight(request.to).getTime() + DAY),
-      };
-    // Payments are kept by their day in the viewer's zone, which is never more than a day from
-    // UTC: read the days either side, then keep the ones in the window.
-    const paymentFilter: Record<string, unknown> = { group: { $in: groupIds } };
-    if (request.from && request.to)
-      paymentFilter.createdAt = {
-        $gte: new Date(utcMidnight(request.from).getTime() - DAY),
-        $lt: new Date(utcMidnight(request.to).getTime() + 2 * DAY),
-      };
+        const names = await this.names([
+          ...ordered.flatMap((group) => group.members.map((member) => member.user)),
+          ...expenses.flatMap((expense) => [
+            ...expense.paidBy.map((payer) => payer.user),
+            ...expense.splitBetween.map((share) => share.user),
+            expense.createdBy,
+            ...(expense.deletedBy ? [expense.deletedBy] : []),
+            ...(expense.editHistory ?? []).flatMap((edit) => [
+              edit.editedBy,
+              ...editPeople(plain(edit.changes) ?? {}),
+            ]),
+          ]),
+          ...payments.flatMap((payment) => [payment.paidBy, payment.paidTo, payment.createdBy]),
+        ]);
 
-    const [expenseCount, editCount, paymentCount] = await Promise.all([
-      Expense.countDocuments(expenseFilter),
-      include.has('history')
-        ? Expense.aggregate<{ edits: number }>([
-            { $match: expenseFilter },
-            {
-              $group: { _id: null, edits: { $sum: { $size: { $ifNull: ['$editHistory', []] } } } },
-            },
-          ]).then((result) => result[0]?.edits ?? 0)
-        : 0,
-      include.has('payments') ? Settlement.countDocuments(paymentFilter) : 0,
-    ]);
-    const rows = expenseCount + editCount + paymentCount;
-    if (rows > maxRows) throw new Refusal('EXPORT_TOO_LARGE', { rows, limit: maxRows });
-
-    const [expenses, settlements] = await Promise.all([
-      Expense.find(expenseFilter)
-        .select(
-          'group description amount amountMinor moneyVersion currency category date paidBy ' +
-            'splitMethod splitBetween tag tagId notes isDeleted deletedAt deletedBy createdBy createdAt updatedAt' +
-            (include.has('history') ? ' editHistory' : ''),
-        )
-        .sort({ date: -1, createdAt: -1, _id: -1 })
-        .lean<LeanExpense[]>(),
-      include.has('payments')
-        ? Settlement.find(paymentFilter).sort({ createdAt: -1, _id: -1 }).lean()
-        : Promise.resolve([]),
-    ]);
-    const payments =
-      request.from && request.to
-        ? settlements.filter((payment) => {
-            const day = zonedDay(payment.createdAt, request.timeZone);
-            return day >= request.from! && day <= request.to!;
-          })
-        : settlements;
-
-    const names = await this.names([
-      ...ordered.flatMap((group) => group.members.map((member) => member.user)),
-      ...expenses.flatMap((expense) => [
-        ...expense.paidBy.map((payer) => payer.user),
-        ...expense.splitBetween.map((share) => share.user),
-        expense.createdBy,
-        ...(expense.deletedBy ? [expense.deletedBy] : []),
-        ...(expense.editHistory ?? []).flatMap((edit) => [
-          edit.editedBy,
-          ...editPeople(plain(edit.changes) ?? {}),
-        ]),
-      ]),
-      ...payments.flatMap((payment) => [payment.paidBy, payment.paidTo, payment.createdBy]),
-    ]);
-
-    const loadedRows =
-      expenses.length +
-      payments.length +
-      expenses.reduce((count, row) => count + (row.editHistory?.length ?? 0), 0);
-    if (loadedRows > maxRows)
-      throw new Refusal('EXPORT_TOO_LARGE', { rows: loadedRows, limit: maxRows });
-    return { ordered, expenses, payments, names };
+        const loadedRows =
+          expenses.length +
+          payments.length +
+          expenses.reduce((count, row) => count + (row.editHistory?.length ?? 0), 0);
+        if (loadedRows > maxRows)
+          throw new Refusal('EXPORT_TOO_LARGE', { rows: loadedRows, limit: maxRows });
+        return { ordered, expenses, payments, names };
+      },
+    });
   }
 
   private backupGroups(data: Awaited<ReturnType<ExportService['load']>>): BackupGroupInput[] {
