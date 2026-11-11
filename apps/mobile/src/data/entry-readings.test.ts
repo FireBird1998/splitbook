@@ -285,8 +285,9 @@ async function reviewFeedback(row: TypedEntry, values: ExpenseDraftValues, rejec
     changedBy: { kind: 'member' },
     values,
     missingFields: parsed.success ? [] : missingDraftFields(values, parsed.error.issues),
-    createdAt: day + 'T00:00:00.000Z',
-    updatedAt: day + 'T00:00:00.000Z',
+    // Local times: the review header's "today 12:00 AM" must not depend on the time zone.
+    createdAt: new Date(day + 'T00:00:00').toISOString(),
+    updatedAt: new Date(day + 'T00:00:00').toISOString(),
   };
   const reviewed = {
     draft,
@@ -323,7 +324,7 @@ async function reviewFeedback(row: TypedEntry, values: ExpenseDraftValues, rejec
   server.reply('POST', '/api/groups/' + groupId + '/drafts/review', () =>
     Response.json({ status: 200, data: [reviewed] }),
   );
-  const phone = testPhone(server, { now: Date.parse(day + 'T12:00:00Z') });
+  const phone = testPhone(server, { now: new Date(day + 'T12:00:00').getTime() });
   const app = phone.open();
   await app.signIn('alex');
   await app.refreshToReview();
