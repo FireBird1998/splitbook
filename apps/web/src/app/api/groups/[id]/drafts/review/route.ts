@@ -14,8 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .strict()
       .parse(await draftBody(request));
     const { id } = await params;
-    const reviews = [];
-    for (const draftId of ids) reviews.push(await expenseDraftService.review(actor, id, draftId));
+    const reviews = await expenseDraftService.reviews(actor, id, ids);
     return privateDraftResponse(success(reviews));
   } catch (cause) {
     return privateDraftResponse(draftError(cause));

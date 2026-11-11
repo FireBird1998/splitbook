@@ -406,6 +406,13 @@ async function readDraftReview(
 
 export const expenseDraftService = {
   async review(actor: DraftActor, groupId: string, draftId: string): Promise<DraftReview> {
+    return (await expenseDraftService.reviews(actor, groupId, [draftId]))[0];
+  },
+  async reviews(
+    actor: DraftActor,
+    groupId: string,
+    draftIds: readonly string[],
+  ): Promise<DraftReview[]> {
     const scope = access(actor, groupId);
     const drafts = await collection();
     await requireAccount(scope);
@@ -413,8 +420,14 @@ export const expenseDraftService = {
       actor: { kind: 'member', id: actor.id },
       groupId,
       recurring: 'recorded-only',
-      read: (_group, storedGroup) =>
-        readDraftReview(scope, drafts, groupId, draftId, undefined, storedGroup),
+      read: async (_group, storedGroup) => {
+        const reviews = [];
+        for (const draftId of draftIds)
+          reviews.push(
+            await readDraftReview(scope, drafts, groupId, draftId, undefined, storedGroup),
+          );
+        return reviews;
+      },
     });
   },
   /** One read across current Groups. No mutation fence, writes or per-item Expense queries. */

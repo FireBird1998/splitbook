@@ -88,6 +88,18 @@ beforeEach(async () => {
 afterAll(testDb.teardown);
 
 describe('persistent private expense Drafts', () => {
+  it('reviews a batch in the requested order against one admitted Group', async () => {
+    const created = await drafts.create(
+      alice,
+      groupId,
+      { drafts: [{ amount: 450 }, {}] },
+      'batch-review-0001',
+    );
+    const reviewed = await drafts.reviews(alice, groupId, [created[1].id, created[0].id]);
+    expect(reviewed.map((row) => row.draft.id)).toEqual([created[1].id, created[0].id]);
+    expect(reviewed[1]).toEqual(await drafts.review(alice, groupId, created[0].id));
+  });
+
   it('retains multiple incomplete Drafts, without changing the ledger or filling missing facts', async () => {
     const created = await drafts.create(
       alice,
