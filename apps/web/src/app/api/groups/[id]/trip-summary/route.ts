@@ -1,5 +1,5 @@
-import { hasTripSummary } from '@splitbook/shared/trip-summary';
 import { readGroupLedger } from '@/lib/group-ledger-read';
+import { hasTripSummary } from '@splitbook/shared/trip-summary';
 import {
   error,
   getAuthUser,
@@ -39,8 +39,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return await readGroupLedger({
       actor: { kind: 'member', id: user.id },
       groupId: id,
-      deletionMarker: 'allow-retained-members',
-      recurring: 'materialize',
+
       validate: (group) => {
         const { searchParams } = new URL(req.url);
         try {

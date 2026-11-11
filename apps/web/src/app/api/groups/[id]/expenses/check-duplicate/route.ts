@@ -16,12 +16,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await routeIds(params);
 
-    return await readGroupLedger({
+    let query: Parameters<typeof expenseService.checkDuplicate>;
+    return await readGroupLedger<Response>({
       actor: { kind: 'member', id: user.id! },
       groupId: id,
-      deletionMarker: 'allow-retained-members',
-      recurring: 'recorded-only',
-      read: async () => {
+      validate: () => {
         const { searchParams } = new URL(req.url);
         const description = searchParams.get('description');
         const amount = searchParams.get('amount');
@@ -32,15 +31,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           return success({ isDuplicate: false });
         }
 
-        const result = await expenseService.checkDuplicate(
-          id,
-          description,
-          parseFloat(amount),
-          new Date(date),
-          excludeId,
-        );
-
-        return success(result);
+        query = [id, description, parseFloat(amount), new Date(date), excludeId];
+      },
+      read: async () => {
+        return success(await expenseService.checkDuplicate(...query));
       },
     });
   } catch (err) {

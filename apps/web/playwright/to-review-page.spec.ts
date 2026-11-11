@@ -443,7 +443,8 @@ test('the last member is told To review items are deleted with the Group', async
   await expect(confirm).not.toContainText('kept but hidden');
   await confirm.getByRole('button', { name: 'Leave and delete Group', exact: true }).click();
   await page.waitForURL('**/dashboard');
-  expect((await page.request.get(`/api/groups/${group._id}`)).status()).toBe(404);
+  // A deleted Group answers as any Group the reader may not see (#1126).
+  expect((await page.request.get(`/api/groups/${group._id}`)).status()).toBe(403);
 });
 
 test('polling an in-flight autosave keeps typing entered after that submission', async ({

@@ -263,8 +263,7 @@ export class BalanceService {
     return readGroupLedgers({
       actor: { kind: 'member', id: userId },
       archived: 'exclude',
-      deletionMarker: 'allow-retained-members',
-      recurring: 'materialize',
+
       now,
       read: async (groups) => {
         const groupIds = groups.map((group) => group._id);

@@ -275,8 +275,6 @@ export class ExportService {
     return readGroupLedgers({
       actor: { kind: 'member', id: userId },
       archived: 'include',
-      deletionMarker: 'allow-retained-members',
-      recurring: 'materialize',
       groupIds: request.groupIds,
       read: async (_groups, ordered) => {
         const include = new Set(request.include);

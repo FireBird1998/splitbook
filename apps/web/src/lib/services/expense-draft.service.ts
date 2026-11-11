@@ -1,6 +1,6 @@
+import { readGroupMetadata, readGroupLedger, readGroupLedgers } from '@/lib/group-ledger-read';
 import { Refusal } from '@splitbook/shared/refusals';
 import 'server-only';
-import { readGroupLedger, readGroupLedgers } from '@/lib/group-ledger-read';
 import {
   isGroupCurrency,
   normaliseExtraCurrencies,
@@ -253,10 +253,9 @@ async function mutate<T>(
   await actor.authorize?.();
   if (actor.assistant) {
     await requireAccount(scope);
-    await readGroupLedger({
+    await readGroupMetadata({
       actor: { kind: 'assistant', id: actor.id, excludedGroupIds: actor.excludedGroupIds ?? [] },
       groupId,
-      recurring: 'recorded-only',
       validate: (group) => {
         if (refuseArchived && group.isArchived) throw new Refusal('GROUP_ARCHIVED');
       },
@@ -430,7 +429,6 @@ export const expenseDraftService = {
     return readGroupLedger({
       actor: { kind: 'member', id: actor.id },
       groupId,
-      recurring: 'recorded-only',
       read: async (_group, storedGroup) => {
         const reviews = [];
         for (const draftId of draftIds)
@@ -441,7 +439,7 @@ export const expenseDraftService = {
       },
     });
   },
-  /** One read across current Groups. No mutation fence, writes or per-item Expense queries. */
+  /** One read across current Groups, after recurring generation; no per-item Expense queries. */
   async toReview(actor: DraftActor): Promise<ToReviewRead> {
     const drafts = await collection();
     const owner = new mongoose.Types.ObjectId(draftObjectId.parse(actor.id));
@@ -456,8 +454,6 @@ export const expenseDraftService = {
     return readGroupLedgers<ToReviewRead>({
       actor: { kind: 'member', id: String(owner) },
       archived: 'include',
-      deletionMarker: 'refuse',
-      recurring: 'recorded-only',
       sort: { name: 1, _id: 1 },
       read: async (_groups, groups) => {
         const records = await drafts
@@ -654,12 +650,11 @@ export const expenseDraftService = {
           .toArray()
       ).map((record) => present(record, currencies));
     await requireAccount(scope);
-    return readGroupLedger({
+    return readGroupMetadata({
       actor: actor.assistant
         ? { kind: 'assistant', id: actor.id, excludedGroupIds: actor.excludedGroupIds ?? [] }
         : { kind: 'member', id: actor.id },
       groupId,
-      recurring: 'recorded-only',
       read: (_group, storedGroup) =>
         read({
           defaultCurrency: storedGroup.defaultCurrency,

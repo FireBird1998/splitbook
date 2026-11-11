@@ -1,4 +1,4 @@
-import { readGroupLedger } from '@/lib/group-ledger-read';
+import { readGroupMetadata } from '@/lib/group-ledger-read';
 import { Refusal } from '@splitbook/shared/refusals';
 /**
  * A Group's currency settings (#721, spec #710). Any member adds an extra currency, up to 4; only
@@ -221,11 +221,9 @@ export const groupCurrencyService = {
   /** The Group's currencies with what uses each one; members only. */
   async settings(groupId: string, viewerId: string): Promise<GroupCurrencySettings> {
     await connectDB();
-    return readGroupLedger({
+    return readGroupMetadata({
       actor: { kind: 'member', id: viewerId },
       groupId,
-      deletionMarker: 'allow-retained-members',
-      recurring: 'recorded-only',
       read: async (_group, storedGroup) => read(storedGroup, viewerId),
     });
   },

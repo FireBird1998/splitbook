@@ -83,7 +83,7 @@ The cap is 100 active Drafts per member per Group; another member’s Drafts nev
 
 Account deletion invokes the Better Auth user-delete hook, fencing concurrent Draft writes and removing all owned Draft content/receipts. The hook supports the existing account lifecycle; this change does not introduce a new account-deletion UI. Administrative account removals must use that lifecycle rather than bypassing it with raw Mongo deletion.
 
-MCP requests are bounded to 128 KiB and 120 requests per member per minute across application instances. Private responses are no-store. Inputs and failures never log Draft content at the new boundary. Ledger tools read only already-recorded Expenses; they do not materialize recurring Expenses. Spending windows use explicitly reported inclusive UTC calendar days, with full-window totals separated by currency and paginated details.
+MCP requests are bounded to 128 KiB and 120 requests per member per minute across application instances. Private responses are no-store. Inputs and failures never log Draft content at the new boundary. As the owner confirmed on 12 November 2026 (#1126), `group_balances` and `group_spending` bring the ledger up to date before reading. Generation attributes each Expense and Activity to the template creator and may send the usual notifications to other involved members. Group listing, Group context and the list/create/replace/discard Draft tools use metadata admission alone. Spending windows use explicitly reported inclusive UTC calendar days, with full-window totals separated by currency and paginated details.
 
 ## Settings connection reads (#615)
 

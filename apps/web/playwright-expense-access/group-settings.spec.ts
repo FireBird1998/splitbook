@@ -428,7 +428,7 @@ test('a sole member confirms cleanup, with safe refusal when deletion is unavail
       expect(confirmed.status, JSON.stringify(confirmed.body)).toBe(200);
       expect(confirmed.body).toEqual({ data: deleted, status: 200 });
       await expect(page).toHaveURL(/\/dashboard$/);
-      expect((await ledger.alex.get(`/api/groups/${ledger.groupA}`)).status()).toBe(404);
+      expect((await ledger.alex.get(`/api/groups/${ledger.groupA}`)).status()).toBe(403);
       const groups = await dataOf(await ledger.alex.get('/api/groups'));
       expect(groups.map((group: { _id: string }) => group._id)).not.toContain(ledger.groupA);
       expect(await db.collection('groups').countDocuments({ _id: groupId })).toBe(0);

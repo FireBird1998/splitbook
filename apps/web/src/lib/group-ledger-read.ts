@@ -20,69 +20,62 @@ export interface GroupLedgerRead<T> {
   /** Trusted session subject or validated grant subject. */
   actor: LedgerReadActor;
   groupId: string;
-  missingGroup?: 'forbidden' | 'not-found';
-  deletionMarker?: 'refuse' | 'allow-retained-members';
-  recurring?: 'materialize' | 'recorded-only';
   now?: Date;
   /** Minimum Group role for this read. */
   requiredRole?: 'member' | 'admin';
   /** Preserve admission before request validation, and validation before any materialization. */
-  validate?: (group: LedgerReadGroup, storedGroup: IGroupDocument) => void | NoInfer<T>;
+  validate?: (
+    group: LedgerReadGroup,
+    storedGroup: IGroupDocument,
+  ) => void | NoInfer<T> | Promise<void | NoInfer<T>>;
   read: (group: LedgerReadGroup, storedGroup: IGroupDocument) => Promise<T>;
 }
 
 /** Supply the admitted Group to the read; refuse access revoked while it was running. */
-export async function readGroupLedger<T>({
-  actor,
-  groupId,
-  missingGroup = 'forbidden',
-  deletionMarker = 'refuse',
-  recurring = 'materialize',
-  requiredRole = 'member',
-  now = new Date(),
-  validate,
-  read,
-}: GroupLedgerRead<T>): Promise<T> {
+export function readGroupLedger<T>(input: GroupLedgerRead<T>): Promise<T> {
+  return readOne(input, true);
+}
+
+/** Metadata reads use actor admission and delivery checks. */
+export function readGroupMetadata<T>(input: GroupLedgerRead<T>): Promise<T> {
+  return readOne(input, false);
+}
+
+async function readOne<T>(
+  { actor, groupId, requiredRole = 'member', now = new Date(), validate, read }: GroupLedgerRead<T>,
+  ledger: boolean,
+): Promise<T> {
   if (!Types.ObjectId.isValid(groupId)) throw new Refusal('INVALID_ID');
   groupId = new Types.ObjectId(groupId).toHexString();
-  const access = groupAccess(actor, { groupId, deletionMarker, requiredRole });
+  const access = groupAccess(actor, { groupId, requiredRole });
   await connectDB();
   const storedGroup = await Group.findOne(access).lean();
-  if (!storedGroup) {
-    if (
-      actor.kind === 'member' &&
-      missingGroup === 'not-found' &&
-      !(await Group.exists({ _id: groupId }))
-    )
-      throw new Refusal('NOT_FOUND', { resource: 'Group' });
-    throw groupReadRefusal(actor);
-  }
+  if (!storedGroup) throw groupReadRefusal(actor);
   // Keep stored member identities for review fingerprints and member-id computations.
   const group = await Group.populate<{ members: LedgerReadGroup['members'] }>(
     { ...storedGroup, members: storedGroup.members.map((member) => ({ ...member })) },
     { path: 'members.user', select: PERSON_FIELDS, options: { lean: true } },
   );
-  const validation = validate?.(group, storedGroup);
+  const validation = await validate?.(group, storedGroup);
   let result: T;
   if (validation !== undefined) result = validation;
   else {
-    if (recurring === 'materialize')
-      await recurringExpenseService.generateDueExpenses(groupId, now);
+    if (ledger) await recurringExpenseService.generateDueExpensesForGroups([groupId], now);
     result = await read(group, storedGroup);
   }
   if (!(await Group.exists(access))) throw groupReadRefusal(actor);
   return result;
 }
 
+type GroupField = keyof LedgerReadGroup | undefined;
+
 type GroupReadField<Field> = undefined extends Field
   ? keyof LedgerReadGroup
   : Exclude<Field, undefined>;
 
-export type GroupLedgersRead<T, Field extends keyof LedgerReadGroup | undefined = undefined> = {
+export type GroupLedgersRead<T, Field extends GroupField = undefined> = {
   actor: LedgerReadActor;
   archived: 'include' | 'exclude';
-  deletionMarker?: GroupLedgerRead<T>['deletionMarker'];
-  recurring?: GroupLedgerRead<T>['recurring'];
   now?: Date;
   sort?: Partial<Record<'name' | 'updatedAt' | '_id', 1 | -1>>;
   /**
@@ -102,24 +95,35 @@ export type GroupLedgersRead<T, Field extends keyof LedgerReadGroup | undefined 
   );
 
 /** Read the ledger over the Groups the actor may currently see. */
-export async function readGroupLedgers<
-  T,
-  Field extends keyof LedgerReadGroup | undefined = undefined,
->({
-  actor,
-  archived,
-  deletionMarker = 'refuse',
-  recurring = 'materialize',
-  now = new Date(),
-  groupIds,
-  page,
-  fields,
-  sort = {},
-  read,
-}: GroupLedgersRead<T, Field>): Promise<T> {
+export function readGroupLedgers<T, Field extends GroupField = undefined>(
+  input: GroupLedgersRead<T, Field>,
+): Promise<T> {
+  return readAcross(input, true);
+}
+
+/** Metadata lists share admission, order, projection and refill. */
+export function readGroupsMetadata<T, Field extends GroupField = undefined>(
+  input: GroupLedgersRead<T, Field>,
+): Promise<T> {
+  return readAcross(input, false);
+}
+
+async function readAcross<T, Field extends GroupField = undefined>(
+  {
+    actor,
+    archived,
+    now = new Date(),
+    groupIds,
+    page,
+    fields,
+    sort = {},
+    read,
+  }: GroupLedgersRead<T, Field>,
+  ledger: boolean,
+): Promise<T> {
   const access = {
     $and: [
-      groupAccess(actor, { archived, deletionMarker }),
+      groupAccess(actor, { archived }),
       ...(groupIds ? [{ _id: { $in: [...groupIds] } }] : []),
       ...(page?.after ? [{ _id: { $gt: page.after } }] : []),
     ],
@@ -153,7 +157,7 @@ export async function readGroupLedgers<
             })),
             { path: 'members.user', select: PERSON_FIELDS, options: { lean: true } },
           );
-    if (recurring === 'materialize') {
+    if (ledger && storedGroups.some((group) => !materialized.has(String(group._id)))) {
       await recurringExpenseService.generateDueExpensesForGroups(
         storedGroups.map((group) => String(group._id)).filter((id) => !materialized.has(id)),
         now,
@@ -190,18 +194,16 @@ export async function readGroupLedgers<
   }
 }
 
-/** One access rule for a Group and a list, including the member-only compatibility choices. */
+/** One access rule for a Group and a list. */
 function groupAccess(
   actor: LedgerReadActor,
   {
     groupId,
     archived = 'include',
-    deletionMarker = 'refuse',
     requiredRole = 'member',
   }: {
     groupId?: string;
     archived?: GroupLedgersRead<unknown>['archived'];
-    deletionMarker?: GroupLedgerRead<unknown>['deletionMarker'];
     requiredRole?: GroupLedgerRead<unknown>['requiredRole'];
   },
 ) {
@@ -220,9 +222,7 @@ function groupAccess(
     ...(requiredRole === 'admin'
       ? { members: { $elemMatch: { user: actor.id, role: 'admin' as const } } }
       : { 'members.user': actor.id }),
-    ...(actor.kind === 'member' && deletionMarker === 'allow-retained-members'
-      ? {}
-      : { deletionRequestedAt: null }),
+    deletionRequestedAt: null,
     ...(archived === 'exclude' ? { isArchived: false } : {}),
     ...(actor.kind === 'assistant' ? { assistantRule: { $ne: 'not_allowed' as const } } : {}),
   };

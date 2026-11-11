@@ -1,9 +1,10 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { Types } from 'mongoose';
-import type { CommandSucceededEvent } from 'mongodb';
+import type { CommandStartedEvent, CommandSucceededEvent } from 'mongodb';
 import Expense from './models/Expense';
 import Group from './models/Group';
 import RecurringExpense from './models/RecurringExpense';
+import ProductSwitch from './models/ProductSwitch';
 import Settlement from './models/Settlement';
 import { DEMO_PERSONA_IDS } from './demo-personas';
 import { groupService } from './services/group.service';
@@ -11,7 +12,12 @@ import { expenseService } from './services/expense.service';
 import { balanceService } from './services/balance.service';
 import { Refusal } from '@splitbook/shared/refusals';
 import { readCases, readFixture, readIds } from './test-utils/reads/fixture';
-import { readGroupLedger, readGroupLedgers, type LedgerReadGroup } from './group-ledger-read';
+import {
+  readGroupMetadata,
+  readGroupLedger,
+  readGroupLedgers,
+  type LedgerReadGroup,
+} from './group-ledger-read';
 
 // Observe the real database replies for the bounded-query regression below.
 if (process.env.TEST_MONGODB_URI) {
@@ -145,47 +151,43 @@ for (const scenario of [
     await refused;
   });
 
-it('retains the named missing-Group answer', async () => {
+it('refuses a missing Group like an inaccessible Group', async () => {
   const access = await fixture.arrange('missing');
   await expect(
     readGroupLedger({
       actor: { kind: 'member', id: access.actorId },
       groupId: access.groupId,
-      missingGroup: 'not-found',
       read: async (group) => group.name,
     }),
-  ).rejects.toMatchObject({ code: 'NOT_FOUND', data: { resource: 'Group' } });
+  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
 });
-it('retains a member read of a deletion marker with membership intact', async () => {
+it('refuses a deletion marker even with membership intact', async () => {
   const access = await fixture.arrange('deletion-marker');
   await expect(
     readGroupLedger({
       actor: { kind: 'member', id: access.actorId },
       groupId: access.groupId,
-      deletionMarker: 'allow-retained-members',
       read: async (group) => group,
     }),
-  ).resolves.toMatchObject({ name: 'Reads Household' });
+  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   expect(await Expense.countDocuments({ recurringExpense: readIds.template })).toBe(0);
 });
-it('keeps the marker compatibility setting from widening assistant access', async () => {
+it('refuses a retained-member deletion marker for an assistant', async () => {
   const access = await fixture.arrange('deletion-marker');
   await expect(
     readGroupLedger({
       actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [] },
       groupId: access.groupId,
-      deletionMarker: 'allow-retained-members',
       read: async (group) => group.name,
     }),
   ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 });
-it('can read the recorded ledger without adding the due Month', async () => {
+it('reads member metadata without adding a due Month', async () => {
   const access = await fixture.arrange('member');
   await expect(
-    readGroupLedger({
-      actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [] },
+    readGroupMetadata({
+      actor: { kind: 'member', id: access.actorId },
       groupId: access.groupId,
-      recurring: 'recorded-only',
       read: async (group) =>
         (await Expense.find({ group: group._id })).map((expense) => expense.amount),
     }),
@@ -275,13 +277,12 @@ for (const subject of ['Expenses', 'Balances'] as const)
   });
 
 for (const state of ['missing', 'outsider'] as const)
-  it(`keeps member missing-Group compatibility from distinguishing an assistant's ${state} Group`, async () => {
+  it(`does not distinguish an assistant's ${state} Group`, async () => {
     const access = await fixture.arrange(state);
     await expect(
       readGroupLedger({
         actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [] },
         groupId: access.groupId,
-        missingGroup: 'not-found',
         read: async (group) => group.name,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -294,7 +295,6 @@ for (const state of ['member', 'admin', 'archived'] as const)
       actor: { kind: 'member', id: access.actorId },
       groupId: access.groupId,
       requiredRole: 'admin',
-      recurring: 'recorded-only',
       read: async (group) => group.name,
     });
     if (state === 'admin') await expect(result).resolves.toBe('Reads Household');
@@ -307,7 +307,6 @@ it('allows an archived admin to read', async () => {
       actor: { kind: 'member', id: DEMO_PERSONA_IDS.alex },
       groupId: readIds.group,
       requiredRole: 'admin',
-      recurring: 'recorded-only',
       read: async (group) => group.name,
     }),
   ).resolves.toBe('Reads Household');
@@ -318,7 +317,6 @@ it('withholds an admin result after demotion during the read', async () => {
     actor: { kind: 'member', id: access.actorId },
     groupId: access.groupId,
     requiredRole: 'admin',
-    recurring: 'recorded-only',
     read: async (group) => {
       await Group.updateOne(
         { _id: group._id, 'members.user': access.actorId },
@@ -336,7 +334,6 @@ it('reads only the member’s admitted Groups across the ledger', async () => {
     readGroupLedgers({
       actor: { kind: 'member', id: access.actorId },
       archived: 'exclude',
-      recurring: 'recorded-only',
       read: async (groups) => groups.map((group) => group.name),
     }),
   ).resolves.toEqual(['Reads Household', 'Control Trip']);
@@ -346,7 +343,6 @@ it('recomputes a list’s aggregate after one Group revokes access during the re
   const result = await readGroupLedgers({
     actor: { kind: 'member', id: access.actorId },
     archived: 'include',
-    recurring: 'recorded-only',
     read: async (groups) => {
       await Group.updateOne(
         { _id: readIds.group },
@@ -388,7 +384,6 @@ it('refuses the whole selected export when a Group revokes access during its rea
     readGroupLedgers({
       actor: { kind: 'member', id: access.actorId },
       archived: 'include',
-      recurring: 'recorded-only',
       groupIds: [readIds.control, readIds.group],
       read: async (groups) => {
         await Group.updateOne(
@@ -406,7 +401,6 @@ it('keeps the read’s Group order when listing by name', async () => {
     readGroupLedgers({
       actor: { kind: 'member', id: access.actorId },
       archived: 'include',
-      recurring: 'recorded-only',
       sort: { name: 1, _id: 1 },
       read: async (groups) => groups.map((group) => group.name),
     }),
@@ -418,35 +412,27 @@ for (const archived of ['include', 'exclude'] as const)
     const names = await readGroupLedgers({
       actor: { kind: 'member', id: access.actorId },
       archived,
-      recurring: 'recorded-only',
       read: async (groups) => groups.map((group) => group.name),
     });
     expect(names).toEqual(
       archived === 'include' ? ['Reads Household', 'Control Trip'] : ['Control Trip'],
     );
   });
-for (const deletionMarker of ['refuse', 'allow-retained-members'] as const)
-  it(`lists a retained-member deletion marker with ${deletionMarker}`, async () => {
-    const access = await fixture.arrange('deletion-marker');
-    const names = await readGroupLedgers({
-      actor: { kind: 'member', id: access.actorId },
-      archived: 'include',
-      deletionMarker,
-      recurring: 'recorded-only',
-      read: async (groups) => groups.map((group) => group.name),
-    });
-    expect(names).toEqual(
-      deletionMarker === 'refuse' ? ['Control Trip'] : ['Reads Household', 'Control Trip'],
-    );
+it('omits a retained-member deletion marker from lists', async () => {
+  const access = await fixture.arrange('deletion-marker');
+  const names = await readGroupLedgers({
+    actor: { kind: 'member', id: access.actorId },
+    archived: 'include',
+    read: async (groups) => groups.map((group) => group.name),
   });
+  expect(names).toEqual(['Control Trip']);
+});
 it('applies exclusions and the Assistant rule when listing an assistant’s Groups', async () => {
   const access = await fixture.arrange('member');
   await Group.updateOne({ _id: readIds.group }, { $set: { assistantRule: 'not_allowed' } });
   const names = await readGroupLedgers({
     actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [readIds.control] },
     archived: 'include',
-    deletionMarker: 'allow-retained-members',
-    recurring: 'recorded-only',
     read: async (groups) => groups.map((group) => group.name),
   });
   expect(names).toEqual([]);
@@ -514,7 +500,6 @@ it('reads 51 projected Group documents for a page among 120 admitted Groups', as
     const page = await readGroupLedgers({
       actor: { kind: 'member', id: access.actorId },
       archived: 'include',
-      recurring: 'recorded-only',
       sort: { _id: 1 },
       page: { limit: 51 },
       fields: ['name'],
@@ -556,7 +541,6 @@ it('refills an exclusive id page after access is revoked and keeps next consiste
   const result = await readGroupLedgers({
     actor: { kind: 'member', id: access.actorId },
     archived: 'include',
-    recurring: 'recorded-only',
     sort: { _id: 1 },
     page: { after: String(ids[0]), limit: 4 },
     fields: ['name'],
@@ -581,4 +565,197 @@ it('requires the field type when an explicit result type selects fields', () => 
     .parameter(0)
     .toHaveProperty('fields')
     .toBeUndefined();
+});
+
+it('uses one schedule query and no separate switch query when no Month is due', async () => {
+  const access = await fixture.arrange('member');
+  await RecurringExpense.updateOne(
+    { _id: readIds.template },
+    { $set: { lastGeneratedFor: '2026-11' } },
+  );
+  const commands: CommandStartedEvent[] = [];
+  const client = Group.db.getClient();
+  const observe = (event: CommandStartedEvent) => commands.push(event);
+  client.on('commandStarted', observe);
+  try {
+    await readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      read: async (group) => expect(await Expense.countDocuments({ group: group._id })).toBe(1),
+    });
+  } finally {
+    client.off('commandStarted', observe);
+  }
+  const dueChecks = commands.filter(({ command }) =>
+    ['recurringexpenses', 'productswitches'].includes(command.find ?? command.aggregate),
+  );
+  expect(dueChecks).toHaveLength(1);
+});
+it('records due rent before calculating the Debt cleared by a payment', async () => {
+  const access = await fixture.arrange('member');
+  const { createSettlementBatch } = await import('./services/settlement-batch.service');
+  const result = await createSettlementBatch(
+    access.groupId,
+    {
+      paidTo: DEMO_PERSONA_IDS.alex,
+      paidCurrency: 'INR',
+      settlements: [{ currency: 'INR', amount: 1 }],
+    },
+    access.actorId,
+    'due-rent-payment-1126',
+  );
+  expect(result.settlements[0].pairDebtBeforeMinor).toBe(-34000);
+});
+
+it('a payment receipt retry does not recalculate Debt or generate another Month', async () => {
+  const access = await fixture.arrange('member');
+  const { createSettlementBatch } = await import('./services/settlement-batch.service');
+  const payment = {
+    paidTo: DEMO_PERSONA_IDS.alex,
+    paidCurrency: 'INR',
+    settlements: [{ currency: 'INR', amount: 1 }],
+  };
+  const first = await createSettlementBatch(
+    access.groupId,
+    payment,
+    access.actorId,
+    'rent-payment-retry-1126',
+  );
+  vi.setSystemTime(new Date(2026, 11, 11, 12));
+  const retry = await createSettlementBatch(
+    access.groupId,
+    payment,
+    access.actorId,
+    'rent-payment-retry-1126',
+  );
+  expect(String(retry.settlements[0]._id)).toBe(String(first.settlements[0]._id));
+  expect(await Expense.countDocuments({ recurringExpense: readIds.template })).toBe(1);
+});
+
+for (const state of ['archived', 'problem', 'before-switch'] as const)
+  it(`uses only the due aggregate for ${state} rent, then records a repaired schedule once`, async () => {
+    const access = await fixture.arrange('member');
+    if (state === 'archived')
+      await Group.updateOne({ _id: access.groupId }, { $set: { isArchived: true } });
+    if (state === 'problem')
+      await Group.updateOne(
+        { _id: access.groupId, 'tags._id': readIds.tag },
+        { $set: { 'tags.$.isArchived': true } },
+      );
+    if (state === 'before-switch') {
+      await RecurringExpense.collection.updateOne(
+        { _id: new Types.ObjectId(readIds.template) },
+        {
+          $set: {
+            startsOn: new Date('2026-10-01T00:00:00Z'),
+            endsOn: new Date('2026-10-31T00:00:00Z'),
+            createdAt: new Date('2026-09-01T00:00:00Z'),
+          },
+        },
+      );
+      await ProductSwitch.create({
+        _id: 'recurringExpenses',
+        enabled: true,
+        since: new Date('2026-11-01T00:00:00Z'),
+      });
+    }
+    const read = () =>
+      readGroupLedger({
+        actor: { kind: 'member', id: access.actorId },
+        groupId: access.groupId,
+        read: async () => Expense.countDocuments({ recurringExpense: readIds.template }),
+      });
+    const commands: CommandStartedEvent[] = [];
+    const client = Group.db.getClient();
+    const observe = (event: CommandStartedEvent) => commands.push(event);
+    client.on('commandStarted', observe);
+    try {
+      expect(await read()).toBe(0);
+      expect(await read()).toBe(0);
+    } finally {
+      client.off('commandStarted', observe);
+    }
+    expect(
+      commands.filter(({ command }) => command.aggregate === 'recurringexpenses'),
+    ).toHaveLength(2);
+    expect(
+      commands.filter(({ command }) =>
+        ['recurringexpenses', 'productswitches'].includes(command.find),
+      ),
+    ).toHaveLength(0);
+    // Each read loads the admitted Group and verifies delivery. A full run adds another lookup.
+    expect(commands.filter(({ command }) => command.find === 'groups')).toHaveLength(4);
+    if (state === 'archived')
+      await Group.updateOne({ _id: access.groupId }, { $set: { isArchived: false } });
+    if (state === 'problem')
+      await Group.updateOne(
+        { _id: access.groupId, 'tags._id': readIds.tag },
+        { $set: { 'tags.$.isArchived': false } },
+      );
+    if (state === 'before-switch')
+      await RecurringExpense.updateOne(
+        { _id: readIds.template },
+        { $set: { endsOn: new Date('2026-11-30T00:00:00Z') } },
+      );
+    expect(await read()).toBe(1);
+    expect(await read()).toBe(1);
+    expect(await RecurringExpense.findById(readIds.template).lean()).toMatchObject({
+      lastGeneratedFor: '2026-11',
+    });
+  });
+
+it('confirms an existing Month after its template enters a problem state', async () => {
+  const access = await fixture.arrange('member');
+  const read = () =>
+    readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      read: async () => Expense.countDocuments({ recurringExpense: readIds.template }),
+    });
+  expect(await read()).toBe(1);
+  await RecurringExpense.updateOne({ _id: readIds.template }, { $set: { lastGeneratedFor: null } });
+  await Group.updateOne(
+    { _id: access.groupId, 'tags._id': readIds.tag },
+    { $set: { 'tags.$.isArchived': true } },
+  );
+  expect(await read()).toBe(1);
+  expect(await RecurringExpense.findById(readIds.template).lean()).toMatchObject({
+    lastGeneratedFor: '2026-11',
+  });
+});
+
+it('skips a problem template whose recorded Month is already confirmed', async () => {
+  const access = await fixture.arrange('member');
+  const read = () =>
+    readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      read: async () => Expense.countDocuments({ recurringExpense: readIds.template }),
+    });
+  expect(await read()).toBe(1);
+  await Group.updateOne(
+    { _id: access.groupId, 'tags._id': readIds.tag },
+    { $set: { 'tags.$.isArchived': true } },
+  );
+  vi.setSystemTime(new Date(2026, 11, 11, 12));
+  const commands: CommandStartedEvent[] = [];
+  const client = Group.db.getClient();
+  const observe = (event: CommandStartedEvent) => commands.push(event);
+  client.on('commandStarted', observe);
+  try {
+    expect(await read()).toBe(1);
+  } finally {
+    client.off('commandStarted', observe);
+  }
+  expect(commands.filter(({ command }) => command.aggregate === 'recurringexpenses')).toHaveLength(
+    1,
+  );
+  expect(
+    commands.filter(({ command }) =>
+      ['recurringexpenses', 'productswitches'].includes(command.find),
+    ),
+  ).toHaveLength(0);
+  expect(await RecurringExpense.findById(readIds.template).lean()).toMatchObject({
+    lastGeneratedFor: '2026-11',
+  });
 });

@@ -1,4 +1,4 @@
-import { readGroupLedger } from '@/lib/group-ledger-read';
+import { readGroupMetadata } from '@/lib/group-ledger-read';
 import { assistantReachesGroup } from '@splitbook/shared/assistant-reach';
 import {
   getAuthUser,
@@ -18,12 +18,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!user) return unauthorized();
 
     const { id } = await routeIds(params);
-    return await readGroupLedger({
+    return await readGroupMetadata({
       actor: { kind: 'member', id: user.id! },
       groupId: id,
-      missingGroup: 'not-found',
-      recurring: 'recorded-only',
-      deletionMarker: 'allow-retained-members',
       requiredRole: 'admin',
       read: async (group) => {
         // Where assistants are off, or the Group doesn't allow them, none reaches it.

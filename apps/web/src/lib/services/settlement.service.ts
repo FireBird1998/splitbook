@@ -1,3 +1,4 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import { recordLedger, type LedgerRecording } from '@/lib/ledger-recording';
 import connectDB from '@/lib/db';
 import Settlement, { type ISettlementDocument } from '@/lib/models/Settlement';
@@ -44,6 +45,7 @@ export class SettlementService {
       amount: toMajorAmount(amountMinor, data.currency),
       note: data.note ?? '',
     };
+
     const settlementId = new Types.ObjectId();
     const {
       records: [settlement],
@@ -52,6 +54,14 @@ export class SettlementService {
       actor: { id: userId, source: 'member' },
       model: Settlement,
       transactions: 'allow-standalone',
+      beforeRecord: data.paidCurrency
+        ? () =>
+            readGroupLedger({
+              actor: { kind: 'member', id: userId },
+              groupId,
+              read: async () => undefined,
+            })
+        : undefined,
       command: () => command,
       retry: requestKey ? { key: requestKey } : undefined,
       currencies: [

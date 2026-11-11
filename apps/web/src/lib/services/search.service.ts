@@ -68,8 +68,6 @@ export class SearchService {
     return readGroupLedgers({
       actor: { kind: 'member', id: userId },
       archived: 'exclude',
-      deletionMarker: 'allow-retained-members',
-      recurring: 'recorded-only',
       sort: { updatedAt: -1 },
       read: async (groups) => {
         if (groups.length === 0) return emptySearch(query);

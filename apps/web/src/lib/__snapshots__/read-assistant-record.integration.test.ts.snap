@@ -765,7 +765,7 @@ exports[`connection_status / revoked grant 1`] = `
 
 exports[`group_balances / admin 1`] = `
 {
-  "addedDueExpense": false,
+  "addedDueExpense": true,
   "after": {
     "activities": [
       {
@@ -793,6 +793,34 @@ exports[`group_balances / admin 1`] = `
           "currency": "INR",
           "description": "Control rent",
           "expenseId": "<controlExpense-1>",
+        },
+        "type": "expense_added",
+      },
+      {
+        "__v": 0,
+        "_id": "<activities-1>",
+        "actor": "<member-a>",
+        "createdAt": "<read-time>",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 600,
+          "currency": "INR",
+          "description": "Due rent",
+          "expenseId": "<expenses-1>",
+          "period": "2026-11",
+          "recurring": true,
+          "recurringExpenseId": "<template-1>",
+        },
+        "notificationContext": {
+          "eventId": "<activities-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "<read-time>",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<expenses-1>",
+          "version": 2,
         },
         "type": "expense_added",
       },
@@ -876,6 +904,52 @@ exports[`group_balances / admin 1`] = `
       },
     ],
     "expenses": [
+      {
+        "_id": "<expenses-1>",
+        "amount": 600,
+        "amountMinor": 60000,
+        "category": "housing",
+        "createdAt": "<read-time>",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Due rent",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "paidBy": [
+          {
+            "amount": 600,
+            "amountMinor": 60000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": "2026-11",
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": "<template-1>",
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-a>",
+          },
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-b>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Groceries",
+        "tagId": "<tag-1>",
+        "updatedAt": "<read-time>",
+      },
       {
         "_id": "<expense-1>",
         "amount": 120,
@@ -999,6 +1073,7 @@ exports[`group_balances / admin 1`] = `
             "user": "<member-b>",
           },
         ],
+        "mutationSequence": 4,
         "name": "Reads Household",
         "startDate": null,
         "tags": [
@@ -1082,7 +1157,7 @@ exports[`group_balances / admin 1`] = `
         "endsOn": null,
         "group": "<group-1>",
         "isPaused": false,
-        "lastGeneratedFor": null,
+        "lastGeneratedFor": "2026-11",
         "moneyVersion": 1,
         "paidBy": [
           {
@@ -1134,7 +1209,7 @@ exports[`group_balances / admin 1`] = `
     "result": {
       "content": [
         {
-          "text": "{"balances":{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera","you":true},"balance":40},{"user":{"id":"<member-b>","name":"Sam Chen"},"balance":-40}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen"},"to":{"id":"<member-a>","name":"Alex Rivera","you":true},"amount":40}],"byCurrency":[{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera","you":true},"balance":40},{"user":{"id":"<member-b>","name":"Sam Chen"},"balance":-40}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen"},"to":{"id":"<member-a>","name":"Alex Rivera","you":true},"amount":40}]}],"hasMixedCurrencies":false},"context":"All recorded Expenses and Settlements, per currency. Positive means owed to the member; negative means the member owes. Scheduled recurring Expenses not yet recorded are excluded. This read creates nothing."}",
+          "text": "{"balances":{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera","you":true},"balance":340},{"user":{"id":"<member-b>","name":"Sam Chen"},"balance":-340}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen"},"to":{"id":"<member-a>","name":"Alex Rivera","you":true},"amount":340}],"byCurrency":[{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera","you":true},"balance":340},{"user":{"id":"<member-b>","name":"Sam Chen"},"balance":-340}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen"},"to":{"id":"<member-a>","name":"Alex Rivera","you":true},"amount":340}]}],"hasMixedCurrencies":false},"context":"All recorded Expenses and Settlements, per currency. Positive means owed to the member; negative means the member owes. Due recurring Expenses are recorded before this read."}",
           "type": "text",
         },
       ],
@@ -1515,7 +1590,7 @@ exports[`group_balances / archived 1`] = `
     "result": {
       "content": [
         {
-          "text": "{"balances":{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"balance":40},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"balance":-40}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen","you":true},"to":{"id":"<member-a>","name":"Alex Rivera"},"amount":40}],"byCurrency":[{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"balance":40},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"balance":-40}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen","you":true},"to":{"id":"<member-a>","name":"Alex Rivera"},"amount":40}]}],"hasMixedCurrencies":false},"context":"All recorded Expenses and Settlements, per currency. Positive means owed to the member; negative means the member owes. Scheduled recurring Expenses not yet recorded are excluded. This read creates nothing."}",
+          "text": "{"balances":{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"balance":40},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"balance":-40}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen","you":true},"to":{"id":"<member-a>","name":"Alex Rivera"},"amount":40}],"byCurrency":[{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"balance":40},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"balance":-40}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen","you":true},"to":{"id":"<member-a>","name":"Alex Rivera"},"amount":40}]}],"hasMixedCurrencies":false},"context":"All recorded Expenses and Settlements, per currency. Positive means owed to the member; negative means the member owes. Due recurring Expenses are recorded before this read."}",
           "type": "text",
         },
       ],
@@ -3423,7 +3498,7 @@ exports[`group_balances / malformed 1`] = `
 
 exports[`group_balances / member 1`] = `
 {
-  "addedDueExpense": false,
+  "addedDueExpense": true,
   "after": {
     "activities": [
       {
@@ -3451,6 +3526,34 @@ exports[`group_balances / member 1`] = `
           "currency": "INR",
           "description": "Control rent",
           "expenseId": "<controlExpense-1>",
+        },
+        "type": "expense_added",
+      },
+      {
+        "__v": 0,
+        "_id": "<activities-1>",
+        "actor": "<member-a>",
+        "createdAt": "<read-time>",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 600,
+          "currency": "INR",
+          "description": "Due rent",
+          "expenseId": "<expenses-1>",
+          "period": "2026-11",
+          "recurring": true,
+          "recurringExpenseId": "<template-1>",
+        },
+        "notificationContext": {
+          "eventId": "<activities-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "<read-time>",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<expenses-1>",
+          "version": 2,
         },
         "type": "expense_added",
       },
@@ -3534,6 +3637,52 @@ exports[`group_balances / member 1`] = `
       },
     ],
     "expenses": [
+      {
+        "_id": "<expenses-1>",
+        "amount": 600,
+        "amountMinor": 60000,
+        "category": "housing",
+        "createdAt": "<read-time>",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Due rent",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "paidBy": [
+          {
+            "amount": 600,
+            "amountMinor": 60000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": "2026-11",
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": "<template-1>",
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-a>",
+          },
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-b>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Groceries",
+        "tagId": "<tag-1>",
+        "updatedAt": "<read-time>",
+      },
       {
         "_id": "<expense-1>",
         "amount": 120,
@@ -3657,6 +3806,7 @@ exports[`group_balances / member 1`] = `
             "user": "<member-b>",
           },
         ],
+        "mutationSequence": 4,
         "name": "Reads Household",
         "startDate": null,
         "tags": [
@@ -3740,7 +3890,7 @@ exports[`group_balances / member 1`] = `
         "endsOn": null,
         "group": "<group-1>",
         "isPaused": false,
-        "lastGeneratedFor": null,
+        "lastGeneratedFor": "2026-11",
         "moneyVersion": 1,
         "paidBy": [
           {
@@ -3792,7 +3942,7 @@ exports[`group_balances / member 1`] = `
     "result": {
       "content": [
         {
-          "text": "{"balances":{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"balance":40},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"balance":-40}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen","you":true},"to":{"id":"<member-a>","name":"Alex Rivera"},"amount":40}],"byCurrency":[{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"balance":40},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"balance":-40}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen","you":true},"to":{"id":"<member-a>","name":"Alex Rivera"},"amount":40}]}],"hasMixedCurrencies":false},"context":"All recorded Expenses and Settlements, per currency. Positive means owed to the member; negative means the member owes. Scheduled recurring Expenses not yet recorded are excluded. This read creates nothing."}",
+          "text": "{"balances":{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"balance":340},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"balance":-340}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen","you":true},"to":{"id":"<member-a>","name":"Alex Rivera"},"amount":340}],"byCurrency":[{"currency":"INR","balances":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"balance":340},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"balance":-340}],"debts":[{"from":{"id":"<member-b>","name":"Sam Chen","you":true},"to":{"id":"<member-a>","name":"Alex Rivera"},"amount":340}]}],"hasMixedCurrencies":false},"context":"All recorded Expenses and Settlements, per currency. Positive means owed to the member; negative means the member owes. Due recurring Expenses are recorded before this read."}",
           "type": "text",
         },
       ],
@@ -9135,7 +9285,7 @@ exports[`group_context / outsider 1`] = `
 
 exports[`group_spending / admin 1`] = `
 {
-  "addedDueExpense": false,
+  "addedDueExpense": true,
   "after": {
     "activities": [
       {
@@ -9163,6 +9313,34 @@ exports[`group_spending / admin 1`] = `
           "currency": "INR",
           "description": "Control rent",
           "expenseId": "<controlExpense-1>",
+        },
+        "type": "expense_added",
+      },
+      {
+        "__v": 0,
+        "_id": "<activities-1>",
+        "actor": "<member-a>",
+        "createdAt": "<read-time>",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 600,
+          "currency": "INR",
+          "description": "Due rent",
+          "expenseId": "<expenses-1>",
+          "period": "2026-11",
+          "recurring": true,
+          "recurringExpenseId": "<template-1>",
+        },
+        "notificationContext": {
+          "eventId": "<activities-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "<read-time>",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<expenses-1>",
+          "version": 2,
         },
         "type": "expense_added",
       },
@@ -9246,6 +9424,52 @@ exports[`group_spending / admin 1`] = `
       },
     ],
     "expenses": [
+      {
+        "_id": "<expenses-1>",
+        "amount": 600,
+        "amountMinor": 60000,
+        "category": "housing",
+        "createdAt": "<read-time>",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Due rent",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "paidBy": [
+          {
+            "amount": 600,
+            "amountMinor": 60000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": "2026-11",
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": "<template-1>",
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-a>",
+          },
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-b>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Groceries",
+        "tagId": "<tag-1>",
+        "updatedAt": "<read-time>",
+      },
       {
         "_id": "<expense-1>",
         "amount": 120,
@@ -9369,6 +9593,7 @@ exports[`group_spending / admin 1`] = `
             "user": "<member-b>",
           },
         ],
+        "mutationSequence": 4,
         "name": "Reads Household",
         "startDate": null,
         "tags": [
@@ -9452,7 +9677,7 @@ exports[`group_spending / admin 1`] = `
         "endsOn": null,
         "group": "<group-1>",
         "isPaused": false,
-        "lastGeneratedFor": null,
+        "lastGeneratedFor": "2026-11",
         "moneyVersion": 1,
         "paidBy": [
           {
@@ -9504,7 +9729,7 @@ exports[`group_spending / admin 1`] = `
     "result": {
       "content": [
         {
-          "text": "{"expenses":[{"id":"<expense-1>","description":"Earlier rent groceries","amount":120,"currency":"INR","date":"2026-11-05T00:00:00.000Z","category":"food","tag":"Groceries","tagId":"<tag-1>","splitMethod":"equal","paidBy":[{"user":{"id":"<member-a>","name":"Alex Rivera","you":true},"amount":120}],"splitBetween":[{"user":{"id":"<member-a>","name":"Alex Rivera","you":true},"amount":60},{"user":{"id":"<member-b>","name":"Sam Chen"},"amount":60}],"createdBy":{"id":"<member-a>","name":"Alex Rivera","you":true}}],"pagination":{"page":1,"limit":20,"total":1,"totalPages":1},"summary":{"count":1,"totalsByCurrency":[{"currency":"INR","totalAmount":120}]},"range":{"from":"2026-11-01","to":"2026-11-30","timezone":"UTC","boundaries":"Inclusive calendar dates, 00:00:00 through 23:59:59.999 UTC"},"context":"Totals cover all matching recorded Expenses, not just this page; currencies are separate. Does not materialize scheduled recurring Expenses."}",
+          "text": "{"expenses":[{"id":"<expense-1>","description":"Earlier rent groceries","amount":120,"currency":"INR","date":"2026-11-05T00:00:00.000Z","category":"food","tag":"Groceries","tagId":"<tag-1>","splitMethod":"equal","paidBy":[{"user":{"id":"<member-a>","name":"Alex Rivera","you":true},"amount":120}],"splitBetween":[{"user":{"id":"<member-a>","name":"Alex Rivera","you":true},"amount":60},{"user":{"id":"<member-b>","name":"Sam Chen"},"amount":60}],"createdBy":{"id":"<member-a>","name":"Alex Rivera","you":true}},{"id":"<expenses-1>","description":"Due rent","amount":600,"currency":"INR","date":"2026-11-01T00:00:00.000Z","category":"housing","tag":"Groceries","tagId":"<tag-1>","splitMethod":"equal","paidBy":[{"user":{"id":"<member-a>","name":"Alex Rivera","you":true},"amount":600}],"splitBetween":[{"user":{"id":"<member-a>","name":"Alex Rivera","you":true},"amount":300},{"user":{"id":"<member-b>","name":"Sam Chen"},"amount":300}],"createdBy":{"id":"<member-a>","name":"Alex Rivera","you":true}}],"pagination":{"page":1,"limit":20,"total":2,"totalPages":1},"summary":{"count":2,"totalsByCurrency":[{"currency":"INR","totalAmount":720}]},"range":{"from":"2026-11-01","to":"2026-11-30","timezone":"UTC","boundaries":"Inclusive calendar dates, 00:00:00 through 23:59:59.999 UTC"},"context":"Totals cover all matching recorded Expenses, not just this page; currencies are separate. Due recurring Expenses are recorded before this read."}",
           "type": "text",
         },
       ],
@@ -9885,7 +10110,7 @@ exports[`group_spending / archived 1`] = `
     "result": {
       "content": [
         {
-          "text": "{"expenses":[{"id":"<expense-1>","description":"Earlier rent groceries","amount":120,"currency":"INR","date":"2026-11-05T00:00:00.000Z","category":"food","tag":"Groceries","tagId":"<tag-1>","splitMethod":"equal","paidBy":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"amount":120}],"splitBetween":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"amount":60},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"amount":60}],"createdBy":{"id":"<member-a>","name":"Alex Rivera"}}],"pagination":{"page":1,"limit":20,"total":1,"totalPages":1},"summary":{"count":1,"totalsByCurrency":[{"currency":"INR","totalAmount":120}]},"range":{"from":"2026-11-01","to":"2026-11-30","timezone":"UTC","boundaries":"Inclusive calendar dates, 00:00:00 through 23:59:59.999 UTC"},"context":"Totals cover all matching recorded Expenses, not just this page; currencies are separate. Does not materialize scheduled recurring Expenses."}",
+          "text": "{"expenses":[{"id":"<expense-1>","description":"Earlier rent groceries","amount":120,"currency":"INR","date":"2026-11-05T00:00:00.000Z","category":"food","tag":"Groceries","tagId":"<tag-1>","splitMethod":"equal","paidBy":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"amount":120}],"splitBetween":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"amount":60},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"amount":60}],"createdBy":{"id":"<member-a>","name":"Alex Rivera"}}],"pagination":{"page":1,"limit":20,"total":1,"totalPages":1},"summary":{"count":1,"totalsByCurrency":[{"currency":"INR","totalAmount":120}]},"range":{"from":"2026-11-01","to":"2026-11-30","timezone":"UTC","boundaries":"Inclusive calendar dates, 00:00:00 through 23:59:59.999 UTC"},"context":"Totals cover all matching recorded Expenses, not just this page; currencies are separate. Due recurring Expenses are recorded before this read."}",
           "type": "text",
         },
       ],
@@ -11793,7 +12018,7 @@ exports[`group_spending / malformed 1`] = `
 
 exports[`group_spending / member 1`] = `
 {
-  "addedDueExpense": false,
+  "addedDueExpense": true,
   "after": {
     "activities": [
       {
@@ -11821,6 +12046,34 @@ exports[`group_spending / member 1`] = `
           "currency": "INR",
           "description": "Control rent",
           "expenseId": "<controlExpense-1>",
+        },
+        "type": "expense_added",
+      },
+      {
+        "__v": 0,
+        "_id": "<activities-1>",
+        "actor": "<member-a>",
+        "createdAt": "<read-time>",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 600,
+          "currency": "INR",
+          "description": "Due rent",
+          "expenseId": "<expenses-1>",
+          "period": "2026-11",
+          "recurring": true,
+          "recurringExpenseId": "<template-1>",
+        },
+        "notificationContext": {
+          "eventId": "<activities-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "<read-time>",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<expenses-1>",
+          "version": 2,
         },
         "type": "expense_added",
       },
@@ -11904,6 +12157,52 @@ exports[`group_spending / member 1`] = `
       },
     ],
     "expenses": [
+      {
+        "_id": "<expenses-1>",
+        "amount": 600,
+        "amountMinor": 60000,
+        "category": "housing",
+        "createdAt": "<read-time>",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Due rent",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "paidBy": [
+          {
+            "amount": 600,
+            "amountMinor": 60000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": "2026-11",
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": "<template-1>",
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-a>",
+          },
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-b>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Groceries",
+        "tagId": "<tag-1>",
+        "updatedAt": "<read-time>",
+      },
       {
         "_id": "<expense-1>",
         "amount": 120,
@@ -12027,6 +12326,7 @@ exports[`group_spending / member 1`] = `
             "user": "<member-b>",
           },
         ],
+        "mutationSequence": 4,
         "name": "Reads Household",
         "startDate": null,
         "tags": [
@@ -12110,7 +12410,7 @@ exports[`group_spending / member 1`] = `
         "endsOn": null,
         "group": "<group-1>",
         "isPaused": false,
-        "lastGeneratedFor": null,
+        "lastGeneratedFor": "2026-11",
         "moneyVersion": 1,
         "paidBy": [
           {
@@ -12162,7 +12462,7 @@ exports[`group_spending / member 1`] = `
     "result": {
       "content": [
         {
-          "text": "{"expenses":[{"id":"<expense-1>","description":"Earlier rent groceries","amount":120,"currency":"INR","date":"2026-11-05T00:00:00.000Z","category":"food","tag":"Groceries","tagId":"<tag-1>","splitMethod":"equal","paidBy":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"amount":120}],"splitBetween":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"amount":60},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"amount":60}],"createdBy":{"id":"<member-a>","name":"Alex Rivera"}}],"pagination":{"page":1,"limit":20,"total":1,"totalPages":1},"summary":{"count":1,"totalsByCurrency":[{"currency":"INR","totalAmount":120}]},"range":{"from":"2026-11-01","to":"2026-11-30","timezone":"UTC","boundaries":"Inclusive calendar dates, 00:00:00 through 23:59:59.999 UTC"},"context":"Totals cover all matching recorded Expenses, not just this page; currencies are separate. Does not materialize scheduled recurring Expenses."}",
+          "text": "{"expenses":[{"id":"<expense-1>","description":"Earlier rent groceries","amount":120,"currency":"INR","date":"2026-11-05T00:00:00.000Z","category":"food","tag":"Groceries","tagId":"<tag-1>","splitMethod":"equal","paidBy":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"amount":120}],"splitBetween":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"amount":60},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"amount":60}],"createdBy":{"id":"<member-a>","name":"Alex Rivera"}},{"id":"<expenses-1>","description":"Due rent","amount":600,"currency":"INR","date":"2026-11-01T00:00:00.000Z","category":"housing","tag":"Groceries","tagId":"<tag-1>","splitMethod":"equal","paidBy":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"amount":600}],"splitBetween":[{"user":{"id":"<member-a>","name":"Alex Rivera"},"amount":300},{"user":{"id":"<member-b>","name":"Sam Chen","you":true},"amount":300}],"createdBy":{"id":"<member-a>","name":"Alex Rivera"}}],"pagination":{"page":1,"limit":20,"total":2,"totalPages":1},"summary":{"count":2,"totalsByCurrency":[{"currency":"INR","totalAmount":720}]},"range":{"from":"2026-11-01","to":"2026-11-30","timezone":"UTC","boundaries":"Inclusive calendar dates, 00:00:00 through 23:59:59.999 UTC"},"context":"Totals cover all matching recorded Expenses, not just this page; currencies are separate. Due recurring Expenses are recorded before this read."}",
           "type": "text",
         },
       ],

@@ -1,7 +1,7 @@
 import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
-import mongoose, { type HydratedDocument } from 'mongoose';
+import mongoose from 'mongoose';
 import Expense, { type IExpenseDocument } from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import ProductSwitch from '@/lib/models/ProductSwitch';
@@ -77,7 +77,9 @@ function assertValidWindow(startsOn: Date, endsOn: Date | null | undefined): voi
 }
 
 /** The same service-level invariants manual expenses go through. */
-function assertTemplateData(group: IGroupDocument, data: TemplateData): void {
+type TemplateGroup = Pick<IGroupDocument, 'members' | 'tags' | 'defaultCurrency'>;
+
+function assertTemplateData(group: TemplateGroup, data: TemplateData): void {
   const memberIds = new Set(group.members.map((member) => member.user.toString()));
   assertExpenseParticipants(memberIds, data.paidBy, data.splitBetween);
   resolveTagReference(group.tags, data);
@@ -93,17 +95,33 @@ function assertTemplateData(group: IGroupDocument, data: TemplateData): void {
  * and the settings list shows the problem.
  */
 function generatableMoney(
-  group: IGroupDocument,
-  template: HydratedDocument<IRecurringExpenseDocument>,
+  group: TemplateGroup,
+  template: TemplateData,
 ): ReturnType<typeof readExpenseMoney> | null {
   try {
     assertTemplateData(group, template);
     // Generation copies the validated, stored allocation; metadata edits and
     // library upgrades cannot move a penny between participants retroactively.
-    return readExpenseMoney(template.toObject());
+    return readExpenseMoney(template);
   } catch {
     return null;
   }
+}
+
+/** The run and its preflight use the same switch-resume window. */
+function duePeriodsForRun(
+  template: Pick<
+    IRecurringExpenseDocument,
+    'dayOfMonth' | 'startsOn' | 'endsOn' | 'isPaused' | 'lastGeneratedFor' | 'createdAt'
+  >,
+  currentPeriod: string,
+  switchedOnAt: Date | null,
+): string[] {
+  const periods = getDuePeriods(template, currentPeriod);
+  // Templates created since turn-on catch up from their own start.
+  if (switchedOnAt && !(template.createdAt >= switchedOnAt))
+    return periods.filter((period) => period >= toPeriod(switchedOnAt));
+  return periods;
 }
 
 /** The switch's record in `productswitches` (see `ProductSwitch`). */
@@ -321,11 +339,10 @@ export class RecurringExpenseService {
 
   /**
    * Lazy-on-read generation, owned by group-ledger-read.ts after actor admission.
-   * Part one (#1119) materializes for Group details, Expenses, Balances, Insights,
-   * Trip summary (a no-op for that Theme), Home balances, spending and export/statement.
-   * Other reads select the module's recorded-only mode, including assistant tools.
-   * Across reads may select a bounded page and fields. Creating/editing a template
-   * and leaving/removing a member also call generation as writes.
+   * Every ledger read, for a member or assistant, checks due schedules first.
+   * Assistant Balances and spending generate (#1126); metadata operations
+   * use admission alone for both actors. Across reads may select a bounded page and fields.
+   * Creating/editing a template and leaving/removing a member also generate as writes.
    * Idempotent under concurrency via
    * the unique (recurringExpense, period) index; `lastGeneratedFor` advances
    * monotonically via $max.
@@ -354,7 +371,7 @@ export class RecurringExpenseService {
    *
    * It costs one query for the whole list, plus one generation run per Group that has a month
    * to add, one Group after another: a Group with nothing due (or no template) is never run,
-   * so a member with many Households pays nothing extra on most reads. The switch (#289) is read once. While it is off nothing is generated
+   * so a member with many Households pays nothing extra on most reads. The switch record is included in that same schedule query. While it is off nothing is generated
    * and the run only records that it is off, as a single Group's read does; while it is on, the
    * first run after it was turned back on records when, even if none of these Groups has a
    * template. Like `generateDueExpenses`, this never throws into the read path.
@@ -372,24 +389,108 @@ export class RecurringExpenseService {
         );
         return { generated };
       }
-      await lastSwitchedOnAt(now).catch((err: unknown) =>
-        console.error('Could not read when recurring Expenses were turned on:', err),
-      );
-      if (groupIds.length === 0) return { generated };
-
-      // One read of every template's schedule finds the Groups with a month to add. Most reads
-      // find none, so no Group is run at all. A Group with one is run as its own read would be,
-      // which applies everything this check leaves out (the Theme, the turn-on month, problem
-      // states), so the check only has to never miss a due month.
+      // One schedule query also reads the switch record. Preserve turn-on bookkeeping
+      // even with no due schedule, without a separate switch query on ordinary reads.
       const currentPeriod = toPeriod(now);
-      const schedules = await RecurringExpense.find({ group: { $in: groupIds } })
-        .select('group dayOfMonth startsOn endsOn isPaused lastGeneratedFor')
-        .lean();
-      const due = new Set(
-        schedules
-          .filter((schedule) => getDuePeriods(schedule, currentPeriod).length > 0)
-          .map((schedule) => String(schedule.group)),
-      );
+      type Schedule = TemplateData &
+        Pick<
+          IRecurringExpenseDocument,
+          '_id' | 'group' | 'dayOfMonth' | 'isPaused' | 'lastGeneratedFor' | 'createdAt'
+        >;
+      type GroupState = TemplateGroup & Pick<IGroupDocument, 'category' | 'isArchived'>;
+      const records = await RecurringExpense.aggregate<
+        | {
+            kind: 'schedule';
+            template: Schedule;
+            group: GroupState;
+            receipts: { period: string }[];
+          }
+        | { kind: 'switch'; enabled: boolean; since: Date }
+      >([
+        { $match: { group: { $in: groupIds.map((id) => new mongoose.Types.ObjectId(id)) } } },
+        {
+          $project: {
+            kind: { $literal: 'schedule' },
+            template: {
+              _id: '$_id',
+              group: '$group',
+              description: '$description',
+              amount: '$amount',
+              amountMinor: '$amountMinor',
+              moneyVersion: '$moneyVersion',
+              currency: '$currency',
+              tag: '$tag',
+              tagId: '$tagId',
+              paidBy: '$paidBy',
+              splitMethod: '$splitMethod',
+              splitBetween: '$splitBetween',
+              dayOfMonth: '$dayOfMonth',
+              startsOn: '$startsOn',
+              endsOn: '$endsOn',
+              isPaused: '$isPaused',
+              lastGeneratedFor: '$lastGeneratedFor',
+              createdAt: '$createdAt',
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: Group.collection.name,
+            localField: 'template.group',
+            foreignField: '_id',
+            pipeline: [
+              { $project: { members: 1, tags: 1, defaultCurrency: 1, category: 1, isArchived: 1 } },
+            ],
+            as: 'group',
+          },
+        },
+        { $unwind: '$group' },
+        {
+          $lookup: {
+            from: Expense.collection.name,
+            localField: 'template._id',
+            foreignField: 'recurringExpense',
+            pipeline: [
+              { $sort: { period: -1 } },
+              { $limit: 1 },
+              { $project: { _id: 0, period: 1 } },
+            ],
+            as: 'receipts',
+          },
+        },
+        {
+          $unionWith: {
+            coll: ProductSwitch.collection.name,
+            pipeline: [
+              { $match: { _id: RECURRING_SWITCH } },
+              { $project: { _id: 0, kind: { $literal: 'switch' }, enabled: 1, since: 1 } },
+            ],
+          },
+        },
+      ]);
+      const switchState = records.find((record) => record.kind === 'switch');
+      let switchedOnAt = switchState?.since ?? null;
+      if (switchState && !switchState.enabled)
+        switchedOnAt = await lastSwitchedOnAt(now).catch((err: unknown) => {
+          console.error('Could not read when recurring Expenses were turned on:', err);
+          return null;
+        });
+      const due = new Set<string>();
+      for (const record of records) {
+        if (record.kind !== 'schedule') continue;
+        const { group, template, receipts } = record;
+        if (group.isArchived || !getGroupTheme(group.category).recurringExpenses) continue;
+        const periods = duePeriodsForRun(template, currentPeriod, switchedOnAt);
+        if (!periods.length) continue;
+        // A stored Month may still need its Activity published and marker confirmed even if
+        // the template has since become a problem. The latest receipt bounds that possibility
+        // without transferring history or duplicating the scheduling rules inside MongoDB.
+        if (
+          generatableMoney(group, template) ||
+          receipts.some((receipt) => receipt.period >= periods[0])
+        )
+          due.add(String(template.group));
+      }
       for (const groupId of groupIds) {
         if (!due.has(groupId)) continue;
         generated += (await this.generateDueExpenses(groupId, now)).generated;
@@ -455,26 +556,10 @@ export class RecurringExpenseService {
       const currentPeriod = toPeriod(now);
 
       for (const template of templates) {
-        let duePeriods = getDuePeriods(
-          {
-            dayOfMonth: template.dayOfMonth,
-            startsOn: template.startsOn,
-            endsOn: template.endsOn,
-            isPaused: template.isPaused,
-            lastGeneratedFor: template.lastGeneratedFor,
-          },
-          currentPeriod,
-        );
-        // A template that existed while recurring Expenses were off resumes from the month
-        // they were turned back on, as resuming a paused template does. A template created
-        // since then catches up from its start, as any new template does.
-        if (switchedOnAt && !(template.createdAt >= switchedOnAt)) {
-          const resumeFrom = toPeriod(switchedOnAt);
-          duePeriods = duePeriods.filter((period) => period >= resumeFrom);
-        }
+        const duePeriods = duePeriodsForRun(template, currentPeriod, switchedOnAt);
         if (duePeriods.length === 0) continue;
 
-        const money = generatableMoney(group, template);
+        const money = generatableMoney(group, template.toObject());
 
         // Advance only through the unbroken materialized prefix: a period that
         // fails unexpectedly is retried on the next read instead of being lost.
@@ -588,7 +673,7 @@ export class RecurringExpenseService {
       $or: [{ 'paidBy.user': member }, { 'splitBetween.user': member }],
     }).sort({ createdAt: 1, _id: 1 });
     return templates
-      .filter((template) => !generatableMoney(group, template))
+      .filter((template) => !generatableMoney(group, template.toObject()))
       .map((template) => ({ id: String(template._id), description: template.description }));
   }
 }

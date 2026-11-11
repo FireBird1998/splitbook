@@ -507,6 +507,15 @@ the balances decoder, so a malformed list fails Needs you only.
 
 ## Groups
 
+A Group with any deletion marker is refused on every direct API read (403
+`FORBIDDEN`), even if its members are still stored. Across-Group lists, totals,
+search and Activity omit it. Page titles use their generic denied metadata and
+the statement renders its existing refusal view. Assistant tools retain their
+inaccessible-Group result. Archive inclusion, admin-only assistant reach, list
+ordering and selected export admission keep their established rules (#1126).
+
+Every authenticated Group read answers **403** `FORBIDDEN` when the Group does not exist, exactly as when the member cannot read it (#1126). This includes Group detail, invite-link and admin-only assistant reach. Expense-not-found responses remain 404. Assistant tools retain their protocol-level “Group not found” result.
+
 | Method | Path                                 | Description                               |
 | ------ | ------------------------------------ | ----------------------------------------- |
 | POST   | `/api/groups`                        | Create group                              |
@@ -1430,19 +1439,31 @@ Recurring generation recognises an already recorded template/Month before refusi
 
 Generation rechecks that the Group is open at the Expense commit. If an archive wins that race, the triggering read still answers normally, adds no Expense for that Month and leaves its marker unchanged so a later eligible read can retry it. The template's creator remains the recorded actor and receives no alert for that Expense. Payers and split participants are checked again at commit. If a participant leaves before that point, the read still succeeds without that Expense or a marker advance; a later eligible read can add the Month.
 
-Household-themed Groups only (`category: "home"`). The Group ledger read module
-currently invokes lazy generation for Group details, Expenses, Balances, Insights,
-Trip summary (whose Theme adds nothing), Home balances, member spending, and
-export including the statement. The Groups list, Group/Home Activity, search,
-one Expense, duplicate warnings, recurring-template lists, currency settings,
-rate suggestions, Tags, Draft reads, page titles, invite links and assistant reach
-read recorded data only. Connected assistants also still read recorded data only. They use
-`readGroupLedger` and `readGroupLedgers` with an assistant actor. The across
-operation accepts `page: { after, limit }` and `fields`. Assistant `list_groups`
-queries 51 projected Groups to deliver 50 and its existing `next` cursor.
-The module refills a page after access is revoked and recomputes the reply.
+Household-themed Groups only (`category: "home"`).
 
-These are the preserved part-one choices of #1119, not the part-two rule.
+**Ledger generation (#1126):** every Group ledger read records due recurring
+Expenses before it reads data. This includes Group details, Expenses (also one
+Expense), Balances, Insights, Trip summary, payments, Group and Home Activity,
+search, duplicate warnings, Draft review, To review, Home balances, spending,
+exports and the Debt calculated before recording a payment. The assistant money tools `group_balances` and `group_spending` generate
+and may send the usual notifications to other involved members, attributed
+to the template creator. This follows the owner's 12 November clarification.
+
+Metadata operations (`readGroupMetadata`, `readGroupsMetadata`) retain the
+same admission and delivery checks but avoid generation: rate suggestions,
+invite links, assistant reach, Tags and receipts, currencies, recurring-template
+settings, private Draft listings, page titles, the Groups list and assistant
+approval choices show no saved Expense, total or Activity entry. The member's
+latest manual-Expense currency in the Groups list explicitly excludes generated
+Expenses. Assistant Group listing, context and all Draft tools use these metadata operations.
+
+The across operations support exclusive-id `page`, `fields` projections and
+bounded refill after revocation. Assistant `list_groups` still queries 51
+projected Groups to deliver 50 with its existing `next` cursor. The module runs
+one due check per operation, once per newly admitted page Group; nothing due
+costs one schedule aggregate including the product-switch record. A switch
+transition still performs its durable bookkeeping. Empty refill batches do not
+run generation again.
 
 Generation also runs on template creation/edit and before a member's leave or removal is checked. An archived Group materializes
 nothing. A template in its problem state that includes a member keeps them in the

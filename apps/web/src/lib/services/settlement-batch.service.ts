@@ -1,3 +1,4 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import { Refusal } from '@splitbook/shared/refusals';
 import { recordLedger, type LedgerRecording } from '@/lib/ledger-recording';
 import Settlement, { type ISettlementDocument } from '@/lib/models/Settlement';
@@ -36,12 +37,19 @@ export async function createSettlementBatch(
   const totalPaidMinor = sumMinorAmounts(
     rows.map((row) => row.amountPaidMinor ?? parseAmountMinor(row.amount, row.currency)),
   );
+
   const ids = rows.map(() => new Types.ObjectId());
   const { records: saved } = await recordLedger({
     groupId,
     actor: { id: userId, source: 'member' },
     model: Settlement,
     transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
+    beforeRecord: () =>
+      readGroupLedger({
+        actor: { kind: 'member', id: userId },
+        groupId,
+        read: async () => undefined,
+      }),
     command: () => command,
     retry: { key: requestKey, receipt: 'ordered-batch', confirmCompetingBatchBeforeRows: true },
     currencies: [],

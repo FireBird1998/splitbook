@@ -223,7 +223,7 @@ src/
 │   │   ├── balance.service.ts
 │   │   ├── invitation.service.ts
 │   │   ├── activity.service.ts
-│   │   └── user-activity.service.ts # Latest Activity across Groups (read-only)
+│   │   └── user-activity.service.ts # Latest Activity across Groups (after recurring generation)
 │   ├── theme/
 │   │   ├── tokens.ts               # Semantic light/dark design tokens
 │   │   └── createAppTheme.ts       # MUI theme + palette augmentation
@@ -310,16 +310,36 @@ Across reads accept `page` for an exclusive id cursor and query limit, and `fiel
 for projected Group columns. `_id` accompanies projections. Selecting members
 populates them. Page delivery rechecks access and refills after an observed revocation.
 
-**Current materializing reads (#1119, part one):** Group details, Expenses,
-Balances, Insights, Trip summary, Home balances, member spending, and export
-(including the statement) ask the module to add due recurring Expenses first.
-A Trip invokes generation but its Theme admits no recurring template.
-The Groups list, Group and Home Activity, search, one Expense, duplicate warning,
-recurring-template list, currency settings, rate suggestions, Tags, Draft reads,
-page titles, invite-link and assistant-reach reads use the recorded ledger.
-Connected assistants use the module with `recurring: 'recorded-only'`.
-Part two applies the owner's four decisions about generation, missing Groups
-and deletion markers.
+**Ledger generation (#1126):** every Group ledger read records due recurring
+Expenses before it reads data. This includes Group details, Expenses (also one
+Expense), Balances, Insights, Trip summary, payments, Group and Home Activity,
+search, duplicate warnings, Draft review, To review, Home balances, spending,
+exports and the Debt calculated before recording a payment. The assistant money tools `group_balances` and `group_spending` generate
+and may send the usual notifications to other involved members, attributed
+to the template creator. This follows the owner's 12 November clarification.
+
+Metadata operations (`readGroupMetadata`, `readGroupsMetadata`) retain the
+same admission and delivery checks but avoid generation: rate suggestions,
+invite links, assistant reach, Tags and receipts, currencies, recurring-template
+settings, private Draft listings, page titles, the Groups list and assistant
+approval choices show no saved Expense, total or Activity entry. The member's
+latest manual-Expense currency in the Groups list explicitly excludes generated
+Expenses. Assistant Group listing, context and all Draft tools use these metadata operations.
+
+The across operations support exclusive-id `page`, `fields` projections and
+bounded refill after revocation. Assistant `list_groups` still queries 51
+projected Groups to deliver 50 with its existing `next` cursor. The module runs
+one due check per operation, once per newly admitted page Group; nothing due
+costs one schedule aggregate including the product-switch record. A switch
+transition still performs its durable bookkeeping. Empty refill batches do not
+run generation again.
+
+A Group with any deletion marker is refused on every direct API read (403
+`FORBIDDEN`), even if its members are still stored. Across-Group lists, totals,
+search and Activity omit it. Page titles use their generic denied metadata and
+the statement renders its existing refusal view. Assistant tools retain their
+inaccessible-Group result. Archive inclusion, admin-only assistant reach, list
+ordering and selected export admission keep their established rules (#1126).
 
 The generator remains idempotent under concurrent reads. An archived Group or a
 disabled recurring switch adds nothing and advances no template marker. Reads

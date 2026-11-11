@@ -1,3 +1,4 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   getAuthUser,
   unauthorized,
@@ -12,7 +13,6 @@ import {
 import { z } from 'zod';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
-import { readGroupLedger } from '@/lib/group-ledger-read';
 import { recurringExpensesEnabled } from '@/lib/recurring-expenses-switch';
 import { createExpenseSchema } from '@splitbook/shared/validators/expense';
 import {
@@ -135,8 +135,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       await readGroupLedger({
         actor: { kind: 'member', id: user.id! },
         groupId: id,
-        deletionMarker: 'allow-retained-members',
-        recurring: 'materialize',
+
         validate: () => {
           if (!added.success) throw added.error;
         },

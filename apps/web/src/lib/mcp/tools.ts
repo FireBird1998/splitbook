@@ -76,9 +76,9 @@ export function registerSplitbookTools(
     'group_balances',
     {
       description:
-        'Read recorded ledger Balances and suggested payments separately for each currency. Does not generate recurring Expenses.',
+        'Read recorded ledger Balances and suggested payments separately for each currency. Records due recurring Expenses before reading and may send the usual notifications to other involved members.',
       inputSchema: z.object({ groupId: draftObjectId }).strict(),
-      annotations: read,
+      annotations: { ...read, readOnlyHint: false },
     },
     (input) => run(() => assistantLedgerService.balances(actor, input.groupId)),
   );
@@ -86,7 +86,7 @@ export function registerSplitbookTools(
     'group_spending',
     {
       description:
-        'Read paginated Expenses and full-range spending totals. Dates are inclusive UTC calendar days. Ask for explicit dates; never combine currencies.',
+        'Read paginated Expenses and full-range spending totals. Dates are inclusive UTC calendar days. Ask for explicit dates; never combine currencies. Records due recurring Expenses before reading and may send the usual notifications to other involved members.',
       inputSchema: z
         .object({
           groupId: draftObjectId,
@@ -103,7 +103,7 @@ export function registerSplitbookTools(
         })
         .strict()
         .refine((input) => input.from <= input.to, 'from must not be after to'),
-      annotations: read,
+      annotations: { ...read, readOnlyHint: false },
     },
     (input) => run(() => assistantLedgerService.spending(actor, input)),
   );

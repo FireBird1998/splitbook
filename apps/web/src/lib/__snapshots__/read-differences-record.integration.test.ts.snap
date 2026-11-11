@@ -6800,7 +6800,7 @@ exports[`Group / a member reads a Not allowed Group 1`] = `
 
 exports[`One Expense / another Group 1`] = `
 {
-  "addedDueExpense": false,
+  "addedDueExpense": true,
   "after": {
     "activities": [
       {
@@ -6828,6 +6828,34 @@ exports[`One Expense / another Group 1`] = `
           "currency": "INR",
           "description": "Control rent",
           "expenseId": "<controlExpense-1>",
+        },
+        "type": "expense_added",
+      },
+      {
+        "__v": 0,
+        "_id": "<activities-1>",
+        "actor": "<member-a>",
+        "createdAt": "<read-time>",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 600,
+          "currency": "INR",
+          "description": "Due rent",
+          "expenseId": "<expenses-1>",
+          "period": "2026-11",
+          "recurring": true,
+          "recurringExpenseId": "<template-1>",
+        },
+        "notificationContext": {
+          "eventId": "<activities-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "<read-time>",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<expenses-1>",
+          "version": 2,
         },
         "type": "expense_added",
       },
@@ -6911,6 +6939,52 @@ exports[`One Expense / another Group 1`] = `
       },
     ],
     "expenses": [
+      {
+        "_id": "<expenses-1>",
+        "amount": 600,
+        "amountMinor": 60000,
+        "category": "housing",
+        "createdAt": "<read-time>",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Due rent",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "paidBy": [
+          {
+            "amount": 600,
+            "amountMinor": 60000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": "2026-11",
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": "<template-1>",
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-a>",
+          },
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-b>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Groceries",
+        "tagId": "<tag-1>",
+        "updatedAt": "<read-time>",
+      },
       {
         "_id": "<expense-1>",
         "amount": 120,
@@ -7034,6 +7108,7 @@ exports[`One Expense / another Group 1`] = `
             "user": "<member-b>",
           },
         ],
+        "mutationSequence": 4,
         "name": "Reads Household",
         "startDate": null,
         "tags": [
@@ -7117,7 +7192,7 @@ exports[`One Expense / another Group 1`] = `
         "endsOn": null,
         "group": "<group-1>",
         "isPaused": false,
-        "lastGeneratedFor": null,
+        "lastGeneratedFor": "2026-11",
         "moneyVersion": 1,
         "paidBy": [
           {
@@ -7562,7 +7637,7 @@ exports[`One Expense / malformed Expense 1`] = `
 
 exports[`One Expense / missing Expense 1`] = `
 {
-  "addedDueExpense": false,
+  "addedDueExpense": true,
   "after": {
     "activities": [
       {
@@ -7590,6 +7665,34 @@ exports[`One Expense / missing Expense 1`] = `
           "currency": "INR",
           "description": "Control rent",
           "expenseId": "<controlExpense-1>",
+        },
+        "type": "expense_added",
+      },
+      {
+        "__v": 0,
+        "_id": "<activities-1>",
+        "actor": "<member-a>",
+        "createdAt": "<read-time>",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 600,
+          "currency": "INR",
+          "description": "Due rent",
+          "expenseId": "<expenses-1>",
+          "period": "2026-11",
+          "recurring": true,
+          "recurringExpenseId": "<template-1>",
+        },
+        "notificationContext": {
+          "eventId": "<activities-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "<read-time>",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<expenses-1>",
+          "version": 2,
         },
         "type": "expense_added",
       },
@@ -7673,6 +7776,52 @@ exports[`One Expense / missing Expense 1`] = `
       },
     ],
     "expenses": [
+      {
+        "_id": "<expenses-1>",
+        "amount": 600,
+        "amountMinor": 60000,
+        "category": "housing",
+        "createdAt": "<read-time>",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Due rent",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "paidBy": [
+          {
+            "amount": 600,
+            "amountMinor": 60000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": "2026-11",
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": "<template-1>",
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-a>",
+          },
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-b>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Groceries",
+        "tagId": "<tag-1>",
+        "updatedAt": "<read-time>",
+      },
       {
         "_id": "<expense-1>",
         "amount": 120,
@@ -7796,6 +7945,7 @@ exports[`One Expense / missing Expense 1`] = `
             "user": "<member-b>",
           },
         ],
+        "mutationSequence": 4,
         "name": "Reads Household",
         "startDate": null,
         "tags": [
@@ -7879,7 +8029,7 @@ exports[`One Expense / missing Expense 1`] = `
         "endsOn": null,
         "group": "<group-1>",
         "isPaused": false,
-        "lastGeneratedFor": null,
+        "lastGeneratedFor": "2026-11",
         "moneyVersion": 1,
         "paidBy": [
           {
@@ -9521,196 +9671,14 @@ exports[`Trip summary / deletion-marker Trip 1`] = `
   },
   "answer": {
     "body": {
-      "data": {
-        "afterTrip": null,
-        "beforeTrip": null,
-        "byTag": [
-          {
-            "expenseCount": 1,
-            "name": "Groceries",
-            "percent": 100,
-            "spentMinor": 12000,
-            "tagId": "<tag-1>",
-            "yourShareMinor": 6000,
-          },
-        ],
-        "currencies": [
-          {
-            "currency": "INR",
-            "expenseCount": 1,
-            "spentMinor": 12000,
-          },
-        ],
-        "currency": "INR",
-        "dailyAverageMinor": 800,
-        "dayCount": 15,
-        "days": [
-          {
-            "biggest": [],
-            "day": "2026-11-01",
-            "expenseCount": 0,
-            "number": 1,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-02",
-            "expenseCount": 0,
-            "number": 2,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-03",
-            "expenseCount": 0,
-            "number": 3,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-04",
-            "expenseCount": 0,
-            "number": 4,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [
-              {
-                "amountMinor": 12000,
-                "description": "Earlier rent groceries",
-                "id": "<expense-1>",
-              },
-            ],
-            "day": "2026-11-05",
-            "expenseCount": 1,
-            "number": 5,
-            "spentMinor": 12000,
-            "yourShareMinor": 6000,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-06",
-            "expenseCount": 0,
-            "number": 6,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-07",
-            "expenseCount": 0,
-            "number": 7,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-08",
-            "expenseCount": 0,
-            "number": 8,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-09",
-            "expenseCount": 0,
-            "number": 9,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-10",
-            "expenseCount": 0,
-            "number": 10,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-11",
-            "expenseCount": 0,
-            "number": 11,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-12",
-            "expenseCount": 0,
-            "number": 12,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-13",
-            "expenseCount": 0,
-            "number": 13,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-14",
-            "expenseCount": 0,
-            "number": 14,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-          {
-            "biggest": [],
-            "day": "2026-11-15",
-            "expenseCount": 0,
-            "number": 15,
-            "spentMinor": 0,
-            "yourShareMinor": 0,
-          },
-        ],
-        "expenseCount": 1,
-        "hasExpenses": true,
-        "otherCurrencies": [],
-        "peopleCount": 2,
-        "perPersonPerDayMinor": 400,
-        "spentMinor": 12000,
-        "suggestedPayments": [
-          {
-            "amountMinor": 4000,
-            "from": {
-              "id": "<member-b>",
-              "name": "Sam Chen",
-            },
-            "to": {
-              "id": "<member-a>",
-              "name": "Alex Rivera",
-            },
-          },
-        ],
-        "timeZone": "UTC",
-        "tooManyDays": false,
-        "tripDates": {
-          "end": "2026-11-15",
-          "start": "2026-11-01",
-        },
-        "window": {
-          "from": "2026-11-01",
-          "to": "2026-11-15",
-        },
-        "youPaidMinor": 0,
-        "yourExpenseCount": 1,
-        "yourShareMinor": 6000,
-      },
-      "status": 200,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
       "content-type": "application/json",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;

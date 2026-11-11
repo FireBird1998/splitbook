@@ -36,7 +36,7 @@ This dated update supersedes conflicting proposals above without rewriting the 1
 - Connecting and approving is opt-in; the proposed private-beta member switch is superseded. Keep the deployment-wide switch. Approval names the assistant, lists Groups with a leave-out warning and separate To review access, and explains limits. Settings shows name, access, reach and last used; Disconnect requires confirmation.
 - Production waits for Excluded Groups, the Assistant rule, approval, Settings controls and idle expiry, with staging acceptance and owner approval. ChatGPT/Claude/Other setup, help and Android connection-management scope follow #603; Claude/Other setup, help and the Android screen may follow production. The 4 October insight tools, tool switches, call log and approvals queue are not in this scope.
 
-**Implementation status, 21 October 2026 (#615/#618):** OAuth/metadata support, ledger reads, optional Draft tools and live revocation checks exist. Settings lists assistant names, addresses, server-reported access and last use, and requires confirmation before Disconnect. Last use is recorded on authorized calls at most once a minute; a failed timestamp write logs and retries on the next call without denying authorized access. Server-enforced 90-day inactivity expiry applies to MCP calls, token issuance and the Settings list. Five-minute access tokens retain live checks; refresh tokens roll forward for 91 days so their lifetime cannot shorten the idle window. A staging-only timeout has a 120-second floor, is ignored on the production deployment and, if malformed, logs once per server instance and disables only MCP (503) at initialization, leaving normal sign-in and app pages available. An unset or empty timeout keeps 90 days. Group access remains membership-only in these tickets; approval and Group controls are separate work. Current assistant reads do not materialize recurring Expenses. Production readiness still requires the remaining controls and hosted acceptance. See [implementation evidence](../connected-assistants/research.md) and the [connection runbook](../runbooks/mcp-connections.md).
+**Implementation status, 21 October 2026 (#615/#618):** OAuth/metadata support, ledger reads, optional Draft tools and live revocation checks exist. Settings lists assistant names, addresses, server-reported access and last use, and requires confirmation before Disconnect. Last use is recorded on authorized calls at most once a minute; a failed timestamp write logs and retries on the next call without denying authorized access. Server-enforced 90-day inactivity expiry applies to MCP calls, token issuance and the Settings list. Five-minute access tokens retain live checks; refresh tokens roll forward for 91 days so their lifetime cannot shorten the idle window. A staging-only timeout has a 120-second floor, is ignored on the production deployment and, if malformed, logs once per server instance and disables only MCP (503) at initialization, leaving normal sign-in and app pages available. An unset or empty timeout keeps 90 days. Group access remains membership-only in these tickets; approval and Group controls are separate work. At that delivery, assistant reads did not materialize recurring Expenses; the 11 November decision below supersedes that rule. Production readiness still requires the remaining controls and hosted acceptance. See [implementation evidence](../connected-assistants/research.md) and the [connection runbook](../runbooks/mcp-connections.md).
 
 ## Update: account switching at approval (21 October 2026, #735)
 
@@ -54,15 +54,17 @@ submission reject it, and the page asks the member to restart from the assistant
 sessions and existing connections are unchanged. This uses Better Auth's signed requests
 and consent endpoints rather than introducing a second authorization flow.
 
-## Delivery status: 11 November 2026 (#1119, part one)
+## Delivery status: 11 November 2026 (#1119, parts one and two)
 
 The first delivery step exists in `apps/web/src/lib/group-ledger-read.ts`.
 Member and Connected assistant reads use actor admission, the admitted Group,
-optional recurring generation and a delivery-time access check. `pnpm check:reads`
+ledger generation and a delivery-time access check. `pnpm check:reads`
 guards that boundary. The across operation supports an exclusive id `page` and
 `fields` projection, including bounded page refill after access revocation.
-Assistant reads currently choose `recurring: 'recorded-only'`. Part two applies
-the owner's four decisions. Archived inclusion, admin-only assistant reach,
+As the owner confirmed on 12 November 2026 (#1126), `group_balances` and `group_spending` bring the ledger up to date before reading. Generation attributes each Expense and Activity to the template creator and may send the usual notifications to other involved members. Group listing, Group context and the list/create/replace/discard Draft tools use metadata admission alone.
+Every ledger read now generates first; metadata operations retain actor admission and delivery checks. Member reads now answer 403 for a missing Group, including detail, invite
+link and admin-only assistant reach. Every deletion marker now denies reads, even with retained members.
+All four part-two decisions are implemented. Archived inclusion, admin-only assistant reach,
 list ordering and selected exports keep their established contracts. Writes
 use their recording boundary. Current generation choices are listed in
 [architecture](../architecture.md#api-request-flow) and

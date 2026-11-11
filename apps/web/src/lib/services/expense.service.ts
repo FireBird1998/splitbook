@@ -444,8 +444,6 @@ export class ExpenseService {
     return readGroupLedger({
       actor: { kind: 'member', id: access.actorId },
       groupId: access.groupId,
-      deletionMarker: 'allow-retained-members',
-      recurring: 'recorded-only',
       read: async (_populatedGroup, group) => {
         const expense = await Expense.findOne({ _id: access.expenseId, group: access.groupId })
           .populate('paidBy.user', PERSON_FIELDS)

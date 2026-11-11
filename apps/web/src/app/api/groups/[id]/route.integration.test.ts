@@ -217,9 +217,6 @@ describe('Group deletion (ADR 0007)', () => {
         status: 200,
       },
     });
-    expect(await readGroup(groupId, alexCookie)).toEqual({
-      status: 404,
-      body: { error: 'Group not found', status: 404, code: 'NOT_FOUND' },
-    });
+    expect(await readGroup(groupId, alexCookie)).toEqual(forbidden);
   });
 });

@@ -1,6 +1,6 @@
 # Connected assistants
 
-A Connected assistant acts as one member in Splitbook. It reads the ledger and, with separate permission, prepares Expense Drafts for the member's To review. Only the member saves Expenses in Splitbook.
+A Connected assistant acts as one member in Splitbook. It reads the ledger and, with separate permission, prepares Expense Drafts for the member's To review. Only the member saves prepared Drafts as Expenses in Splitbook. As the owner confirmed on 12 November 2026 (#1126), `group_balances` and `group_spending` bring the ledger up to date before reading. Generation attributes each Expense and Activity to the template creator and may send the usual notifications to other involved members. Group listing, Group context and the list/create/replace/discard Draft tools use metadata admission alone.
 
 **Updated 19 October 2026.** These docs replace the unmerged [4 October concept PR #242](https://github.com/FireBird1998/splitbook/pull/242). They distinguish the chosen product model from implementation at `5c700703`; they do not announce a release.
 

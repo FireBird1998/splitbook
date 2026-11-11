@@ -1,3 +1,4 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   getAuthUser,
   unauthorized,
@@ -9,7 +10,6 @@ import {
   routeIds,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
-import { readGroupLedger } from '@/lib/group-ledger-read';
 import { updateGroupSchema } from '@splitbook/shared/validators/group';
 
 // GET /api/groups/[id] — Get group detail
@@ -23,9 +23,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       await readGroupLedger({
         actor: { kind: 'member', id: user.id! },
         groupId: id,
-        missingGroup: 'not-found',
-        deletionMarker: 'allow-retained-members',
-        recurring: 'materialize',
         read: (group) => groupService.readForMember(group, { id: user.id!, email: user.email }),
       }),
     );

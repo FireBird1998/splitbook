@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import Group from '@/lib/models/Group';
+import Expense from '@/lib/models/Expense';
 import { DEMO_PERSONAS } from '@/lib/demo-personas';
 import { readCases, readIds, type readFixture } from './fixture';
 import { readGrant, mcpRead } from './mcp';
@@ -89,7 +90,17 @@ export function assistantReadCases(
         const record = await fixture.capture(() =>
           mcpRead(grant.token, tool.name, tool.args({ groupId: access.groupId, draftId })),
         );
-        expect(record.addedDueExpense).toBe(false);
+        const moneyTool = tool.name === 'group_balances' || tool.name === 'group_spending';
+        expect(record.addedDueExpense).toBe(moneyTool && (state === 'member' || state === 'admin'));
+        if (state === 'member' || state === 'admin') {
+          if (moneyTool)
+            expect(
+              await mcpRead(grant.token, tool.name, tool.args({ groupId: access.groupId })),
+            ).toEqual(record.answer);
+          expect(
+            await Expense.countDocuments({ recurringExpense: readIds.template, period: '2026-11' }),
+          ).toBe(moneyTool ? 1 : 0);
+        }
         expect(record.answer.status).toBe(200);
         if (state === 'member' || state === 'admin') {
           expect(record.answer).toMatchObject({ result: { content: expect.any(Array) } });

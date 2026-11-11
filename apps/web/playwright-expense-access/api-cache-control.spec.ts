@@ -57,7 +57,11 @@ test('the HTTP API prevents caching on successful and refused ledger requests (#
   expect(download.headers()['content-disposition']).toMatch(/^attachment; filename=/);
   expect(download.headers()['x-content-type-options']).toBe('nosniff');
   privateResponse(await alex.get(exportPath), 403, 'export refuses an outsider');
-  privateResponse(await sam.get('/api/groups/000000000000000000000000'), 404, 'Group not found');
+  privateResponse(
+    await sam.get('/api/groups/000000000000000000000000'),
+    403,
+    'Missing Group is not allowed',
+  );
 });
 
 test('the HTTP API prevents caching on auth, MCP and cron responses (#1043)', async ({
