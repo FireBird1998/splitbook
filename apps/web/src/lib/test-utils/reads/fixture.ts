@@ -10,7 +10,6 @@ import { RateTable } from '@/lib/rates/table';
 import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
 import { integrationTestDb } from '../integration-db';
 import {
-  callRoute,
   connectSignedIn,
   disconnectSignedIn,
   insertDemoPersonas,

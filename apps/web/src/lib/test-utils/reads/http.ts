@@ -11,10 +11,10 @@ export async function httpRead(
   overrides: Partial<{ path: string; expenseId: string; requestId: string; cookie: string }> = {},
 ) {
   const access = await fixture.arrange(state);
-  const module = await read.load();
-  const handler = read.method === 'POST' ? module.POST : module.GET;
+  const route = await read.load();
+  const handler = read.method === 'POST' ? route.POST : route.GET;
   if (!handler) throw new Error(`Missing ${read.method ?? 'GET'} handler for ${read.name}`);
-  let headers: Record<string, string> = {};
+  const headers: Record<string, string> = {};
   const answer = await callRoute(
     async (req, context) => {
       const response = await handler(req, context);
