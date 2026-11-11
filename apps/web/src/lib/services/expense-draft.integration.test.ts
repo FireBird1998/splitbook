@@ -547,6 +547,26 @@ describe('persistent private expense Drafts', () => {
     },
   );
 
+  it.each([0, undefined])(
+    'keeps an unpaid duplicate blocked without rewriting its Draft (%s, #1117 decision 11)',
+    async (amount) => {
+      const [complete] = await completeDrafts();
+      const values = {
+        ...complete.values!,
+        paidBy: [
+          { user: alice.id, amount: 450 },
+          { user: alice.id, ...(amount === undefined ? {} : { amount }) },
+        ],
+      };
+      const changed = await drafts.replace(alice, groupId, complete.id, values, complete.revision);
+      const reviewed = await drafts.review(alice, groupId, changed.id);
+      expect(reviewed.problems).toContain('paidBy: Each person can appear only once');
+      expect((await drafts.list(alice, groupId))[0].values).toEqual(values);
+      expect((await drafts.save(alice, groupId, saveCommand(reviewed)))[0].status).toBe('failed');
+      expect(await db().collection('expenses').countDocuments()).toBe(0);
+    },
+  );
+
   it('saves an unspecified Category as Other, as Add expense does, without rewriting the item', async () => {
     const [complete] = await completeDrafts();
     const values = { ...complete.values };

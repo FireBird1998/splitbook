@@ -1138,3 +1138,24 @@ it('keeps an unlisted currency readable on Android and names its needs-details r
     'Add this currency to the Group or choose a listed currency.',
   );
 });
+
+it.each([0, undefined])(
+  'keeps the listed-twice warning and blocks Save for an unpaid duplicate (%s, #1117 decision 11)',
+  (amount) => {
+    const base = item(1);
+    base.draft.values = {
+      ...base.draft.values,
+      amount: 100,
+      currency: 'INR',
+      paidBy: [
+        { user: member, amount: 100 },
+        { user: member, ...(amount === undefined ? {} : { amount }) },
+      ],
+    };
+    const before = JSON.stringify(base.draft.values);
+    const model = buildToReview(read([base]), [], now).items[0];
+    expect(model.state).toBe('needs-details');
+    expect(payerListedTwice(model.needs)).toBe(true);
+    expect(JSON.stringify(base.draft.values)).toBe(before);
+  },
+);

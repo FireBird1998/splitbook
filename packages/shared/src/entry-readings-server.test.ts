@@ -54,3 +54,20 @@ it.each([0, undefined])(
     ]);
   },
 );
+
+it.each([0, undefined])(
+  'refuses a repeated payer before dropping its unpaid later row (%s, #1117 decisions 2 and 11)',
+  (amount) => {
+    const row = numericDraft(entries[0]);
+    row.paidBy = [
+      { user: entries[0].payerId, amount: 100 },
+      { user: entries[0].payerId, ...(amount === undefined ? {} : { amount }) },
+    ];
+    const parsed = completeExpenseDraftSchema.safeParse(row);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success)
+      expect(parsed.error.issues).toContainEqual(
+        expect.objectContaining({ path: ['paidBy'], message: 'Each person can appear only once' }),
+      );
+  },
+);

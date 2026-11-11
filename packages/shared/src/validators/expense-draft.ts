@@ -62,25 +62,47 @@ export const expenseDraftValuesSchema = expenseFields
  * paid the whole Expense, and a missing Category is Other (it never affects Balances).
  * Without an Expense amount the parse still fails on the amount alone, never on who paid.
  */
-export const completeExpenseDraftSchema = z.preprocess((values) => {
-  if (!values || typeof values !== 'object') return values;
-  const draft = values as ExpenseDraftValues;
-  if (!Array.isArray(draft.paidBy)) return values;
-  if (draft.paidBy.length > 1)
-    return {
-      ...draft,
-      paidBy: draft.paidBy.filter(
-        (payer) =>
-          // Invalid rows still reach the command validator; only a readable unpaid row disappears.
-          !expenseDraftValuesSchema.shape.paidBy.unwrap().element.safeParse(payer).success ||
-          (payer.amount !== undefined && payer.amount !== 0),
-      ),
-    };
-  const [payer] = draft.paidBy;
-  return payer && payer.amount === undefined
-    ? { ...draft, paidBy: [{ ...payer, amount: draft.amount ?? 0 }] }
-    : draft;
-}, createExpenseSchema);
+// A duplicate must be corrected before an unpaid row can disappear. Otherwise the member
+// sees the later box while completion silently records the earlier payer (#1117).
+const distinctDraftPeople = z.unknown().superRefine((value, context) => {
+  if (!value || typeof value !== 'object') return;
+  for (const field of ['paidBy', 'splitBetween'] as const) {
+    const rows = (value as Record<string, unknown>)[field];
+    if (!Array.isArray(rows)) continue;
+    const ids = rows.flatMap((row) =>
+      row && typeof row === 'object' && draftObjectId.safeParse(row.user).success
+        ? [row.user as string]
+        : [],
+    );
+    if (new Set(ids).size !== ids.length)
+      context.addIssue({
+        code: 'custom',
+        path: [field],
+        message: 'Each person can appear only once',
+      });
+  }
+});
+export const completeExpenseDraftSchema = distinctDraftPeople.pipe(
+  z.preprocess((values) => {
+    if (!values || typeof values !== 'object') return values;
+    const draft = values as ExpenseDraftValues;
+    if (!Array.isArray(draft.paidBy)) return values;
+    if (draft.paidBy.length > 1)
+      return {
+        ...draft,
+        paidBy: draft.paidBy.filter(
+          (payer) =>
+            // Invalid rows still reach the command validator; only a readable unpaid row disappears.
+            !expenseDraftValuesSchema.shape.paidBy.unwrap().element.safeParse(payer).success ||
+            (payer.amount !== undefined && payer.amount !== 0),
+        ),
+      };
+    const [payer] = draft.paidBy;
+    return payer && payer.amount === undefined
+      ? { ...draft, paidBy: [{ ...payer, amount: draft.amount ?? 0 }] }
+      : draft;
+  }, createExpenseSchema),
+);
 
 export const createExpenseDraftsSchema = z
   .object({

@@ -55,7 +55,7 @@ export function entryForExpenseDraft(values: ExpenseDraftValues = {}): Incomplet
   };
 }
 
-/** Finish later keeps zero rows and omits boxes left blank; it never completes an Expense. */
+/** Finish later omits unpaid people and boxes left blank; it never completes an Expense. */
 export function draftForExpenseEntry(
   entry: IncompleteExpenseEntry,
   update?: {
