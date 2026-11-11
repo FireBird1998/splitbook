@@ -110,7 +110,7 @@ export function recordCreationPaths(recording: Recording) {
       const duplicate = await racing;
       const ordinary = await recording.send();
       const after = await recording.state();
-      expect([duplicate.body.data.tag, ordinary.body.data.tag]).toEqual(['Food', 'Meals']);
+      expect([duplicate.body.data.tag, ordinary.body.data.tag]).toEqual(['Meals', 'Meals']);
       expect(
         recording.names.normalise({ before, first, duplicate, ordinary, after }),
       ).toMatchSnapshot();
@@ -183,7 +183,7 @@ export function recordCreationPaths(recording: Recording) {
         spy.mockRestore();
         const ordinary = await recording.send();
         const after = await recording.state();
-        expect([committed.status, duplicate.status, ordinary.status]).toEqual([201, 409, 201]);
+        expect([committed.status, duplicate.status, ordinary.status]).toEqual([201, 201, 201]);
         expect(
           recording.names.normalise({ before, committed, duplicate, ordinary, after }),
         ).toMatchSnapshot();

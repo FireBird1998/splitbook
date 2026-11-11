@@ -2811,3 +2811,5 @@ and keeps the work for later; neither switch changes any financial save. Schedul
 (`docs/runbooks/android-notifications.md`, "Recovery trigger").
 
 Payment and Expense creation retries first admit the current actor, then recognise the matching stored receipt, before checking a new save. A named party's departure or a later archive does not refuse an already recorded payment: the retry confirms it with **201** and its original IDs. A departed actor still answers **403 `FORBIDDEN`**. For new saves, archive refusal precedes participant validation; for an existing key, a changed body answers **409 `IDEMPOTENCY_CONFLICT`** before participant validation.
+
+An Expense retry uses its immutable original Tag alias to recognise the recorded submission, including a duplicate race after that name is reused. Both a duplicate-race response and an ordinary retry show the recorded Tag identity's current label; neither creates another Expense.

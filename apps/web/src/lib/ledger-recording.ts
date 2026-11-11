@@ -55,7 +55,6 @@ interface SubmissionRetry {
   key: string;
   receipt?: 'ordered-records';
   atCommit?: true;
-  raceCommand?: 'original';
   legacyTagAlias?: string;
 }
 interface TemplateMonthRetry {
@@ -81,7 +80,6 @@ export interface LedgerRecording<
   prepareResponseRecord?: (
     record: HydratedDocument<T>,
     context: {
-      outcome: 'created' | 'replayed' | 'raced';
       group?: IGroupDocument;
     },
   ) => Promise<unknown>;
@@ -157,7 +155,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
       await afterGroupCommit(() =>
         activityService.publishPending(source, row._id, row.pendingActivity),
       );
-      await description.prepareResponseRecord?.(row, { outcome, group: admittedGroup });
+      await description.prepareResponseRecord?.(row, { group: admittedGroup });
     }
     return { records: rows, created: outcome === 'created' };
   };
@@ -250,13 +248,9 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
       const current = await Group.findById(groupId);
       if (!current) throw new Refusal('FORBIDDEN');
       checkMembers(current, false);
+      admittedGroup = current;
       const receipt = await lookup();
-      const raced = receipt
-        ? await confirm(
-            receipt,
-            submission?.raceCommand === 'original' ? command : normalize(receipt),
-          )
-        : null;
+      const raced = receipt ? await confirm(receipt, normalize(receipt)) : null;
       if (raced) return publish(raced, 'raced');
     }
     throw error;

@@ -116,9 +116,7 @@ export class ExpenseService {
       actor: { id: userId, source: 'member' },
       model: Expense,
       transactions: 'allow-standalone',
-      retry: requestKey
-        ? { key: requestKey, legacyTagAlias: data.tag, raceCommand: 'original' }
-        : undefined,
+      retry: requestKey ? { key: requestKey, legacyTagAlias: data.tag } : undefined,
       command({ group, receipt }) {
         const incoming = receipt ? requestTagForReplay(data, receipt) : data;
         const money = normalizeExpenseMoney(incoming);
@@ -174,8 +172,8 @@ export class ExpenseService {
           },
         ];
       },
-      async prepareResponseRecord(record, { group, outcome }) {
-        if (outcome === 'replayed') record.tag = displayTagReference(group!.tags, record).tag;
+      async prepareResponseRecord(record, { group }) {
+        record.tag = displayTagReference(group!.tags, record).tag;
         await record.populate([
           { path: 'paidBy.user', select: PERSON_FIELDS },
           { path: 'splitBetween.user', select: PERSON_FIELDS },
