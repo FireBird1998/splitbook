@@ -9,8 +9,8 @@ The product's promise: a member's ledger is exact, recorded once, and only ever 
 - **Writes are Member-started and online.** An Expense, Settlement, Group or Draft save is sent only when a member starts it, and only while online. Nothing queues, resumes or replays a write (ADR 0004, ADR 0006).
 - **One retry identity per save.** A create sends an `Idempotency-Key` and an edit or delete sends `X-Splitbook-Revision`. The device stores both before sending, and a retry reuses them unchanged, so a lost reply can never record twice.
 - **Exact money.** Amounts are integer minor units through `@splitbook/shared/exact-money`, both when shown and when sent.
-- **Any read of a Group's ledger brings it up to date first.** The Group ledger read module records due recurring Expenses before ledger data is read, for members and Connected assistants. Member metadata operations use the same admission without generation; the choices are listed in `docs/architecture.md`. No caller selects a generation setting.
-- **A Connected assistant prepares only Drafts.** A member saves them (ADR 0008). As the owner decided in #1126, assistant Group operations also trigger the ordinary recurring generator, attributed to the template creator.
+- **Any read of a Group's ledger brings it up to date first.** The Group ledger read module records due recurring Expenses before ledger data is read, for members and Connected assistants. Metadata operations use actor admission and delivery checks; the choices are listed in `docs/architecture.md`. No caller selects a generation setting.
+- **A Connected assistant prepares only Drafts.** A member saves them (ADR 0008). As the owner clarified in #1126, the two assistant money tools (`group_balances`, `group_spending`) trigger the ordinary recurring generator, attributed to the template creator, and may cause its usual notifications. Group listing, context and Draft tools use metadata admission.
 
 ## Accounts and access
 

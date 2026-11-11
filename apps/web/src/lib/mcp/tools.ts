@@ -32,7 +32,7 @@ export function registerSplitbookTools(
   scopes: string[],
   appUrl: string,
 ) {
-  const read = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
+  const read = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
   async function run(work: () => Promise<unknown>) {
     try {
       await actor.authorize?.();
@@ -56,7 +56,7 @@ export function registerSplitbookTools(
     'list_groups',
     {
       description:
-        'List your current Groups with their main currency (currency) and extra currencies (alternateCurrencies). Pass next as after to continue. Records due recurring Expenses before reading.',
+        'List your current Groups with their main currency (currency) and extra currencies (alternateCurrencies). Pass next as after to continue.',
       inputSchema: z.object({ after: draftObjectId.optional() }).strict(),
       annotations: read,
     },
@@ -66,7 +66,7 @@ export function registerSplitbookTools(
     'group_context',
     {
       description:
-        'Read current member identities, active Tags, the Category choices, main currency (currency) and extra currencies (alternateCurrencies). The member you are helping is marked you: true, so "I" and "me" are that member. Ask the member to resolve ambiguous names; never guess missing expense facts. Records due recurring Expenses before reading.',
+        'Read current member identities, active Tags, the Category choices, main currency (currency) and extra currencies (alternateCurrencies). The member you are helping is marked you: true, so "I" and "me" are that member. Ask the member to resolve ambiguous names; never guess missing expense facts.',
       inputSchema: z.object({ groupId: draftObjectId }).strict(),
       annotations: read,
     },
@@ -76,9 +76,9 @@ export function registerSplitbookTools(
     'group_balances',
     {
       description:
-        'Read recorded ledger Balances and suggested payments separately for each currency. Records due recurring Expenses before reading.',
+        'Read recorded ledger Balances and suggested payments separately for each currency. Records due recurring Expenses before reading and may send the usual notifications to other involved members.',
       inputSchema: z.object({ groupId: draftObjectId }).strict(),
-      annotations: read,
+      annotations: { ...read, readOnlyHint: false },
     },
     (input) => run(() => assistantLedgerService.balances(actor, input.groupId)),
   );
@@ -86,7 +86,7 @@ export function registerSplitbookTools(
     'group_spending',
     {
       description:
-        'Read paginated Expenses and full-range spending totals. Dates are inclusive UTC calendar days. Ask for explicit dates; never combine currencies. Records due recurring Expenses before reading.',
+        'Read paginated Expenses and full-range spending totals. Dates are inclusive UTC calendar days. Ask for explicit dates; never combine currencies. Records due recurring Expenses before reading and may send the usual notifications to other involved members.',
       inputSchema: z
         .object({
           groupId: draftObjectId,
@@ -103,12 +103,12 @@ export function registerSplitbookTools(
         })
         .strict()
         .refine((input) => input.from <= input.to, 'from must not be after to'),
-      annotations: read,
+      annotations: { ...read, readOnlyHint: false },
     },
     (input) => run(() => assistantLedgerService.spending(actor, input)),
   );
   if (!scopes.includes(MCP_DRAFT_SCOPE) || process.env.PERSISTENT_DRAFTS_ENABLED !== 'true') return;
-  const reviewDescription = `These are items in the member's To review in Splitbook, where only the member can save them as Expenses; never call them drafts. This operation records any due recurring Expenses first. Limit: ${ACTIVE_DRAFTS_PER_MEMBER} per member per Group.`;
+  const reviewDescription = `These are items in the member's To review in Splitbook, where only the member can save them as Expenses; never call them drafts. Limit: ${ACTIVE_DRAFTS_PER_MEMBER} per member per Group.`;
   const preparationGuidance =
     "Use group_context to read the main and extra currencies. Any listed currency can be saved. Keep an explicitly given unlisted currency: the item will need details in To review until the member adds it to the Group or changes its currency. Never convert amounts. For one payer, give who paid; they paid the whole amount. For several payers, give each amount. Choose a Category only when the member's words make it clear; otherwise omit it, and it's saved as Other. Set the Group Tag that clearly matches the member's words (for example a meal and Food); if none clearly fits, ask the member.";
   const link = (groupId: string) => new URL(`/groups/${groupId}/review`, appUrl).href;

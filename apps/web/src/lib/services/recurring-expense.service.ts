@@ -322,8 +322,8 @@ export class RecurringExpenseService {
   /**
    * Lazy-on-read generation, owned by group-ledger-read.ts after actor admission.
    * Every ledger read, for a member or assistant, checks due schedules first.
-   * Assistant Group metadata and Draft operations do too (#1126); member metadata
-   * uses admission alone. Across reads may select a bounded page and fields.
+   * Assistant Balances and spending generate (#1126); metadata operations
+   * use admission alone for both actors. Across reads may select a bounded page and fields.
    * Creating/editing a template and leaving/removing a member also generate as writes.
    * Idempotent under concurrency via
    * the unique (recurringExpense, period) index; `lastGeneratedFor` advances

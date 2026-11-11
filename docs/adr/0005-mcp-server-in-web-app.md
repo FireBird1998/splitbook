@@ -61,12 +61,8 @@ Member and Connected assistant reads use actor admission, the admitted Group,
 ledger generation and a delivery-time access check. `pnpm check:reads`
 guards that boundary. The across operation supports an exclusive id `page` and
 `fields` projection, including bounded page refill after access revocation.
-The owner's first part-two decision (#1126) now makes every assistant Group
-operation record due recurring Expenses before reading, including context and
-Draft operations. It supersedes the earlier no-ledger-write rule. Generated
-Expenses and Activity are attributed to the template creator and may notify
-other involved members under the usual no-self-alert rule. Every ledger read now generates first; member metadata operations retain
-admission without generation. Member reads now answer 403 for a missing Group, including detail, invite
+As the owner confirmed on 12 November 2026 (#1126), `group_balances` and `group_spending` bring the ledger up to date before reading. Generation attributes each Expense and Activity to the template creator and may send the usual notifications to other involved members. Group listing, Group context and the list/create/replace/discard Draft tools use metadata admission alone.
+Every ledger read now generates first; metadata operations retain actor admission and delivery checks. Member reads now answer 403 for a missing Group, including detail, invite
 link and admin-only assistant reach. Every deletion marker now denies reads, even with retained members.
 All four part-two decisions are implemented. Archived inclusion, admin-only assistant reach,
 list ordering and selected exports keep their established contracts. Writes

@@ -314,17 +314,17 @@ populates them. Page delivery rechecks access and refills after an observed revo
 Expenses before it reads data. This includes Group details, Expenses (also one
 Expense), Balances, Insights, Trip summary, payments, Group and Home Activity,
 search, duplicate warnings, Draft review, To review, Home balances, spending,
-exports and the Debt calculated before recording a payment. Every assistant Group
-operation also generates, including context and Draft operations, replacing the
-earlier no-ledger-write rule.
+exports and the Debt calculated before recording a payment. The assistant money tools `group_balances` and `group_spending` generate
+and may send the usual notifications to other involved members, attributed
+to the template creator. This follows the owner's 12 November clarification.
 
-Member metadata operations (`readGroupMetadata`, `readGroupsMetadata`) retain the
+Metadata operations (`readGroupMetadata`, `readGroupsMetadata`) retain the
 same admission and delivery checks but avoid generation: rate suggestions,
 invite links, assistant reach, Tags and receipts, currencies, recurring-template
 settings, private Draft listings, page titles, the Groups list and assistant
 approval choices show no saved Expense, total or Activity entry. The member's
 latest manual-Expense currency in the Groups list explicitly excludes generated
-Expenses. Assistant metadata operations still generate under decision 1.
+Expenses. Assistant Group listing, context and all Draft tools use these metadata operations.
 
 The across operations support exclusive-id `page`, `fields` projections and
 bounded refill after revocation. Assistant `list_groups` still queries 51

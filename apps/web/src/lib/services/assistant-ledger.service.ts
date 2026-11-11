@@ -1,4 +1,4 @@
-import { readGroupsMetadata, readGroupLedger, readGroupLedgers } from '@/lib/group-ledger-read';
+import { readGroupsMetadata, readGroupLedger, readGroupMetadata } from '@/lib/group-ledger-read';
 import 'server-only';
 import connectDB from '@/lib/db';
 import Group from '@/lib/models/Group';
@@ -129,7 +129,7 @@ export type ApprovalGroup = AssistantGroup & {
 export const assistantLedgerService = {
   async groups(reader: LedgerReader, after?: string) {
     const cursor = after ? draftObjectId.parse(after).toLowerCase() : undefined;
-    return readGroupLedgers({
+    return readGroupsMetadata({
       actor: assistantActor(reader),
       archived: 'include',
       sort: { _id: 1 },
@@ -185,7 +185,7 @@ export const assistantLedgerService = {
     });
   },
   async context(reader: LedgerReader, groupId: string) {
-    return readGroupLedger({
+    return readGroupMetadata({
       actor: assistantActor(reader),
       groupId,
       read: async (group) => {

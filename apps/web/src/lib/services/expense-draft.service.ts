@@ -253,7 +253,7 @@ async function mutate<T>(
   await actor.authorize?.();
   if (actor.assistant) {
     await requireAccount(scope);
-    await readGroupLedger({
+    await readGroupMetadata({
       actor: { kind: 'assistant', id: actor.id, excludedGroupIds: actor.excludedGroupIds ?? [] },
       groupId,
       validate: (group) => {

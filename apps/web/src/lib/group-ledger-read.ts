@@ -33,7 +33,7 @@ export function readGroupLedger<T>(input: GroupLedgerRead<T>): Promise<T> {
   return readOne(input, true);
 }
 
-/** Member metadata needs admission but no ledger generation. Assistant operations still generate. */
+/** Metadata reads use actor admission and delivery checks. */
 export function readGroupMetadata<T>(input: GroupLedgerRead<T>): Promise<T> {
   return readOne(input, false);
 }
@@ -57,8 +57,7 @@ async function readOne<T>(
   let result: T;
   if (validation !== undefined) result = validation;
   else {
-    if (ledger || actor.kind === 'assistant')
-      await recurringExpenseService.generateDueExpensesForGroups([groupId], now);
+    if (ledger) await recurringExpenseService.generateDueExpensesForGroups([groupId], now);
     result = await read(group, storedGroup);
   }
   if (!(await Group.exists(access))) throw groupReadRefusal(actor);
@@ -99,7 +98,7 @@ export function readGroupLedgers<T, Field extends GroupField = undefined>(
   return readAcross(input, true);
 }
 
-/** Metadata lists use the same admission, order, projection and refill without a member ledger read. */
+/** Metadata lists share admission, order, projection and refill. */
 export function readGroupsMetadata<T, Field extends GroupField = undefined>(
   input: GroupLedgersRead<T, Field>,
 ): Promise<T> {
@@ -155,10 +154,7 @@ async function readAcross<T, Field extends GroupField = undefined>(
             })),
             { path: 'members.user', select: PERSON_FIELDS, options: { lean: true } },
           );
-    if (
-      (ledger || actor.kind === 'assistant') &&
-      storedGroups.some((group) => !materialized.has(String(group._id)))
-    ) {
+    if (ledger && storedGroups.some((group) => !materialized.has(String(group._id)))) {
       await recurringExpenseService.generateDueExpensesForGroups(
         storedGroups.map((group) => String(group._id)).filter((id) => !materialized.has(id)),
         now,
