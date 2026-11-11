@@ -17,7 +17,6 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import { toDateParam } from '@splitbook/shared/date';
-import { formatCurrency } from '@splitbook/shared/currency';
 import {
   MAX_EXTRA_CURRENCIES,
   expenseCurrencyChoices,
@@ -120,7 +119,8 @@ function ExpenseDraftDialog({
   );
   const { description, amount, currency, tagId: tag } = draft.entry;
   // The field says why it can't take the amount; Save waits for one it can (#528).
-  const amountUnreadable = draft.reading().fields.amountReading.status === 'invalid';
+  const reading = draft.reading();
+  const amountUnreadable = reading.fields.amountReading.status === 'invalid';
   const { error, conflict, loading, invalidStoredMoney } = draft;
   const expense = draft.base;
   const isEditMode = !!expense;
@@ -221,10 +221,6 @@ function ExpenseDraftDialog({
       ? `Started in ${currency}, the currency of your latest Expense here.`
       : null;
   const preview = draft.preview();
-  const previewAmount = (id: string): string => {
-    const row = preview.money?.splitBetween.find((row) => row.user === id);
-    return row ? formatCurrency(row.amount, currency) : '—';
-  };
   const reloadLatest = async () => {
     if (!expense || transportBusy.current) return;
     transportBusy.current = true;
@@ -322,6 +318,7 @@ function ExpenseDraftDialog({
 
           <ExpenseFields
             entry={draft.entry}
+            reading={reading}
             editEntry={edit}
             chooseSplitMethod={(method) => setDraft((current) => current.chooseSplitMethod(method))}
             members={members}
@@ -331,7 +328,6 @@ function ExpenseDraftDialog({
             isEditMode={isEditMode}
             currentTag={expense?.tag as string | undefined}
             currentTagId={expense?.tagId as string | undefined}
-            previewAmount={previewAmount}
             currencyChoices={currencyChoices}
             currencyHint={currencyHint}
             addCurrency={

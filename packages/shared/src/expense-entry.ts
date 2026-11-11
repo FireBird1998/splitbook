@@ -60,7 +60,8 @@ export interface ExpenseEntryPolicy {
   splitPreview: 'whole-expense' | 'independent-split';
   roundingNote: 'show' | 'hide';
   weightInput: 'numbers' | 'decimal-units';
-  corrections: 'form' | 'fields';
+  /** A form summary prioritizes the empty whole-share count; entry corrections mark each box. */
+  feedback: 'form-summary' | 'entry-corrections';
 }
 export const expenseEntryPolicy: ExpenseEntryPolicy = {
   blankShare: 'zero',
@@ -70,7 +71,7 @@ export const expenseEntryPolicy: ExpenseEntryPolicy = {
   splitPreview: 'independent-split',
   roundingNote: 'show',
   weightInput: 'decimal-units',
-  corrections: 'fields',
+  feedback: 'entry-corrections',
 };
 export const formSummaryPolicy: ExpenseEntryPolicy = {
   blankShare: 'one',
@@ -80,7 +81,7 @@ export const formSummaryPolicy: ExpenseEntryPolicy = {
   splitPreview: 'whole-expense',
   roundingNote: 'hide',
   weightInput: 'numbers',
-  corrections: 'form',
+  feedback: 'form-summary',
 };
 
 /** One entry supplies both the displayed split and the command; callers cannot supply an allocator. */
@@ -97,7 +98,7 @@ export function readExpenseEntry(
     try {
       // The complete-form guard counts whole share parts before allocating (#1111).
       if (
-        policy.corrections === 'form' &&
+        policy.feedback === 'form-summary' &&
         entry.splitMethod === 'shares' &&
         entry.participantIds.reduce(
           (sum, id) => sum + (parseInt(entry.splitValues[id]) || 0),
@@ -187,7 +188,7 @@ export function readExpenseEntry(
       kind: 'refused' as const,
       error,
       problems: [
-        policy.corrections === 'form'
+        policy.feedback === 'form-summary'
           ? {
               field: 'form' as const,
               message: error instanceof Error ? error.message : 'Invalid allocation',

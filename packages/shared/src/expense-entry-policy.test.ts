@@ -56,3 +56,83 @@ it('keeps all entered payer rows, uses their first identity for one payer, and r
     money: { paidBy: [{ user: single.payers[0].user }] },
   });
 });
+
+it('honors removing a historical zero payer only under the keep-entered-rows policy', () => {
+  const original = entries.find((entry) => entry.id === 'saved-zero-payer-unchanged')!;
+  const entry = { ...original, payers: original.payers.slice(0, 1) };
+  const purpose = { kind: 'edit' as const, saved: savedFor(original) };
+  expect(readExpenseEntry(entry, purpose, formSummaryPolicy).result).toMatchObject({
+    kind: 'ready',
+    financialEdit: true,
+    money: { paidBy: [{ amountMinor: 10000 }] },
+  });
+  expect(
+    readExpenseEntry(entry, purpose, { ...formSummaryPolicy, savedZeroPayers: 'unchanged' }).result,
+  ).toMatchObject({
+    kind: 'ready',
+    financialEdit: false,
+    money: { paidBy: [{ amountMinor: 10000 }, { amountMinor: 0 }] },
+  });
+});
+
+it.each([
+  ['equal', [5000, 5000], 1],
+  ['amounts', [4000, 6000], 1],
+  ['exact', [4000, 6000], 1],
+  ['percentage', [4000, 6000], 1],
+  ['shares', [6667, 3333], 1],
+  ['multiple-payers', [5000, 5000], 2],
+  ['leftover-cent', [3334, 3333, 3333], 1],
+  ['shares-partly-blank', [6667, 3333], 1],
+  ['shares-one-zero', [10000, 0], 1],
+  ['payers-zero', [5000, 5000], 2],
+  ['single-payer-blank', [5000, 5000], 1],
+  ['amounts-partly-blank', [10000, 0], 1],
+  ['percentage-partly-blank', [10000, 0], 1],
+  ['unticked-typed-value', [10000], 1],
+  ['single-payer-field-differs', [5000, 5000], 1],
+] as const)('keeps the complete-form figures for %s', (id, shares, payerCount) => {
+  const { result } = readExpenseEntry(
+    entries.find((entry) => entry.id === id)!,
+    { kind: 'new' },
+    formSummaryPolicy,
+  );
+  expect(result.kind).toBe('ready');
+  if (result.kind !== 'ready') throw new Error('Expected accepted figures');
+  expect(result.money.splitBetween.map((row) => row.amountMinor)).toEqual(shares);
+  expect(result.money.paidBy).toHaveLength(payerCount);
+});
+
+it.each([
+  ['shares-all-blank', 'Each member needs at least 1 share'],
+  ['shares-all-zero', 'Each member needs at least 1 share'],
+  ['shares-fractional', 'Shares must be whole numbers within the supported range'],
+  ['payers-partly-blank', 'Enter a valid decimal amount'],
+  ['lone-listed-payer-blank', 'Enter a valid decimal amount'],
+  ['amounts-not-total', 'Split amounts must add up to the expense amount'],
+  ['percentage-not-total', 'Percentages must add up to 100'],
+  ['unreadable-amount', 'Enter a valid decimal amount'],
+  ['unreadable-payer', 'Enter a valid decimal amount'],
+  ['unreadable-split-amount', 'Enter a valid decimal amount'],
+  ['unreadable-percentage', 'Enter a valid decimal amount'],
+  ['unreadable-share', 'Shares must be whole numbers within the supported range'],
+  ['no-participants', 'At least one payer and participant are required'],
+])('keeps the complete-form refusal for %s', (id, message) => {
+  expect(
+    readExpenseEntry(entries.find((entry) => entry.id === id)!, { kind: 'new' }, formSummaryPolicy)
+      .result,
+  ).toMatchObject({ kind: 'refused', problems: [{ field: 'form', message }] });
+});
+
+it('keeps an empty unknown-currency preview as a refusal instead of throwing', async () => {
+  const { ExpenseDraft } = await import('./expense-draft');
+  const draft = ExpenseDraft.open({
+    groupId: 'group',
+    accountId: 'alex',
+    memberIds: ['alex'],
+    currency: 'INR',
+    defaultTag: '',
+    date: '2026-11-11',
+  }).edit({ currency: '', amount: '' });
+  expect(draft.preview()).toEqual({ money: null, error: 'INVALID_CURRENCY' });
+});

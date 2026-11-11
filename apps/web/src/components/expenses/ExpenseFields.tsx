@@ -37,6 +37,7 @@ import {
 } from '@splitbook/shared/expense-draft';
 import {
   readExpenseEntry,
+  roundingNote,
   formSummaryPolicy,
   type ExpenseEntry,
 } from '@splitbook/shared/expense-entry';
@@ -68,9 +69,13 @@ type ExpenseFieldsInput =
       edit: (change: Partial<ExpenseDraftValues>) => void;
       entry?: never;
       editEntry?: never;
+      reading?: never;
+      previewAmount: (id: string) => string;
     }
   | {
       entry: ExpenseEntry;
+      reading: ReturnType<typeof readExpenseEntry>;
+      previewAmount?: never;
       editEntry: (change: Partial<ExpenseEntry>) => void;
       values?: never;
       edit?: never;
@@ -105,7 +110,6 @@ export type ExpenseFieldsProps = ExpenseFieldsInput & {
   addCurrency?: { note: string; onAdd: () => void };
   currentTag?: string | null;
   currentTagId?: string | null;
-  previewAmount: (id: string) => string;
   /** In review, payers the item names more than once: each shows once, and Paid by says so (#894). */
   listedTwice?: readonly string[];
 };
@@ -124,7 +128,8 @@ export default function ExpenseFields({
   isEditMode,
   currentTag,
   currentTagId,
-  previewAmount,
+  previewAmount: priorPreview,
+  reading: suppliedReading,
   review = false,
   groupCurrency,
   currencyChoices,
@@ -149,7 +154,13 @@ export default function ExpenseFields({
     splitValues,
   } = entry;
   const splitMethod = typedEntry ? entry.splitMethod : priorValues!.splitMethod;
-  const reading = readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy);
+  const reading = suppliedReading ?? readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy);
+  const previewAmount = typedEntry
+    ? (id: string) =>
+        reading.split.shares[id] === undefined
+          ? '—'
+          : formatCurrency(toMajorAmount(reading.split.shares[id]!, entry.currency), entry.currency)
+    : priorPreview!;
   const amountReasonId = useId();
   const amountReading = reading.fields.amountReading;
   const amountReason = amountReading.status === 'invalid' ? amountReading.message : '';
@@ -220,6 +231,15 @@ export default function ExpenseFields({
     shares: 'Split by shares',
     exact: 'Split exact',
   };
+
+  const leftover = reading.split.status.kind === 'adds-up' ? reading.split.status.leftover : null;
+  const note = leftover
+    ? roundingNote(
+        leftover,
+        (id) => (id === viewerId ? 'you' : memberName(id)),
+        (minor) => formatCurrency(toMajorAmount(minor, currency), currency),
+      )
+    : null;
 
   const memberSummary =
     participantIds.length === members.length
@@ -985,6 +1005,7 @@ export default function ExpenseFields({
                     {percentagesBalanced && ' ✓'}
                   </Box>
                 )}
+                {note && <Box sx={{ fontSize: 12, color: 'text.secondary' }}>{note}</Box>}
                 {splitMethod === 'shares' && sharesTotal > 0 && (
                   <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
                     {counted(sharesTotal, 'share')}

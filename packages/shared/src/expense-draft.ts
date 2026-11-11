@@ -255,14 +255,14 @@ export class ExpenseDraft {
   }
 
   preview() {
-    if (this.invalidStoredMoney) return { money: null, error: this.error };
-    const { result } = this.reading();
-    return result.kind === 'ready'
-      ? { money: result.money, error: '' }
-      : {
-          money: null,
-          error: result.error instanceof Error ? result.error.message : 'Invalid allocation',
-        };
+    try {
+      if (this.invalidStoredMoney) throw new Error(this.error);
+      const { result } = this.reading();
+      if (result.kind === 'refused') throw result.error;
+      return { money: result.money, error: '' };
+    } catch (error) {
+      return { money: null, error: error instanceof Error ? error.message : 'Invalid allocation' };
+    }
   }
 
   prepare(
