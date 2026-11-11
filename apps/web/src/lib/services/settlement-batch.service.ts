@@ -1,15 +1,6 @@
 import { Refusal } from '@splitbook/shared/refusals';
-import connectDB from '@/lib/db';
-import { supportsGroupTransactions, withGroupMutation } from '@/lib/group-mutation';
-import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
-import {
-  assertCreateReplay,
-  createRequestMetadata,
-  makePendingActivity,
-  paymentAlertAudience,
-} from '@/lib/financial-write';
-import Group from '@/lib/models/Group';
-import Settlement from '@/lib/models/Settlement';
+import { recordLedger, type LedgerRecording } from '@/lib/ledger-recording';
+import Settlement, { type ISettlementDocument } from '@/lib/models/Settlement';
 import User from '@/lib/models/User';
 import { Types } from 'mongoose';
 import {
@@ -21,9 +12,7 @@ import {
   assertSettlementMembers,
 } from '@splitbook/shared/expense-validation';
 import { parseAmountMinor, sumMinorAmounts, toMajorAmount } from '@splitbook/shared/exact-money';
-import { lockClearedCurrency, lockLedgerCurrency } from '@/lib/ledger-currency';
 import { settlementDebtSnapshot } from './settlement-debt';
-import { activityService } from './activity.service';
 import { PERSON_FIELDS } from './person-fields';
 
 /** One member-started payment; the first Settlement holds its whole-request retry identity. */
@@ -47,123 +36,80 @@ export async function createSettlementBatch(
   const totalPaidMinor = sumMinorAmounts(
     rows.map((row) => row.amountPaidMinor ?? parseAmountMinor(row.amount, row.currency)),
   );
-  await connectDB();
-  await ensureLedgerWriteIndexes();
-  const authorize = async () => {
-    const group = await Group.findById(groupId);
-    if (!group || !group.members.some((member) => String(member.user) === userId))
-      throw new Refusal('FORBIDDEN');
-    assertSettlementMembers(
-      new Set(group.members.map((member) => String(member.user))),
-      paidBy,
-      data.paidTo,
-    );
-    assertSettlementAuthorization(userId, paidBy, data.paidTo);
-    return group;
-  };
-  await authorize();
-  const replay = async () => {
-    const first = await Settlement.findOne({
-      group: groupId,
-      createdBy: userId,
-      'creationRequest.key': requestKey,
-    }).select('+creationRequest +batchSettlementIds');
-    if (!first) return null;
-    assertCreateReplay(first.creationRequest!, command);
-    // A matching batch receipt carries the ids committed atomically with it.
-    if (!first.batchSettlementIds?.length) throw new Error('IDEMPOTENCY_CONFLICT');
-    const saved = await Settlement.find({
-      group: groupId,
-      _id: { $in: first.batchSettlementIds },
-    }).select('+pendingActivity');
-    if (saved.length !== first.batchSettlementIds.length)
-      throw new Error('Incomplete stored Settlement batch');
-    return first.batchSettlementIds.map((id) => saved.find((row) => row._id.equals(id))!);
-  };
-  const respond = async (saved: NonNullable<Awaited<ReturnType<typeof replay>>>) => {
-    // Publication follows the complete ledger commit. Each row has its own recoverable outbox.
-    for (const row of saved) {
-      await activityService.publishPending('settlements', row._id, row.pendingActivity);
+  const ids = rows.map(() => new Types.ObjectId());
+  const saved = await recordLedger({
+    groupId,
+    actorId: userId,
+    model: Settlement,
+    transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
+    compatibility: { membership: 'before-retry-and-at-commit' },
+    command: () => command,
+    retry: { key: requestKey, receipt: 'ordered-records', atCommit: true },
+    currencies: [],
+    prepareAt: 'commit',
+    async prepareResponseRecord(row) {
       await row.populate([
         { path: 'paidBy', select: PERSON_FIELDS },
         { path: 'paidTo', select: PERSON_FIELDS },
         { path: 'createdBy', select: PERSON_FIELDS },
       ]);
-    }
-    return { paidCurrency: data.paidCurrency, totalPaidMinor, settlements: saved };
-  };
-  const existing = await replay();
-  if (existing) return respond(existing);
-  // Unlike a single legacy save, a batch can never fall back to non-transactional writes.
-  if (!(await supportsGroupTransactions())) throw new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED');
-  const ids = rows.map(() => new Types.ObjectId());
-  const saved = await withGroupMutation(
-    groupId,
-    async (session) => {
-      if (!session) throw new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED');
-      const committedGroup = await authorize();
-      // A competing request may have committed while this one waited on the Group fence.
-      const concurrent = await replay();
-      if (concurrent) return concurrent;
+    },
+    checkPeople(members) {
+      assertSettlementMembers(members, paidBy, data.paidTo);
+      assertSettlementAuthorization(userId, paidBy, data.paidTo);
+    },
+    async prepare(): ReturnType<LedgerRecording<ISettlementDocument>['prepare']> {
       const names = await User.find({ _id: { $in: [paidBy, data.paidTo] } })
         .select('name')
         .lean();
-      const result = [];
-      for (const [index, row] of rows.entries()) {
-        // Share the single-payment rules inside this batch's own mutation: the cleared
-        // currency may be historical; the paying currency must still be listed.
-        await lockClearedCurrency(groupId, row.currency);
-        await lockLedgerCurrency(groupId, data.paidCurrency);
-        const amountMinor = parseAmountMinor(row.amount, row.currency);
-        const snapshot = await settlementDebtSnapshot(
-          groupId,
-          row.currency,
-          paidBy,
-          data.paidTo,
-          amountMinor,
-          { requireDebt: true },
-        );
-        const event = makePendingActivity(groupId, 'settlement_recorded', userId, {
-          ...row,
-          note: undefined,
-          settlementId: String(ids[index]),
-          batchId: String(ids[0]),
-          batchSize: rows.length,
-          amountMinor,
-          ...snapshot,
-          paidByName: names.find((person) => String(person._id) === paidBy)?.name,
-          paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
-        });
-        // One Payment alert identity per committed Settlement (#842); the batch has none of its own.
-        await paymentAlertAudience(event, {
-          groupId,
-          recordId: String(ids[index]),
-          paidBy,
-          paidTo: data.paidTo,
-          members: async () => committedGroup.members,
-        });
-        result.push(
-          await Settlement.create({
-            ...row,
-            _id: ids[index],
-            group: groupId,
-            createdBy: userId,
+      return rows.map((row, index) => ({
+        id: ids[index],
+        currencies: [
+          { currency: row.currency, rule: 'held-by-ledger' },
+          { currency: data.paidCurrency, rule: 'listed' },
+        ],
+        async build() {
+          const amountMinor = parseAmountMinor(row.amount, row.currency);
+          const snapshot = await settlementDebtSnapshot(
+            groupId,
+            row.currency,
+            paidBy,
+            data.paidTo,
             amountMinor,
-            moneyVersion: 1,
-            ...snapshot,
-            ...(index === 0
-              ? {
-                  creationRequest: createRequestMetadata(requestKey, command),
-                  batchSettlementIds: ids,
-                }
-              : {}),
-            pendingActivity: [event],
-          }),
-        );
-      }
-      return result;
+            { requireDebt: true },
+          );
+          return {
+            document: {
+              ...row,
+              paidBy: new Types.ObjectId(paidBy),
+              paidTo: new Types.ObjectId(data.paidTo),
+              amountMinor,
+              moneyVersion: 1,
+              ...snapshot,
+            },
+            activity: {
+              type: 'settlement_recorded',
+              metadata: {
+                ...row,
+                note: undefined,
+                settlementId: String(ids[index]),
+                batchId: String(ids[0]),
+                batchSize: rows.length,
+                amountMinor,
+                ...snapshot,
+                paidByName: names.find((person) => String(person._id) === paidBy)?.name,
+                paidToName: names.find((person) => String(person._id) === data.paidTo)?.name,
+              },
+              alert: {
+                kind: 'settlement_recorded',
+                involved: [paidBy, data.paidTo],
+                switch: 'payments',
+              },
+            },
+          };
+        },
+      }));
     },
-    { ledger: true },
-  );
-  return respond(saved);
+  });
+  return { paidCurrency: data.paidCurrency, totalPaidMinor, settlements: saved };
 }

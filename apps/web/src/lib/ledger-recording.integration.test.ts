@@ -46,40 +46,44 @@ function record(
     actorId: alice,
     model: Expense,
     transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
-    retry: { key, command: { description: 'A record', amount: 10 } },
+    command: () => ({ description: 'A record', amount: 10 }),
+    retry: { key },
     currencies: [{ currency: 'INR', rule: 'listed' }],
     checkPeople(members) {
       if (!members.has(bob)) throw new Refusal('INVALID_MEMBERS');
     },
     ...overrides,
     async prepare(): ReturnType<LedgerRecording<IExpenseDocument>['prepare']> {
+      const id = new Types.ObjectId();
       return [
-        async () => {
-          const id = new Types.ObjectId();
-          return {
-            document: {
-              _id: id,
-              description: 'A record',
-              amount: 10,
-              currency: 'INR',
-              category: 'food',
-              tag: 'Food',
-              date: new Date('2026-11-11T12:00:00Z'),
-              splitMethod: 'equal',
-              paidBy: [{ user: new Types.ObjectId(alice), amount: 10 }],
-              splitBetween: [{ user: new Types.ObjectId(bob), amount: 10 }],
-              ...documentOverrides,
-            },
-            activity: {
-              type: 'expense_added',
-              metadata: { expenseId: String(id), description: 'A record' },
-              alert: {
-                kind: 'expense_added',
-                involved: [alice, bob, bob, carol],
-                switch: alertSwitch,
+        {
+          id,
+          async build() {
+            return {
+              document: {
+                _id: id,
+                description: 'A record',
+                amount: 10,
+                currency: 'INR',
+                category: 'food',
+                tag: 'Food',
+                date: new Date('2026-11-11T12:00:00Z'),
+                splitMethod: 'equal',
+                paidBy: [{ user: new Types.ObjectId(alice), amount: 10 }],
+                splitBetween: [{ user: new Types.ObjectId(bob), amount: 10 }],
+                ...documentOverrides,
               },
-            },
-          };
+              activity: {
+                type: 'expense_added',
+                metadata: { expenseId: String(id), description: 'A record' },
+                alert: {
+                  kind: 'expense_added',
+                  involved: [alice, bob, bob, carol],
+                  switch: alertSwitch,
+                },
+              },
+            };
+          },
         },
       ];
     },

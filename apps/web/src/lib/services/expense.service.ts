@@ -1,9 +1,9 @@
 import { Refusal, type RefusalCode } from '@splitbook/shared/refusals';
 import { inGroupCurrencyOrder } from '@splitbook/shared/group-currencies';
 import type { AssistantAttribution } from '@splitbook/shared/draft-attribution';
-import { afterGroupCommit, withGroupMutation } from '@/lib/group-mutation';
+import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
-import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
+import { recordLedger } from '@/lib/ledger-recording';
 import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
@@ -38,9 +38,7 @@ import {
   unsupportedCurrencyEditRefusal,
 } from '@splitbook/shared/expense-money-edit';
 import {
-  assertCreateReplay,
   assertPendingActivityCapacity,
-  createRequestMetadata,
   expenseChangeAlertsEnabled,
   ledgerNotificationContext,
   involvedMembers,
@@ -159,126 +157,80 @@ export class ExpenseService {
     requestKey?: string,
     options?: { preparedBy?: AssistantAttribution },
   ) {
-    await connectDB();
-    await ensureLedgerWriteIndexes();
-    const group = await Group.findOne({ _id: groupId, 'members.user': userId });
-    if (!group) throw new Refusal('FORBIDDEN');
-    const existing = requestKey
-      ? await Expense.findOne({
-          group: groupId,
-          createdBy: userId,
-          'creationRequest.key': requestKey,
-        }).select('+creationRequest +pendingActivity')
-      : null;
-    const incoming = existing ? requestTagForReplay(data, existing) : data;
-    const money = normalizeExpenseMoney(incoming);
-    // Replay validates its immutable command, without requiring the old Tag still be active.
-    const tagReference =
-      existing && incoming.tagId
-        ? { tagId: incoming.tagId, tag: incoming.tag ?? existing.tag }
-        : resolveTagReference(group.tags, incoming);
-    const command = {
-      ...incoming,
-      ...money,
-      ...tagReference,
-      notes: incoming.notes ?? '',
-      predefinedItem: incoming.predefinedItem ?? null,
-    };
-    if (existing) {
-      assertCreateReplay(existing.creationRequest!, command);
-      await afterGroupCommit(() =>
-        activityService.publishPending('expenses', existing._id, existing.pendingActivity),
-      );
-      existing.tag = displayTagReference(group.tags, existing).tag;
-      return existing.populate([
-        { path: 'paidBy.user', select: PERSON_FIELDS },
-        { path: 'splitBetween.user', select: PERSON_FIELDS },
-        { path: 'createdBy', select: PERSON_FIELDS },
-      ]);
-    }
-    // A retry of an Expense recorded before the archive is confirmed above; nothing new is (#578).
-    if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
-    const memberIds = new Set(group.members.map((member) => String(member.user)));
-    assertExpenseParticipants(memberIds, data.paidBy, data.splitBetween);
-    assertGroupCurrency(group, data.currency);
-    const id = new mongoose.Types.ObjectId();
-    const event = makePendingActivity(groupId, 'expense_added', userId, {
-      ...(options?.preparedBy ? { preparedBy: options.preparedBy } : {}),
-      expenseId: String(id),
-      description: data.description,
-      amount: money.amount,
-      currency: data.currency,
+    const [expense] = await recordLedger({
+      groupId,
+      actorId: userId,
+      model: Expense,
+      transactions: 'allow-standalone',
+      compatibility: { membership: 'actor-before-retry', standaloneArchive: 'fence-only' },
+      retry: requestKey
+        ? { key: requestKey, legacyTagAlias: data.tag, raceCommand: 'original' }
+        : undefined,
+      command({ group, receipt }) {
+        const incoming = receipt ? requestTagForReplay(data, receipt) : data;
+        const money = normalizeExpenseMoney(incoming);
+        const tagReference =
+          receipt && incoming.tagId
+            ? { tagId: incoming.tagId, tag: incoming.tag ?? receipt.tag }
+            : resolveTagReference(group!.tags, incoming);
+        return {
+          ...incoming,
+          ...money,
+          ...tagReference,
+          notes: incoming.notes ?? '',
+          predefinedItem: incoming.predefinedItem ?? null,
+        };
+      },
+      currencies: [{ currency: data.currency, rule: 'listed' }],
+      checkPeople(members) {
+        assertExpenseParticipants(members, data.paidBy, data.splitBetween);
+      },
+      async prepare(command, group) {
+        assertExpenseParticipants(
+          new Set(group!.members.map((member) => String(member.user))),
+          data.paidBy,
+          data.splitBetween,
+        );
+        assertGroupCurrency(group!, data.currency);
+        const id = new mongoose.Types.ObjectId();
+        const occurredAt = new Date();
+        return [
+          {
+            id,
+            async build() {
+              return {
+                document: { ...command, preparedBy: options?.preparedBy },
+                activity: {
+                  type: 'expense_added',
+                  occurredAt,
+                  metadata: {
+                    ...(options?.preparedBy ? { preparedBy: options.preparedBy } : {}),
+                    expenseId: String(id),
+                    description: data.description,
+                    amount: command.amount,
+                    currency: data.currency,
+                  },
+                  alert: {
+                    kind: 'expense_added',
+                    involved: involvedMembers(data),
+                    switch: 'always',
+                  },
+                },
+              };
+            },
+          },
+        ];
+      },
+      async prepareResponseRecord(record, { group, outcome }) {
+        if (outcome === 'replayed') record.tag = displayTagReference(group!.tags, record).tag;
+        await record.populate([
+          { path: 'paidBy.user', select: PERSON_FIELDS },
+          { path: 'splitBetween.user', select: PERSON_FIELDS },
+          { path: 'createdBy', select: PERSON_FIELDS },
+        ]);
+      },
     });
-    let expense;
-    try {
-      expense = await withGroupMutation(
-        groupId,
-        async () => {
-          // In the insert's own mutation, so a removal of the currency can't come in between.
-          await lockLedgerCurrency(groupId, data.currency);
-          // Read the current fenced Group inside the same commit; never reconstruct an audience later.
-          const committedGroup = await Group.findOne({ _id: groupId, 'members.user': userId });
-          if (!committedGroup) throw new Refusal('FORBIDDEN');
-          const membersAtCommit = new Set(
-            committedGroup.members.map((member) => String(member.user)),
-          );
-          assertExpenseParticipants(membersAtCommit, data.paidBy, data.splitBetween);
-          event.notificationContext = {
-            version: 2,
-            eventId: String(event._id),
-            kind: 'expense_added',
-            groupId,
-            recordId: String(id),
-            occurredAt: event.occurredAt,
-            recipientIds: [
-              ...new Set([...data.paidBy, ...data.splitBetween].map((row) => String(row.user))),
-            ]
-              .filter((candidate) => candidate !== userId && membersAtCommit.has(candidate))
-              .sort(),
-          };
-          return Expense.create({
-            ...command,
-            preparedBy: options?.preparedBy,
-            _id: id,
-            group: groupId,
-            createdBy: userId,
-            pendingActivity: [event],
-            ...(requestKey
-              ? { creationRequest: createRequestMetadata(requestKey, command, data.tag) }
-              : {}),
-          });
-        },
-        { ledger: true },
-      );
-    } catch (error) {
-      if (requestKey && (error as { code?: number }).code === 11000) {
-        const replay = await Expense.findOne({
-          group: groupId,
-          createdBy: userId,
-          'creationRequest.key': requestKey,
-        }).select('+creationRequest +pendingActivity');
-        if (replay) {
-          assertCreateReplay(replay.creationRequest!, command);
-          await afterGroupCommit(() =>
-            activityService.publishPending('expenses', replay._id, replay.pendingActivity),
-          );
-          return replay.populate([
-            { path: 'paidBy.user', select: PERSON_FIELDS },
-            { path: 'splitBetween.user', select: PERSON_FIELDS },
-            { path: 'createdBy', select: PERSON_FIELDS },
-          ]);
-        }
-      }
-      throw error;
-    }
-    await afterGroupCommit(() =>
-      activityService.publishPending('expenses', expense._id, expense.pendingActivity),
-    );
-    return expense.populate([
-      { path: 'paidBy.user', select: PERSON_FIELDS },
-      { path: 'splitBetween.user', select: PERSON_FIELDS },
-      { path: 'createdBy', select: PERSON_FIELDS },
-    ]);
+    return expense;
   }
 
   /**
