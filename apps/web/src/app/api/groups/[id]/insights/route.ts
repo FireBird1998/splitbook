@@ -39,7 +39,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     let timeZone: string;
     let compare: number;
     const now = new Date();
-    return await readGroupLedger({
+    return await readGroupLedger<Response>({
       actor: { kind: 'member', id: user.id },
       groupId: id,
       deletionMarker: 'allow-retained-members',
