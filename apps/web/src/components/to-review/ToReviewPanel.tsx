@@ -194,7 +194,9 @@ export default function ToReviewPanel({
           sx={{ border: 0, p: 0, m: 0, minWidth: 0 }}
         >
           <ReviewExpenseFields
-            entries={editor.entries}
+            entry={editor.entry}
+            original={editor.original}
+            changes={editor.changes}
             context={context}
             listedTwice={listedTwice}
             onChange={(changes) => {

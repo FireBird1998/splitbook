@@ -93,5 +93,7 @@ it('merges repeated people for one-box-per-person fields and retains rows for th
 });
 
 it('keeps an unreadable saved amount visible for correction instead of throwing while opening', () => {
-  expect(entryForExpenseDraft({amount: 0}, {...expenseEntryPolicy, repeatedPeople: 'merge'}).amount).toBe('0');
+  expect(
+    entryForExpenseDraft({ amount: 0 }, { ...expenseEntryPolicy, repeatedPeople: 'merge' }).amount,
+  ).toBe('0');
 });

@@ -31,14 +31,9 @@ import {
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import type { ExpenseSplitMethod } from '@splitbook/shared/split-calculation';
 import {
-  expenseEntryFromValues,
-  expenseDraftChanges,
-  type ExpenseDraftValues,
-} from '@splitbook/shared/expense-draft';
-import {
   readExpenseEntry,
   roundingNote,
-  formSummaryPolicy,
+  type IncompleteExpenseEntry,
   type ExpenseEntry,
 } from '@splitbook/shared/expense-entry';
 import { type ExpenseCurrencyChoice } from '@splitbook/shared/group-currencies';
@@ -61,25 +56,11 @@ import { memberLabel } from '@splitbook/shared/activity-timeline';
 import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
 import { scrollBox } from '@/components/common/scroll-box';
 
-type ExpenseFieldsInput =
-  | {
-      values: Omit<ExpenseDraftValues, 'splitMethod'> & {
-        splitMethod: ExpenseDraftValues['splitMethod'] | '';
-      };
-      edit: (change: Partial<ExpenseDraftValues>) => void;
-      entry?: never;
-      editEntry?: never;
-      reading?: never;
-      previewAmount: (id: string) => string;
-    }
-  | {
-      entry: ExpenseEntry;
-      reading: ReturnType<typeof readExpenseEntry>;
-      previewAmount?: never;
-      editEntry: (change: Partial<ExpenseEntry>) => void;
-      values?: never;
-      edit?: never;
-    };
+type ExpenseFieldsInput = {
+  entry: IncompleteExpenseEntry;
+  reading: ReturnType<typeof readExpenseEntry>;
+  editEntry: (change: Partial<ExpenseEntry>) => void;
+};
 export type ExpenseFieldsProps = ExpenseFieldsInput & {
   chooseSplitMethod: (method: ExpenseSplitMethod) => void;
   members: Array<{ user: { _id: string; name: string } }>;
@@ -115,10 +96,8 @@ export type ExpenseFieldsProps = ExpenseFieldsInput & {
 };
 /** The Add expense fields, shared with To review. Persistence belongs to the caller. */
 export default function ExpenseFields({
-  values: priorValues,
-  edit: editPrior,
-  entry: typedEntry,
-  editEntry,
+  entry,
+  editEntry: edit,
   chooseSplitMethod,
   members,
   groupTags,
@@ -128,8 +107,7 @@ export default function ExpenseFields({
   isEditMode,
   currentTag,
   currentTagId,
-  previewAmount: priorPreview,
-  reading: suppliedReading,
+  reading,
   review = false,
   groupCurrency,
   currencyChoices,
@@ -137,10 +115,6 @@ export default function ExpenseFields({
   addCurrency,
   listedTwice = [],
 }: ExpenseFieldsProps) {
-  // To review keeps its existing flat editor until #1115; Add/Edit hold only an entry.
-  const entry = typedEntry ?? expenseEntryFromValues(priorValues!);
-  const edit = (change: Partial<ExpenseEntry>) =>
-    typedEntry ? editEntry!(change) : editPrior!(expenseDraftChanges(change, entry.splitMethod));
   const {
     description,
     amount,
@@ -153,14 +127,11 @@ export default function ExpenseFields({
     multiPayer,
     splitValues,
   } = entry;
-  const splitMethod = typedEntry ? entry.splitMethod : priorValues!.splitMethod;
-  const reading = suppliedReading ?? readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy);
-  const previewAmount = typedEntry
-    ? (id: string) =>
-        reading.split.shares[id] === undefined
-          ? '—'
-          : formatCurrency(toMajorAmount(reading.split.shares[id]!, entry.currency), entry.currency)
-    : priorPreview!;
+  const splitMethod = entry.splitMethod;
+  const previewAmount = (id: string) =>
+    reading.split.shares[id] === undefined
+      ? '—'
+      : formatCurrency(toMajorAmount(reading.split.shares[id]!, entry.currency), entry.currency);
   const amountReasonId = useId();
   const amountReading = reading.fields.amountReading;
   const amountReason = amountReading.status === 'invalid' ? amountReading.message : '';

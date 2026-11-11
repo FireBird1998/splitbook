@@ -48,7 +48,7 @@ const saved = vi.hoisted(() => [] as Record<string, unknown>[]);
 vi.mock('./use-expense-draft-save', () => ({
   useExpenseDraftSave: () => ({
     save: async (draft: ExpenseDraft) => {
-      saved.push({ ...draft.values });
+      saved.push({ ...draft.entry });
       return { status: 'saved' };
     },
   }),

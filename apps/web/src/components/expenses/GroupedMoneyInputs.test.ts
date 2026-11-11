@@ -31,19 +31,20 @@ it.each(['INR', 'EUR', 'JPY'])(
       currency,
       defaultTag: 'General',
       date: '2026-10-21',
-    }).edit({
+    }).change({
       amount: initial,
-      multiPayerMode: true,
+      multiPayer: true,
       payers: [{ user: 'you', amount: initial }],
       splitMethod: 'exact',
-      customAmounts: { you: initial, sam: '0' },
+      splitValues: { you: initial, sam: '0' },
     });
     function Form() {
       const [current, setCurrent] = useState(draft);
       return createElement(ExpenseFields, {
-        values: current.values,
-        edit: (change) => {
-          setCurrent(current.edit(change));
+        entry: current.entry,
+        reading: current.reading(),
+        editEntry: (change) => {
+          setCurrent(current.change(change));
         },
         chooseSplitMethod: () => {},
         members: [
@@ -54,7 +55,6 @@ it.each(['INR', 'EUR', 'JPY'])(
         userId: 'you',
         isEditMode: false,
         review: true,
-        previewAmount: () => '',
       });
     }
     await act(async () => {
@@ -81,10 +81,10 @@ it.each(['INR', 'EUR', 'JPY'])(
       expect(field(kind).props.value).toBe(shown);
       const stored = () =>
         kind === 0
-          ? renderer.root.findByType(ExpenseFields).props.values.amount
+          ? renderer.root.findByType(ExpenseFields).props.entry.amount
           : kind === 1
-            ? renderer.root.findByType(ExpenseFields).props.values.payers[0].amount
-            : renderer.root.findByType(ExpenseFields).props.values.customAmounts.you;
+            ? renderer.root.findByType(ExpenseFields).props.entry.payers[0].amount
+            : renderer.root.findByType(ExpenseFields).props.entry.splitValues.you;
       expect(stored()).toBe(initial);
       await act(async () => field(kind).props.onFocus?.({}));
       await act(async () => field(kind).props.onChange({ target: { value: shown } }));

@@ -1,123 +1,99 @@
 'use client';
 import { useState } from 'react';
-import { draftValues } from '@splitbook/shared/persistent-draft-editor';
+import { draftForExpenseEntry, fieldDraftEntryPolicy } from '@splitbook/shared/expense-entry-draft';
+import {
+  readExpenseEntry,
+  formSummaryPolicy,
+  type IncompleteExpenseEntry,
+} from '@splitbook/shared/expense-entry';
 import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
 import {
   completeExpenseDraftSchema,
   withGroupCurrency,
+  type ExpenseDraftValues,
 } from '@splitbook/shared/validators/expense-draft';
-import { formatCurrency } from '@splitbook/shared/currency';
 import ExpenseFields from '@/components/expenses/ExpenseFields';
-import type { ExpenseDraftValues } from '@splitbook/shared/expense-draft';
-import type { DraftContext, DraftEntries } from '@splitbook/shared/persistent-draft-editor';
+import type { DraftContext } from '@splitbook/shared/persistent-draft-editor';
 
-/** Adapt only changed fields: opening a partial item must never invent missing facts. */
+/** Picker defaults are a projection. Only an edited entry field becomes a Draft fact. */
 export default function ReviewExpenseFields({
-  entries,
+  entry,
+  original,
+  changes = {},
   context,
   onChange,
   listedTwice,
 }: {
-  entries: DraftEntries;
+  entry: IncompleteExpenseEntry;
+  original: ExpenseDraftValues;
+  changes?: Partial<Record<keyof IncompleteExpenseEntry, boolean>>;
   context: DraftContext;
-  onChange: (changes: DraftEntries) => void;
-  /** Payers the item names more than once, which its entries hold once each (#894). */
+  onChange: (changes: Partial<IncompleteExpenseEntry>) => void;
   listedTwice?: readonly string[];
 }) {
-  const selected = (kind: string) =>
-    Object.keys(entries)
-      .filter(
-        (key) =>
-          key.startsWith(`${kind}.`) && key.split('.').length === 2 && entries[key] === 'yes',
-      )
-      .map((key) => key.split('.')[1]);
-  const payerIds = selected('paidBy');
   const [multiple, setMultiple] = useState(false);
-  // A lone payer without their own amount paid the whole Expense, as in Add expense.
-  const loneAmount = entries[`paidBy.${payerIds[0]}.amount`];
-  const mismatched = payerIds.length === 1 && Boolean(loneAmount) && loneAmount !== entries.amount;
-  // Once shown, keep several payers while the member clears an amount to retype it.
+  const loneAmount = entry.payers[0]?.amount;
+  const mismatched =
+    entry.payers.length === 1 && Boolean(loneAmount) && loneAmount !== entry.amount;
+  // Keep several payers open while the member clears an amount to retype it (#591).
   if (mismatched && !multiple) setMultiple(true);
-  const multiPayerMode = multiple || mismatched || payerIds.length > 1;
-  const parts = (part: string) =>
-    Object.fromEntries(
-      selected('splitBetween').map((id) => [id, entries[`splitBetween.${id}.${part}`] ?? '']),
-    );
-  const values = {
-    description: entries.description ?? '',
-    amount: entries.amount ?? '',
-    // Shown in the Group's currency, which saving applies, as on Add expense (#512).
-    currency: entries.currency || context.currency || '',
-    // Shown as Other, which saving applies, but stored only once the member chooses.
-    category: entries.category || 'other',
-    date: entries.date ?? '',
-    tag:
-      entries.tagId ||
-      context.tags.find((tag) => tag.name === entries.tag)?.id ||
-      entries.tag ||
+  const multiPayer = multiple || mismatched || entry.multiPayer;
+  const shown = {
+    ...entry,
+    currency: entry.currency || context.currency || '',
+    category: entry.category || 'other',
+    tagId:
+      entry.tagId ||
+      context.tags.find((tag) => tag.name === original.tag)?.id ||
+      original.tag ||
       '',
-    notes: entries.notes ?? '',
-    splitMethod: (entries.splitMethod ?? '') as ExpenseDraftValues['splitMethod'] | '',
-    selectedMembers: selected('splitBetween'),
-    payers: payerIds.map((user) => ({ user, amount: entries[`paidBy.${user}.amount`] ?? '' })),
-    multiPayerMode,
-    customAmounts: parts('amount'),
-    customPercentages: parts('percentage'),
-    customShares: parts('shares'),
+    multiPayer,
   };
-  function edit(change: Partial<ExpenseDraftValues>) {
-    const patch: DraftEntries = {};
-    for (const key of ['description', 'amount', 'currency', 'category', 'date', 'notes'] as const)
-      if (change[key] !== undefined) patch[key] = change[key];
-    if (change.tag !== undefined) {
-      patch.tagId = change.tag;
-      patch.tag = '';
-    }
-    if (change.multiPayerMode !== undefined) setMultiple(change.multiPayerMode);
-    const multi = change.multiPayerMode ?? multiPayerMode;
-    if (change.payers || (change.amount !== undefined && !multi && payerIds.length === 1)) {
-      for (const key of Object.keys(entries)) if (key.startsWith('paidBy.')) patch[key] = '';
-      for (const payer of change.payers ?? values.payers) {
-        if (!payer.user) continue;
-        patch[`paidBy.${payer.user}`] = 'yes';
-        patch[`paidBy.${payer.user}.amount`] = multi
-          ? payer.amount
-          : (change.amount ?? values.amount);
-      }
-    }
-    if (change.selectedMembers) {
-      for (const id of values.selectedMembers) patch[`splitBetween.${id}`] = '';
-      for (const id of change.selectedMembers) patch[`splitBetween.${id}`] = 'yes';
-    }
-    for (const [field, part] of [
-      ['customAmounts', 'amount'],
-      ['customPercentages', 'percentage'],
-      ['customShares', 'shares'],
-    ] as const)
-      if (change[field])
-        for (const [id, value] of Object.entries(change[field]))
-          patch[`splitBetween.${id}.${part}`] = value;
-    if (Object.keys(patch).length) onChange(patch);
+  function edit(change: Partial<IncompleteExpenseEntry>) {
+    if (change.multiPayer !== undefined) setMultiple(change.multiPayer);
+    // Expanding Who paid is an interaction, not a saved edit until a box changes.
+    if (Object.keys(change).every((key) => key === 'multiPayer')) return;
+    const nextMode = change.multiPayer ?? multiPayer;
+    const payers = change.payers ?? entry.payers;
+    onChange({
+      ...change,
+      ...(change.payers || change.amount !== undefined
+        ? {
+            multiPayer: nextMode,
+            ...(!nextMode && (change.payers || payers.length === 1)
+              ? { payers: payers.map((row) => ({ ...row, amount: change.amount ?? entry.amount })) }
+              : {}),
+          }
+        : {}),
+    });
   }
-  // Retain removed identities visibly until the member replaces them.
   const members = [...context.members];
-  for (const id of [...payerIds, ...values.selectedMembers])
+  for (const id of [...entry.payers.map((row) => row.user), ...entry.participantIds])
     if (!members.some((member) => member.id === id)) members.push({ id, name: 'Former member' });
   let preview: ReturnType<typeof normalizeExpenseMoney> | undefined;
   try {
     const parsed = completeExpenseDraftSchema.safeParse(
-      withGroupCurrency(draftValues(entries), context.currency),
+      withGroupCurrency(
+        draftForExpenseEntry(entry, fieldDraftEntryPolicy, { from: original, changed: changes }),
+        context.currency,
+      ),
     );
     if (parsed.success) preview = normalizeExpenseMoney(parsed.data);
   } catch {
-    // Incomplete typing is expected. The shared form still shows its totals and missing facts.
+    // An incomplete Draft remains editable; the review machine asks for the missing facts.
   }
+  const reading = readExpenseEntry(shown, { kind: 'new' }, formSummaryPolicy);
+  // To review uses the server's completeness check: a missing row must not become zero here.
+  reading.split.shares = Object.fromEntries(
+    preview?.splitBetween.map((row) => [row.user, row.amountMinor]) ?? [],
+  );
   return (
     <ExpenseFields
       review
       listedTwice={listedTwice}
-      values={values}
-      edit={edit}
+      entry={shown}
+      reading={reading}
+      editEntry={edit}
       isEditMode
       groupCurrency={context.currency}
       groupCategory={context.category}
@@ -125,18 +101,9 @@ export default function ReviewExpenseFields({
       viewerId={context.viewerId}
       members={members.map((member) => ({ user: { _id: member.id, name: member.name } }))}
       groupTags={context.tags.map((tag) => ({ _id: tag.id, name: tag.name, isArchived: false }))}
-      currentTag={entries.tag}
-      currentTagId={entries.tagId}
-      previewAmount={(id) => {
-        const row = preview?.splitBetween.find((row) => row.user === id);
-        return row ? formatCurrency(row.amount, values.currency) : '—';
-      }}
-      chooseSplitMethod={(method) => {
-        const patch: DraftEntries = { splitMethod: method };
-        for (const key of Object.keys(entries))
-          if (key.startsWith('splitBetween.') && key.split('.').length === 3) patch[key] = '';
-        onChange(patch);
-      }}
+      currentTag={original.tag}
+      currentTagId={original.tagId}
+      chooseSplitMethod={(splitMethod) => onChange({ splitMethod, splitValues: {} })}
     />
   );
 }

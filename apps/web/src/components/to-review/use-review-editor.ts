@@ -3,12 +3,26 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { draftEditQueue } from '@splitbook/shared/draft-edit-queue';
 import { describeDraftChange } from '@splitbook/shared/to-review';
 import {
-  draftEntries,
-  draftValues,
-  type DraftEntries,
-} from '@splitbook/shared/persistent-draft-editor';
+  entryForExpenseDraft,
+  draftForExpenseEntry,
+  fieldDraftEntryPolicy,
+} from '@splitbook/shared/expense-entry-draft';
+import type { IncompleteExpenseEntry } from '@splitbook/shared/expense-entry';
 import type { PersistedExpenseDraft } from '@splitbook/shared/validators/expense-draft';
 import type { WebReviewClient } from './review-client';
+
+type EntryEdit = {
+  entry: IncompleteExpenseEntry;
+  from: NonNullable<PersistedExpenseDraft['values']>;
+  changed: Partial<Record<keyof IncompleteExpenseEntry, boolean>>;
+};
+const editing = (draft: PersistedExpenseDraft): EntryEdit => ({
+  entry: entryForExpenseDraft(draft.values, fieldDraftEntryPolicy),
+  from: draft.values ?? {},
+  changed: {},
+});
+const valuesFor = (edit: EntryEdit) =>
+  draftForExpenseEntry(edit.entry, fieldDraftEntryPolicy, edit);
 
 /** The Draft left To review elsewhere, so typing for it is obsolete and is never sent. */
 class RemovedElsewhere extends Error {}
@@ -32,12 +46,12 @@ export function useReviewEditor(
   currency?: string,
 ) {
   const [draft, setDraft] = useState(initial);
-  const [entries, setEntries] = useState(() => draftEntries(initial.values));
+  const [entryEdit, setEntryEdit] = useState(() => editing(initial));
   const [status, setStatus] = useState<'kept' | 'changed' | 'keeping' | 'failed'>('kept');
   const [note, setNote] = useState(() => (unkeptDraftIds.has(initial.id) ? UNKEPT_NOTE : ''));
   const [error, setError] = useState('');
   const current = useRef(initial);
-  const input = useRef(entries);
+  const input = useRef(entryEdit);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const live = useRef(true);
   /**
@@ -52,7 +66,7 @@ export function useReviewEditor(
   useEffect(() => {
     adapter.current = { client, refresh };
   }, [client, refresh]);
-  const editQueue = useRef<ReturnType<typeof draftEditQueue<DraftEntries>> | null>(null);
+  const editQueue = useRef<ReturnType<typeof draftEditQueue<EntryEdit>> | null>(null);
   useEffect(() => {
     namesRef.current = names;
     currencyRef.current = currency;
@@ -62,10 +76,10 @@ export function useReviewEditor(
     if (announce)
       setNote(describeDraftChange(current.current, next, namesRef.current, currencyRef.current));
     current.current = next;
-    input.current = draftEntries(next.values);
+    input.current = editing(next);
     editQueue.current?.clear();
     setDraft(next);
-    setEntries(input.current);
+    setEntryEdit(input.current);
     setStatus('kept');
     setError('');
   }, []);
@@ -79,7 +93,7 @@ export function useReviewEditor(
   }, [adopt]);
   // Construct on first use in an effect or member action, never by reading refs in render.
   const edits = useCallback(() => {
-    editQueue.current ??= draftEditQueue<DraftEntries>({
+    editQueue.current ??= draftEditQueue<EntryEdit>({
       current: () => live.current || leaving.current,
       canWrite: () => live.current || leaving.current,
       replace: async (before, submitted) => {
@@ -89,7 +103,7 @@ export function useReviewEditor(
           !(await adapter.current.client.list()).some(({ id }) => id === before.id)
         )
           throw new RemovedElsewhere();
-        return adapter.current.client.replace(before, draftValues(submitted));
+        return adapter.current.client.replace(before, valuesFor(submitted));
       },
       kept: (kept, pending) => {
         current.current = kept;
@@ -200,7 +214,7 @@ export function useReviewEditor(
     const pageHide = () => {
       if (!edits().pending || edits().writing) return;
       if (timer.current) clearTimeout(timer.current);
-      adapter.current.client.replaceAsPageGoes(current.current, draftValues(input.current));
+      adapter.current.client.replaceAsPageGoes(current.current, valuesFor(input.current));
       edits().clear();
     };
     window.addEventListener('beforeunload', beforeUnload);
@@ -212,10 +226,17 @@ export function useReviewEditor(
       document.removeEventListener('click', navigate, true);
     };
   });
-  function change(changes: Record<string, string>) {
-    input.current = { ...input.current, ...changes };
+  function change(changes: Partial<IncompleteExpenseEntry>) {
+    input.current = {
+      ...input.current,
+      entry: { ...input.current.entry, ...changes },
+      changed: {
+        ...input.current.changed,
+        ...Object.fromEntries(Object.keys(changes).map((key) => [key, true])),
+      },
+    };
     edits().change(input.current);
-    setEntries(input.current);
+    setEntryEdit(input.current);
     setStatus('changed');
     setError('');
     if (timer.current) clearTimeout(timer.current);
@@ -225,7 +246,9 @@ export function useReviewEditor(
   }
   return {
     draft,
-    entries,
+    entry: entryEdit.entry,
+    original: entryEdit.from,
+    changes: entryEdit.changed,
     status,
     note,
     error,

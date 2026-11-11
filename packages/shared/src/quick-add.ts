@@ -37,7 +37,6 @@ import {
   toMajorAmount,
 } from './exact-money';
 import { groupCurrencies } from './group-currencies';
-import { expenseDraftValues, type ExpenseDraftValues } from './expense-draft';
 import type { ExpenseEntry } from './expense-entry';
 
 /** The longest description an Expense takes, as the create request counts it. */
@@ -1254,11 +1253,20 @@ export function quickAddDraftValues(
   read: QuickAddRead,
   choices: QuickAddChoices,
   context: Pick<QuickAddContext, 'currency' | 'viewerId' | 'members'>,
-): Partial<ExpenseDraftValues> {
-  const values: Partial<ExpenseDraftValues> = expenseDraftValues(
-    quickAddEntry(read, choices, context),
-  );
-  delete values.category;
-  delete values.notes;
-  return values;
+) {
+  const entry = quickAddEntry(read, choices, context);
+  return {
+    description: entry.description,
+    amount: entry.amount,
+    currency: entry.currency,
+    date: entry.date,
+    tag: entry.tagId,
+    splitMethod: entry.splitMethod,
+    payers: entry.payers,
+    multiPayerMode: entry.multiPayer,
+    selectedMembers: entry.participantIds,
+    customAmounts: {},
+    customPercentages: {},
+    customShares: {},
+  };
 }

@@ -30,23 +30,6 @@ export interface SavedDraftExpense extends StoredExpenseMoney {
   notes?: string;
 }
 
-export interface ExpenseDraftValues {
-  description: string;
-  amount: string;
-  currency: string;
-  category: string;
-  date: string;
-  tag: string;
-  notes: string;
-  splitMethod: ExpenseSplitMethod;
-  selectedMembers: string[];
-  payers: Array<{ user: string; amount: string }>;
-  multiPayerMode: boolean;
-  customAmounts: Record<string, string>;
-  customPercentages: Record<string, string>;
-  customShares: Record<string, string>;
-}
-
 export interface ExpenseSubmission {
   readonly groupId: string;
   readonly expenseId?: string;
@@ -195,9 +178,6 @@ export class ExpenseDraft {
     return this.state.entry;
   }
 
-  get values() {
-    return expenseDraftValues(this.entry);
-  }
   get base() {
     return this.state.base;
   }
@@ -222,11 +202,6 @@ export class ExpenseDraft {
 
   private with(change: Partial<DraftState>) {
     return new ExpenseDraft({ ...this.state, ...change });
-  }
-
-  /** Legacy view for Finish later and To review until #1115; no second state is held. */
-  edit(change: Partial<ExpenseDraftValues> | Partial<ExpenseEntry>) {
-    return this.change(expenseEntryChange(this.entry, change));
   }
 
   change(change: Partial<ExpenseEntry>) {
@@ -349,107 +324,4 @@ export class ExpenseDraft {
   reloadFailed(error: string) {
     return this.with({ error });
   }
-}
-
-/** Compatibility projection for the existing Draft editors. Only the active map exists. */
-export function expenseDraftValues(entry: ExpenseEntry): ExpenseDraftValues {
-  const { participantIds, multiPayer, splitValues, tagId } = entry;
-  return {
-    description: entry.description,
-    amount: entry.amount,
-    currency: entry.currency,
-    category: entry.category,
-    date: entry.date,
-    notes: entry.notes,
-    splitMethod: entry.splitMethod,
-    payers: entry.payers,
-    tag: tagId,
-    selectedMembers: participantIds,
-    multiPayerMode: multiPayer,
-    customAmounts:
-      entry.splitMethod === 'exact' || entry.splitMethod === 'unequal' ? splitValues : {},
-    customPercentages: entry.splitMethod === 'percentage' ? splitValues : {},
-    customShares: entry.splitMethod === 'shares' ? splitValues : {},
-  };
-}
-
-/** Rename field changes; interpreting their contents belongs only to readExpenseEntry. */
-export function expenseEntryChange(
-  entry: ExpenseEntry,
-  change: Partial<ExpenseDraftValues> | Partial<ExpenseEntry>,
-): Partial<ExpenseEntry> {
-  const {
-    tag,
-    selectedMembers,
-    multiPayerMode,
-    customAmounts,
-    customPercentages,
-    customShares,
-    ...rest
-  } = change as Partial<ExpenseDraftValues & ExpenseEntry>;
-  const method = change.splitMethod ?? entry.splitMethod;
-  const splitValues =
-    method === 'percentage'
-      ? customPercentages
-      : method === 'shares'
-        ? customShares
-        : customAmounts;
-  return {
-    ...rest,
-    ...(tag === undefined ? {} : { tagId: tag }),
-    ...(selectedMembers === undefined ? {} : { participantIds: selectedMembers }),
-    ...(multiPayerMode === undefined ? {} : { multiPayer: multiPayerMode }),
-    ...(splitValues === undefined ? {} : { splitValues }),
-  };
-}
-
-export function expenseEntryFromValues(
-  values: Omit<ExpenseDraftValues, 'splitMethod'> & { splitMethod: ExpenseSplitMethod | '' },
-): ExpenseEntry {
-  return {
-    amount: values.amount,
-    currency: values.currency,
-    description: values.description,
-    date: values.date,
-    notes: values.notes,
-    category: values.category,
-    tagId: values.tag,
-    payerId: values.payers[0]?.user ?? '',
-    payers: values.payers,
-    multiPayer: values.multiPayerMode,
-    participantIds: values.selectedMembers,
-    splitMethod: values.splitMethod || 'equal',
-    splitValues:
-      values.splitMethod === 'shares'
-        ? values.customShares
-        : values.splitMethod === 'percentage'
-          ? values.customPercentages
-          : values.customAmounts,
-  };
-}
-
-/** Rename only changed fields for the still-flat To review editor; missing facts stay missing. */
-export function expenseDraftChanges(
-  change: Partial<ExpenseEntry>,
-  method: ExpenseSplitMethod,
-): Partial<ExpenseDraftValues> {
-  const { participantIds, multiPayer, splitValues, tagId, ...rest } = change;
-  // The legacy editor chooses the payer from its rows; this copied patch has no payer field.
-  delete rest.payerId;
-  const next = change.splitMethod ?? method;
-  return {
-    ...rest,
-    ...(tagId === undefined ? {} : { tag: tagId }),
-    ...(participantIds === undefined ? {} : { selectedMembers: participantIds }),
-    ...(multiPayer === undefined ? {} : { multiPayerMode: multiPayer }),
-    ...(splitValues === undefined
-      ? {}
-      : {
-          [next === 'percentage'
-            ? 'customPercentages'
-            : next === 'shares'
-              ? 'customShares'
-              : 'customAmounts']: splitValues,
-        }),
-  };
 }

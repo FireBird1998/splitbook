@@ -38,10 +38,10 @@ function render(
     currency: mode.currency ?? 'INR',
     defaultTag: 'General',
     date: '2026-10-18',
-  }).edit({
+  }).change({
     description: 'Chai',
     amount,
-    multiPayerMode: mode.multiPayerMode ?? false,
+    multiPayer: mode.multiPayerMode ?? false,
     payers: mode.payers ?? [{ user: YOU, amount }],
   });
   return renderToStaticMarkup(
@@ -49,8 +49,9 @@ function render(
       ThemeProvider,
       { theme: createAppTheme('light') },
       createElement(ExpenseFields, {
-        values: draft.values,
-        edit: () => {},
+        entry: draft.entry,
+        reading: draft.reading(),
+        editEntry: () => {},
         chooseSplitMethod: () => {},
         members: [
           { user: { _id: YOU, name: 'Alex Rivera' } },
@@ -62,7 +63,6 @@ function render(
         review: mode.review,
         currencyChoices: mode.currencyChoices,
         currencyHint: mode.currencyHint,
-        previewAmount: () => '—',
       }),
     ),
   );

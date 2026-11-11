@@ -9,10 +9,12 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { ExpenseDraft } from '@splitbook/shared/expense-draft';
 import { formatCurrency } from '@splitbook/shared/currency';
 import {
-  draftEntries,
-  draftValues,
-  type DraftEntries,
-} from '@splitbook/shared/persistent-draft-editor';
+  entryForExpenseDraft,
+  draftForExpenseEntry,
+  fieldDraftEntryPolicy,
+} from '@splitbook/shared/expense-entry-draft';
+import type { IncompleteExpenseEntry } from '@splitbook/shared/expense-entry';
+import type { ExpenseDraftValues as NumericDraft } from '@splitbook/shared/validators/expense-draft';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { useKeepExpenseDraft } from '@/components/drafts/KeepExpenseDraft';
 import ReviewExpenseFields from '@/components/to-review/ReviewExpenseFields';
@@ -30,6 +32,27 @@ import {
   type Reading,
 } from '@splitbook/shared/test-support/expense-entry-cases';
 
+type ReviewInput = {
+  entry: IncompleteExpenseEntry;
+  from: NumericDraft;
+  changed: Partial<Record<keyof IncompleteExpenseEntry, boolean>>;
+};
+const reviewInput = (from: NumericDraft = {}): ReviewInput => ({
+  entry: entryForExpenseDraft(from, fieldDraftEntryPolicy),
+  from,
+  changed: {},
+});
+const changeReview = (prior: ReviewInput, patch: Partial<IncompleteExpenseEntry>): ReviewInput => ({
+  ...prior,
+  entry: { ...prior.entry, ...patch },
+  changed: {
+    ...prior.changed,
+    ...Object.fromEntries(Object.keys(patch).map((key) => [key, true])),
+  },
+});
+const reviewValue = (input: ReviewInput) =>
+  draftForExpenseEntry(input.entry, fieldDraftEntryPolicy, input);
+
 const context = {
   groupId,
   accountId: alex,
@@ -41,22 +64,7 @@ const context = {
 const members = people.map((p) => ({ user: { _id: p.id, name: p.name } }));
 const tags = [{ _id: tagId, name: 'Shared', isArchived: false }];
 function open(row: TypedEntry, edit = false) {
-  return ExpenseDraft.open(context, edit ? savedFor(row) : null).edit({
-    description: row.description,
-    amount: row.amount,
-    currency: row.currency,
-    date: row.date,
-    category: row.category,
-    tag: row.tagId,
-    notes: row.notes,
-    splitMethod: row.splitMethod,
-    selectedMembers: row.participantIds,
-    payers: row.payers,
-    multiPayerMode: row.multiPayer,
-    customAmounts: ['unequal', 'exact'].includes(row.splitMethod) ? row.splitValues : {},
-    customPercentages: row.splitMethod === 'percentage' ? row.splitValues : {},
-    customShares: row.splitMethod === 'shares' ? row.splitValues : {},
-  });
+  return ExpenseDraft.open(context, edit ? savedFor(row) : null).change(row);
 }
 /** Text only, retaining no-break spaces (part of the form's own words). */
 function text(html: string) {
@@ -75,7 +83,7 @@ function renderFields(draft: ExpenseDraft, edit: boolean) {
     user: p.id,
     amount: (() => {
       const row = preview.money?.splitBetween.find((r) => r.user === p.id);
-      return row ? formatCurrency(row.amount, draft.values.currency) : '—';
+      return row ? formatCurrency(row.amount, draft.entry.currency) : '—';
     })(),
   }));
   return {
@@ -89,14 +97,14 @@ function renderFields(draft: ExpenseDraft, edit: boolean) {
           ThemeProvider,
           { theme: createAppTheme('light') },
           createElement(ExpenseFields, {
-            values: draft.values,
-            edit: () => {},
+            entry: draft.entry,
+            reading: draft.reading(),
+            editEntry: () => {},
             chooseSplitMethod: () => {},
             members,
             groupTags: tags,
             userId: alex,
             isEditMode: edit,
-            previewAmount: (id) => perPerson.find((p) => p.user === id)!.amount,
           }),
         ),
       ),
@@ -158,14 +166,16 @@ it('records the web To review editor and the Draft it reads (#1111)', async () =
       cells[row.id] = unsupported();
       continue;
     }
-    let input: DraftEntries = {};
+    let input = reviewInput();
     function Form() {
-      const [entries, setEntries] = useState<DraftEntries>({});
+      const [current, setCurrent] = useState(input);
       useLayoutEffect(() => {
-        input = entries;
+        input = current;
       });
       return createElement(ReviewExpenseFields, {
-        entries,
+        entry: current.entry,
+        original: current.from,
+        changes: current.changed,
         context: {
           members: people,
           tags: tags.map((t) => ({ id: t._id, name: t.name })),
@@ -173,7 +183,7 @@ it('records the web To review editor and the Draft it reads (#1111)', async () =
           category: 'home',
           viewerId: alex,
         },
-        onChange: (patch) => setEntries((previous) => ({ ...previous, ...patch })),
+        onChange: (patch) => setCurrent((previous) => changeReview(previous, patch)),
       });
     }
     await act(async () => {
@@ -185,10 +195,12 @@ it('records the web To review editor and the Draft it reads (#1111)', async () =
       renderer!.root.findByType(ExpenseFields).props.chooseSplitMethod(row.splitMethod),
     );
     // The same whole typed change given to Android's public reviewFormChange seam.
-    await act(async () => renderer!.root.findByType(ExpenseFields).props.edit(open(row).values));
+    await act(async () =>
+      renderer!.root.findByType(ExpenseFields).props.editEntry(open(row).entry),
+    );
     let result: Reading['result'];
     try {
-      result = { kind: 'draft', value: draftValues(input) };
+      result = { kind: 'draft', value: reviewValue(input) };
     } catch (error) {
       result = refusal(error);
     }
@@ -303,16 +315,18 @@ it('records review edits of extra split facts and repeated people (#1115)', asyn
   vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
   const cells: Record<string, unknown> = {};
   for (const row of draftEntryCases) {
-    let input = draftEntries(row.values);
+    let input = reviewInput(row.values);
     function Form() {
-      const [entries, setEntries] = useState(input);
+      const [current, setCurrent] = useState(input);
       useLayoutEffect(() => {
-        input = entries;
+        input = current;
       });
       return createElement(ReviewExpenseFields, {
-        entries,
+        entry: current.entry,
+        original: current.from,
+        changes: current.changed,
         context: { members: people, tags: [], currency: 'INR' },
-        onChange: (patch) => setEntries((prior) => ({ ...prior, ...patch })),
+        onChange: (patch) => setCurrent((prior) => changeReview(prior, patch)),
       });
     }
     await act(async () => {
@@ -320,17 +334,17 @@ it('records review edits of extra split facts and repeated people (#1115)', asyn
         createElement(ThemeProvider, { theme: createAppTheme('light') }, createElement(Form)),
       );
     });
-    const payers = renderer!.root.findByType(ExpenseFields).props.values.payers;
+    const payers = renderer!.root.findByType(ExpenseFields).props.entry.payers;
     await act(async () =>
       renderer!.root
         .findByType(ExpenseFields)
-        .props.edit(
+        .props.editEntry(
           row.change === 'shares'
-            ? { customShares: { [alex]: '2', [people[1].id]: '1' } }
+            ? { splitValues: { [alex]: '2', [people[1].id]: '1' } }
             : { notes: 'Checked' },
         ),
     );
-    cells[row.id] = { payers, result: draftValues(input) };
+    cells[row.id] = { payers, result: reviewValue(input) };
     await act(async () => renderer!.unmount());
     renderer = undefined;
   }

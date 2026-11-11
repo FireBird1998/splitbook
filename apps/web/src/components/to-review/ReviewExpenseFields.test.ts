@@ -1,8 +1,9 @@
+import { entryForExpenseDraft, fieldDraftEntryPolicy } from '@splitbook/shared/expense-entry-draft';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
-import type { DraftEntries } from '@splitbook/shared/persistent-draft-editor';
+import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
 import ReviewExpenseFields from './ReviewExpenseFields';
@@ -18,13 +19,14 @@ const namesake = 'a00000000000000000000002';
 const sam = 'a00000000000000000000003';
 
 /** The editor's markup, without the `<style>` elements MUI writes between its elements. */
-function render(entries: DraftEntries) {
+function render(values: ExpenseDraftValues) {
   return renderToStaticMarkup(
     createElement(
       ThemeProvider,
       { theme: createAppTheme('light') },
       createElement(ReviewExpenseFields, {
-        entries,
+        entry: entryForExpenseDraft(values, fieldDraftEntryPolicy),
+        original: values,
         context: {
           currency: 'INR',
           viewerId: viewer,
@@ -57,16 +59,15 @@ function ariaLabels(html: string) {
   return [...html.matchAll(/aria-label="([^"]*)"/g)].map(([, label]) => text(label));
 }
 
-const dinner = { description: 'Dinner', amount: '100' };
+const dinner = { description: 'Dinner', amount: 100 };
 
 describe('the payer and split pickers in the web To review editor (#591)', () => {
   it('call only the viewer You, by member id, beside a member with the same name', () => {
     const html = render({
       ...dinner,
-      [`paidBy.${viewer}`]: 'yes',
+      paidBy: [{ user: viewer }],
       splitMethod: 'unequal',
-      [`splitBetween.${viewer}`]: 'yes',
-      [`splitBetween.${namesake}`]: 'yes',
+      splitBetween: [{ user: viewer }, { user: namesake }],
     });
 
     expect(paidBy(html)).toEqual({ shows: 'You', holds: viewer });
@@ -83,7 +84,7 @@ describe('the payer and split pickers in the web To review editor (#591)', () =>
   });
 
   it('name the other Ankit Das when they paid', () => {
-    const html = render({ ...dinner, [`paidBy.${namesake}`]: 'yes' });
+    const html = render({ ...dinner, paidBy: [{ user: namesake }] });
 
     expect(paidBy(html)).toEqual({ shows: 'Ankit Das', holds: namesake });
   });

@@ -133,6 +133,6 @@ it('keeps an empty unknown-currency preview as a refusal instead of throwing', a
     currency: 'INR',
     defaultTag: '',
     date: '2026-11-11',
-  }).edit({ currency: '', amount: '' });
+  }).change({ currency: '', amount: '' });
   expect(draft.preview()).toEqual({ money: null, error: 'INVALID_CURRENCY' });
 });
