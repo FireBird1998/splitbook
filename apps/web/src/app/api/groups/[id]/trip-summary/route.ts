@@ -3,7 +3,6 @@ import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   error,
   getAuthUser,
-  notFound,
   failedRead,
   success,
   unauthorized,
@@ -64,7 +63,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           timeZone,
           currency: currency ?? undefined,
         });
-        if (result.kind === 'missing') return notFound('Group');
         if (result.kind === 'not-a-trip')
           return error('Only a Trip has a Trip summary.', 409, 'NOT_A_TRIP');
         return success(result.summary);

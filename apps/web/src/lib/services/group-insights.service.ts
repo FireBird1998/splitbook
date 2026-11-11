@@ -1,7 +1,6 @@
 import type { IGroupDocument } from '@/lib/models/Group';
 import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
-import Group from '@/lib/models/Group';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import User from '@/lib/models/User';
 import { recurringExpensesEnabled } from '@/lib/recurring-expenses-switch';
@@ -58,7 +57,7 @@ export interface GroupInsightsResponse extends Omit<GroupMonthInsights, 'biggest
 
 /**
  * A Group's Month against the Months before it, for the Insights tab (#314), and the Month in
- * detail (#315). The caller has checked membership. Null when the Group doesn't exist.
+ * detail (#315). The ledger module supplies the admitted Group after materialization.
  *
  * - Months are calendar months in the time zone the client sent, never the server's.
  * - Recurring Expenses that have fallen due are added first, as the Group's other reads do, so
@@ -77,7 +76,7 @@ export interface GroupInsightsResponse extends Omit<GroupMonthInsights, 'biggest
  *   are unchanged: Android and older web clients read only those.
  */
 export async function getGroupInsights(
-  groupOrId: string | IGroupDocument,
+  group: IGroupDocument,
   userId: string,
   {
     month: requestedMonth,
@@ -86,22 +85,14 @@ export async function getGroupInsights(
     currency: requestedCurrency,
     now = new Date(),
   }: { month?: MonthKey; compare: number; timeZone: string; currency?: string; now?: Date },
-): Promise<GroupInsightsResponse | null> {
-  const groupId = typeof groupOrId === 'string' ? groupOrId : String(groupOrId._id);
+): Promise<GroupInsightsResponse> {
+  const groupId = String(group._id);
   // Fails before any read when the zone is wrong.
   const zone = readTimeZone(timeZone);
   const month = requestedMonth ?? monthKeyInZone(now, zone);
   await connectDB();
 
   const recurringExpenses = recurringExpensesEnabled();
-
-  const group =
-    typeof groupOrId === 'string'
-      ? await Group.findById(groupId)
-          .select('defaultCurrency alternateCurrencies createdAt tags members')
-          .lean()
-      : groupOrId;
-  if (!group) return null;
 
   // Only an Expense in a supported currency starts the Group's Months (#820).
   const earliest = await Expense.findOne({

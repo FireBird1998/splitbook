@@ -2,7 +2,6 @@ import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   error,
   getAuthUser,
-  notFound,
   failedRead,
   success,
   unauthorized,
@@ -76,7 +75,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           timeZone,
           currency: currency ?? undefined,
         });
-        if (!insights) return notFound('Group');
         return success(insights);
       },
     });
