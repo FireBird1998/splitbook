@@ -285,6 +285,15 @@ export interface LedgerExpenseChange {
   } | null;
 }
 
+async function requireCommitGroup(groupId: string, actorId?: string) {
+  const group = await Group.findById(groupId);
+  if (!group) throw new Refusal('FORBIDDEN');
+  if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
+  const members = new Set(group.members.map((member) => String(member.user)));
+  if (actorId !== undefined && !members.has(actorId)) throw new Refusal('FORBIDDEN');
+  return { group, members };
+}
+
 /** Change once under the displayed revision; callers cannot separate loading from committing. */
 export async function changeLedgerExpense({
   access,
@@ -299,8 +308,9 @@ export async function changeLedgerExpense({
   // Old Expenses get their first revision even when the displayed revision is absent.
   await withGroupMutation(
     groupId,
-    async (session) =>
-      Expense.collection.updateOne(
+    async (session) => {
+      await requireCommitGroup(groupId, actorId);
+      return Expense.collection.updateOne(
         {
           _id: new Types.ObjectId(expenseId),
           group: new Types.ObjectId(groupId),
@@ -308,7 +318,8 @@ export async function changeLedgerExpense({
         },
         { $set: { revision: 0 } },
         { session },
-      ),
+      );
+    },
     { ledger: true },
   );
   const expense = await Expense.findOne({ _id: expenseId, group: groupId }).select(
@@ -340,13 +351,8 @@ export async function changeLedgerExpense({
         await lockRestoredCurrency(groupId, expense.currency, expenseId);
       else if (originalCurrency !== expense.currency)
         await lockLedgerCurrency(groupId, expense.currency);
-      const committedGroup = await Group.findById(groupId);
-      if (!committedGroup) throw new Refusal('FORBIDDEN');
-      if (committedGroup.isArchived) throw new Refusal('GROUP_ARCHIVED');
+      const { members } = await requireCommitGroup(groupId, actorId);
       if (event && expenseChangeAlertsEnabled()) {
-        const members = new Set(
-          (committedGroup?.members ?? []).map((member) => String(member.user)),
-        );
         const intent = expense.pendingActivity.find(
           (pending) => String(pending._id) === String(event._id),
         );

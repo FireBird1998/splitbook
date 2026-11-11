@@ -110,8 +110,16 @@ export function recordCommonPaths(recording: Recording) {
   });
   it('actor leaves between the checks and the commit', async () => {
     const recorded = await recording.interleave(() => recording.remove(alex));
-    if (recording.writer === 'single-settlement')
+    if (
+      recording.writer === 'single-settlement' ||
+      ['edit', 'delete', 'restore'].includes(recording.writer)
+    )
       expect((recorded.answers as Answer).status).toBe(403);
+    if (recording.writer === 'tag-change')
+      expect((recorded.answers as Answer).body.data.results[0]).toMatchObject({
+        outcome: 'refused',
+        code: 'FORBIDDEN',
+      });
   });
   it('named person leaves between the checks and the commit', async () => {
     if (recording.writer === 'recurring-expense') await recording.readAs('priya');

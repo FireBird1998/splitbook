@@ -92,3 +92,44 @@ describe('change refusal precedence', () => {
     expect(answer.body.code).toBe('INVALID_TAG');
   });
 });
+
+it.each(['edit', 'delete', 'restore'] as const)(
+  '%s refuses an actor who left before legacy revision initialization',
+  async (operation) => {
+    await Expense.collection.updateOne(
+      { _id: new Types.ObjectId(fixture.expenseId) },
+      {
+        $unset: { revision: '' },
+        ...(operation === 'restore' ? { $set: { isDeleted: true } } : {}),
+      },
+    );
+    const pause = fixture.holdFence(1);
+    const pending =
+      operation === 'delete'
+        ? fixture.http(
+            fixture.routes.expense.DELETE,
+            'DELETE',
+            `expenses/${fixture.expenseId}`,
+            undefined,
+            { 'X-Splitbook-Revision': '0' },
+          )
+        : fixture.send(operation === 'restore' ? { isDeleted: false } : {}, {
+            'X-Splitbook-Revision': '0',
+          });
+    try {
+      await Promise.race([
+        pause.reached,
+        pending.then(() => {
+          throw new Error('Change ended before initialization');
+        }),
+      ]);
+      await fixture.remove(DEMO_PERSONA_IDS.alex);
+    } finally {
+      pause.restore();
+      pause.release();
+      await pending;
+    }
+    expect((await pending).status).toBe(403);
+    expect((await fixture.state()).expenses[0]).not.toHaveProperty('revision');
+  },
+);
