@@ -498,6 +498,27 @@ describe('native payment recording', () => {
     expect(controller.getSnapshot().auth.status).toBe('signed-out');
   });
 
+  it('removes an archived payment refusal and keeps only its parties’ names through the purge (#1153)', async () => {
+    const message = 'This Group was archived, so nothing more can be saved in it.';
+    const { controller, records } = setup((path, init) =>
+      path.endsWith('/settlements') && init.method === 'POST'
+        ? json({ status: 409, code: 'GROUP_ARCHIVED', error: message }, 409)
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '10' });
+    await controller.recordSettlement();
+
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'blocked', message, attempt: null, group: null, balances: [],
+    });
+    expect(controller.getSnapshot().settlement.known).toEqual({ [actor]: 'Alex', [recipient]: 'Sam' });
+    expect(controller.getSnapshot().pendingPayment).toBeNull();
+  });
+
   it('unlocks a definitively rejected new submission for correction without losing input', async () => {
     // A refusal its entries can correct. One the Group's change made (a member left, the currency
     // changed) ends the payment instead (#333).
