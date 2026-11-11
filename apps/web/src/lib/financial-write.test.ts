@@ -3,12 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { Types } from 'mongoose';
 import {
   assertCreateReplay,
-  assertPendingActivityCapacity,
   createRequestMetadata,
   fingerprintCreateCommand,
-  makePendingActivity,
   parseIdempotencyKey,
-  PENDING_ACTIVITY_LIMIT,
   requestTagForReplay,
 } from './financial-write';
 
@@ -106,35 +103,5 @@ describe('financial request identity', () => {
     for (const amount of [NaN, Infinity, -Infinity]) {
       expect(() => fingerprintCreateCommand({ amount })).toThrow('INVALID_REQUEST_FINGERPRINT');
     }
-  });
-});
-
-describe('durable Activity intent', () => {
-  it('snapshots the original payload and timestamp', () => {
-    const when = new Date('2026-09-16T12:00:00Z');
-    const metadata = { description: 'Original', changes: { amount: { old: 10, new: 20 } } };
-    const event = makePendingActivity(groupId, 'expense_updated', actorId, metadata, when);
-    metadata.description = 'Changed later';
-    metadata.changes.amount.new = 99;
-    when.setUTCFullYear(2030);
-
-    expect(event.metadata).toEqual({
-      description: 'Original',
-      changes: { amount: { old: 10, new: 20 } },
-    });
-    expect(event.occurredAt.toISOString()).toBe('2026-09-16T12:00:00.000Z');
-  });
-
-  it('limits pending work without silently dropping old events', () => {
-    const event = makePendingActivity(groupId, 'expense_added', actorId);
-    expect(() =>
-      assertPendingActivityCapacity(Array(PENDING_ACTIVITY_LIMIT - 1).fill(event)),
-    ).not.toThrow();
-    expect(() => assertPendingActivityCapacity(Array(PENDING_ACTIVITY_LIMIT).fill(event))).toThrow(
-      'ACTIVITY_BACKLOG_FULL',
-    );
-    expect(() => assertPendingActivityCapacity(Array(PENDING_ACTIVITY_LIMIT).fill(event))).toThrow(
-      Refusal,
-    );
   });
 });

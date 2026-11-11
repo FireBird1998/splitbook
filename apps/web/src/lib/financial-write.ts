@@ -15,14 +15,9 @@ export interface ICreationRequest {
 }
 
 /** The Expense events an Android alert can be about (#840, #841). */
-export const EXPENSE_NOTIFICATION_KINDS = [
-  'expense_added',
-  'expense_updated',
-  'expense_deleted',
-] as const;
-export type ExpenseNotificationKind = (typeof EXPENSE_NOTIFICATION_KINDS)[number];
+const EXPENSE_NOTIFICATION_KINDS = ['expense_added', 'expense_updated', 'expense_deleted'] as const;
 /** Every event an Android alert can be about: the Expense ones and a recorded Settlement (#842). */
-export const NOTIFICATION_KINDS = [...EXPENSE_NOTIFICATION_KINDS, 'settlement_recorded'] as const;
+const NOTIFICATION_KINDS = [...EXPENSE_NOTIFICATION_KINDS, 'settlement_recorded'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 /** The private immutable alert context an Expense or Settlement event captures at its commit. */
@@ -69,8 +64,6 @@ export const ACTIVITY_TYPES: ActivityType[] = [
   'group_updated',
   'assistant_rule_changed',
 ];
-
-export const PENDING_ACTIVITY_LIMIT = 100;
 
 /** Missing keys remain valid for older clients; a provided key must be bounded and printable. */
 export function parseIdempotencyKey(value: string | null | undefined): string | undefined {
@@ -184,24 +177,6 @@ export function requestTagForReplay<T extends { tag?: string; tagId?: unknown }>
   return input;
 }
 
-export function makePendingActivity(
-  groupId: string,
-  type: ActivityType,
-  actorId: string,
-  metadata: Record<string, unknown> = {},
-  occurredAt: Date = new Date(),
-): IPendingActivity {
-  return {
-    _id: new Types.ObjectId(),
-    group: new Types.ObjectId(groupId),
-    type,
-    actor: new Types.ObjectId(actorId),
-    occurredAt: new Date(occurredAt),
-    // Snapshot now: callers may subsequently mutate an expense or a changes object.
-    metadata: JSON.parse(JSON.stringify(metadata)) as Record<string, unknown>,
-  };
-}
-
 /**
  * Whether edits, deletion, restoration and recurring generation capture an alert audience
  * (#841). Off unless `ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED=true`: while it is off those
@@ -224,63 +199,6 @@ export function paymentAlertsEnabled(): boolean {
   return process.env.ANDROID_NOTIFICATION_PAYMENTS_ENABLED === 'true';
 }
 
-/**
- * The private immutable alert context for one Expense or Settlement event, captured inside the
- * financial commit: its involved members (an Expense's payers and split participants, before and
- * after for an edit; a Settlement's payer and recipient) who are Group members at that commit,
- * without the event's actor.
- */
-export function ledgerNotificationContext(
-  event: Pick<IPendingActivity, '_id' | 'actor' | 'occurredAt'>,
-  kind: NotificationKind,
-  record: { groupId: string; recordId: string },
-  involved: Iterable<unknown>,
-  membersAtCommit: ReadonlySet<string>,
-): NotificationContext {
-  const actor = String(event.actor);
-  return {
-    version: 2,
-    eventId: String(event._id),
-    kind,
-    groupId: record.groupId,
-    recordId: record.recordId,
-    occurredAt: event.occurredAt,
-    recipientIds: [...new Set(Array.from(involved, String))]
-      .filter((candidate) => candidate !== actor && membersAtCommit.has(candidate))
-      .sort(),
-  };
-}
-
-/**
- * Inside a Settlement's financial commit: give its `settlement_recorded` intent the Payment alert
- * audience (#842), the payer and recipient who are Group members at this commit, without the
- * member who recorded it. Each Settlement of a batch gets its own, under its own event identity.
- * While the rollout switch is off nothing is read or captured. Never refuses: an alert can't
- * change what the save does.
- */
-export async function paymentAlertAudience(
-  event: IPendingActivity,
-  settlement: {
-    groupId: string;
-    recordId: string;
-    paidBy: string;
-    paidTo: string;
-    members: () => Promise<ReadonlyArray<{ user: unknown }>>;
-  },
-): Promise<void> {
-  if (!paymentAlertsEnabled()) return;
-  const membersAtCommit = new Set(
-    (await settlement.members()).map((member) => String(member.user)),
-  );
-  event.notificationContext = ledgerNotificationContext(
-    event,
-    'settlement_recorded',
-    { groupId: settlement.groupId, recordId: settlement.recordId },
-    [settlement.paidBy, settlement.paidTo],
-    membersAtCommit,
-  );
-}
-
 /** The payer and split-participant ids an Expense (or its template) records. */
 export function involvedMembers(record: {
   paidBy?: ReadonlyArray<{ user: unknown }>;
@@ -290,9 +208,4 @@ export function involvedMembers(record: {
     const user = row.user as { _id?: unknown } | null;
     return String(user && typeof user === 'object' && '_id' in user ? user._id : user);
   });
-}
-
-/** Refuse another mutation before committing if a sustained outage has filled this outbox. */
-export function assertPendingActivityCapacity(events: readonly IPendingActivity[] = []): void {
-  if (events.length >= PENDING_ACTIVITY_LIMIT) throw new Refusal('ACTIVITY_BACKLOG_FULL');
 }

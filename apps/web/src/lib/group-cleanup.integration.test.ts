@@ -1,3 +1,4 @@
+import { pendingActivityFixture as makePendingActivity } from '@/lib/test-utils/pending-activity';
 import mongoose from 'mongoose';
 import { beforeAll, beforeEach, afterAll, describe, expect, it, vi } from 'vitest';
 import { integrationTestDb } from './test-utils/integration-db';
@@ -32,7 +33,6 @@ import {
   resumeRequestedGroupDeletions,
 } from './services/group-cleanup.service';
 import { activityService } from './services/activity.service';
-import { makePendingActivity } from './financial-write';
 import { groupService } from './services/group.service';
 import { settlementService } from './services/settlement.service';
 import { recurringExpenseService } from './services/recurring-expense.service';

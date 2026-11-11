@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import mongoose, { Types } from 'mongoose';
 import { createRequestMetadata } from './financial-write';
+import { pendingActivityFixture } from './test-utils/pending-activity';
 import { withGroupMutation } from './group-mutation';
 import { Refusal } from '@splitbook/shared/refusals';
 import { recordLedger, changeLedgerExpense, type LedgerRecording } from './ledger-recording';
@@ -40,6 +41,7 @@ function recordResult(
   overrides: Partial<LedgerRecording<IExpenseDocument>> = {},
   alertSwitch: 'always' | 'payments' | 'expense-changes' = 'always',
   documentOverrides: Partial<IExpenseDocument> = {},
+  event?: { metadata: Record<string, unknown>; occurredAt: Date },
 ) {
   return recordLedger({
     groupId,
@@ -75,7 +77,8 @@ function recordResult(
               },
               activity: {
                 type: 'expense_added',
-                metadata: { expenseId: String(id), description: 'A record' },
+                metadata: event?.metadata ?? { expenseId: String(id), description: 'A record' },
+                occurredAt: event?.occurredAt,
                 alert: {
                   kind: 'expense_added',
                   involved: [alice, bob, bob, carol],
@@ -222,40 +225,67 @@ describe('ledger recording', () => {
     expect(await Expense.countDocuments()).toBe(0);
     expect(await Activity.countDocuments()).toBe(0);
   });
-  it('treats two concurrent saves of the retry identity as one recording', async () => {
-    const key = randomUUID();
-    const transaction = mongoose.connection.transaction.bind(mongoose.connection);
-    let arrivals = 0;
-    let release!: () => void;
-    let reject!: (error: Error) => void;
-    const gate = new Promise<void>((resolve, fail) => {
-      release = resolve;
-      reject = fail;
-    });
-    const barrier = vi
-      .spyOn(mongoose.connection, 'transaction')
-      .mockImplementation(async (write, options) => {
-        if (++arrivals === 2) release();
-        await gate;
-        return transaction(write, options);
+  it.each([false, true])(
+    'treats concurrent recovery as one recording even if response preparation fails: %s',
+    async (responseFails) => {
+      const key = randomUUID();
+      const transaction = mongoose.connection.transaction.bind(mongoose.connection);
+      let arrivals = 0;
+      let release!: () => void;
+      let reject!: (error: Error) => void;
+      const gate = new Promise<void>((resolve, fail) => {
+        release = resolve;
+        reject = fail;
       });
-    const timeout = setTimeout(() => reject(new Error('Concurrent writers did not arrive')), 1000);
-    try {
-      const results = await Promise.allSettled([record(key), record(key)]);
-      expect(results.every((result) => result.status === 'fulfilled')).toBe(true);
-      const ids = results.flatMap((result) =>
-        result.status === 'fulfilled' ? result.value.map((row) => String(row._id)) : [],
+      const barrier = vi
+        .spyOn(mongoose.connection, 'transaction')
+        .mockImplementation(async (write, options) => {
+          if (++arrivals === 2) release();
+          await gate;
+          return transaction(write, options);
+        });
+      const timeout = setTimeout(
+        () => reject(new Error('Concurrent writers did not arrive')),
+        1000,
       );
-      expect(ids).toHaveLength(2);
-      expect(ids[0]).toBe(ids[1]);
-      expect(await Expense.countDocuments()).toBe(1);
-      expect(await Activity.countDocuments()).toBe(1);
-    } finally {
-      clearTimeout(timeout);
-      barrier.mockRestore();
-      release();
-    }
-  });
+      try {
+        const response = async () => {
+          if (responseFails) throw new Error('Response unavailable');
+        };
+        const results = await Promise.allSettled([
+          record(key, { prepareResponseRecord: response }),
+          record(key, { prepareResponseRecord: response }),
+        ]);
+        if (responseFails) {
+          expect(results).toEqual(
+            Array.from({ length: 2 }, () =>
+              expect.objectContaining({
+                status: 'rejected',
+                reason: expect.objectContaining({ message: 'Response unavailable' }),
+              }),
+            ),
+          );
+        } else expect(results.every((result) => result.status === 'fulfilled')).toBe(true);
+        const ids = results.flatMap((result) =>
+          result.status === 'fulfilled' ? result.value.map((row) => String(row._id)) : [],
+        );
+        if (!responseFails) {
+          expect(ids).toHaveLength(2);
+          expect(ids[0]).toBe(ids[1]);
+        }
+        expect(await Expense.countDocuments()).toBe(1);
+        expect(await Activity.countDocuments()).toBe(1);
+        const stored = await Expense.findOne().select('+pendingActivity');
+        expect(stored!.pendingActivity).toHaveLength(0);
+        barrier.mockRestore();
+        expect(String((await record(key))[0]._id)).toBe(String(stored!._id));
+      } finally {
+        clearTimeout(timeout);
+        barrier.mockRestore();
+        release();
+      }
+    },
+  );
   it('leaves an atomic pending event when publication fails and recovers it on retry', async () => {
     const key = randomUUID();
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -267,6 +297,11 @@ describe('ledger recording', () => {
     const pending = (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity;
     expect(pending).toHaveLength(1);
     expect(pending[0].notificationContext!.recipientIds).toEqual([bob]);
+    expect(String((await record(key))[0]._id)).toBe(String(saved._id));
+    expect(await Expense.countDocuments()).toBe(1);
+    expect(
+      (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity,
+    ).toHaveLength(1);
     outage.mockRestore();
     const [replayed] = await record(key);
     expect(String(replayed._id)).toBe(String(saved._id));
@@ -335,5 +370,130 @@ describe('changing a ledger Expense', () => {
     );
     expect(activity!.metadata.description).toBe('Changed through the module');
     expect(activity!.notificationContext!.recipientIds).toEqual([bob]);
+  });
+});
+
+describe('private recording intent', () => {
+  it('keeps the original event payload and timestamp after caller values change', async () => {
+    const when = new Date('2026-09-16T12:00:00Z');
+    const metadata = { description: 'Original', changes: { amount: { old: 10, new: 20 } } };
+    const result = await recordResult(
+      randomUUID(),
+      {},
+      'always',
+      {},
+      { metadata, occurredAt: when },
+    );
+    metadata.description = 'Changed later';
+    metadata.changes.amount.new = 99;
+    when.setUTCFullYear(2030);
+    const intent = result.records[0].pendingActivity[0];
+    expect(intent.metadata).toEqual({
+      description: 'Original',
+      changes: { amount: { old: 10, new: 20 } },
+    });
+    expect(intent.occurredAt.toISOString()).toBe('2026-09-16T12:00:00.000Z');
+    const activity = await Activity.findOne({ type: 'expense_added' });
+    expect(activity!.metadata).toEqual({
+      description: 'Original',
+      changes: { amount: { old: 10, new: 20 } },
+    });
+    expect(activity!.createdAt.toISOString()).toBe('2026-09-16T12:00:00.000Z');
+  });
+  it('accepts the hundredth pending event and refuses another without dropping any', async () => {
+    const [saved] = await record();
+    const pending = Array.from({ length: 99 }, () =>
+      pendingActivityFixture(groupId, 'expense_updated', alice),
+    );
+    await Expense.collection.updateOne({ _id: saved._id }, { $set: { pendingActivity: pending } });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(Activity, 'updateOne').mockImplementation(() => {
+      throw new Error('Activity unavailable');
+    });
+    const description = {
+      access: { actorId: alice, groupId, expenseId: String(saved._id) },
+      change(expense: mongoose.HydratedDocument<IExpenseDocument>) {
+        expense.description = 'Hundredth event';
+        return {
+          activity: {
+            type: 'expense_updated' as const,
+            metadata: { description: expense.description },
+          },
+        };
+      },
+    };
+    await changeLedgerExpense({ ...description, expectedRevision: 0 });
+    expect(
+      (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity,
+    ).toHaveLength(100);
+    await expect(
+      changeLedgerExpense({ ...description, expectedRevision: 1 }),
+    ).rejects.toMatchObject({ message: 'ACTIVITY_BACKLOG_FULL' });
+    await expect(
+      changeLedgerExpense({ ...description, expectedRevision: 1 }),
+    ).rejects.toBeInstanceOf(Refusal);
+    expect(
+      (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity,
+    ).toHaveLength(100);
+  });
+});
+
+describe('recording recovery ownership', () => {
+  it('attempts publication before failing response preparation on creation and ordinary replay', async () => {
+    const key = randomUUID();
+    const options = {
+      prepareResponseRecord: async () => {
+        throw new Error('Response unavailable');
+      },
+    };
+    await expect(record(key, options)).rejects.toThrow('Response unavailable');
+    const stored = await Expense.findOne().select('+pendingActivity');
+    expect(stored!.pendingActivity).toHaveLength(0);
+    expect(await Activity.countDocuments()).toBe(1);
+    await expect(record(key, options)).rejects.toThrow('Response unavailable');
+    expect(String((await record(key))[0]._id)).toBe(String(stored!._id));
+    expect(await Expense.countDocuments()).toBe(1);
+    expect(await Activity.countDocuments()).toBe(1);
+  });
+  it('recovers publication before acknowledgement failure without duplicating Activity', async () => {
+    const key = randomUUID();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const original = mongoose.mongo.Collection.prototype.updateOne;
+    const fault = vi
+      .spyOn(mongoose.mongo.Collection.prototype, 'updateOne')
+      .mockImplementation(function (this: mongoose.mongo.Collection, filter, update, options) {
+        if (this.collectionName === 'expenses' && '$pull' in update)
+          throw new Error('Acknowledgement unavailable');
+        return original.call(this, filter, update, options);
+      });
+    const [saved] = await record(key);
+    expect(await Activity.countDocuments()).toBe(1);
+    expect(
+      (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity,
+    ).toHaveLength(1);
+    fault.mockRestore();
+    expect(String((await record(key))[0]._id)).toBe(String(saved._id));
+    expect(await Expense.countDocuments()).toBe(1);
+    expect(await Activity.countDocuments()).toBe(1);
+    expect(
+      (await Expense.findById(saved._id).select('+pendingActivity'))!.pendingActivity,
+    ).toHaveLength(0);
+  });
+  it('rethrows an unrelated real unique collision without a matching scoped receipt', async () => {
+    const [saved] = await record();
+    const index = await Expense.collection.createIndex(
+      { description: 1 },
+      { unique: true, name: 'isolated_unrelated_collision' },
+    );
+    const key = randomUUID();
+    try {
+      await expect(record(key)).rejects.toMatchObject({ code: 11000 });
+      expect(await Expense.findOne({ 'creationRequest.key': key })).toBeNull();
+      expect(String((await Expense.findOne())!._id)).toBe(String(saved._id));
+      expect(await Expense.countDocuments()).toBe(1);
+      expect(await Activity.countDocuments()).toBe(1);
+    } finally {
+      await Expense.collection.dropIndex(index);
+    }
   });
 });

@@ -1,7 +1,8 @@
+import { pendingActivityFixture as makePendingActivity } from '@/lib/test-utils/pending-activity';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import mongoose, { Types } from 'mongoose';
 import Activity from '@/lib/models/Activity';
-import { makePendingActivity, type IPendingActivity } from '@/lib/financial-write';
+import type { IPendingActivity } from '@/lib/financial-write';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
 import { activityService, type ActivitySource } from './activity.service';
