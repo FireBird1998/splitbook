@@ -19,17 +19,61 @@ export interface AllowedReadSite {
 }
 
 const modulePath = 'apps/web/src/lib/group-ledger-read.ts';
-function owner(node: ts.Node): string {
+function owner(node: ts.Node, owners: ReadonlyMap<ts.Node, string>): string {
   for (let parent = node.parent; parent; parent = parent.parent) {
-    if ((ts.isFunctionDeclaration(parent) || ts.isMethodDeclaration(parent)) && parent.name)
-      return parent.name.getText();
-    if (
-      (ts.isArrowFunction(parent) || ts.isFunctionExpression(parent)) &&
-      ts.isVariableDeclaration(parent.parent)
-    )
-      return parent.parent.name.getText();
+    const found = owners.get(parent);
+    if (found) return found;
   }
-  return '';
+  return '<module>';
+}
+
+/** Kind, lexical container and a local ordinal give every function its own exception identity. */
+function functionOwners(nodes: readonly ts.Node[]) {
+  const owners = new Map<ts.Node, string>();
+  const counts = new Map<string, number>();
+  for (const node of nodes) {
+    if (
+      !(
+        ts.isFunctionDeclaration(node) ||
+        ts.isMethodDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isArrowFunction(node) ||
+        ts.isGetAccessorDeclaration(node) ||
+        ts.isSetAccessorDeclaration(node) ||
+        ts.isConstructorDeclaration(node)
+      )
+    )
+      continue;
+    let name =
+      ts.isArrowFunction(node) || ts.isConstructorDeclaration(node)
+        ? undefined
+        : node.name?.getText();
+    if (
+      !name &&
+      (ts.isVariableDeclaration(node.parent) ||
+        ts.isPropertyAssignment(node.parent) ||
+        ts.isPropertyDeclaration(node.parent))
+    )
+      name = node.parent.name.getText();
+    if (ts.isMethodDeclaration(node)) {
+      const container = node.parent;
+      if ((ts.isClassDeclaration(container) || ts.isClassExpression(container)) && container.name)
+        name = `${container.name.text}.${name}`;
+      else if (
+        ts.isObjectLiteralExpression(container) &&
+        ts.isVariableDeclaration(container.parent)
+      )
+        name = `${container.parent.name.getText()}.${name}`;
+    }
+    const outer = owner(node, owners);
+    const label = `${ts.SyntaxKind[node.kind]} ${name ?? '<callback>'}`;
+    const identity = outer === '<module>' ? label : `${outer}/${label}`;
+    const key = `${node.getSourceFile().fileName}/${identity}`;
+    const ordinal = (counts.get(key) ?? 0) + 1;
+    counts.set(key, ordinal);
+    owners.set(node, `${identity}#${ordinal}`);
+  }
+  return owners;
 }
 
 /** Keep read admission and materialization together; exceptions describe one reviewed site. */
@@ -40,6 +84,7 @@ export function checkReadSources(
   const { nodes, symbol, checker } = bindSources(
     inputs.filter((file) => isRecordingSource(file.path)),
   );
+  const owners = functionOwners(nodes);
   function origins(
     node: ts.Node,
     match: (node: ts.Node) => boolean,
@@ -233,7 +278,7 @@ export function checkReadSources(
       path = source.fileName.slice(1);
     if (!path.startsWith('apps/web/src/') || path === modulePath) return;
     const site = sourceTokens(node.getText()),
-      within = owner(node);
+      within = owner(node, owners);
     const index = allowed.findIndex(
       (entry, index) =>
         !used.has(index) &&

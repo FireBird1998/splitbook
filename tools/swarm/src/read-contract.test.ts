@@ -18,7 +18,11 @@ it('refuses a route that decides membership for its own read', () => {
         }`),
     ]),
   ).toMatchObject([
-    { path: 'apps/web/src/app/api/groups/[id]/route.ts', within: 'GET', operation: 'membership' },
+    {
+      path: 'apps/web/src/app/api/groups/[id]/route.ts',
+      within: 'FunctionDeclaration GET#1',
+      operation: 'membership',
+    },
   ]);
 });
 
@@ -113,7 +117,7 @@ it('binds old service gates through method aliases and re-exports', () => {
         "import {groups} from '@/lib/groups'; const gate = groups.isMember; export const GET = async () => gate(id, actor);",
       ),
     ]),
-  ).toMatchObject([{ operation: 'membership', within: 'GET' }]);
+  ).toMatchObject([{ operation: 'membership', within: 'ArrowFunction GET#1' }]);
 });
 it('checks Trip summary by the same admitted-Group rule', () => {
   expect(
@@ -247,4 +251,37 @@ it.each([
   `),
     ]),
   ).toMatchObject([{ operation: 'unadmitted-service' }]);
+});
+
+it.each([
+  [
+    'function and method',
+    `async function settings() { HELPER }
+    export const groupCurrencyService = { async settings() { READ } };`,
+  ],
+  [
+    'two object methods',
+    `const writes = { async settings() { HELPER } };
+    const reads = { async settings() { READ } };`,
+  ],
+  [
+    'nested declarations',
+    `const write = () => { async function settings() { HELPER } };
+    const read = () => { async function settings() { READ } };`,
+  ],
+])('keeps an exception from moving between same-named functions (%s)', (_name, body) => {
+  const prefix = 'async function memberGroup() {} ';
+  const gate = 'return memberGroup(groupId, viewerId, null);';
+  const original = {
+    path: 'apps/web/src/lib/services/group-currency.service.ts',
+    source: prefix + body.replace('HELPER', gate).replace('READ', 'return metadata();'),
+  };
+  const [finding] = checkReadSources([original]);
+  const exception = { ...finding!, reason: 'Currency post-write response admission.' };
+  expect(checkReadSources([original], [exception])).toEqual([]);
+  const moved = {
+    ...original,
+    source: prefix + body.replace('HELPER', 'return data;').replace('READ', gate),
+  };
+  expect(checkReadSources([moved], [exception])).toHaveLength(2);
 });
