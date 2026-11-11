@@ -1,3 +1,4 @@
+import { readGroupLedgers } from '@/lib/group-ledger-read';
 import 'server-only';
 import { assistantGroupFilter } from '@splitbook/shared/assistant-reach';
 import connectDB from '@/lib/db';
@@ -171,35 +172,38 @@ export const assistantLedgerService = {
   /** Every Group the member belongs to, as the approval page lists them to tick or leave out. */
   async approvalGroups(memberId: string): Promise<ApprovalGroup[]> {
     await connectDB();
-    const groups = await Group.find({
-      'members.user': draftObjectId.parse(memberId),
-      deletionRequestedAt: null,
-    })
-      .sort({ name: 1, _id: 1 })
-      .select(
-        'name defaultCurrency alternateCurrencies category isArchived members assistantRule assistantRuleSetBy',
-      )
-      .populate<{ assistantRuleSetBy: { _id: unknown; name: string } | null }>(
-        'assistantRuleSetBy',
-        'name',
-      )
-      .lean();
-    return groups.map((group) => {
-      // A Group stored before the rule is Allowed.
-      const rule = group.assistantRule ?? 'allowed';
-      const setBy = rule === 'not_allowed' ? group.assistantRuleSetBy : null;
-      // Named while they are still an admin here; otherwise the page names the Group's admins.
-      const admin =
-        setBy &&
-        group.members.some(
-          (member) => String(member.user) === String(setBy._id) && member.role === 'admin',
-        );
-      return {
-        ...assistantGroup(group),
-        currencies: [group.defaultCurrency, ...(group.alternateCurrencies ?? [])],
-        rule,
-        ruleSetBy: admin ? { id: String(setBy._id), name: setBy.name } : null,
-      };
+    return readGroupLedgers({
+      actor: { kind: 'member', id: draftObjectId.parse(memberId) },
+      archived: 'include',
+      deletionMarker: 'refuse',
+      recurring: 'recorded-only',
+      sort: { name: 1, _id: 1 },
+      read: async (_groups, storedGroups) => {
+        const groups = await Group.populate<{
+          assistantRuleSetBy: { _id: unknown; name: string } | null;
+        }>(storedGroups, {
+          path: 'assistantRuleSetBy',
+          select: 'name',
+          options: { lean: true },
+        });
+        return groups.map((group) => {
+          // A Group stored before the rule is Allowed.
+          const rule = group.assistantRule ?? 'allowed';
+          const setBy = rule === 'not_allowed' ? group.assistantRuleSetBy : null;
+          // Named while they are still an admin here; otherwise the page names the Group's admins.
+          const admin =
+            setBy &&
+            group.members.some(
+              (member) => String(member.user) === String(setBy._id) && member.role === 'admin',
+            );
+          return {
+            ...assistantGroup(group),
+            currencies: [group.defaultCurrency, ...(group.alternateCurrencies ?? [])],
+            rule,
+            ruleSetBy: admin ? { id: String(setBy._id), name: setBy.name } : null,
+          };
+        });
+      },
     });
   },
   async context(reader: LedgerReader, groupId: string) {

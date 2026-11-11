@@ -1,4 +1,4 @@
-import type { LedgerReadGroup } from '@/lib/group-ledger-read';
+import { readGroupLedger, readGroupLedgers, type LedgerReadGroup } from '@/lib/group-ledger-read';
 import { isGroupAdmin, withMemberEmails } from '@/lib/group-member-emails';
 import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
@@ -93,12 +93,20 @@ type DepartureBlock =
   | { code: 'RECURRING_EXPENSE_PROBLEM'; recurringExpenses: BrokenRecurringExpenses };
 
 export class GroupService {
-  /** Request-scoped title read: authorize and project the name in one query. */
+  /** Request-scoped title read; the page supplies generic metadata when access is refused. */
   getMemberName = cache(async (groupId: string, userId: string) => {
-    await connectDB();
-    return Group.findOne({ _id: groupId, 'members.user': userId })
-      .select('name -_id')
-      .lean<{ name: string }>();
+    try {
+      return await readGroupLedger({
+        actor: { kind: 'member', id: userId },
+        groupId,
+        deletionMarker: 'allow-retained-members',
+        recurring: 'recorded-only',
+        read: async (group) => ({ name: group.name }),
+      });
+    } catch (cause) {
+      if (cause instanceof Refusal && cause.code === 'FORBIDDEN') return null;
+      throw cause;
+    }
   });
 
   /** A valid public invitation may name its Group without loading its members. */
@@ -181,24 +189,20 @@ export class GroupService {
    * Get all groups the user is a member of.
    */
   async getUserGroups(userId: string, includeArchived: boolean = false) {
-    await connectDB();
-
-    const filter: Record<string, unknown> = {
-      'members.user': userId,
-    };
-    if (!includeArchived) {
-      filter.isArchived = false;
-    }
-
-    const groups = await Group.find(filter)
-      .populate('members.user', PERSON_FIELDS)
-      .sort({ updatedAt: -1 })
-      .lean();
-    const latest = await latestExpenseCurrencies(
-      groups.map((group) => group._id),
-      userId,
-    );
-    return groups.map((group) => readableFor(group, latest.get(String(group._id)) ?? null));
+    return readGroupLedgers({
+      actor: { kind: 'member', id: userId },
+      archived: includeArchived ? 'include' : 'exclude',
+      deletionMarker: 'allow-retained-members',
+      recurring: 'recorded-only',
+      sort: { updatedAt: -1 },
+      read: async (groups) => {
+        const latest = await latestExpenseCurrencies(
+          groups.map((group) => group._id),
+          userId,
+        );
+        return groups.map((group) => readableFor(group, latest.get(String(group._id)) ?? null));
+      },
+    });
   }
 
   /**

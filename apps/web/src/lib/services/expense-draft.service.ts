@@ -1,6 +1,6 @@
 import { Refusal } from '@splitbook/shared/refusals';
 import 'server-only';
-import { readGroupLedger } from '@/lib/group-ledger-read';
+import { readGroupLedger, readGroupLedgers } from '@/lib/group-ledger-read';
 import {
   isGroupCurrency,
   normaliseExtraCurrencies,
@@ -429,81 +429,89 @@ export const expenseDraftService = {
       { projection: { _id: 1 } },
     );
     if (!account) throw new Refusal('FORBIDDEN');
-    const groups = await Group.find({ 'members.user': owner, deletionRequestedAt: null })
-      .sort({ name: 1, _id: 1 })
-      .lean();
-    const records = await drafts
-      .find({ owner, state: 'active', group: { $in: groups.map((group) => group._id) } })
-      .sort({ createdAt: 1, _id: 1 })
-      .toArray();
-    const result: ToReviewRead = { groups: [], total: records.length };
-    for (const group of groups) {
-      const own = records.filter((record) => String(record.group) === String(group._id));
-      if (!own.length) continue;
-      // Bound the one Expense query to the dates/amounts/currencies represented in this Group.
-      const comparable = own.flatMap((record) => {
-        const v = withGroupCurrency(record.values, group.defaultCurrency);
-        if (!v.description || !v.amount || !v.currency || !v.date) return [];
-        const start = new Date(`${v.date.slice(0, 10)}T00:00:00.000Z`);
-        return [
-          {
-            currency: v.currency,
-            amount: v.amount,
-            date: { $gte: start, $lt: new Date(start.getTime() + 86400000) },
-          },
-        ];
-      });
-      const expenses = comparable.length
-        ? await Expense.find({ group: group._id, isDeleted: false, $or: comparable })
-            .select('description amount currency date')
-            .lean()
-        : [];
-      const items = own.map((record) => {
-        const values = withGroupCurrency(record.values, group.defaultCurrency);
-        const duplicates: DraftReview['duplicates'] = [];
-        for (const other of own) {
-          if (
-            String(other._id) !== String(record._id) &&
-            other.values &&
-            isPossibleExpenseDuplicate(
-              values,
-              withGroupCurrency(other.values, group.defaultCurrency),
-            )
-          )
-            duplicates.push({
-              kind: 'draft',
-              id: String(other._id),
-              description: other.values.description!,
-            });
+    return readGroupLedgers<ToReviewRead>({
+      actor: { kind: 'member', id: String(owner) },
+      archived: 'include',
+      deletionMarker: 'refuse',
+      recurring: 'recorded-only',
+      sort: { name: 1, _id: 1 },
+      read: async (_groups, groups) => {
+        const records = await drafts
+          .find({ owner, state: 'active', group: { $in: groups.map((group) => group._id) } })
+          .sort({ createdAt: 1, _id: 1 })
+          .toArray();
+        const result: ToReviewRead = { groups: [], total: records.length };
+        for (const group of groups) {
+          const own = records.filter((record) => String(record.group) === String(group._id));
+          if (!own.length) continue;
+          // Bound the one Expense query to the dates/amounts/currencies represented in this Group.
+          const comparable = own.flatMap((record) => {
+            const v = withGroupCurrency(record.values, group.defaultCurrency);
+            if (!v.description || !v.amount || !v.currency || !v.date) return [];
+            const start = new Date(`${v.date.slice(0, 10)}T00:00:00.000Z`);
+            return [
+              {
+                currency: v.currency,
+                amount: v.amount,
+                date: { $gte: start, $lt: new Date(start.getTime() + 86400000) },
+              },
+            ];
+          });
+          const expenses = comparable.length
+            ? await Expense.find({ group: group._id, isDeleted: false, $or: comparable })
+                .select('description amount currency date')
+                .lean()
+            : [];
+          const items = own.map((record) => {
+            const values = withGroupCurrency(record.values, group.defaultCurrency);
+            const duplicates: DraftReview['duplicates'] = [];
+            for (const other of own) {
+              if (
+                String(other._id) !== String(record._id) &&
+                other.values &&
+                isPossibleExpenseDuplicate(
+                  values,
+                  withGroupCurrency(other.values, group.defaultCurrency),
+                )
+              )
+                duplicates.push({
+                  kind: 'draft',
+                  id: String(other._id),
+                  description: other.values.description!,
+                });
+            }
+            for (const expense of expenses) {
+              if (
+                isPossibleExpenseDuplicate(values, { ...expense, date: expense.date.toISOString() })
+              )
+                duplicates.push({
+                  kind: 'expense',
+                  id: String(expense._id),
+                  description: expense.description,
+                });
+            }
+            return {
+              draft: present(record, group),
+              problems: reviewValues(record, group).problems,
+              duplicates,
+            };
+          });
+          result.groups.push({
+            groupId: String(group._id),
+            groupName: group.name,
+            currency: group.defaultCurrency,
+            alternateCurrencies: normaliseExtraCurrencies(
+              group.defaultCurrency,
+              group.alternateCurrencies,
+            ),
+            category: group.category ?? 'other',
+            count: items.length,
+            items,
+          });
         }
-        for (const expense of expenses) {
-          if (isPossibleExpenseDuplicate(values, { ...expense, date: expense.date.toISOString() }))
-            duplicates.push({
-              kind: 'expense',
-              id: String(expense._id),
-              description: expense.description,
-            });
-        }
-        return {
-          draft: present(record, group),
-          problems: reviewValues(record, group).problems,
-          duplicates,
-        };
-      });
-      result.groups.push({
-        groupId: String(group._id),
-        groupName: group.name,
-        currency: group.defaultCurrency,
-        alternateCurrencies: normaliseExtraCurrencies(
-          group.defaultCurrency,
-          group.alternateCurrencies,
-        ),
-        category: group.category ?? 'other',
-        count: items.length,
-        items,
-      });
-    }
-    return result;
+        return result;
+      },
+    });
   },
   async save(actor: DraftActor, groupId: string, input: unknown): Promise<DraftSaveOutcome[]> {
     // An MCP actor is never permitted to convert a Draft, even if accidentally wired here.

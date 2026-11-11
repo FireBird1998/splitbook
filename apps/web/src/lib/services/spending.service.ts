@@ -1,9 +1,7 @@
+import { readGroupLedgers } from '@/lib/group-ledger-read';
 import type { Types } from 'mongoose';
-import connectDB from '@/lib/db';
 import Activity from '@/lib/models/Activity';
 import Expense from '@/lib/models/Expense';
-import Group from '@/lib/models/Group';
-import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { inSupportedCurrencies } from '@splitbook/shared/currency';
 import { assertStoredExpenseMoney } from '@splitbook/shared/exact-money';
 import {
@@ -45,74 +43,72 @@ export async function getMemberSpending(
   const range = monthsQueryRange(months);
   const thisMonth = months[months.length - 1];
   const thisMonthRange = monthsQueryRange([thisMonth]);
-  await connectDB();
+  return readGroupLedgers({
+    actor: { kind: 'member', id: userId },
+    archived: 'exclude',
+    deletionMarker: 'allow-retained-members',
+    recurring: 'materialize',
+    now,
+    sort: { name: 1, _id: 1 },
+    read: async (groups) => {
+      const groupIds = groups.map((group) => group._id);
+      // The member's own Expenses over the window, and the current Month's Expenses of every member
+      // for what each Group spent. The Months' figures still count only the member's share.
+      // A currency Splitbook no longer supports has no position, so it is left out (#812, #820).
+      const expenses = inSupportedCurrencies(
+        await Expense.find({
+          group: { $in: groupIds },
+          isDeleted: false,
+          date: { $gte: range.from, $lt: range.to },
+          $or: [{ 'splitBetween.user': userId }, { date: { $gte: thisMonthRange.from } }],
+        })
+          .select(
+            'group currency moneyVersion amount amountMinor date paidBy splitBetween category',
+          )
+          .lean(),
+      );
+      // As Balances does: a stored allocation that doesn't add up is refused, never summed.
+      for (const expense of expenses) assertStoredExpenseMoney(expense);
 
-  const groups = await Group.find({ 'members.user': userId, isArchived: false })
-    .select('_id name')
-    .sort({ name: 1, _id: 1 })
-    .lean();
-  const groupIds = groups.map((group) => group._id);
+      const spendingGroups = groups.map((group) => ({
+        groupId: String(group._id),
+        name: group.name,
+      }));
+      const insightExpenses = expenses.map((expense) => ({
+        groupId: String(expense.group),
+        currency: expense.currency,
+        date: expense.date,
+        moneyVersion: expense.moneyVersion,
+        // The stored total, for what its Group spent; checked above to equal its shares.
+        amount: expense.amount,
+        amountMinor: expense.amountMinor,
+        category: expense.category,
+        splitBetween: expense.splitBetween.map(({ user, amount, amountMinor }) => ({
+          user: String(user),
+          amount,
+          amountMinor,
+        })),
+      }));
 
-  // Lazy-on-read, as the Group, Expense and Balances reads do: add the recurring Expenses that
-  // have fallen due first, so the figures agree. It generates nothing while recurring Expenses
-  // are switched off (#289), and never throws into the read.
-  await Promise.all(
-    groups.map((group) => recurringExpenseService.generateDueExpenses(String(group._id), now)),
-  );
-
-  // The member's own Expenses over the window, and the current Month's Expenses of every member
-  // for what each Group spent. The Months' figures still count only the member's share.
-  // A currency Splitbook no longer supports has no position, so it is left out (#812, #820).
-  const expenses = inSupportedCurrencies(
-    await Expense.find({
-      group: { $in: groupIds },
-      isDeleted: false,
-      date: { $gte: range.from, $lt: range.to },
-      $or: [{ 'splitBetween.user': userId }, { date: { $gte: thisMonthRange.from } }],
-    })
-      .select('group currency moneyVersion amount amountMinor date paidBy splitBetween category')
-      .lean(),
-  );
-  // As Balances does: a stored allocation that doesn't add up is refused, never summed.
-  for (const expense of expenses) assertStoredExpenseMoney(expense);
-
-  const spendingGroups = groups.map((group) => ({
-    groupId: String(group._id),
-    name: group.name,
-  }));
-  const insightExpenses = expenses.map((expense) => ({
-    groupId: String(expense.group),
-    currency: expense.currency,
-    date: expense.date,
-    moneyVersion: expense.moneyVersion,
-    // The stored total, for what its Group spent; checked above to equal its shares.
-    amount: expense.amount,
-    amountMinor: expense.amountMinor,
-    category: expense.category,
-    splitBetween: expense.splitBetween.map(({ user, amount, amountMinor }) => ({
-      user: String(user),
-      amount,
-      amountMinor,
-    })),
-  }));
-
-  return {
-    ...memberSpendingByMonth({
-      memberId: userId,
-      timeZone,
-      months,
-      groups: spendingGroups,
-      expenses: insightExpenses,
-    }),
-    thisMonth: spendingInMonth({
-      memberId: userId,
-      timeZone,
-      month: thisMonth,
-      groups: spendingGroups,
-      expenses: insightExpenses,
-    }),
-    lastChanges: await lastChangeByGroup(groupIds),
-  };
+      return {
+        ...memberSpendingByMonth({
+          memberId: userId,
+          timeZone,
+          months,
+          groups: spendingGroups,
+          expenses: insightExpenses,
+        }),
+        thisMonth: spendingInMonth({
+          memberId: userId,
+          timeZone,
+          month: thisMonth,
+          groups: spendingGroups,
+          expenses: insightExpenses,
+        }),
+        lastChanges: await lastChangeByGroup(groupIds),
+      };
+    },
+  });
 }
 
 /**

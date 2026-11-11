@@ -1,4 +1,4 @@
-import type { LedgerReadGroup } from '@/lib/group-ledger-read';
+import { readGroupLedgers, type LedgerReadGroup } from '@/lib/group-ledger-read';
 import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
@@ -35,7 +35,6 @@ import type {
   UserBalancesResponse,
 } from '@splitbook/shared/types';
 import { getCurrency, inSupportedCurrencies } from '@splitbook/shared/currency';
-import { recurringExpenseService } from './recurring-expense.service';
 import { PERSON_FIELDS } from './person-fields';
 
 type Party = { user?: unknown } | null | undefined;
@@ -261,175 +260,170 @@ export class BalanceService {
    * payment in its currency.
    */
   async getUserBalances(userId: string, now: Date = new Date()) {
-    await connectDB();
-
-    const groups = await Group.find({
-      'members.user': userId,
-      isArchived: false,
-    })
-      .populate('members.user', PERSON_FIELDS)
-      .lean();
-
-    await recurringExpenseService.generateDueExpensesForGroups(
-      groups.map((group) => group._id.toString()),
+    return readGroupLedgers({
+      actor: { kind: 'member', id: userId },
+      archived: 'exclude',
+      deletionMarker: 'allow-retained-members',
+      recurring: 'materialize',
       now,
-    );
+      read: async (groups) => {
+        const groupIds = groups.map((group) => group._id);
+        const [storedExpenses, storedSettlements] = await Promise.all([
+          Expense.find({ group: { $in: groupIds }, isDeleted: false })
+            .select('group currency moneyVersion amount amountMinor paidBy splitBetween')
+            .lean(),
+          Settlement.find({ group: { $in: groupIds } })
+            .select('group currency moneyVersion amount amountMinor paidBy paidTo')
+            .lean(),
+        ]);
+        const allExpenses = inSupportedCurrencies(storedExpenses);
+        const allSettlements = inSupportedCurrencies(storedSettlements);
 
-    const groupIds = groups.map((group) => group._id);
-    const [storedExpenses, storedSettlements] = await Promise.all([
-      Expense.find({ group: { $in: groupIds }, isDeleted: false })
-        .select('group currency moneyVersion amount amountMinor paidBy splitBetween')
-        .lean(),
-      Settlement.find({ group: { $in: groupIds } })
-        .select('group currency moneyVersion amount amountMinor paidBy paidTo')
-        .lean(),
-    ]);
-    const allExpenses = inSupportedCurrencies(storedExpenses);
-    const allSettlements = inSupportedCurrencies(storedSettlements);
+        for (const expense of allExpenses) assertStoredExpenseMoney(expense);
+        const expensesByGroup = new Map<string, typeof allExpenses>();
+        for (const expense of allExpenses) {
+          const key = expense.group.toString();
+          const list = expensesByGroup.get(key) || [];
+          list.push(expense);
+          expensesByGroup.set(key, list);
+        }
 
-    for (const expense of allExpenses) assertStoredExpenseMoney(expense);
-    const expensesByGroup = new Map<string, typeof allExpenses>();
-    for (const expense of allExpenses) {
-      const key = expense.group.toString();
-      const list = expensesByGroup.get(key) || [];
-      list.push(expense);
-      expensesByGroup.set(key, list);
-    }
+        const settlementsByGroup = new Map<string, typeof allSettlements>();
+        for (const settlement of allSettlements) {
+          const key = settlement.group.toString();
+          const list = settlementsByGroup.get(key) || [];
+          list.push(settlement);
+          settlementsByGroup.set(key, list);
+        }
 
-    const settlementsByGroup = new Map<string, typeof allSettlements>();
-    for (const settlement of allSettlements) {
-      const key = settlement.group.toString();
-      const list = settlementsByGroup.get(key) || [];
-      list.push(settlement);
-      settlementsByGroup.set(key, list);
-    }
+        const groupBalances: DashboardGroupBalance[] = [];
+        const suggested: HomeSuggestedPayment[] = [];
+        /** People in a suggested payment who are no longer members of its Group. */
+        const formerIds = new Set<string>();
 
-    const groupBalances: DashboardGroupBalance[] = [];
-    const suggested: HomeSuggestedPayment[] = [];
-    /** People in a suggested payment who are no longer members of its Group. */
-    const formerIds = new Set<string>();
+        for (const group of groups) {
+          const groupId = group._id.toString();
+          const expenses = expensesByGroup.get(groupId) || [];
+          const settlements = settlementsByGroup.get(groupId) || [];
 
-    for (const group of groups) {
-      const groupId = group._id.toString();
-      const expenses = expensesByGroup.get(groupId) || [];
-      const settlements = settlementsByGroup.get(groupId) || [];
+          const currencies = new Set([
+            ...expenses.map((expense) => expense.currency),
+            ...settlements.map((settlement) => settlement.currency),
+          ]);
+          const memberNames = new Map(
+            group.members.map((member) => {
+              const memberUser = member.user as unknown as {
+                _id: { toString(): string };
+                name: string;
+              };
+              return [memberUser._id.toString(), memberUser.name] as const;
+            }),
+          );
 
-      const currencies = new Set([
-        ...expenses.map((expense) => expense.currency),
-        ...settlements.map((settlement) => settlement.currency),
-      ]);
-      const memberNames = new Map(
-        group.members.map((member) => {
-          const memberUser = member.user as unknown as {
-            _id: { toString(): string };
-            name: string;
+          const balancesIn = (currency: string) => {
+            const expenseData = expenses
+              .filter((expense) => expense.currency === currency)
+              .map((expense) => ({
+                currency: expense.currency,
+                moneyVersion: expense.moneyVersion,
+                paidBy: expense.paidBy.map((payer) => ({
+                  user: payer.user.toString(),
+                  amount: payer.amount,
+                  amountMinor: payer.amountMinor,
+                })),
+                splitBetween: expense.splitBetween.map((split) => ({
+                  user: split.user.toString(),
+                  amount: split.amount,
+                  amountMinor: split.amountMinor,
+                })),
+              }));
+            const settlementData = settlements
+              .filter((settlement) => settlement.currency === currency)
+              .map((settlement) => ({
+                currency: settlement.currency,
+                moneyVersion: settlement.moneyVersion,
+                amountMinor: settlement.amountMinor,
+                paidBy: settlement.paidBy.toString(),
+                paidTo: settlement.paidTo.toString(),
+                amount: settlement.amount,
+              }));
+            // The Group's Balances simplifies the same exact balances, so both suggest the same payments.
+            const netMinor = calculateNetBalancesMinor(expenseData, settlementData, currency);
+            const userBalance = netMinor.find((balance) => balance.userId === userId);
+
+            if (!userBalance || userBalance.amountMinor === 0) return [];
+
+            const payments = memberSuggestedPayments(simplifyDebtsMinor(netMinor), userId);
+            for (const payment of payments) {
+              const name = memberNames.get(payment.counterpartyId);
+              if (name === undefined) formerIds.add(payment.counterpartyId);
+              suggested.push({
+                groupId,
+                groupName: group.name,
+                currency,
+                ...payment,
+                counterpartyName: name ?? '',
+              });
+            }
+
+            // Unchanged for Android: only the largest payment, with a former member named Unknown.
+            const settlement = [...payments].sort((a, b) => b.amountMinor - a.amountMinor)[0];
+
+            return [
+              {
+                currency,
+                balance: toMajorAmount(userBalance.amountMinor, currency),
+                ...(settlement
+                  ? {
+                      settlement: {
+                        counterpartyId: settlement.counterpartyId,
+                        counterpartyName: memberNames.get(settlement.counterpartyId) || 'Unknown',
+                        amount: toMajorAmount(settlement.amountMinor, currency),
+                      },
+                    }
+                  : {}),
+              },
+            ];
           };
-          return [memberUser._id.toString(), memberUser.name] as const;
-        }),
-      );
-
-      const balancesIn = (currency: string) => {
-        const expenseData = expenses
-          .filter((expense) => expense.currency === currency)
-          .map((expense) => ({
-            currency: expense.currency,
-            moneyVersion: expense.moneyVersion,
-            paidBy: expense.paidBy.map((payer) => ({
-              user: payer.user.toString(),
-              amount: payer.amount,
-              amountMinor: payer.amountMinor,
-            })),
-            splitBetween: expense.splitBetween.map((split) => ({
-              user: split.user.toString(),
-              amount: split.amount,
-              amountMinor: split.amountMinor,
-            })),
-          }));
-        const settlementData = settlements
-          .filter((settlement) => settlement.currency === currency)
-          .map((settlement) => ({
-            currency: settlement.currency,
-            moneyVersion: settlement.moneyVersion,
-            amountMinor: settlement.amountMinor,
-            paidBy: settlement.paidBy.toString(),
-            paidTo: settlement.paidTo.toString(),
-            amount: settlement.amount,
-          }));
-        // The Group's Balances simplifies the same exact balances, so both suggest the same payments.
-        const netMinor = calculateNetBalancesMinor(expenseData, settlementData, currency);
-        const userBalance = netMinor.find((balance) => balance.userId === userId);
-
-        if (!userBalance || userBalance.amountMinor === 0) return [];
-
-        const payments = memberSuggestedPayments(simplifyDebtsMinor(netMinor), userId);
-        for (const payment of payments) {
-          const name = memberNames.get(payment.counterpartyId);
-          if (name === undefined) formerIds.add(payment.counterpartyId);
-          suggested.push({
+          // A fault in this Group's stored money names the Group (#547).
+          const balances = checkStoredMoney(() => [...currencies].sort().flatMap(balancesIn), {
             groupId,
-            groupName: group.name,
-            currency,
-            ...payment,
-            counterpartyName: name ?? '',
+          });
+
+          groupBalances.push({
+            groupId,
+            name: group.name,
+            category: group.category as GroupCategory,
+            updatedAt: new Date(group.updatedAt).toISOString(),
+            hasMixedCurrencies: hasMixedCurrencies(currencies),
+            balances,
           });
         }
 
-        // Unchanged for Android: only the largest payment, with a former member named Unknown.
-        const settlement = [...payments].sort((a, b) => b.amountMinor - a.amountMinor)[0];
+        // Someone who left a Group with a balance open is named from their account, as Balances does.
+        const formerNames = new Map<string, string>();
+        if (formerIds.size > 0) {
+          const former = await User.find({ _id: { $in: [...formerIds] } })
+            .select('name')
+            .lean();
+          for (const user of former) formerNames.set(String(user._id), user.name);
+        }
+        const suggestedPayments = orderSuggestedPayments(
+          suggested.map((payment) => ({
+            ...payment,
+            counterpartyName:
+              payment.counterpartyName || formerNames.get(payment.counterpartyId) || 'Unknown',
+          })),
+        );
 
-        return [
-          {
-            currency,
-            balance: toMajorAmount(userBalance.amountMinor, currency),
-            ...(settlement
-              ? {
-                  settlement: {
-                    counterpartyId: settlement.counterpartyId,
-                    counterpartyName: memberNames.get(settlement.counterpartyId) || 'Unknown',
-                    amount: toMajorAmount(settlement.amountMinor, currency),
-                  },
-                }
-              : {}),
-          },
-        ];
-      };
-      // A fault in this Group's stored money names the Group (#547).
-      const balances = checkStoredMoney(() => [...currencies].sort().flatMap(balancesIn), {
-        groupId,
-      });
-
-      groupBalances.push({
-        groupId,
-        name: group.name,
-        category: group.category as GroupCategory,
-        updatedAt: new Date(group.updatedAt).toISOString(),
-        hasMixedCurrencies: hasMixedCurrencies(currencies),
-        balances,
-      });
-    }
-
-    // Someone who left a Group with a balance open is named from their account, as Balances does.
-    const formerNames = new Map<string, string>();
-    if (formerIds.size > 0) {
-      const former = await User.find({ _id: { $in: [...formerIds] } })
-        .select('name')
-        .lean();
-      for (const user of former) formerNames.set(String(user._id), user.name);
-    }
-    const suggestedPayments = orderSuggestedPayments(
-      suggested.map((payment) => ({
-        ...payment,
-        counterpartyName:
-          payment.counterpartyName || formerNames.get(payment.counterpartyId) || 'Unknown',
-      })),
-    );
-
-    return {
-      buckets: aggregateCurrencyBalances(groupBalances),
-      groups: groupBalances,
-      hasMixedCurrencies: groupBalances.some((group) => group.hasMixedCurrencies),
-      suggestedPayments,
-    } satisfies UserBalancesResponse;
+        return {
+          buckets: aggregateCurrencyBalances(groupBalances),
+          groups: groupBalances,
+          hasMixedCurrencies: groupBalances.some((group) => group.hasMixedCurrencies),
+          suggestedPayments,
+        } satisfies UserBalancesResponse;
+      },
+    });
   }
 }
 
