@@ -165,3 +165,15 @@ it('records identity-only new entries, including the former name-classification 
     '../../../test/expense-entry-readings/supplemental/tag-reference.json',
   );
 });
+
+it('keeps the entered several-payer mode when duplicate rows become one box (#1117 decision 11)', () => {
+  expect(
+    entryForExpenseDraft({
+      amount: 100,
+      paidBy: [
+        { user: alex, amount: 40 },
+        { user: alex, amount: 60 },
+      ],
+    }),
+  ).toMatchObject({ multiPayer: true, payers: [{ user: alex, amount: '60' }] });
+});

@@ -757,6 +757,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
         String(node.props.accessibilityLabel).startsWith('Paid by'),
     )[0];
     await act(async () => paidTile.props.onPress());
+    expect(tree.root.findByType(PayerSheet).props.draft.multiPayer).toBe(true);
     expect(tree.root.findByType(PayerSheet).props.draft.payers).toEqual([
       { user: user.id, amount: '8.34' },
     ]);

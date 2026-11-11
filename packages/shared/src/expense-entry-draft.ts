@@ -17,6 +17,7 @@ type DraftEntries = Record<string, string>;
 
 /** An incomplete Draft is kept as typed text; no amount is filled in for the member. */
 export function entryForExpenseDraft(values: ExpenseDraftValues = {}): IncompleteExpenseEntry {
+  const multiPayer = (values.paidBy?.length ?? 0) > 1;
   values = {
     ...values,
     paidBy: lastPeople(values.paidBy),
@@ -37,7 +38,7 @@ export function entryForExpenseDraft(values: ExpenseDraftValues = {}): Incomplet
     tagId: values.tagId ?? '',
     notes: values.notes ?? '',
     payerId: values.paidBy?.[0]?.user ?? '',
-    multiPayer: (values.paidBy?.length ?? 0) > 1,
+    multiPayer,
     payers:
       values.paidBy?.map((row) => ({
         user: row.user,
