@@ -17,6 +17,7 @@ export type LedgerReadGroup = Omit<IGroupDocument, 'members' | 'deletionRequeste
   }>;
 };
 export interface GroupLedgerRead<T> {
+  /** Trusted session subject or validated grant subject. */
   actor: LedgerReadActor;
   groupId: string;
   missingGroup?: 'forbidden' | 'not-found';
@@ -57,7 +58,11 @@ export async function readGroupLedger<T>({
     .populate<{ members: LedgerReadGroup['members'] }>('members.user', PERSON_FIELDS)
     .lean();
   if (!group) {
-    if (missingGroup === 'not-found' && !(await Group.exists({ _id: groupId })))
+    if (
+      actor.kind === 'member' &&
+      missingGroup === 'not-found' &&
+      !(await Group.exists({ _id: groupId }))
+    )
       throw new Refusal('NOT_FOUND', { resource: 'Group' });
     throw new Refusal('FORBIDDEN');
   }

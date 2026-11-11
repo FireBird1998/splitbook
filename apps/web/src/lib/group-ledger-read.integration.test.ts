@@ -258,3 +258,16 @@ for (const subject of ['Expenses', 'Balances'] as const)
     expect(new Set(people)).toEqual(new Set([DEMO_PERSONA_IDS.alex, DEMO_PERSONA_IDS.sam]));
     expect((await Group.findById(access.groupId))?.members).toHaveLength(3);
   });
+
+for (const state of ['missing', 'outsider'] as const)
+  it(`keeps member missing-Group compatibility from distinguishing an assistant's ${state} Group`, async () => {
+    const access = await fixture.arrange(state);
+    await expect(
+      readGroupLedger({
+        actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [] },
+        groupId: access.groupId,
+        missingGroup: 'not-found',
+        read: async (group) => group.name,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
