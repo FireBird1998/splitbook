@@ -76,7 +76,6 @@ export interface LedgerRecording<
       | 'before-retry-and-at-commit'
       | 'actor-before-retry'
       | 'template-validated';
-    missingGroup?: 'fault';
     standaloneArchive?: 'fence-only';
     archive?: 'before-generation';
   };
@@ -130,10 +129,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
     description.compatibility.membership !== 'template-validated'
   ) {
     admittedGroup = (await Group.findById(groupId)) ?? undefined;
-    if (!admittedGroup) {
-      if (description.compatibility?.missingGroup === 'fault') throw new Error('Group not found');
-      throw new Refusal('FORBIDDEN');
-    }
+    if (!admittedGroup) throw new Refusal('FORBIDDEN');
     checkMembers(admittedGroup, description.compatibility.membership !== 'actor-before-retry');
   }
   const lookup = async () => {

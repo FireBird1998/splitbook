@@ -54,7 +54,6 @@ export class SettlementService {
       transactions: 'allow-standalone',
       compatibility: {
         membership: 'before-retry',
-        missingGroup: 'fault',
         standaloneArchive: 'fence-only',
       },
       command: () => command,

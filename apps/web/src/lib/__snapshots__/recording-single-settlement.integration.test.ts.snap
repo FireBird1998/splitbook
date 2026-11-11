@@ -2561,10 +2561,11 @@ exports[`single-settlement record of recordings > the Group vanishes after route
   },
   "answers": {
     "body": {
-      "error": "Internal server error",
-      "status": 500,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
-    "status": 500,
+    "status": 403,
   },
   "before": {
     "activities": [],

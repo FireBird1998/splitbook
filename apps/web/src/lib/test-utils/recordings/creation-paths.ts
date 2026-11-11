@@ -36,9 +36,7 @@ export function recordCreationPaths(recording: Recording) {
       try {
         const recorded = await recording.capture(() => recording.send(), before);
         expect(removed).toBe(true);
-        expect((recorded.answers as Answer).status).toBe(
-          recording.writer === 'single-settlement' ? 500 : 403,
-        );
+        expect((recorded.answers as Answer).status).toBe(403);
       } finally {
         spy.mockRestore();
       }

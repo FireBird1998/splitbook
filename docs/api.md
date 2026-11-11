@@ -1529,6 +1529,8 @@ switch off has no such document and generates exactly as before.
 
 ## Settlements
 
+A Group that disappears after route admission is refused with **403 `FORBIDDEN`**, including a single payment; it is not a server fault.
+
 | Method | Path                           | Description       |
 | ------ | ------------------------------ | ----------------- |
 | POST   | `/api/groups/[id]/settlements` | Record settlement |

@@ -147,7 +147,7 @@ describe('ledger recording', () => {
       return transaction(write, options);
     });
     await record(randomUUID(), {
-      compatibility: { membership: 'before-retry', missingGroup: 'fault' },
+      compatibility: { membership: 'before-retry' },
     });
     expect(await Expense.countDocuments()).toBe(1);
     const event = await Activity.findOne({ type: 'expense_added' }).select('+notificationContext');
@@ -155,7 +155,7 @@ describe('ledger recording', () => {
   });
   it('can preserve pre-retry membership checks without checking again at the commit', async () => {
     const key = randomUUID();
-    const compatibility = { membership: 'before-retry' as const, missingGroup: 'fault' as const };
+    const compatibility = { membership: 'before-retry' as const };
     const [saved] = await record(key, { compatibility });
     await Group.updateOne({ _id: groupId }, { $pull: { members: { user: bob } } });
     await expect(record(key, { compatibility })).rejects.toMatchObject({
