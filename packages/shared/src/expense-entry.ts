@@ -54,6 +54,7 @@ export type ExpenseEntryPurpose = { kind: 'new' } | { kind: 'edit'; saved: Store
 
 export interface ExpenseEntryPolicy {
   blankShare: 'one' | 'zero';
+  blankSplitAmount: 'zero' | 'refuse';
   payerRows: 'all' | 'nonzero';
   savedZeroPayers: 'keep' | 'unchanged';
   singlePayer: 'first-row' | 'field';
@@ -61,10 +62,11 @@ export interface ExpenseEntryPolicy {
   roundingNote: 'show' | 'hide';
   weightInput: 'numbers' | 'decimal-units';
   /** A form summary prioritizes the empty whole-share count; entry corrections mark each box. */
-  feedback: 'form-summary' | 'entry-corrections';
+  feedback: 'form-summary' | 'allocation-summary' | 'entry-corrections';
 }
 export const expenseEntryPolicy: ExpenseEntryPolicy = {
   blankShare: 'zero',
+  blankSplitAmount: 'zero',
   payerRows: 'nonzero',
   savedZeroPayers: 'unchanged',
   singlePayer: 'field',
@@ -75,6 +77,7 @@ export const expenseEntryPolicy: ExpenseEntryPolicy = {
 };
 export const formSummaryPolicy: ExpenseEntryPolicy = {
   blankShare: 'one',
+  blankSplitAmount: 'zero',
   payerRows: 'all',
   savedZeroPayers: 'keep',
   singlePayer: 'first-row',
@@ -82,6 +85,15 @@ export const formSummaryPolicy: ExpenseEntryPolicy = {
   roundingNote: 'hide',
   weightInput: 'numbers',
   feedback: 'form-summary',
+};
+
+/** The recurring form reports the allocator's refusal without the whole-share guard. */
+export const recurringEntryPolicy: ExpenseEntryPolicy = {
+  ...formSummaryPolicy,
+  blankShare: 'zero',
+  blankSplitAmount: 'refuse',
+  singlePayer: 'field',
+  feedback: 'allocation-summary',
 };
 
 /** One entry supplies both the displayed split and the command; callers cannot supply an allocator. */
@@ -121,7 +133,15 @@ export function readExpenseEntry(
         splitBetween: entry.participantIds.map((user) => ({
           user,
           ...(entry.splitMethod === 'unequal' || entry.splitMethod === 'exact'
-            ? { amount: entry.splitValues[user] || '0' }
+            ? {
+                amount:
+                  policy.blankSplitAmount === 'refuse'
+                    ? toMajorAmount(
+                        parseAmountMinor(entry.splitValues[user] ?? '', entry.currency),
+                        entry.currency,
+                      )
+                    : entry.splitValues[user] || '0',
+              }
             : entry.splitMethod === 'percentage'
               ? { percentage: weight(user, 2) }
               : entry.splitMethod === 'shares'
@@ -188,7 +208,7 @@ export function readExpenseEntry(
       kind: 'refused' as const,
       error,
       problems: [
-        policy.feedback === 'form-summary'
+        policy.feedback !== 'entry-corrections'
           ? {
               field: 'form' as const,
               message: error instanceof Error ? error.message : 'Invalid allocation',
