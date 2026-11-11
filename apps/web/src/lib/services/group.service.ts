@@ -1,4 +1,4 @@
-import { readGroupLedgers, type LedgerReadGroup } from '@/lib/group-ledger-read';
+import { readGroupLedger, readGroupLedgers, type LedgerReadGroup } from '@/lib/group-ledger-read';
 import { isGroupAdmin, withMemberEmails } from '@/lib/group-member-emails';
 import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
@@ -93,13 +93,16 @@ type DepartureBlock =
   | { code: 'RECURRING_EXPENSE_PROBLEM'; recurringExpenses: BrokenRecurringExpenses };
 
 export class GroupService {
-  /** Request-scoped title read: authorize and project the name in one query. */
-  getMemberName = cache(async (groupId: string, userId: string) => {
-    await connectDB();
-    return Group.findOne({ _id: groupId, 'members.user': userId })
-      .select('name -_id')
-      .lean<{ name: string }>();
-  });
+  /** Request-scoped title read; the page supplies generic metadata when access is refused. */
+  getMemberName = cache(async (groupId: string, userId: string) =>
+    readGroupLedger({
+      actor: { kind: 'member', id: userId },
+      groupId,
+      deletionMarker: 'allow-retained-members',
+      recurring: 'recorded-only',
+      read: async (group) => ({ name: group.name }),
+    }),
+  );
 
   /** A valid public invitation may name its Group without loading its members. */
   getInviteName = cache(async (code: string) => {
