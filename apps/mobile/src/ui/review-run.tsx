@@ -10,6 +10,8 @@ import {
   needsAmount,
   payerListedTwice,
   PAYER_LISTED_TWICE,
+  SPLIT_LISTED_TWICE,
+  splitListedTwice,
   type ReviewNeed,
 } from '@splitbook/shared/to-review';
 import {
@@ -602,8 +604,10 @@ function ReviewRunContent({
                   : undefined,
             // A split that is there but doesn't add up says so, not "Choose" (#506).
             split:
-              hasNeed('splitBetween') || hasNeed('splitMethod')
-                ? 'Choose who shared it and how'
+              splitListedTwice(model.needs)
+                ? SPLIT_LISTED_TWICE
+                : hasNeed('splitBetween') || hasNeed('splitMethod')
+                  ? 'Choose who shared it and how'
                 : hasNeed('splitBetween', 'split-total')
                   ? 'Must add up to the total'
                   : hasNeed('splitBetween', 'percentage-total')
@@ -780,6 +784,7 @@ function ReviewRunContent({
       {sheet === 'split' && (
         <SplitSheet
           visible
+          problem={splitListedTwice(model.needs) ? SPLIT_LISTED_TWICE : undefined}
           draft={form}
           members={members}
           currentUserId={userId}

@@ -59,6 +59,7 @@ export function SplitSheet({
   currentUserId,
   locked,
   persistence,
+  problem,
   name,
   money,
   onChange,
@@ -71,6 +72,8 @@ export function SplitSheet({
   currentUserId?: string;
   locked: boolean;
   persistence: 'saved' | 'saving' | 'error';
+  /** A review problem retained in the original item, before its people are folded for display. */
+  problem?: string;
   /** Any participant's name, including people who have left the Group. */
   name: (id: string) => string;
   money: (minor: number) => string;
@@ -144,6 +147,7 @@ export function SplitSheet({
         </>
       }
     >
+      {problem && <FieldError message={problem} />}
       <View
         accessibilityRole="radiogroup"
         accessibilityLabel="Split method"
