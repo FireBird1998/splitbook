@@ -44,3 +44,13 @@ it('keeps the shown Equal choice when a member edits an otherwise unspecified sp
     splitBetween: [{ user: 'a00000000000000000000001' }],
   });
 });
+
+it('keeps the assistant’s unedited amounts and percentages when changing shares (#1117 decision 10)', () => {
+  const from = {
+    splitMethod: 'shares' as const,
+    splitBetween: [{ user: member, amount: 50, percentage: 50, shares: 1 }],
+  };
+  expect(reviewFormChange(from, { splitValues: { [member]: '2' } }).splitBetween).toEqual([
+    { user: member, amount: 50, percentage: 50, shares: 2 },
+  ]);
+});

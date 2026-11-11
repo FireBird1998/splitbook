@@ -8,8 +8,8 @@
       "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
       "splitMethod": "shares",
       "splitBetween": [
-        { "user": "a00000000000000000000001", "shares": 2 },
-        { "user": "a00000000000000000000002", "shares": 1 }
+        { "user": "a00000000000000000000001", "amount": 50, "percentage": 50, "shares": 2 },
+        { "user": "a00000000000000000000002", "amount": 50, "percentage": 50, "shares": 1 }
       ]
     }
   },

@@ -18,14 +18,11 @@ type DraftEntries = Record<string, string>;
 
 export interface ExpenseDraftEntryPolicy {
   singlePayer: ExpenseEntryPolicy['singlePayer'];
-  /** Sheet changes replace the split; a box edit retains the parts it didn't edit. */
-  splitEdit?: 'replace' | 'patch';
   repeatedPeople?: 'keep' | 'merge';
   tagReference?: 'identity' | 'identity-or-name';
 }
 export const fieldDraftEntryPolicy: ExpenseDraftEntryPolicy = {
   singlePayer: 'first-row',
-  splitEdit: 'patch',
   repeatedPeople: 'merge',
   tagReference: 'identity-or-name',
 };
@@ -121,13 +118,13 @@ export function draftForExpenseEntry(
     }
   }
   if (!update || changed?.splitMethod || changed?.participantIds || changed?.splitValues) {
-    const replace = !update || policy.splitEdit !== 'patch';
+    const replace = !update;
     for (const key of Object.keys(fields)) {
       if (!key.startsWith('splitBetween.')) continue;
       if (replace || (changed?.splitMethod && key.split('.').length === 3)) delete fields[key];
       else if (changed?.participantIds && key.split('.').length === 2) fields[key] = '';
     }
-    const method = entry.splitMethod || (update && replace ? 'equal' : '');
+    const method = entry.splitMethod;
     if (replace || changed?.splitMethod) fields.splitMethod = method;
     const part = method === 'percentage' ? 'percentage' : method === 'shares' ? 'shares' : 'amount';
     if (replace || changed?.participantIds)

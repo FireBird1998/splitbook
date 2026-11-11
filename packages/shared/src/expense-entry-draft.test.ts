@@ -51,7 +51,7 @@ it('changes a note without inventing omitted facts or losing a retained Tag name
   ).toEqual({ ...from, notes: 'Receipt checked' });
 });
 
-it('keeps unedited split facts for a box edit and replaces them for a sheet edit', () => {
+it('keeps unedited split facts for both field and sheet edits', () => {
   const from = {
     amount: 100,
     currency: 'INR',
@@ -62,7 +62,7 @@ it('keeps unedited split facts for a box edit and replaces them for a sheet edit
     ],
   };
   const entry = { ...entryForExpenseDraft(from), splitValues: { [alex]: '2', [sam]: '1' } };
-  const policy = { ...expenseEntryPolicy, splitEdit: 'patch' as const };
+  const policy = expenseEntryPolicy;
   expect(
     draftForExpenseEntry(entry, policy, { from, changed: { splitValues: true } }).splitBetween,
   ).toEqual([
@@ -73,8 +73,8 @@ it('keeps unedited split facts for a box edit and replaces them for a sheet edit
     draftForExpenseEntry(entry, expenseEntryPolicy, { from, changed: { splitValues: true } })
       .splitBetween,
   ).toEqual([
-    { user: alex, shares: 2 },
-    { user: sam, shares: 1 },
+    { user: alex, amount: 50, percentage: 50, shares: 2 },
+    { user: sam, amount: 50, percentage: 50, shares: 1 },
   ]);
 });
 it('merges repeated people for one-box-per-person fields and retains rows for the sheet projection', () => {
@@ -98,14 +98,13 @@ it('keeps an unreadable saved amount visible for correction instead of throwing 
   ).toBe('0');
 });
 
-it('records the displayed Equal choice only when a sheet edits an incomplete split', () => {
+it('leaves an omitted split method to the caller’s explicit choice', () => {
   const from = { description: 'Lunch' };
   const entry = { ...entryForExpenseDraft(from), participantIds: [alex] };
   expect(
     draftForExpenseEntry(entry, expenseEntryPolicy, { from, changed: { participantIds: true } }),
   ).toEqual({
     description: 'Lunch',
-    splitMethod: 'equal',
     splitBetween: [{ user: alex }],
   });
 });
@@ -114,11 +113,8 @@ it('keeps existing row positions when a field unticks and reticks a participant'
   const from = { splitMethod: 'equal' as const, splitBetween: [{ user: alex }, { user: sam }] };
   const entry = { ...entryForExpenseDraft(from), participantIds: [sam, alex] };
   expect(
-    draftForExpenseEntry(
-      entry,
-      { ...expenseEntryPolicy, splitEdit: 'patch' },
-      { from, changed: { participantIds: true } },
-    ).splitBetween,
+    draftForExpenseEntry(entry, expenseEntryPolicy, { from, changed: { participantIds: true } })
+      .splitBetween,
   ).toEqual([{ user: alex }, { user: sam }]);
 });
 
@@ -128,4 +124,22 @@ it('keeps a phone Tag identity distinct from a form’s legacy named Tag', () =>
   expect(
     draftForExpenseEntry(entry, { ...expenseEntryPolicy, tagReference: 'identity-or-name' }),
   ).toMatchObject({ tag: 'Food' });
+});
+
+it('retains assistant split facts a sheet did not edit (#1117 decision 10)', () => {
+  const from = {
+    splitMethod: 'shares' as const,
+    splitBetween: [
+      { user: alex, amount: 50, percentage: 50, shares: 1 },
+      { user: sam, amount: 50, percentage: 50, shares: 1 },
+    ],
+  };
+  const entry = { ...entryForExpenseDraft(from), splitValues: { [alex]: '2', [sam]: '1' } };
+  expect(
+    draftForExpenseEntry(entry, expenseEntryPolicy, { from, changed: { splitValues: true } })
+      .splitBetween,
+  ).toEqual([
+    { user: alex, amount: 50, percentage: 50, shares: 2 },
+    { user: sam, amount: 50, percentage: 50, shares: 1 },
+  ]);
 });
