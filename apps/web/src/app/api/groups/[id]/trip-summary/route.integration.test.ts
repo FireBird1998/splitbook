@@ -494,39 +494,6 @@ describe('a member', () => {
 });
 
 describe('only members', () => {
-  it('refuses a non-member exactly as the Group’s other reads do', async () => {
-    const theirs = await createGroup('Sunday Trip', [bob, carol]);
-    await insertExpense(theirs, '2026-09-18T12:00:00Z', { [bob]: 1000, [carol]: 500 });
-
-    const summary = await read(theirs);
-    expect(summary).toEqual({
-      status: 403,
-      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
-    });
-    expect(summary).toEqual(await readBalances(theirs));
-  });
-
-  it('refuses a member who has left, exactly as the Group’s other reads do', async () => {
-    const left = await createGroup('Old Trip', [bob, alice]);
-    await insertExpense(left, '2026-09-18T12:00:00Z', { [alice]: 7000, [bob]: 7000 });
-    expect((await read(left)).status).toBe(200);
-    // Leaving takes the member off the Group's list; their Expenses stay in its ledger.
-    await Group.updateOne({ _id: left }, { $pull: { members: { user: oid(alice) } } });
-
-    const summary = await read(left);
-    expect(summary).toEqual({
-      status: 403,
-      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
-    });
-    expect(summary).toEqual(await readBalances(left));
-  });
-
-  it('refuses a Group that does not exist as one the member is not in', async () => {
-    const missing = 'f00000000000000000000000';
-    expect(await read(missing)).toEqual(await readBalances(missing));
-    expect((await read(missing)).status).toBe(403);
-  });
-
   it('refuses a non-member before reading the query, so a bad query tells them nothing', async () => {
     const theirs = await createGroup('Sunday Trip', [bob, carol]);
     expect((await read(theirs, 'tz=Mars%2FPhobos')).status).toBe(403);

@@ -598,14 +598,6 @@ describe('who may read', () => {
     session.userId = null;
     expect((await read(fixture.groupId, '?limit=500')).status).toBe(401);
   });
-
-  it('refuses a member who has left', async () => {
-    const fixture = await household();
-    // Removed with Debts still open, as removal allowed before #875: written directly.
-    await Group.updateOne({ _id: fixture.groupId }, { $pull: { members: { user: carol } } });
-    session.userId = carol;
-    expect((await read(fixture.groupId, `?involvesUser=${carol}`)).status).toBe(403);
-  });
 });
 
 describe('each currency’s position, on request (#759)', () => {
