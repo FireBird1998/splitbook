@@ -1531,6 +1531,8 @@ switch off has no such document and generates exactly as before.
 
 A Group that disappears after route admission is refused with **403 `FORBIDDEN`**, including a single payment; it is not a server fault.
 
+A new single payment rechecks the current actor and both parties at commit: **403 `FORBIDDEN`** if the actor left, or **422 `INVALID_MEMBERS`** if its payer or recipient left. Nothing is recorded when that final check refuses.
+
 | Method | Path                           | Description       |
 | ------ | ------------------------------ | ----------------- |
 | POST   | `/api/groups/[id]/settlements` | Record settlement |

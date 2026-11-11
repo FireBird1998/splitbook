@@ -109,7 +109,9 @@ export function recordCommonPaths(recording: Recording) {
     await recording.interleave(recording.archive);
   });
   it('actor leaves between the checks and the commit', async () => {
-    await recording.interleave(() => recording.remove(alex));
+    const recorded = await recording.interleave(() => recording.remove(alex));
+    if (recording.writer === 'single-settlement')
+      expect((recorded.answers as Answer).status).toBe(403);
   });
   it('named person leaves between the checks and the commit', async () => {
     if (recording.writer === 'recurring-expense') await recording.readAs('priya');
@@ -121,11 +123,13 @@ export function recordCommonPaths(recording: Recording) {
             splitBetween: [{ user: sam }, { user: priya }],
           }
         : {};
-    await recording.interleave(
+    const recorded = await recording.interleave(
       () => recording.remove(sam),
       changes,
       recording.writer === 'edit' || recording.writer === 'restore' ? 1 : recording.fenceNumber,
     );
+    if (recording.writer === 'single-settlement')
+      expect((recorded.answers as Answer).status).toBe(422);
   });
   it('two requests race with the same retry identity', async () => {
     const transaction = mongoose.connection.transaction.bind(mongoose.connection);

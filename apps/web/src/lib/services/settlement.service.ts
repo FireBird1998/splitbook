@@ -53,7 +53,7 @@ export class SettlementService {
       model: Settlement,
       transactions: 'allow-standalone',
       compatibility: {
-        membership: 'before-retry',
+        membership: 'before-retry-and-at-commit',
         standaloneArchive: 'fence-only',
       },
       command: () => command,

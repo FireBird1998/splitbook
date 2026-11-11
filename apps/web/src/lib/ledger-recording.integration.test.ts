@@ -135,27 +135,33 @@ describe('ledger recording', () => {
   it.each([
     ['actor', alice],
     ['named person', bob],
-  ])('can preserve a recording when the %s leaves after its pre-retry check', async (_, person) => {
-    const transaction = mongoose.connection.transaction.bind(mongoose.connection);
-    vi.spyOn(mongoose.connection, 'transaction').mockImplementationOnce(async (write, options) => {
-      await mongoose.connection
-        .db!.collection<IGroupDocument>('groups')
-        .updateOne(
-          { _id: new Types.ObjectId(groupId) },
-          { $pull: { members: { user: new Types.ObjectId(person) } } },
-        );
-      return transaction(write, options);
-    });
-    await record(randomUUID(), {
-      compatibility: { membership: 'before-retry' },
-    });
-    expect(await Expense.countDocuments()).toBe(1);
-    const event = await Activity.findOne({ type: 'expense_added' }).select('+notificationContext');
-    expect(event!.notificationContext!.recipientIds).toEqual(person === bob ? [] : [bob]);
-  });
-  it('can preserve pre-retry membership checks without checking again at the commit', async () => {
+  ])(
+    'refuses a payment recording when the %s leaves after its admission check',
+    async (_, person) => {
+      const transaction = mongoose.connection.transaction.bind(mongoose.connection);
+      vi.spyOn(mongoose.connection, 'transaction').mockImplementationOnce(
+        async (write, options) => {
+          await mongoose.connection
+            .db!.collection<IGroupDocument>('groups')
+            .updateOne(
+              { _id: new Types.ObjectId(groupId) },
+              { $pull: { members: { user: new Types.ObjectId(person) } } },
+            );
+          return transaction(write, options);
+        },
+      );
+      await expect(
+        record(randomUUID(), {
+          compatibility: { membership: 'before-retry-and-at-commit' },
+        }),
+      ).rejects.toMatchObject({ message: person === alice ? 'FORBIDDEN' : 'INVALID_MEMBERS' });
+      expect(await Expense.countDocuments()).toBe(0);
+      expect(await Activity.countDocuments()).toBe(0);
+    },
+  );
+  it('still checks payment participants before ordinary replay until the retry policy is unified', async () => {
     const key = randomUUID();
-    const compatibility = { membership: 'before-retry' as const };
+    const compatibility = { membership: 'before-retry-and-at-commit' as const };
     const [saved] = await record(key, { compatibility });
     await Group.updateOne({ _id: groupId }, { $pull: { members: { user: bob } } });
     await expect(record(key, { compatibility })).rejects.toMatchObject({

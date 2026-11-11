@@ -71,11 +71,7 @@ export interface LedgerRecording<
   model: Model<T>;
   transactions: 'allow-standalone' | { required: Refusal };
   compatibility?: {
-    membership:
-      | 'before-retry'
-      | 'before-retry-and-at-commit'
-      | 'actor-before-retry'
-      | 'template-validated';
+    membership: 'before-retry-and-at-commit' | 'actor-before-retry' | 'template-validated';
     standaloneArchive?: 'fence-only';
     archive?: 'before-generation';
   };
@@ -208,11 +204,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
             !(await supportsGroupTransactions());
           if (!legacyStandalone) throw new Refusal('GROUP_ARCHIVED');
         }
-        if (
-          description.compatibility?.membership !== 'before-retry' &&
-          description.compatibility?.membership !== 'template-validated'
-        )
-          checkMembers(group);
+        if (description.compatibility?.membership !== 'template-validated') checkMembers(group);
         if (submission?.atCommit) {
           const receipt = await lookup();
           const concurrent = receipt ? await confirm(receipt, normalize(receipt)) : null;
