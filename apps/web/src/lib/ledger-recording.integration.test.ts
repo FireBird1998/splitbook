@@ -35,7 +35,7 @@ afterEach(() => {
 afterAll(db.teardown);
 
 // A minimal Expense description, independent of either production creation service.
-function record(
+function recordResult(
   key = randomUUID(),
   overrides: Partial<LedgerRecording<IExpenseDocument>> = {},
   alertSwitch: 'always' | 'payments' | 'expense-changes' = 'always',
@@ -88,6 +88,10 @@ function record(
       ];
     },
   });
+}
+
+async function record(...args: Parameters<typeof recordResult>) {
+  return (await recordResult(...args)).records;
 }
 
 describe('ledger recording', () => {
@@ -291,4 +295,14 @@ describe('ledger recording', () => {
     const stored = await Expense.findById(saved._id).select('+creationRequest');
     expect(stored!.creationRequest).toBeUndefined();
   });
+  it('reports whether a recording was created or already present', async () => {
+    const key = randomUUID();
+    const first = await recordResult(key);
+    const retry = await recordResult(key);
+    expect(first.created).toBe(true);
+    expect(retry.created).toBe(false);
+    expect(String(retry.records[0]._id)).toBe(String(first.records[0]._id));
+    expect(await Expense.countDocuments()).toBe(1);
+  });
+
 });
