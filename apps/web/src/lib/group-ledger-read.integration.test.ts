@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { Types } from 'mongoose';
+import type { CommandSucceededEvent } from 'mongodb';
 import Expense from './models/Expense';
 import Group from './models/Group';
 import RecurringExpense from './models/RecurringExpense';
@@ -9,8 +11,14 @@ import { expenseService } from './services/expense.service';
 import { balanceService } from './services/balance.service';
 import { Refusal } from '@splitbook/shared/refusals';
 import { readCases, readFixture, readIds } from './test-utils/reads/fixture';
-import { readGroupLedger, readGroupLedgers } from './group-ledger-read';
+import { readGroupLedger, readGroupLedgers, type LedgerReadGroup } from './group-ledger-read';
 
+// Observe the real database replies for the bounded-query regression below.
+if (process.env.TEST_MONGODB_URI) {
+  const uri = new URL(process.env.TEST_MONGODB_URI);
+  uri.searchParams.set('monitorCommands', 'true');
+  vi.stubEnv('TEST_MONGODB_URI', uri.href);
+}
 const fixture = readFixture('module');
 
 it('brings the admitted Household up to date before running its read', async () => {
@@ -475,4 +483,102 @@ it('materializes the one-Group ledger at the same instant the reader uses', asyn
     read: async (group) => (await Expense.find({ group: group._id })).map((row) => row.amount),
   });
   expect(amounts).toEqual([120]);
+});
+
+it('reads 51 projected Group documents for a page among 120 admitted Groups', async () => {
+  const access = await fixture.arrange('member');
+  await Group.deleteMany({});
+  await Group.insertMany(
+    Array.from({ length: 120 }, (_, index) => ({
+      _id: new Types.ObjectId((index + 1).toString(16).padStart(24, '0')),
+      name: `Group ${index + 1}`,
+      defaultCurrency: 'INR',
+      createdBy: access.actorId,
+      members: [{ user: access.actorId, role: 'admin' }],
+    })),
+  );
+  const client = Group.db.getClient();
+  const groupBatches: number[] = [];
+  let userReads = 0;
+  const observe = (event: CommandSucceededEvent) => {
+    const { cursor } = event.reply as {
+      cursor?: { ns: string; firstBatch?: unknown[]; nextBatch?: unknown[] };
+    };
+    if (!cursor) return;
+    if (cursor.ns === `${Group.db.name}.groups`)
+      groupBatches.push((cursor.firstBatch ?? cursor.nextBatch ?? []).length);
+    if (cursor.ns === `${Group.db.name}.users`) userReads++;
+  };
+  client.on('commandSucceeded', observe);
+  try {
+    const page = await readGroupLedgers({
+      actor: { kind: 'member', id: access.actorId },
+      archived: 'include',
+      recurring: 'recorded-only',
+      sort: { _id: 1 },
+      page: { limit: 51 },
+      fields: ['name'],
+      read: async (groups) => groups,
+    });
+    expectTypeOf(page).toEqualTypeOf<Pick<LedgerReadGroup, '_id' | 'name'>[]>();
+    expect(groupBatches).toEqual([51, 51]); // Admission, then the delivery-time id probe.
+    expect(userReads).toBe(0);
+    expect(page).toHaveLength(51);
+    expect(page[0]).toEqual({
+      _id: new Types.ObjectId('000000000000000000000001'),
+      name: 'Group 1',
+    });
+    expect(page[50].name).toBe('Group 51');
+  } finally {
+    client.off('commandSucceeded', observe);
+  }
+});
+
+it('refills an exclusive id page after access is revoked and keeps next consistent', async () => {
+  const access = await fixture.arrange('member');
+  await Group.deleteMany({});
+  const ids = Array.from(
+    { length: 7 },
+    (_, index) => new Types.ObjectId((index + 1).toString(16).padStart(24, '0')),
+  );
+  await Group.insertMany(
+    ids.map((_id, index) => ({
+      _id,
+      name: `Group ${index + 1}`,
+      defaultCurrency: 'INR',
+      createdBy: access.actorId,
+      members: [{ user: access.actorId, role: 'admin' }],
+    })),
+  );
+  // An exclusive cursor is an id boundary even after membership in that Group is gone.
+  await Group.updateOne({ _id: ids[0] }, { $set: { members: [] } });
+  const attempts: string[][] = [];
+  const result = await readGroupLedgers({
+    actor: { kind: 'member', id: access.actorId },
+    archived: 'include',
+    recurring: 'recorded-only',
+    sort: { _id: 1 },
+    page: { after: String(ids[0]), limit: 4 },
+    fields: ['name'],
+    read: async (groups) => {
+      attempts.push(groups.map((group) => group.name));
+      if (attempts.length === 1) await Group.updateOne({ _id: ids[1] }, { $set: { members: [] } });
+      return {
+        groups: groups.slice(0, 3).map((group) => group.name),
+        next: groups.length > 3 ? String(groups[2]._id) : null,
+      };
+    },
+  });
+  expect(attempts).toEqual([
+    ['Group 2', 'Group 3', 'Group 4', 'Group 5'],
+    ['Group 3', 'Group 4', 'Group 5', 'Group 6'],
+  ]);
+  expect(result).toEqual({ groups: ['Group 3', 'Group 4', 'Group 5'], next: String(ids[4]) });
+});
+
+it('requires the field type when an explicit result type selects fields', () => {
+  expectTypeOf(readGroupLedgers<number>)
+    .parameter(0)
+    .toHaveProperty('fields')
+    .toBeUndefined();
 });

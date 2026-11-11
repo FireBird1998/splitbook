@@ -74,61 +74,102 @@ export async function readGroupLedger<T>({
   return result;
 }
 
-export interface GroupLedgersRead<T> {
+type GroupReadField<Field> = undefined extends Field
+  ? keyof LedgerReadGroup
+  : Exclude<Field, undefined>;
+
+export type GroupLedgersRead<T, Field extends keyof LedgerReadGroup | undefined = undefined> = {
   actor: LedgerReadActor;
   archived: 'include' | 'exclude';
   deletionMarker?: GroupLedgerRead<T>['deletionMarker'];
   recurring?: GroupLedgerRead<T>['recurring'];
   now?: Date;
   sort?: Partial<Record<'name' | 'updatedAt' | '_id', 1 | -1>>;
-  /** Every selected Group must be admitted, in the supplied order, before generation. */
-  groupIds?: readonly string[];
-  read: (groups: LedgerReadGroup[], storedGroups: IGroupDocument[]) => Promise<T>;
-}
+  /**
+   * Select Group fields with `_id`. Selecting members also populates them.
+   * Infer Field, or supply it alongside an explicit result type.
+   */
+  fields?: readonly Exclude<Field, undefined>[] & (undefined extends Field ? never : unknown);
+  read: (
+    groups: Pick<LedgerReadGroup, GroupReadField<Field> | '_id'>[],
+    storedGroups: Pick<IGroupDocument, GroupReadField<Field> | '_id'>[],
+  ) => Promise<T>;
+} &
+  /** An exclusive id boundary and query limit, applied with this read's sort. */
+  (| { groupIds?: never; page?: { after?: string; limit: number } }
+    /** Every selected Group must be admitted, in the supplied order, before generation. */
+    | { groupIds: readonly string[]; page?: never }
+  );
 
 /** Read the ledger over the Groups the actor may currently see. */
-export async function readGroupLedgers<T>({
+export async function readGroupLedgers<
+  T,
+  Field extends keyof LedgerReadGroup | undefined = undefined,
+>({
   actor,
   archived,
   deletionMarker = 'refuse',
   recurring = 'materialize',
   now = new Date(),
   groupIds,
+  page,
+  fields,
   sort = {},
   read,
-}: GroupLedgersRead<T>): Promise<T> {
+}: GroupLedgersRead<T, Field>): Promise<T> {
   const access = {
     $and: [
       groupAccess(actor, { archived, deletionMarker }),
       ...(groupIds ? [{ _id: { $in: [...groupIds] } }] : []),
+      ...(page?.after ? [{ _id: { $gt: page.after } }] : []),
     ],
   };
   await connectDB();
-  let storedGroups = await Group.find(access).sort(sort).lean();
-  if (groupIds) {
-    const byId = new Map(storedGroups.map((group) => [String(group._id), group]));
-    storedGroups = groupIds.map((id) => {
-      const group = byId.get(id);
-      if (!group) throw groupReadRefusal(actor);
-      return group;
-    });
-  }
-  let groups = await Group.populate<{ members: LedgerReadGroup['members'] }>(
-    storedGroups.map((group) => ({
-      ...group,
-      members: group.members.map((member) => ({ ...member })),
-    })),
-    { path: 'members.user', select: PERSON_FIELDS, options: { lean: true } },
-  );
-  if (recurring === 'materialize')
-    await recurringExpenseService.generateDueExpensesForGroups(
-      storedGroups.map((group) => String(group._id)),
-      now,
-    );
-  // Aggregates and capped lists must be read again over the surviving Groups.
-  // The set only shrinks: at most one re-read per initially admitted Group.
+  const revoked = new Set<string>();
+  const materialized = new Set<string>();
+  const load = async () => {
+    let storedGroups = await Group.find(
+      revoked.size ? { $and: [access, { _id: { $nin: [...revoked] } }] } : access,
+    )
+      .sort(sort)
+      .limit(page?.limit ?? 0)
+      .select(fields ? ['_id', ...fields].join(' ') : '')
+      .lean();
+    if (groupIds) {
+      const byId = new Map(storedGroups.map((group) => [String(group._id), group]));
+      storedGroups = groupIds.map((id) => {
+        const group = byId.get(id);
+        if (!group) throw groupReadRefusal(actor);
+        return group;
+      });
+    }
+    const groups: (IGroupDocument | LedgerReadGroup)[] =
+      fields && !fields.some((field) => field === 'members')
+        ? storedGroups
+        : await Group.populate<{ members: LedgerReadGroup['members'] }>(
+            storedGroups.map((group) => ({
+              ...group,
+              members: group.members.map((member) => ({ ...member })),
+            })),
+            { path: 'members.user', select: PERSON_FIELDS, options: { lean: true } },
+          );
+    if (recurring === 'materialize') {
+      await recurringExpenseService.generateDueExpensesForGroups(
+        storedGroups.map((group) => String(group._id)).filter((id) => !materialized.has(id)),
+        now,
+      );
+      storedGroups.forEach((group) => materialized.add(String(group._id)));
+    }
+    return { groups, storedGroups };
+  };
+  let { groups, storedGroups } = await load();
+  // Recompute aggregates and capped lists over admitted Groups.
+  // Page queries exclude every Group whose access was revoked.
   while (true) {
-    const result = await read(groups, storedGroups);
+    const result = await read(
+      groups as Pick<LedgerReadGroup, GroupReadField<Field> | '_id'>[],
+      storedGroups,
+    );
     const current = await Group.find({
       $and: [access, { _id: { $in: storedGroups.map((group) => group._id) } }],
     })
@@ -137,8 +178,15 @@ export async function readGroupLedgers<T>({
     const admitted = new Set(current.map((group) => String(group._id)));
     if (storedGroups.every((group) => admitted.has(String(group._id)))) return result;
     if (groupIds) throw groupReadRefusal(actor);
-    storedGroups = storedGroups.filter((group) => admitted.has(String(group._id)));
-    groups = groups.filter((group) => admitted.has(String(group._id)));
+    if (page) {
+      storedGroups
+        .filter((group) => !admitted.has(String(group._id)))
+        .forEach((group) => revoked.add(String(group._id)));
+      ({ groups, storedGroups } = await load());
+    } else {
+      storedGroups = storedGroups.filter((group) => admitted.has(String(group._id)));
+      groups = groups.filter((group) => admitted.has(String(group._id)));
+    }
   }
 }
 
