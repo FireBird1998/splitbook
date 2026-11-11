@@ -800,13 +800,9 @@ export default function RecurringExpensesSection({
                             onChange={(e) =>
                               setEntry({
                                 ...entry,
-                                participantIds: members
-                                  .filter(({ user }) =>
-                                    user._id === member.user._id
-                                      ? e.target.checked
-                                      : entry.participantIds.includes(user._id),
-                                  )
-                                  .map(({ user }) => user._id),
+                                participantIds: e.target.checked
+                                  ? [...new Set([...entry.participantIds, member.user._id])]
+                                  : entry.participantIds.filter((id) => id !== member.user._id),
                               })
                             }
                             size="small"

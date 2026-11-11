@@ -216,11 +216,23 @@ async function read(
         tree('JPY', [people[1], { id: 'a00000000000000000000004', name: 'New Person' }]),
       ),
     );
-    await act(async () => root().findAllByType(Checkbox)[0].props.onChange({target: {checked: false}}));
-    await act(async () => root().findAllByType(Checkbox)[0].props.onChange({target: {checked: true}}));
+    await act(async () =>
+      root()
+        .findAllByType(Checkbox)[0]
+        .props.onChange({ target: { checked: false } }),
+    );
+    await act(async () =>
+      root()
+        .findAllByType(Checkbox)[0]
+        .props.onChange({ target: { checked: true } }),
+    );
     await act(async () => renderer!.update(tree()));
     expect(root().findAllByType(Checkbox)[0].props.checked).toBe(true);
-    await act(async () => renderer!.update(tree('JPY', [people[1], {id: 'a00000000000000000000004', name: 'New Person'}])));
+    await act(async () =>
+      renderer!.update(
+        tree('JPY', [people[1], { id: 'a00000000000000000000004', name: 'New Person' }]),
+      ),
+    );
     // Existing boxes follow the latest Group; newly arriving members get boxes on the next open.
     expect(root().findAllByType(Checkbox)).toHaveLength(1);
   }
