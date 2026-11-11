@@ -1,25 +1,9 @@
 import { parseAmountMinor, parseDecimalUnits } from './exact-money';
-import type { ExpenseSplitMethod } from './split-calculation';
 
-/**
- * One version of an Expense as an edit form holds it: the entered text, with members by id.
- * A conflicting edit is compared and reviewed against the latest saved Expense through these.
- */
-export interface ExpenseEntries {
-  amount: string;
-  currency: string;
-  description: string;
-  date: string;
-  payerId: string;
-  multiPayer: boolean;
-  payers: { user: string; amount: string }[];
-  splitMethod: ExpenseSplitMethod;
-  splitValues: Record<string, string>;
-  participantIds: string[];
-  tagId: string;
-  category: string;
-  notes: string;
-}
+import type { ExpenseEntry } from './expense-entry';
+
+/** The review's entry is the same typed Expense entry the form holds and the device stores. */
+export type ExpenseEntries = ExpenseEntry;
 
 /** Money is never merged automatically between two versions of an Expense (ADR 0004). */
 export const expenseMoneyFields = ['amount', 'payers', 'split'] as const;
