@@ -9,7 +9,7 @@ import { expenseService } from './services/expense.service';
 import { balanceService } from './services/balance.service';
 import { Refusal } from '@splitbook/shared/refusals';
 import { readCases, readFixture, readIds } from './test-utils/reads/fixture';
-import { readGroupLedger } from './group-ledger-read';
+import { readGroupLedger, readGroupLedgers } from './group-ledger-read';
 
 const fixture = readFixture('module');
 
@@ -313,4 +313,148 @@ it('withholds an admin result after demotion during the read', async () => {
     },
   });
   await expect(result).rejects.toMatchObject({ code: 'FORBIDDEN' });
+});
+
+it('reads only the member’s admitted Groups across the ledger', async () => {
+  const access = await fixture.arrange('member');
+  await expect(
+    readGroupLedgers({
+      actor: { kind: 'member', id: access.actorId },
+      archived: 'exclude',
+      recurring: 'recorded-only',
+      read: async (groups) => groups.map((group) => group.name),
+    }),
+  ).resolves.toEqual(['Reads Household', 'Control Trip']);
+});
+it('recomputes a list’s aggregate after one Group revokes access during the read', async () => {
+  const access = await fixture.arrange('member');
+  const result = await readGroupLedgers({
+    actor: { kind: 'member', id: access.actorId },
+    archived: 'include',
+    recurring: 'recorded-only',
+    read: async (groups) => {
+      await Group.updateOne(
+        { _id: readIds.group },
+        { $pull: { members: { user: access.actorId } } },
+      );
+      return { total: groups.length, names: groups.map((group) => group.name) };
+    },
+  });
+  expect(result).toEqual({ total: 1, names: ['Control Trip'] });
+});
+it('materializes due Months before reading across Groups', async () => {
+  const access = await fixture.arrange('member');
+  const amounts = await readGroupLedgers({
+    actor: { kind: 'member', id: access.actorId },
+    archived: 'exclude',
+    now: fixture.clock,
+    read: async (groups) =>
+      (
+        await Expense.find({ group: { $in: groups.map((group) => group._id) } }).sort({ amount: 1 })
+      ).map((expense) => expense.amount),
+  });
+  expect(amounts).toEqual([45, 120, 600]);
+});
+it('refuses a selected list before generation when any Group cannot be admitted', async () => {
+  const access = await fixture.arrange('member');
+  await expect(
+    readGroupLedgers({
+      actor: { kind: 'member', id: access.actorId },
+      archived: 'include',
+      groupIds: [readIds.group, 'b10000000000000000000099'],
+      read: async (groups) => groups.map((group) => group.name),
+    }),
+  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  expect(await Expense.countDocuments({ recurringExpense: readIds.template })).toBe(0);
+});
+it('refuses the whole selected export when a Group revokes access during its read', async () => {
+  const access = await fixture.arrange('member');
+  await expect(
+    readGroupLedgers({
+      actor: { kind: 'member', id: access.actorId },
+      archived: 'include',
+      recurring: 'recorded-only',
+      groupIds: [readIds.control, readIds.group],
+      read: async (groups) => {
+        await Group.updateOne(
+          { _id: readIds.group },
+          { $pull: { members: { user: access.actorId } } },
+        );
+        return groups.map((group) => group.name);
+      },
+    }),
+  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+});
+it('keeps the read’s Group order when listing by name', async () => {
+  const access = await fixture.arrange('member');
+  await expect(
+    readGroupLedgers({
+      actor: { kind: 'member', id: access.actorId },
+      archived: 'include',
+      recurring: 'recorded-only',
+      sort: { name: 1, _id: 1 },
+      read: async (groups) => groups.map((group) => group.name),
+    }),
+  ).resolves.toEqual(['Control Trip', 'Reads Household']);
+});
+for (const archived of ['include', 'exclude'] as const)
+  it(`lists archived Groups with the ${archived} setting`, async () => {
+    const access = await fixture.arrange('archived');
+    const names = await readGroupLedgers({
+      actor: { kind: 'member', id: access.actorId },
+      archived,
+      recurring: 'recorded-only',
+      read: async (groups) => groups.map((group) => group.name),
+    });
+    expect(names).toEqual(
+      archived === 'include' ? ['Reads Household', 'Control Trip'] : ['Control Trip'],
+    );
+  });
+for (const deletionMarker of ['refuse', 'allow-retained-members'] as const)
+  it(`lists a retained-member deletion marker with ${deletionMarker}`, async () => {
+    const access = await fixture.arrange('deletion-marker');
+    const names = await readGroupLedgers({
+      actor: { kind: 'member', id: access.actorId },
+      archived: 'include',
+      deletionMarker,
+      recurring: 'recorded-only',
+      read: async (groups) => groups.map((group) => group.name),
+    });
+    expect(names).toEqual(
+      deletionMarker === 'refuse' ? ['Control Trip'] : ['Reads Household', 'Control Trip'],
+    );
+  });
+it('applies exclusions and the Assistant rule when listing an assistant’s Groups', async () => {
+  const access = await fixture.arrange('member');
+  await Group.updateOne({ _id: readIds.group }, { $set: { assistantRule: 'not_allowed' } });
+  const names = await readGroupLedgers({
+    actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [readIds.control] },
+    archived: 'include',
+    deletionMarker: 'allow-retained-members',
+    recurring: 'recorded-only',
+    read: async (groups) => groups.map((group) => group.name),
+  });
+  expect(names).toEqual([]);
+});
+it('answers across Groups with the recorded ledger when a due insertion fails', async () => {
+  const access = await fixture.arrange('member');
+  await Expense.db.db!.command({
+    collMod: 'expenses',
+    validator: { description: { $ne: 'Due rent' } },
+  });
+  try {
+    const amounts = await readGroupLedgers({
+      actor: { kind: 'member', id: access.actorId },
+      archived: 'exclude',
+      read: async (groups) =>
+        (
+          await Expense.find({ group: { $in: groups.map((group) => group._id) } }).sort({
+            amount: 1,
+          })
+        ).map((expense) => expense.amount),
+    });
+    expect(amounts).toEqual([45, 120]);
+  } finally {
+    await Expense.db.db!.command({ collMod: 'expenses', validator: {} });
+  }
 });
