@@ -1,0 +1,1292 @@
+{
+  "equal": {
+    "result": { "kind": "command", "value": {} },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 50, "amountMinor": 5000 },
+          { "user": "a00000000000000000000002", "amount": 50, "amountMinor": 5000 }
+        ]
+      }
+    }
+  },
+  "amounts": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "unequal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 40 },
+          { "user": "a00000000000000000000002", "amount": 60 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Enter what each person owes. Switching method clears these values. You ₹40.00 Sam Chen ₹60.00 Priya Shah Not included Adds up ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 4000, "a00000000000000000000002": 6000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 40, "amountMinor": 4000 },
+          { "user": "a00000000000000000000002", "amount": 60, "amountMinor": 6000 }
+        ]
+      }
+    }
+  },
+  "exact": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "exact",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 40 },
+          { "user": "a00000000000000000000002", "amount": 60 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Enter what each person owes. Switching method clears these values. You ₹40.00 Sam Chen ₹60.00 Priya Shah Not included Adds up ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 4000, "a00000000000000000000002": 6000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 40, "amountMinor": 4000 },
+          { "user": "a00000000000000000000002", "amount": 60, "amountMinor": 6000 }
+        ]
+      }
+    }
+  },
+  "percentage": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "percentage",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 40, "percentage": 40 },
+          { "user": "a00000000000000000000002", "amount": 60, "percentage": 60 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Enter each person’s percentage of the total. Switching method clears these values. You ₹40.00 % Sam Chen ₹60.00 % Priya Shah Not included Adds up 100% · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 4000, "a00000000000000000000002": 6000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          {
+            "user": "a00000000000000000000001",
+            "percentage": 40,
+            "amountMinor": 4000,
+            "amount": 40
+          },
+          {
+            "user": "a00000000000000000000002",
+            "percentage": 60,
+            "amountMinor": 6000,
+            "amount": 60
+          }
+        ]
+      }
+    }
+  },
+  "shares": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "shares",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 66.67, "shares": 2 },
+          { "user": "a00000000000000000000002", "amount": 33.33, "shares": 1 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Weights: 2 and 1 split the cost 2:1. Switching method clears these values. You ₹66.67 2 Sam Chen ₹33.33 1 Priya Shah Not included Adds up 3 shares · ₹100.00 allocated The leftover ₹0.01 goes to you so the total is exact.",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 6667, "a00000000000000000000002": 3333 },
+        "errors": {},
+        "status": {
+          "kind": "adds-up",
+          "leftover": { "amountMinor": 1, "users": ["a00000000000000000000001"] }
+        }
+      },
+      "roundingNote": "The leftover ₹0.01 goes to you so the total is exact.",
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "shares": 2, "amountMinor": 6667, "amount": 66.67 },
+          { "user": "a00000000000000000000002", "shares": 1, "amountMinor": 3333, "amount": 33.33 }
+        ]
+      }
+    }
+  },
+  "multiple-payers": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [
+          { "user": "a00000000000000000000001", "amount": 40 },
+          { "user": "a00000000000000000000002", "amount": 60 }
+        ],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 50 },
+          { "user": "a00000000000000000000002", "amount": 50 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people Enter what each person paid. Together it must equal ₹100.00. AR You Alex Rivera SC Sam Chen PS Priya Shah Adds up ₹100.00 of ₹100.00 Entries stay in your draft. Done or Back keeps them."
+      },
+      "paidBySummary": "2 people",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": true,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [
+          { "user": "a00000000000000000000001", "amount": 40, "amountMinor": 4000 },
+          { "user": "a00000000000000000000002", "amount": 60, "amountMinor": 6000 }
+        ],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
+          { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
+        ]
+      }
+    }
+  },
+  "leftover-cent": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 33.34 },
+          { "user": "a00000000000000000000002", "amount": 33.33 },
+          { "user": "a00000000000000000000003", "amount": 33.33 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹33.34 Sam Chen ₹33.33 Priya Shah ₹33.33 Adds up 3 people · ₹100.00 allocated The leftover ₹0.01 goes to you so the total is exact.",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": {
+          "a00000000000000000000001": 3334,
+          "a00000000000000000000002": 3333,
+          "a00000000000000000000003": 3333
+        },
+        "errors": {},
+        "status": {
+          "kind": "adds-up",
+          "leftover": { "amountMinor": 1, "users": ["a00000000000000000000001"] }
+        }
+      },
+      "roundingNote": "The leftover ₹0.01 goes to you so the total is exact.",
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 3334, "amount": 33.34 },
+          { "user": "a00000000000000000000002", "amountMinor": 3333, "amount": 33.33 },
+          { "user": "a00000000000000000000003", "amountMinor": 3333, "amount": 33.33 }
+        ]
+      }
+    }
+  },
+  "shares-partly-blank": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "shares",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 100, "shares": 2 },
+          { "user": "a00000000000000000000002", "amount": 0, "shares": 0 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Weights: 2 and 1 split the cost 2:1. Switching method clears these values. You ₹100.00 2 Sam Chen ₹0.00 0 Priya Shah Not included Adds up 2 shares · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 10000, "a00000000000000000000002": 0 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "shares": 2, "amountMinor": 10000, "amount": 100 },
+          { "user": "a00000000000000000000002", "shares": 0, "amountMinor": 0, "amount": 0 }
+        ]
+      }
+    }
+  },
+  "shares-all-blank": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "splitBetween", "message": "Total split weight must be positive" }]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Weights: 2 and 1 split the cost 2:1. Switching method clears these values. You 0 Sam Chen 0 Priya Shah Not included Give at least one person a share.",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": {},
+        "errors": {},
+        "status": { "kind": "problem", "message": "Give at least one person a share." }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": { "split": "Total split weight must be positive" },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "shares-one-zero": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "shares",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 100, "shares": 2 },
+          { "user": "a00000000000000000000002", "amount": 0, "shares": 0 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Weights: 2 and 1 split the cost 2:1. Switching method clears these values. You ₹100.00 2 Sam Chen ₹0.00 0 Priya Shah Not included Adds up 2 shares · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 10000, "a00000000000000000000002": 0 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "shares": 2, "amountMinor": 10000, "amount": 100 },
+          { "user": "a00000000000000000000002", "shares": 0, "amountMinor": 0, "amount": 0 }
+        ]
+      }
+    }
+  },
+  "shares-all-zero": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "splitBetween", "message": "Total split weight must be positive" }]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Weights: 2 and 1 split the cost 2:1. Switching method clears these values. You 0 Sam Chen 0 Priya Shah Not included Give at least one person a share.",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": {},
+        "errors": {},
+        "status": { "kind": "problem", "message": "Give at least one person a share." }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": { "split": "Total split weight must be positive" },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "shares-fractional": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "", "message": "Amount supports at most 0 decimal places" }]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Weights: 2 and 1 split the cost 2:1. Switching method clears these values. You 1.5 Use a whole number of shares. Sam Chen 1 Priya Shah Not included Correct the entry marked above.",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": {},
+        "errors": { "a00000000000000000000001": "Use a whole number of shares." },
+        "status": { "kind": "problem", "message": "Correct the entry marked above." }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": { "split": "Amount supports at most 0 decimal places" },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "payers-partly-blank": {
+    "result": { "kind": "command", "value": {} },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people Enter what each person paid. Together it must equal ₹100.00. AR You Alex Rivera SC Sam Chen PS Priya Shah Adds up ₹100.00 of ₹100.00 Entries stay in your draft. Done or Back keeps them."
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": true,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 50, "amountMinor": 5000 },
+          { "user": "a00000000000000000000002", "amount": 50, "amountMinor": 5000 }
+        ]
+      }
+    }
+  },
+  "payers-zero": {
+    "result": { "kind": "command", "value": {} },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people Enter what each person paid. Together it must equal ₹100.00. AR You Alex Rivera SC Sam Chen PS Priya Shah Adds up ₹100.00 of ₹100.00 Entries stay in your draft. Done or Back keeps them."
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": true,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": ["payers"],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 50, "amountMinor": 5000 },
+          { "user": "a00000000000000000000002", "amount": 50, "amountMinor": 5000 }
+        ]
+      }
+    }
+  },
+  "single-payer-blank": {
+    "result": { "kind": "command", "value": {} },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 0,
+        "remainingMinor": 10000,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 50, "amountMinor": 5000 },
+          { "user": "a00000000000000000000002", "amount": 50, "amountMinor": 5000 }
+        ]
+      }
+    }
+  },
+  "lone-listed-payer-blank": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "", "message": "At least one payer and participant are required" }]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people Enter what each person paid. Together it must equal ₹100.00. AR You Alex Rivera SC Sam Chen PS Priya Shah ₹100.00 still to assign ₹0.00 of ₹100.00 Entries stay in your draft. Done or Back keeps them. Give ₹100.00 to you"
+      },
+      "paidBySummary": "Choose who paid",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": true,
+        "totalMinor": 10000,
+        "assignedMinor": 0,
+        "remainingMinor": 10000,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": { "payers": "Choose who paid." },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "amounts-partly-blank": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "unequal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 100 },
+          { "user": "a00000000000000000000002", "amount": 0 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Enter what each person owes. Switching method clears these values. You ₹100.00 Sam Chen ₹0.00 Priya Shah Not included Adds up ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 10000, "a00000000000000000000002": 0 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 },
+          { "user": "a00000000000000000000002", "amount": 0, "amountMinor": 0 }
+        ]
+      }
+    }
+  },
+  "amounts-not-total": {
+    "result": {
+      "kind": "refusal",
+      "issues": [
+        { "field": "splitBetween", "message": "Split amounts must add up to the expense amount" }
+      ]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Enter what each person owes. Switching method clears these values. You ₹40.00 Sam Chen ₹40.00 Priya Shah Not included ₹20.00 still to assign ₹80.00 of ₹100.00",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 4000, "a00000000000000000000002": 4000 },
+        "errors": {},
+        "status": { "kind": "remaining", "unit": "amount", "entered": 8000, "target": 10000 }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": { "split": "Split amounts must add up to the expense amount" },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "percentage-partly-blank": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "percentage",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 100, "percentage": 100 },
+          { "user": "a00000000000000000000002", "amount": 0, "percentage": 0 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Enter each person’s percentage of the total. Switching method clears these values. You ₹100.00 % Sam Chen ₹0.00 % Priya Shah Not included Adds up 100% · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 10000, "a00000000000000000000002": 0 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          {
+            "user": "a00000000000000000000001",
+            "percentage": 100,
+            "amountMinor": 10000,
+            "amount": 100
+          },
+          { "user": "a00000000000000000000002", "percentage": 0, "amountMinor": 0, "amount": 0 }
+        ]
+      }
+    }
+  },
+  "percentage-not-total": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "splitBetween", "message": "Percentages must add up to 100" }]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Enter each person’s percentage of the total. Switching method clears these values. You ₹40.00 % Sam Chen ₹40.00 % Priya Shah Not included 20% still to assign 80% of 100%",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 4000, "a00000000000000000000002": 4000 },
+        "errors": {},
+        "status": { "kind": "remaining", "unit": "percent", "entered": 8000, "target": 10000 }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": { "split": "Percentages must add up to 100" },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "unreadable-amount": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Done Equal Amounts Percentage Shares Everyone included pays the same share. You Sam Chen Priya Shah Not included Enter a valid amount to see who owes what.",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": { "total": null, "shares": {}, "errors": {}, "status": { "kind": "no-amount" } },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": null,
+        "assignedMinor": 10000,
+        "remainingMinor": null,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": { "amount": "Use digits and one decimal point, such as 250.50." },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "unreadable-payer": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "paidBy.1.amount", "message": "Enter a valid decimal amount" }]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people Enter what each person paid. Together it must equal ₹100.00. AR You Alex Rivera SC Sam Chen Use digits and one decimal point, such as 250.50. PS Priya Shah Correct the marked amounts first. Entries stay in your draft. Done or Back keeps them."
+      },
+      "paidBySummary": "2 people",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": true,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": { "a00000000000000000000002": "invalid" },
+        "errors": {
+          "a00000000000000000000002": "Use digits and one decimal point, such as 250.50."
+        }
+      },
+      "corrections": { "payers": "Enter a valid decimal amount" },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "unreadable-split-amount": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "splitBetween.1.amount", "message": "Enter a valid decimal amount" }]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Enter what each person owes. Switching method clears these values. You ₹100.00 Sam Chen Use digits and one decimal point, such as 250.50. Priya Shah Not included Correct the entry marked above.",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 10000 },
+        "errors": {
+          "a00000000000000000000002": "Use digits and one decimal point, such as 250.50."
+        },
+        "status": { "kind": "problem", "message": "Correct the entry marked above." }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": { "split": "Enter a valid decimal amount" },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "unreadable-percentage": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Enter each person’s percentage of the total. Switching method clears these values. You % Sam Chen % Use digits and one decimal point, such as 33.5. Priya Shah Not included Correct the entry marked above.",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": {},
+        "errors": { "a00000000000000000000002": "Use digits and one decimal point, such as 33.5." },
+        "status": { "kind": "problem", "message": "Correct the entry marked above." }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": { "split": "Enter a valid decimal amount" },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "unreadable-share": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Weights: 2 and 1 split the cost 2:1. Switching method clears these values. You 2 Sam Chen 0 Use a whole number of shares. Priya Shah Not included Correct the entry marked above.",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": {},
+        "errors": { "a00000000000000000000002": "Use a whole number of shares." },
+        "status": { "kind": "problem", "message": "Correct the entry marked above." }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": { "split": "Enter a valid decimal amount" },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "unticked-typed-value": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "shares",
+        "splitBetween": [{ "user": "a00000000000000000000001", "amount": 100, "shares": 1 }]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Weights: 2 and 1 split the cost 2:1. Switching method clears these values. You ₹100.00 1 Sam Chen Not included Priya Shah Not included Adds up 1 share · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 10000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "shares": 1, "amountMinor": 10000, "amount": 100 }
+        ]
+      }
+    }
+  },
+  "no-participants": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "", "message": "At least one payer and participant are required" }]
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You Not included Sam Chen Not included Priya Shah Not included Choose at least one person to share this Expense.",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": {},
+        "errors": {},
+        "status": {
+          "kind": "problem",
+          "message": "Choose at least one person to share this Expense."
+        }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": { "split": "Choose at least one person to share this Expense." },
+      "payerDifferencesWithoutZero": [],
+      "money": null
+    }
+  },
+  "single-payer-field-differs": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 100,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000002", "amount": 100 }],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 50 },
+          { "user": "a00000000000000000000002", "amount": 50 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "Sam Chen",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": [],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000002", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
+          { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
+        ]
+      }
+    }
+  },
+  "saved-zero-payer-unchanged": {
+    "result": { "kind": "command", "value": { "notes": "Receipt checked" } },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people Enter what each person paid. Together it must equal ₹100.00. AR You Alex Rivera SC Sam Chen PS Priya Shah Adds up ₹100.00 of ₹100.00 Entries stay in your draft. Done or Back keeps them."
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": true,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": ["payers"],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [
+          { "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 },
+          { "user": "a00000000000000000000002", "amount": 0, "amountMinor": 0 }
+        ],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 50, "amountMinor": 5000 },
+          { "user": "a00000000000000000000002", "amount": 50, "amountMinor": 5000 }
+        ]
+      }
+    }
+  },
+  "saved-zero-payer-money-change": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "amount": 120,
+        "currency": "INR",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 120 }],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 60 },
+          { "user": "a00000000000000000000002", "amount": 60 }
+        ]
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹120.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹60.00 Sam Chen ₹60.00 Priya Shah Not included Adds up 2 people · ₹120.00 allocated",
+        "payers": "Who paid? Done One person Several people Enter what each person paid. Together it must equal ₹120.00. AR You Alex Rivera SC Sam Chen PS Priya Shah Adds up ₹120.00 of ₹120.00 Entries stay in your draft. Done or Back keeps them."
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 12000,
+        "shares": { "a00000000000000000000001": 6000, "a00000000000000000000002": 6000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": true,
+        "totalMinor": 12000,
+        "assignedMinor": 12000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "corrections": {},
+      "payerDifferencesWithoutZero": ["payers"],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 120,
+        "amountMinor": 12000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 120, "amountMinor": 12000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 6000, "amount": 60 },
+          { "user": "a00000000000000000000002", "amountMinor": 6000, "amount": 60 }
+        ]
+      }
+    }
+  },
+  "saved-zero-payer-conflict": {
+    "result": { "kind": "command", "value": {} },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people Enter what each person paid. Together it must equal ₹100.00. AR You Alex Rivera SC Sam Chen PS Priya Shah Adds up ₹100.00 of ₹100.00 Entries stay in your draft. Done or Back keeps them."
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": true,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "conflictReview": ["payers"],
+      "corrections": {},
+      "payerDifferencesWithoutZero": ["payers"],
+      "money": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [
+          { "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 },
+          { "user": "a00000000000000000000002", "amount": 0, "amountMinor": 0 }
+        ],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 50, "amountMinor": 5000 },
+          { "user": "a00000000000000000000002", "amount": 50, "amountMinor": 5000 }
+        ]
+      }
+    }
+  }
+}

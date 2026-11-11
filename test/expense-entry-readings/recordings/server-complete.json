@@ -1,0 +1,638 @@
+{
+  "equal": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001" },
+          { "user": "a00000000000000000000002" }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
+          { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
+        ]
+      }
+    }
+  },
+  "amounts": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "unequal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 40 },
+          { "user": "a00000000000000000000002", "amount": 60 }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 40, "amountMinor": 4000 },
+          { "user": "a00000000000000000000002", "amount": 60, "amountMinor": 6000 }
+        ]
+      }
+    }
+  },
+  "exact": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "exact",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 40 },
+          { "user": "a00000000000000000000002", "amount": 60 }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amount": 40, "amountMinor": 4000 },
+          { "user": "a00000000000000000000002", "amount": 60, "amountMinor": 6000 }
+        ]
+      }
+    }
+  },
+  "percentage": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "percentage",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "percentage": 40 },
+          { "user": "a00000000000000000000002", "percentage": 60 }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          {
+            "user": "a00000000000000000000001",
+            "percentage": 40,
+            "amountMinor": 4000,
+            "amount": 40
+          },
+          {
+            "user": "a00000000000000000000002",
+            "percentage": 60,
+            "amountMinor": 6000,
+            "amount": 60
+          }
+        ]
+      }
+    }
+  },
+  "shares": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "shares",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "shares": 2 },
+          { "user": "a00000000000000000000002", "shares": 1 }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "shares": 2, "amountMinor": 6667, "amount": 66.67 },
+          { "user": "a00000000000000000000002", "shares": 1, "amountMinor": 3333, "amount": 33.33 }
+        ]
+      }
+    }
+  },
+  "multiple-payers": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [
+          { "user": "a00000000000000000000001", "amount": 40 },
+          { "user": "a00000000000000000000002", "amount": 60 }
+        ],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001" },
+          { "user": "a00000000000000000000002" }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [
+          { "user": "a00000000000000000000001", "amount": 40, "amountMinor": 4000 },
+          { "user": "a00000000000000000000002", "amount": 60, "amountMinor": 6000 }
+        ],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
+          { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
+        ]
+      }
+    }
+  },
+  "leftover-cent": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001" },
+          { "user": "a00000000000000000000002" },
+          { "user": "a00000000000000000000003" }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 3334, "amount": 33.34 },
+          { "user": "a00000000000000000000002", "amountMinor": 3333, "amount": 33.33 },
+          { "user": "a00000000000000000000003", "amountMinor": 3333, "amount": 33.33 }
+        ]
+      }
+    }
+  },
+  "shares-partly-blank": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "shares",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "shares": 2 },
+          { "user": "a00000000000000000000002" }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "shares": 2, "amountMinor": 10000, "amount": 100 },
+          { "user": "a00000000000000000000002", "amountMinor": 0, "amount": 0 }
+        ]
+      }
+    }
+  },
+  "shares-all-blank": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "splitBetween", "message": "Total split weight must be positive" }]
+    }
+  },
+  "shares-one-zero": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "shares",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "shares": 2 },
+          { "user": "a00000000000000000000002", "shares": 0 }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "shares": 2, "amountMinor": 10000, "amount": 100 },
+          { "user": "a00000000000000000000002", "shares": 0, "amountMinor": 0, "amount": 0 }
+        ]
+      }
+    }
+  },
+  "shares-all-zero": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "splitBetween", "message": "Total split weight must be positive" }]
+    }
+  },
+  "shares-fractional": {
+    "result": {
+      "kind": "refusal",
+      "issues": [
+        {
+          "field": "splitBetween.0.shares",
+          "message": "Invalid input: expected int, received number"
+        }
+      ]
+    }
+  },
+  "payers-partly-blank": {
+    "result": {
+      "kind": "refusal",
+      "issues": [
+        {
+          "field": "paidBy.1.amount",
+          "message": "Invalid input: expected number, received undefined"
+        }
+      ]
+    }
+  },
+  "payers-zero": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [
+          { "user": "a00000000000000000000001", "amount": 100 },
+          { "user": "a00000000000000000000002", "amount": 0 }
+        ],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001" },
+          { "user": "a00000000000000000000002" }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [
+          { "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 },
+          { "user": "a00000000000000000000002", "amount": 0, "amountMinor": 0 }
+        ],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
+          { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
+        ]
+      }
+    }
+  },
+  "single-payer-blank": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001" },
+          { "user": "a00000000000000000000002" }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
+          { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
+        ]
+      }
+    }
+  },
+  "lone-listed-payer-blank": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001" },
+          { "user": "a00000000000000000000002" }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
+          { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
+        ]
+      }
+    }
+  },
+  "amounts-partly-blank": {
+    "result": {
+      "kind": "refusal",
+      "issues": [
+        {
+          "field": "splitBetween.1.amount",
+          "message": "Enter an amount for each person in the split"
+        }
+      ]
+    }
+  },
+  "amounts-not-total": {
+    "result": {
+      "kind": "refusal",
+      "issues": [
+        { "field": "splitBetween", "message": "Split amounts must add up to the expense amount" }
+      ]
+    }
+  },
+  "percentage-partly-blank": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "percentage",
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "percentage": 100 },
+          { "user": "a00000000000000000000002" }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          {
+            "user": "a00000000000000000000001",
+            "percentage": 100,
+            "amountMinor": 10000,
+            "amount": 100
+          },
+          { "user": "a00000000000000000000002", "amountMinor": 0, "amount": 0 }
+        ]
+      }
+    }
+  },
+  "percentage-not-total": {
+    "result": {
+      "kind": "refusal",
+      "issues": [{ "field": "splitBetween", "message": "Percentages must add up to 100" }]
+    }
+  },
+  "unreadable-amount": {
+    "result": {
+      "kind": "unsupported",
+      "reason": "A stored numeric Draft cannot hold unreadable typed text."
+    }
+  },
+  "unreadable-payer": {
+    "result": {
+      "kind": "unsupported",
+      "reason": "A stored numeric Draft cannot hold unreadable typed text."
+    }
+  },
+  "unreadable-split-amount": {
+    "result": {
+      "kind": "unsupported",
+      "reason": "A stored numeric Draft cannot hold unreadable typed text."
+    }
+  },
+  "unreadable-percentage": {
+    "result": {
+      "kind": "unsupported",
+      "reason": "A stored numeric Draft cannot hold unreadable typed text."
+    }
+  },
+  "unreadable-share": {
+    "result": {
+      "kind": "unsupported",
+      "reason": "A stored numeric Draft cannot hold unreadable typed text."
+    }
+  },
+  "unticked-typed-value": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "shares",
+        "splitBetween": [{ "user": "a00000000000000000000001", "shares": 1 }],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "shares": 1, "amountMinor": 10000, "amount": 100 }
+        ]
+      }
+    }
+  },
+  "no-participants": {
+    "result": {
+      "kind": "refusal",
+      "issues": [
+        { "field": "splitBetween", "message": "At least one person must be in the split" },
+        { "field": "amount", "message": "At least one payer and participant are required" }
+      ]
+    }
+  },
+  "single-payer-field-differs": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001" },
+          { "user": "a00000000000000000000002" }
+        ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
+          { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
+        ]
+      }
+    }
+  },
+  "saved-zero-payer-unchanged": {
+    "result": {
+      "kind": "unsupported",
+      "reason": "Completing a Draft creates an Expense; it does not edit a saved Expense."
+    }
+  },
+  "saved-zero-payer-money-change": {
+    "result": {
+      "kind": "unsupported",
+      "reason": "Completing a Draft creates an Expense; it does not edit a saved Expense."
+    }
+  },
+  "saved-zero-payer-conflict": {
+    "result": {
+      "kind": "unsupported",
+      "reason": "Completing a Draft creates an Expense; it does not edit a saved Expense."
+    }
+  }
+}
