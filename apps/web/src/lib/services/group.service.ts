@@ -94,15 +94,20 @@ type DepartureBlock =
 
 export class GroupService {
   /** Request-scoped title read; the page supplies generic metadata when access is refused. */
-  getMemberName = cache(async (groupId: string, userId: string) =>
-    readGroupLedger({
-      actor: { kind: 'member', id: userId },
-      groupId,
-      deletionMarker: 'allow-retained-members',
-      recurring: 'recorded-only',
-      read: async (group) => ({ name: group.name }),
-    }),
-  );
+  getMemberName = cache(async (groupId: string, userId: string) => {
+    try {
+      return await readGroupLedger({
+        actor: { kind: 'member', id: userId },
+        groupId,
+        deletionMarker: 'allow-retained-members',
+        recurring: 'recorded-only',
+        read: async (group) => ({ name: group.name }),
+      });
+    } catch (cause) {
+      if (cause instanceof Refusal && cause.code === 'FORBIDDEN') return null;
+      throw cause;
+    }
+  });
 
   /** A valid public invitation may name its Group without loading its members. */
   getInviteName = cache(async (code: string) => {

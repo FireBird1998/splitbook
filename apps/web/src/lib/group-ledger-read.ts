@@ -123,7 +123,7 @@ export async function readGroupLedgers<T>({
       now,
     );
   // Aggregates and capped lists must be read again over the surviving Groups.
-  // The set only shrinks, so even repeated revocations finish after at most one pass per Group.
+  // The set only shrinks: at most one re-read per initially admitted Group.
   while (true) {
     const result = await read(groups, storedGroups);
     const current = await Group.find({
