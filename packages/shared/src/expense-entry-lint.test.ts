@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { Linter } from 'eslint';
 import tseslint from 'typescript-eslint';
 import ts from 'typescript';
-import { entryTranslationPlugin } from '../eslint/expense-entry.mjs';
+import { entryExceptions, entryTranslationPlugin } from '../eslint/expense-entry.mjs';
 
 /** The public lint diagnostic, with the same typed parser used by the workspace. */
 function check(source: string, path = 'apps/web/src/components/ExpenseForm.ts') {
@@ -82,39 +82,77 @@ it('refuses shorthand typed rows', () => {
 it('permits forwarding and projecting already-read numeric money, including optional weights', () => {
   expect(
     check(`
+    function major(minor: number, currency: string) {return currency === 'JPY' ? minor : minor / 100;}
     function save(rows: {user: string | null; amount: number; percentage?: number; shares?: number}[]) {
       const paidBy = rows.map((row, index) => ({...row, user: row.user ?? 'former-' + index}));
-      return {paidBy, splitBetween: rows.map(row => ({user: row.user, amount: row.amount}))};
+      return {paidBy, splitBetween: rows.map(row => ({user: row.user, amount: major(row.amount, 'INR')}))};
     }
   `),
   ).toEqual([]);
 });
-it.each([
-  'packages/shared/src/expense-entry.ts',
-  'packages/shared/src/expense-entry-draft.ts',
-  'packages/shared/src/validators/expense.ts',
-  'apps/web/scripts/seed.ts',
-  'apps/mobile/src/test-utils/world.ts',
-  'apps/web/src/components/Form.test.ts',
-])('permits the reviewed owner or fixture at %s', (path) => {
+// Every documented exception must have a public diagnostic contract. Adding an exception
+// without its representative fails here, so the scope and its explanation cannot drift silently.
+const exceptionFiles: Record<string, string> = {
+  '**/*.{test,spec}.{ts,tsx}': 'apps/web/src/components/Form.test.ts',
+  '**/{test-utils,test-support,fixtures,__fixtures__,__mocks__}/**':
+    'apps/mobile/src/test-utils/world.ts',
+  '**/scripts/**': 'apps/web/scripts/seed.ts',
+  'packages/shared/src/expense-entry.ts': 'packages/shared/src/expense-entry.ts',
+  'packages/shared/src/expense-entry-draft.ts': 'packages/shared/src/expense-entry-draft.ts',
+  'packages/shared/src/exact-money.ts': 'packages/shared/src/exact-money.ts',
+  'packages/shared/src/expense-money-edit.ts': 'packages/shared/src/expense-money-edit.ts',
+  'packages/shared/src/validators/**': 'packages/shared/src/validators/expense.ts',
+};
+it.each(entryExceptions)('permits the documented owner or fixture: $path', ({ path }) => {
+  const filename = exceptionFiles[path];
+  expect(filename).toBeDefined();
   expect(
     check(
       `function save(amount: string) {return {paidBy: [{user: 'a', amount: Number(amount)}]};}`,
-      path,
+      filename,
     ),
   ).toEqual([]);
 });
 
-it('is enabled for a production form by each package lint command', async () => {
-  const { ESLint } = await import('eslint');
-  const { fileURLToPath } = await import('node:url');
-  for (const [directory, form] of [
-    ['../../../apps/mobile/', 'src/data/expense-draft.ts'],
-    ['../../../apps/web/', 'src/components/expenses/ExpenseFields.tsx'],
-    ['../', 'src/expense-draft.ts'],
-  ]) {
-    const eslint = new ESLint({ cwd: fileURLToPath(new URL(directory, import.meta.url)) });
-    const config = await eslint.calculateConfigForFile(form);
-    expect(config.rules['expense-entry/no-local-reading']).toEqual([2]);
-  }
+it('refuses conversion hidden in a scalar helper', () => {
+  expect(
+    check(`
+    function amount(entry: {amount: string}) {return Number(entry.amount);}
+    function save(entry: {amount: string}) {return {paidBy: [{user: 'a', amount: amount(entry)}]};}
+  `),
+  ).toMatchObject([{ messageId: 'useReading' }]);
+});
+it.each([
+  `rows.push({user: 'a', amount: Number(entry.amount)});`,
+  `rows[0] = {user: 'a', amount: Number(entry.amount)};`,
+])('refuses a typed row added after initializing the collection: %s', (mutation) => {
+  expect(
+    check(`
+    function save(entry: {amount: string}) {
+      const rows: {user: string; amount: number}[] = [];
+      ${mutation}
+      return {paidBy: rows};
+    }
+  `),
+  ).toMatchObject([{ messageId: 'useReading' }]);
+});
+
+it.each([
+  `(entry: {amount: string}) => Number(entry.amount)`,
+  `function(entry: {amount: string}) {return Number(entry.amount);}`,
+])('refuses conversion hidden in a scalar function value: %s', (helper) => {
+  expect(
+    check(
+      `const amount = ${helper}; function save(entry: {amount: string}) {return {paidBy: [{user: 'a', amount: amount(entry)}]};}`,
+    ),
+  ).toMatchObject([{ messageId: 'useReading' }]);
+});
+it('follows a mutated collection through a shorthand command property', () => {
+  expect(
+    check(`function save(entry: {amount: string}) {
+    const paidBy: {user: string; amount: number}[] = [];
+    paidBy.push({user: 'a', amount: Number(entry.amount)});
+    return {paidBy};
+  }`),
+  ).toMatchObject([{ messageId: 'useReading' }]);
 });

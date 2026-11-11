@@ -87,12 +87,14 @@ export const entryTranslationPlugin = {
         const checker = services.program.getTypeChecker();
         // Mobile and shared use different TypeScript majors; TypeFlags are not stable between them.
         const stringType = (type) =>
-          type.intrinsicName === 'string' ||
-          type.isStringLiteral() ||
+          checker.typeToString(checker.getBaseTypeOfLiteralType(type)) === 'string' ||
           ((type.isUnion() || type.isIntersection()) && type.types.some(stringType));
         const stringValue = (node) => stringType(checker.getTypeAtLocation(unwrap(node)));
         function declarations(node) {
-          let symbol = checker.getSymbolAtLocation(node);
+          let symbol =
+            ts.isShorthandPropertyAssignment(node.parent) && node.parent.name === node
+              ? checker.getShorthandAssignmentValueSymbol(node.parent)
+              : checker.getSymbolAtLocation(node);
           if (
             symbol?.declarations?.some(
               (declaration) => ts.isImportSpecifier(declaration) || ts.isImportClause(declaration),
@@ -115,8 +117,35 @@ export const entryTranslationPlugin = {
               )
                 return true;
           }
-          if (ts.isCallExpression(node))
-            return !!node.arguments[0] && convertedText(node.arguments[0], seen);
+          if (ts.isCallExpression(node)) {
+            // Money formatters also take a currency string; only the value argument is input.
+            if (node.arguments[0] && convertedText(node.arguments[0], seen)) return true;
+            for (const declaration of declarations(node.expression)) {
+              if (exempt(declaration.getSourceFile().fileName)) continue;
+              const body =
+                declaration.body ??
+                (ts.isVariableDeclaration(declaration) &&
+                declaration.initializer &&
+                (ts.isArrowFunction(declaration.initializer) ||
+                  ts.isFunctionExpression(declaration.initializer))
+                  ? declaration.initializer.body
+                  : null);
+              if (!body) continue;
+              if (!ts.isBlock(body) && convertedText(body, seen)) return true;
+              let found = false;
+              const returnedText = (part) => {
+                if (
+                  ts.isReturnStatement(part) &&
+                  part.expression &&
+                  convertedText(part.expression, seen)
+                )
+                  found = true;
+                if (!found) part.forEachChild(returnedText);
+              };
+              returnedText(body);
+              if (found) return true;
+            }
+          }
           if (ts.isPrefixUnaryExpression(node)) return convertedText(node.operand, seen);
           if (ts.isBinaryExpression(node))
             return convertedText(node.left, seen) || convertedText(node.right, seen);
@@ -149,6 +178,33 @@ export const entryTranslationPlugin = {
                 unsafe(declaration.initializer, seen)
               )
                 return true;
+              // Array mutations can fill an initially empty command collection later.
+              // Resolve the binding, rather than treating a same-spelled row list as its alias.
+              if (ts.isVariableDeclaration(declaration)) {
+                let changed = false;
+                const binding = checker.getSymbolAtLocation(declaration.name);
+                const sameBinding = (value) =>
+                  ts.isIdentifier(value) && checker.getSymbolAtLocation(value) === binding;
+                const mutation = (part) => {
+                  if (
+                    ts.isCallExpression(part) &&
+                    ts.isPropertyAccessExpression(part.expression) &&
+                    sameBinding(part.expression.expression) &&
+                    ['push', 'unshift', 'splice'].includes(part.expression.name.text)
+                  )
+                    changed ||= part.arguments.some((argument) => unsafe(argument, seen));
+                  if (
+                    ts.isBinaryExpression(part) &&
+                    part.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                    ts.isElementAccessExpression(part.left) &&
+                    sameBinding(part.left.expression)
+                  )
+                    changed ||= unsafe(part.right, seen);
+                  if (!changed) part.forEachChild(mutation);
+                };
+                mutation(declaration.getSourceFile());
+                if (changed) return true;
+              }
               if (
                 (ts.isFunctionDeclaration(declaration) || ts.isMethodDeclaration(declaration)) &&
                 declaration.body &&

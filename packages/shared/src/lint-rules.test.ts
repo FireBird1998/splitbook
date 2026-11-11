@@ -9,6 +9,8 @@ let eslint: ESLint;
 beforeAll(async () => {
   eslint = new ESLint();
   expect(await eslint.findConfigFile()).toMatch(/packages[\\/]shared[\\/]eslint\.config\.mjs$/);
+  // Build the typed lint program once in setup, outside each small rule-example's timeout.
+  await eslint.lintText('export {};', { filePath: 'src/lint-sample.ts' });
 });
 
 async function lint(code: string, filePath = 'src/lint-sample.ts') {
