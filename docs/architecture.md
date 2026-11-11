@@ -303,28 +303,51 @@ Client Component
 in `src/lib/group-ledger-read.ts` own read admission and delivery-time access checks.
 They pass the admitted Group to the read; a route or projection must not repeat
 its membership lookup. Writes keep their access checks in their recording or
-Group mutation, not in this read module. `pnpm check:reads` enforces that boundary,
+Group mutation, not in this read module. `pnpm check:reads` rejects local membership gates and external generator calls,
 with exact reviewed sites for writes, projections, notifications and maintenance.
+A new unguarded Expense query can pass the check. Reviewers verify that each ledger
+read enters the module.
 Connected assistant reads also use these operations with an assistant actor.
 Across reads accept `page` for an exclusive id cursor and query limit, and `fields`
 for projected Group columns. `_id` accompanies projections. Selecting members
 populates them. Page delivery rechecks access and refills after an observed revocation.
 
-**Ledger generation (#1126):** every Group ledger read records due recurring
-Expenses before it reads data. This includes Group details, Expenses (also one
-Expense), Balances, Insights, Trip summary, payments, Group and Home Activity,
-search, duplicate warnings, Draft review, To review, Home balances, spending,
-exports and the Debt calculated before recording a payment. The assistant money tools `group_balances` and `group_spending` generate
-and may send the usual notifications to other involved members, attributed
-to the template creator. This follows the owner's 12 November clarification.
+Every ledger read brings due recurring Expenses up to date through the read module.
+The owner clarified assistant money-tool parity on 12 November 2026.
 
-Metadata operations (`readGroupMetadata`, `readGroupsMetadata`) retain the
-same admission and delivery checks but avoid generation: rate suggestions,
-invite links, assistant reach, Tags and receipts, currencies, recurring-template
-settings, private Draft listings, page titles, the Groups list and assistant
-approval choices show no saved Expense, total or Activity entry. The member's
-latest manual-Expense currency in the Groups list explicitly excludes generated
-Expenses. Assistant Group listing, context and all Draft tools use these metadata operations.
+| Read                                                                       | Recurring generation                                       |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Member Group detail, Expenses and one Expense                              | Yes                                                        |
+| Member Balances, Insights and Trip summary                                 | Yes, with the Theme's existing eligibility                 |
+| Group Activity and Home Activity                                           | Yes                                                        |
+| Search                                                                     | Yes                                                        |
+| Duplicate warning when adding an Expense                                   | Yes                                                        |
+| Draft review and To review                                                 | Yes, before comparing saved Expenses                       |
+| Payments list                                                              | Yes                                                        |
+| Debt for a new batch or cross-currency single payment                      | Yes, after receipt lookup and before its write transaction |
+| Same-currency single payment and a confirmed payment receipt               | No Debt calculation                                        |
+| Home balances and member spending                                          | Yes                                                        |
+| Export and statement                                                       | Yes                                                        |
+| Rate suggestion                                                            | Metadata admission                                         |
+| Invite link                                                                | Metadata admission                                         |
+| Admin assistant reach                                                      | Metadata admission                                         |
+| Tags and Tag-action receipt                                                | Metadata admission                                         |
+| Currency settings                                                          | Metadata admission                                         |
+| Recurring-template settings                                                | Metadata admission                                         |
+| Private Draft list                                                         | Metadata admission                                         |
+| Page titles                                                                | Metadata admission                                         |
+| Groups list                                                                | Metadata admission                                         |
+| Assistant approval list                                                    | Metadata admission                                         |
+| Assistant `group_balances` and `group_spending`                            | Yes                                                        |
+| Assistant `list_groups` and `group_context`                                | Metadata admission                                         |
+| Assistant `list_drafts`, `create_drafts`, `replace_draft`, `discard_draft` | Metadata admission, followed by each Draft operation       |
+| Assistant `connection_status`                                              | No Group read                                              |
+
+The two assistant money tools may cause the usual notifications to other involved
+members. Generation attributes the Expense and Activity to the template creator and
+applies the no-self-alert rule. The Groups list's latest manual-Expense currency
+explicitly excludes recurring Expenses. Metadata operations use `readGroupMetadata`
+and `readGroupsMetadata` for actor admission and delivery checks.
 
 The across operations support exclusive-id `page`, `fields` projections and
 bounded refill after revocation. Assistant `list_groups` still queries 51

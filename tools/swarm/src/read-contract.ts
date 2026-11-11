@@ -19,17 +19,61 @@ export interface AllowedReadSite {
 }
 
 const modulePath = 'apps/web/src/lib/group-ledger-read.ts';
-function owner(node: ts.Node): string {
+function owner(node: ts.Node, owners: ReadonlyMap<ts.Node, string>): string {
   for (let parent = node.parent; parent; parent = parent.parent) {
-    if ((ts.isFunctionDeclaration(parent) || ts.isMethodDeclaration(parent)) && parent.name)
-      return parent.name.getText();
-    if (
-      (ts.isArrowFunction(parent) || ts.isFunctionExpression(parent)) &&
-      ts.isVariableDeclaration(parent.parent)
-    )
-      return parent.parent.name.getText();
+    const found = owners.get(parent);
+    if (found) return found;
   }
-  return '';
+  return '<module>';
+}
+
+/** Kind, lexical container and a local ordinal give every function its own exception identity. */
+function functionOwners(nodes: readonly ts.Node[]) {
+  const owners = new Map<ts.Node, string>();
+  const counts = new Map<string, number>();
+  for (const node of nodes) {
+    if (
+      !(
+        ts.isFunctionDeclaration(node) ||
+        ts.isMethodDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isArrowFunction(node) ||
+        ts.isGetAccessorDeclaration(node) ||
+        ts.isSetAccessorDeclaration(node) ||
+        ts.isConstructorDeclaration(node)
+      )
+    )
+      continue;
+    let name =
+      ts.isArrowFunction(node) || ts.isConstructorDeclaration(node)
+        ? undefined
+        : node.name?.getText();
+    if (
+      !name &&
+      (ts.isVariableDeclaration(node.parent) ||
+        ts.isPropertyAssignment(node.parent) ||
+        ts.isPropertyDeclaration(node.parent))
+    )
+      name = node.parent.name.getText();
+    if (ts.isMethodDeclaration(node)) {
+      const container = node.parent;
+      if ((ts.isClassDeclaration(container) || ts.isClassExpression(container)) && container.name)
+        name = `${container.name.text}.${name}`;
+      else if (
+        ts.isObjectLiteralExpression(container) &&
+        ts.isVariableDeclaration(container.parent)
+      )
+        name = `${container.parent.name.getText()}.${name}`;
+    }
+    const outer = owner(node, owners);
+    const label = `${ts.SyntaxKind[node.kind]} ${name ?? '<callback>'}`;
+    const identity = outer === '<module>' ? label : `${outer}/${label}`;
+    const key = `${node.getSourceFile().fileName}/${identity}`;
+    const ordinal = (counts.get(key) ?? 0) + 1;
+    counts.set(key, ordinal);
+    owners.set(node, `${identity}#${ordinal}`);
+  }
+  return owners;
 }
 
 /** Keep read admission and materialization together; exceptions describe one reviewed site. */
@@ -40,6 +84,7 @@ export function checkReadSources(
   const { nodes, symbol, checker } = bindSources(
     inputs.filter((file) => isRecordingSource(file.path)),
   );
+  const owners = functionOwners(nodes);
   function origins(
     node: ts.Node,
     match: (node: ts.Node) => boolean,
@@ -108,19 +153,18 @@ export function checkReadSources(
       (ts.isBindingElement(node) && (node.propertyName ?? node.name).getText() === name)
     );
   }
+  const mutatedFilters = new Set<ts.Symbol>();
+  function membershipPath(node: ts.Node): boolean {
+    const key = ts.isComputedPropertyName(node) ? node.expression : node;
+    return /^members(?:\.|$)/.test(literal(key) ?? (ts.isIdentifier(key) ? key.text : ''));
+  }
   function membershipFilter(node: ts.Node, seen = new Set<ts.Node>()): boolean {
     if (seen.has(node)) return false;
     seen.add(node);
     return origins(node, (value) => {
-      if (
-        ts.isPropertyAssignment(value) &&
-        /^members(?:\.|$)/.test(
-          ts.isComputedPropertyName(value.name)
-            ? (literal(value.name.expression) ?? '')
-            : value.name.getText().replace(/^['"]|['"]$/g, ''),
-        )
-      )
-        return true;
+      const binding = symbol(ts.isVariableDeclaration(value) ? value.name : value);
+      if (binding && mutatedFilters.has(binding)) return true;
+      if (ts.isPropertyAssignment(value) && membershipPath(value.name)) return true;
       let found = false;
       value.forEachChild((child) => {
         if (membershipFilter(child, seen)) found = true;
@@ -128,17 +172,27 @@ export function checkReadSources(
       return found;
     });
   }
-  function groupModel(node: ts.Node): boolean {
-    return origins(
-      node,
-      (value) =>
-        value.getSourceFile().fileName.endsWith('/lib/models/Group.ts') ||
-        (ts.isCallExpression(value) &&
-          property(value.expression, 'collection') &&
-          !!value.arguments[0] &&
-          ts.isStringLiteralLike(value.arguments[0]) &&
-          value.arguments[0].text === 'groups'),
-    );
+  function groupModel(node: ts.Node, seen = new Set<ts.Node>()): boolean {
+    if (seen.has(node)) return false;
+    seen.add(node);
+    return origins(node, (value) => {
+      if (value.getSourceFile().fileName.endsWith('/lib/models/Group.ts')) return true;
+      const target = receiver(value);
+      if (target && property(value, 'collection') && groupModel(target, seen)) return true;
+      if (!ts.isCallExpression(value)) return false;
+      if (
+        property(value.expression, 'collection') &&
+        value.arguments[0] &&
+        literal(value.arguments[0]) === 'groups'
+      )
+        return true;
+      const query = receiver(value.expression);
+      return (
+        !!query &&
+        ['find', 'findOne', 'findById', 'where'].some((name) => property(value.expression, name)) &&
+        groupModel(query, seen)
+      );
+    });
   }
   function receiver(node: ts.Node): ts.Node | undefined {
     if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
@@ -147,6 +201,59 @@ export function checkReadSources(
       const binding = node.parent.parent;
       if (ts.isVariableDeclaration(binding)) return binding.initializer;
     }
+  }
+  function memberList(node: ts.Node, seen = new Set<ts.Node>()): boolean {
+    if (seen.has(node)) return false;
+    seen.add(node);
+    return origins(node, (value) => {
+      if (property(value, 'members')) return true;
+      if (
+        ts.isNewExpression(value) &&
+        ts.isIdentifier(value.expression) &&
+        value.expression.text === 'Set' &&
+        value.arguments?.[0]
+      )
+        return memberList(value.arguments[0], seen);
+      if (
+        ts.isCallExpression(value) &&
+        ['map', 'filter'].some((name) => property(value.expression, name))
+      ) {
+        const target = receiver(value.expression);
+        return !!target && memberList(target, seen);
+      }
+      return false;
+    });
+  }
+  function contains(node: ts.Node, match: (value: ts.Node) => boolean): boolean {
+    return match(node) || !!node.forEachChild((child) => contains(child, match));
+  }
+  function comparesLoopMember(loop: ts.ForOfStatement): boolean {
+    const binding = ts.isVariableDeclarationList(loop.initializer)
+      ? loop.initializer.declarations[0]?.name
+      : loop.initializer;
+    if (!binding) return false;
+    const bindings = new Set<ts.Symbol>();
+    function collectBindings(value: ts.Node) {
+      const found = ts.isIdentifier(value) ? symbol(value) : undefined;
+      if (found) bindings.add(found);
+      value.forEachChild(collectBindings);
+    }
+    collectBindings(binding);
+    return contains(
+      loop.statement,
+      (value) =>
+        ts.isBinaryExpression(value) &&
+        [
+          ts.SyntaxKind.EqualsEqualsToken,
+          ts.SyntaxKind.EqualsEqualsEqualsToken,
+          ts.SyntaxKind.ExclamationEqualsToken,
+          ts.SyntaxKind.ExclamationEqualsEqualsToken,
+        ].includes(value.operatorToken.kind) &&
+        contains(value, (part) => {
+          const found = ts.isIdentifier(part) ? symbol(part) : undefined;
+          return !!found && bindings.has(found);
+        }),
+    );
   }
   function named(node: ts.Node, name: string, file: string): boolean {
     return origins(
@@ -190,6 +297,16 @@ export function checkReadSources(
       node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
       node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
     ) {
+      if (
+        (ts.isPropertyAccessExpression(node.left) && membershipPath(node.left.name)) ||
+        (ts.isElementAccessExpression(node.left) && membershipPath(node.left.argumentExpression))
+      ) {
+        origins(node.left.expression, (value) => {
+          const found = symbol(ts.isVariableDeclaration(value) ? value.name : value);
+          if (found) mutatedFilters.add(found);
+          return false;
+        });
+      }
       let target: ts.Node = node.left;
       while (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target))
         target = target.expression;
@@ -233,7 +350,7 @@ export function checkReadSources(
       path = source.fileName.slice(1);
     if (!path.startsWith('apps/web/src/') || path === modulePath) return;
     const site = sourceTokens(node.getText()),
-      within = owner(node);
+      within = owner(node, owners);
     const index = allowed.findIndex(
       (entry, index) =>
         !used.has(index) &&
@@ -255,6 +372,10 @@ export function checkReadSources(
       });
   }
   for (const node of nodes) {
+    if (ts.isForOfStatement(node) && memberList(node.expression) && comparesLoopMember(node)) {
+      report(node, 'membership');
+      continue;
+    }
     if (!ts.isCallExpression(node)) continue;
     if (
       ['getGroupInsights', 'getTripSummary'].some((name) =>
@@ -315,6 +436,8 @@ export function checkReadSources(
           groupModel(target) &&
           [
             'find',
+            'aggregate',
+            'where',
             'findOne',
             'exists',
             'findOneAndUpdate',
@@ -327,13 +450,17 @@ export function checkReadSources(
         );
       }) &&
         node.arguments[0] &&
-        membershipFilter(node.arguments[0])) ||
+        (membershipFilter(node.arguments[0]) ||
+          (origins(node.expression, (value) => property(value, 'where')) &&
+            membershipPath(node.arguments[0])))) ||
       origins(node.expression, (value) => {
         const target = receiver(value);
         return (
           !!target &&
-          ['some', 'find', 'filter', 'every'].some((name) => property(value, name)) &&
-          origins(target, (value) => property(value, 'members'))
+          ['some', 'find', 'filter', 'every', 'findIndex', 'includes', 'has'].some((name) =>
+            property(value, name),
+          ) &&
+          memberList(target)
         );
       })
     )
