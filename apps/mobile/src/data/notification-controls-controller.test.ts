@@ -333,7 +333,7 @@ describe('Settings notification controls at the controller/native seam', () => {
       expect(controller.getSnapshot().notifications.status).toBe(
         initial === 'granted' ? 'ready' : 'blocked',
       );
-      const confirmed = controller.getSnapshot().notifications.confirmed;
+      const confirmed = structuredClone(controller.getSnapshot().notifications.confirmed);
       const writesBeforeResume = writes.length;
       for (const method of ['permission', 'requestPermission', 'token', 'clear'] as const)
         notifications[method].mockClear();

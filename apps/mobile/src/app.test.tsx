@@ -205,8 +205,6 @@ function backend() {
     return undefined;
   });
   const phone = testPhone(server, {
-    // See flow-monitor.ts: real permission transitions are missing from the production table.
-    monitor: false,
     now: new Date(2026, 8, 27, 12).getTime(),
     newSubmissionKey: () => device.submissionKey,
     parts: {
@@ -3537,82 +3535,136 @@ describe('held update Banner in screen content', () => {
       expect(native.scrollTo).not.toHaveBeenCalled();
     },
   );
+  async function heldBanner(
+    destination: 'Home' | 'Group' | 'Group event',
+    status: 'held' | 'opening' | 'error' | 'idle',
+  ) {
+    const app = await renderApp((path) =>
+      path.startsWith('/api/notifications/device')
+        ? json({ data: notificationPreferences })
+        : undefined,
+    );
+    await settle(app.controller.openGroup(groupId));
+    await settle(app.controller.openExpense(groupId));
+    await settle(app.controller.tapNotification(notificationHint(user.id, groupId, app.clock.now)));
+    expect(app.controller.getSnapshot().notificationOpening.status).toBe('held');
+    const owner = app.controller.getSnapshot().heldNotification!;
+    await settle(app.controller.closeExpense());
+    if (destination === 'Home') await app.androidBack();
+    if (destination === 'Group event') {
+      await settle(app.controller.selectDestination('activity'));
+      await settle(app.controller.openActivityEvent('d00000000000000000000001', { scrollY: 0 }));
+    }
+    let opening: Promise<void> | undefined;
+    const checking = hold();
+    if (status === 'opening' || status === 'error') {
+      app.use((path) =>
+        path === `/api/groups/${groupId}`
+          ? status === 'opening'
+            ? checking.respond()
+            : json({ error: 'Fictional unavailable read' }, 500)
+          : undefined,
+      );
+      opening = app.controller.openPendingNotification();
+      await settle(status === 'opening' ? checking.reached : opening);
+    } else if (status === 'idle') app.controller.dismissPendingNotification(owner);
+    expect(app.controller.getSnapshot().notificationOpening.status).toBe(status);
+    return {
+      app,
+      owner,
+      finish: async () => {
+        app.use(() => undefined);
+        checking.release(json({ data: group }));
+        await settle(opening);
+      },
+    };
+  }
   for (const mode of ['light', 'dark'] as const) {
     for (const destination of ['Home', 'Group', 'Group event'] as const) {
       it.each(['held', 'opening', 'error', 'idle'] as const)(
         `${mode} ${destination}: %s`,
         async (status) => {
           runtime.appearance = { mode, status: 'ready', message: null };
-          const app = await renderApp();
-          if (destination !== 'Home') await settle(app.controller.openGroup(groupId));
-          if (destination === 'Group event') {
-            await settle(app.controller.selectDestination('activity'));
-            await settle(
-              app.controller.openActivityEvent('d00000000000000000000001', { scrollY: 0 }),
-            );
-          }
-          const owner = { generation: 1, accountId: user.id };
-          const snapshot = {
-            ...app.controller.getSnapshot(),
-            heldNotification: owner,
-            notificationOpening: { status, message: 'Legacy controller message' },
-          };
-          vi.spyOn(app.controller, 'getSnapshot').mockReturnValue(snapshot);
+          const { app, owner, finish } = await heldBanner(destination, status);
+          const readSnapshot = app.controller.getSnapshot;
+          const copies = new WeakMap<
+            ReturnType<typeof readSnapshot>,
+            ReturnType<typeof readSnapshot>
+          >();
+          // Change only legacy copy, keeping snapshots stable and every real state visible
+          // to React and the flow monitor while the access request is in flight.
+          const snapshotRead = vi.spyOn(app.controller, 'getSnapshot').mockImplementation(() => {
+            const current = readSnapshot();
+            if (!copies.has(current))
+              copies.set(current, {
+                ...current,
+                notificationOpening: {
+                  ...current.notificationOpening,
+                  message: 'Legacy controller message',
+                },
+              });
+            return copies.get(current)!;
+          });
           const open = vi.spyOn(app.controller, 'openPendingNotification').mockResolvedValue();
           const dismiss = vi
             .spyOn(app.controller, 'dismissPendingNotification')
             .mockImplementation(() => {});
-          act(() => screen!.unmount());
-          await mount();
-          const banners = app
-            .root()
-            .findAllByType(Banner)
-            .filter(
-              (node) =>
-                ['An update is ready', 'Couldn’t open the update'].includes(node.props.title) ||
-                node.props.message === 'Checking Group access…',
+          try {
+            act(() => screen!.unmount());
+            await mount();
+            const banners = app
+              .root()
+              .findAllByType(Banner)
+              .filter(
+                (node) =>
+                  ['An update is ready', 'Couldn’t open the update'].includes(node.props.title) ||
+                  node.props.message === 'Checking Group access…',
+              );
+            expect(banners).toHaveLength(status === 'idle' ? 0 : 1);
+            expect(app.text()).not.toContain('Legacy controller message');
+            if (status === 'idle') return;
+            const banner = banners[0];
+            expect(banner.props.standing).toBe(true);
+            expect(banner.props.tone).toBe(status === 'error' ? 'error' : 'info');
+            let ancestor = banner.parent;
+            while (ancestor && (ancestor.type as unknown) !== 'ScrollView')
+              ancestor = ancestor.parent;
+            expect(ancestor, 'Banner belongs inside the screen scroll content').not.toBeNull();
+            const colors = getSemanticTokens(mode);
+            const host = banner.findAll((node) => (node.type as unknown) === 'View')[0];
+            expect(host.props.style.backgroundColor).toBe(
+              status === 'error' ? colors.negative.bg : colors.info.bg,
             );
-          expect(banners).toHaveLength(status === 'idle' ? 0 : 1);
-          expect(app.text()).not.toContain('Legacy controller message');
-          if (status === 'idle') return;
-          const banner = banners[0];
-          expect(banner.props.standing).toBe(true);
-          expect(banner.props.tone).toBe(status === 'error' ? 'error' : 'info');
-          let ancestor = banner.parent;
-          while (ancestor && (ancestor.type as unknown) !== 'ScrollView')
-            ancestor = ancestor.parent;
-          expect(ancestor, 'Banner belongs inside the screen scroll content').not.toBeNull();
-          const colors = getSemanticTokens(mode);
-          const host = banner.findAll((node) => (node.type as unknown) === 'View')[0];
-          expect(host.props.style.backgroundColor).toBe(
-            status === 'error' ? colors.negative.bg : colors.info.bg,
-          );
-          expect(host.props.accessibilityState.busy).toBe(status === 'opening');
-          if (status === 'opening') {
-            expect(banner.findAllByType(BusyMark)).toHaveLength(1);
-            expect(banner.findAll((node) => (node.type as unknown) === 'Pressable')).toHaveLength(
-              0,
-            );
-          } else {
-            expect(banner.props.message).toBe(
-              status === 'held'
-                ? 'From a notification you opened earlier.'
-                : 'Check your connection and try again.',
-            );
-            await settle(
-              Promise.resolve(
-                banner
-                  .find(
-                    (node) =>
-                      (node.type as unknown) === 'Pressable' &&
-                      node.props.accessibilityLabel === (status === 'held' ? 'Open' : 'Retry'),
-                  )
-                  .props.onPress(),
-              ),
-            );
-            expect(open).toHaveBeenCalledOnce();
-            await app.press('Not now');
-            expect(dismiss).toHaveBeenCalledExactlyOnceWith(owner);
+            expect(host.props.accessibilityState.busy).toBe(status === 'opening');
+            if (status === 'opening') {
+              expect(banner.findAllByType(BusyMark)).toHaveLength(1);
+              expect(banner.findAll((node) => (node.type as unknown) === 'Pressable')).toHaveLength(
+                0,
+              );
+            } else {
+              expect(banner.props.message).toBe(
+                status === 'held'
+                  ? 'From a notification you opened earlier.'
+                  : 'Check your connection and try again.',
+              );
+              await settle(
+                Promise.resolve(
+                  banner
+                    .find(
+                      (node) =>
+                        (node.type as unknown) === 'Pressable' &&
+                        node.props.accessibilityLabel === (status === 'held' ? 'Open' : 'Retry'),
+                    )
+                    .props.onPress(),
+                ),
+              );
+              expect(open).toHaveBeenCalledOnce();
+              await app.press('Not now');
+              expect(dismiss).toHaveBeenCalledExactlyOnceWith(owner);
+            }
+          } finally {
+            snapshotRead.mockRestore();
+            await finish();
           }
         },
       );
