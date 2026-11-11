@@ -1,0 +1,12 @@
+{
+  "tagId": {
+    "kind": "refused",
+    "message": "tagId: Invalid Tag identity"
+  },
+  "tag": {
+    "kind": "draft",
+    "values": {
+      "tag": "Food"
+    }
+  }
+}

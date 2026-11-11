@@ -143,8 +143,12 @@ it('keeps a cleared named Tag unselected while the changed entry is being kept',
         'aria-pressed'
       ],
     ).toBe(false);
-    await act(async () => renderer!.root.findAllByType(Checkbox)[0].props.onChange());
-    await act(async () => renderer!.root.findAllByType(Checkbox)[0].props.onChange());
+    await act(async () =>
+      renderer!.root.findAllByType(Checkbox)[0].props.onChange({ target: { checked: false } }),
+    );
+    await act(async () =>
+      renderer!.root.findAllByType(Checkbox)[0].props.onChange({ target: { checked: true } }),
+    );
     expect(renderer!.root.findByType(ExpenseFields).props.entry.participantIds).toEqual([
       viewer,
       sam,

@@ -123,7 +123,9 @@ it('keeps existing row positions when a field unticks and reticks a participant'
 });
 
 it('keeps a phone Tag identity distinct from a form’s legacy named Tag', () => {
-  const entry = {...entries[0], tagId: 'Food'};
+  const entry = { ...entries[0], tagId: 'Food' };
   expect(() => draftForExpenseEntry(entry)).toThrow('tagId: Invalid Tag identity');
-  expect(draftForExpenseEntry(entry, {...expenseEntryPolicy, tagReference: 'identity-or-name'})).toMatchObject({tag: 'Food'});
+  expect(
+    draftForExpenseEntry(entry, { ...expenseEntryPolicy, tagReference: 'identity-or-name' }),
+  ).toMatchObject({ tag: 'Food' });
 });

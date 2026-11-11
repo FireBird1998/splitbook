@@ -1,18 +1,21 @@
 import type { IncompleteExpenseEntry } from './expense-entry';
 import { expenseEntryPolicy, type ExpenseEntryPolicy } from './expense-entry';
-type DraftEntries = Record<string, string>;
 import { expenseDraftValuesSchema, type ExpenseDraftValues } from './validators/expense-draft';
+
+type DraftEntries = Record<string, string>;
 
 export interface ExpenseDraftEntryPolicy {
   singlePayer: ExpenseEntryPolicy['singlePayer'];
   /** Sheet changes replace the split; a box edit retains the parts it didn't edit. */
   splitEdit?: 'replace' | 'patch';
   repeatedPeople?: 'keep' | 'merge';
+  tagReference?: 'identity' | 'identity-or-name';
 }
 export const fieldDraftEntryPolicy: ExpenseDraftEntryPolicy = {
   singlePayer: 'first-row',
   splitEdit: 'patch',
   repeatedPeople: 'merge',
+  tagReference: 'identity-or-name',
 };
 
 /** An incomplete Draft is kept as typed text; no amount is filled in for the member. */
@@ -75,7 +78,9 @@ export function draftForExpenseEntry(
   if (!update) {
     Object.assign(
       fields,
-      /^[a-f0-9]{24}$/i.test(entry.tagId) ? { tagId: entry.tagId } : { tag: entry.tagId },
+      policy.tagReference === 'identity-or-name' && !/^[a-f0-9]{24}$/i.test(entry.tagId)
+        ? { tag: entry.tagId }
+        : { tagId: entry.tagId },
     );
     fields.splitMethod = entry.splitMethod;
   } else if (update.changed.tagId) {

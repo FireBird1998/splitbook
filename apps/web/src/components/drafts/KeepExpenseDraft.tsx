@@ -10,8 +10,7 @@ import {
 } from '@splitbook/shared/validators/expense-draft';
 import { Alert, Button, Link, Stack, Typography } from '@mui/material';
 import type { ExpenseDraft } from '@splitbook/shared/expense-draft';
-import { draftForExpenseEntry } from '@splitbook/shared/expense-entry-draft';
-import { formSummaryPolicy } from '@splitbook/shared/expense-entry';
+import { draftForExpenseEntry, fieldDraftEntryPolicy } from '@splitbook/shared/expense-entry-draft';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import { toReviewHref } from '@splitbook/shared/api-paths';
 import { apiFetch } from '@/lib/utils/api-fetch';
@@ -101,7 +100,7 @@ export function useKeepExpenseDraft({
         return;
       }
       attemptValues.current = JSON.stringify(draft.entry);
-      await client.create(draftForExpenseEntry(draft.entry, formSummaryPolicy));
+      await client.create(draftForExpenseEntry(draft.entry, fieldDraftEntryPolicy));
       attemptValues.current = null;
       void mutate();
       void refresh(TO_REVIEW_KEY);
