@@ -26,7 +26,7 @@ export interface GroupLedgerRead<T> {
   /** Minimum Group role for this read. */
   requiredRole?: 'member' | 'admin';
   /** Preserve admission before request validation, and validation before any materialization. */
-  validate?: () => void;
+  validate?: (group: LedgerReadGroup, storedGroup: IGroupDocument) => void | NoInfer<T>;
   read: (group: LedgerReadGroup, storedGroup: IGroupDocument) => Promise<T>;
 }
 
@@ -74,9 +74,13 @@ export async function readGroupLedger<T>({
     { ...storedGroup, members: storedGroup.members.map((member) => ({ ...member })) },
     { path: 'members.user', select: PERSON_FIELDS, options: { lean: true } },
   );
-  validate?.();
-  if (recurring === 'materialize') await recurringExpenseService.generateDueExpenses(groupId);
-  const result = await read(group, storedGroup);
+  const validation = validate?.(group, storedGroup);
+  let result: T;
+  if (validation !== undefined) result = validation;
+  else {
+    if (recurring === 'materialize') await recurringExpenseService.generateDueExpenses(groupId);
+    result = await read(group, storedGroup);
+  }
   if (!(await Group.exists(access))) throw new Refusal('FORBIDDEN');
   return result;
 }

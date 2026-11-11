@@ -1,9 +1,9 @@
+import type { LedgerReadGroup } from '@/lib/group-ledger-read';
 import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import Settlement from '@/lib/models/Settlement';
 import User from '@/lib/models/User';
-import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { inSupportedCurrencies } from '@splitbook/shared/currency';
 import { assertStoredExpenseMoney, readStoredAmountMinor } from '@splitbook/shared/exact-money';
 import {
@@ -62,27 +62,24 @@ export type TripSummaryResult =
  *   when they have left the Group with a balance open, as Balances does; never by email.
  */
 export async function getTripSummary(
-  groupId: string,
+  groupOrId: string | LedgerReadGroup,
   userId: string,
-  {
-    timeZone,
-    currency: requestedCurrency,
-    now = new Date(),
-  }: { timeZone: string; currency?: string; now?: Date },
+  { timeZone, currency: requestedCurrency }: { timeZone: string; currency?: string; now?: Date },
 ): Promise<TripSummaryResult> {
+  const groupId = typeof groupOrId === 'string' ? groupOrId : String(groupOrId._id);
   // Fails before any read when the zone is wrong.
   const zone = readTimeZone(timeZone);
   await connectDB();
 
-  const group = await Group.findById(groupId)
-    .select('category defaultCurrency alternateCurrencies startDate endDate tags members')
-    .populate('members.user', 'name')
-    .lean();
+  const group =
+    typeof groupOrId === 'string'
+      ? await Group.findById(groupId)
+          .select('category defaultCurrency alternateCurrencies startDate endDate tags members')
+          .populate('members.user', 'name')
+          .lean()
+      : groupOrId;
   if (!group) return { kind: 'missing' };
   if (!hasTripSummary(group.category)) return { kind: 'not-a-trip' };
-
-  // Lazy-on-read, as the Group, Expense and Balances reads do. Never throws into the read.
-  await recurringExpenseService.generateDueExpenses(groupId, now);
 
   const [storedExpenses, storedSettlements] = await Promise.all([
     Expense.find({ group: groupId, isDeleted: false })

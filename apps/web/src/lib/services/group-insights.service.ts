@@ -1,10 +1,10 @@
+import type { IGroupDocument } from '@/lib/models/Group';
 import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import User from '@/lib/models/User';
 import { recurringExpensesEnabled } from '@/lib/recurring-expenses-switch';
-import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { CURRENCY_CODES, inSupportedCurrencies } from '@splitbook/shared/currency';
 import { assertStoredExpenseMoney, readStoredAmountMinor } from '@splitbook/shared/exact-money';
 import {
@@ -77,7 +77,7 @@ export interface GroupInsightsResponse extends Omit<GroupMonthInsights, 'biggest
  *   are unchanged: Android and older web clients read only those.
  */
 export async function getGroupInsights(
-  groupId: string,
+  groupOrId: string | IGroupDocument,
   userId: string,
   {
     month: requestedMonth,
@@ -87,19 +87,20 @@ export async function getGroupInsights(
     now = new Date(),
   }: { month?: MonthKey; compare: number; timeZone: string; currency?: string; now?: Date },
 ): Promise<GroupInsightsResponse | null> {
+  const groupId = typeof groupOrId === 'string' ? groupOrId : String(groupOrId._id);
   // Fails before any read when the zone is wrong.
   const zone = readTimeZone(timeZone);
   const month = requestedMonth ?? monthKeyInZone(now, zone);
   await connectDB();
 
-  // Lazy-on-read, as the Group, Expense and Balances reads do. It generates nothing while
-  // recurring Expenses are switched off, and never throws into the read.
-  await recurringExpenseService.generateDueExpenses(groupId, now);
   const recurringExpenses = recurringExpensesEnabled();
 
-  const group = await Group.findById(groupId)
-    .select('defaultCurrency alternateCurrencies createdAt tags members')
-    .lean();
+  const group =
+    typeof groupOrId === 'string'
+      ? await Group.findById(groupId)
+          .select('defaultCurrency alternateCurrencies createdAt tags members')
+          .lean()
+      : groupOrId;
   if (!group) return null;
 
   // Only an Expense in a supported currency starts the Group's Months (#820).

@@ -1,6 +1,6 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   error,
-  forbidden,
   getAuthUser,
   notFound,
   failedRead,
@@ -8,7 +8,6 @@ import {
   unauthorized,
   routeIds,
 } from '@/lib/utils/api-response';
-import { groupService } from '@/lib/services/group.service';
 import { getGroupInsights } from '@/lib/services/group-insights.service';
 import { readCompareMonths } from '@splitbook/shared/insights';
 import { CURRENCY_CODES } from '@splitbook/shared/currency';
@@ -35,42 +34,52 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!user) return unauthorized();
 
     const { id } = await routeIds(params);
-    const isMember = await groupService.isMember(id, user.id);
-    if (!isMember) return forbidden();
-
     const { searchParams } = new URL(req.url);
+    const month = searchParams.get('month') || null;
+    const currency = searchParams.get('currency') || null;
     let timeZone: string;
     let compare: number;
-    try {
-      timeZone = readTimeZone(searchParams.get('tz'));
-    } catch (err) {
-      if (err instanceof TimeZoneError) return error(err.message, 400, 'INVALID_TIME_ZONE');
-      throw err;
-    }
-    // Empty is unset, as for `compare`. Year 0 is refused so a year of earlier Months fits.
-    const month = searchParams.get('month') || null;
-    if (month !== null && (!isMonthKey(month) || month < '0001-01'))
-      return error('Send a Month as YYYY-MM, such as 2026-09.', 400, 'INVALID_MONTH');
-    try {
-      compare = readCompareMonths(searchParams.get('compare'));
-    } catch (err) {
-      if (err instanceof RangeError) return error(err.message, 400, 'INVALID_COMPARE');
-      throw err;
-    }
+    let now: Date;
+    return await readGroupLedger({
+      actor: { kind: 'member', id: user.id },
+      groupId: id,
+      deletionMarker: 'allow-retained-members',
+      recurring: 'materialize',
+      validate: () => {
+        try {
+          timeZone = readTimeZone(searchParams.get('tz'));
+        } catch (err) {
+          if (err instanceof TimeZoneError) return error(err.message, 400, 'INVALID_TIME_ZONE');
+          throw err;
+        }
+        // Empty is unset, as for `compare`. Year 0 is refused so a year of earlier Months fits.
+        if (month !== null && (!isMonthKey(month) || month < '0001-01'))
+          return error('Send a Month as YYYY-MM, such as 2026-09.', 400, 'INVALID_MONTH');
+        try {
+          compare = readCompareMonths(searchParams.get('compare'));
+        } catch (err) {
+          if (err instanceof RangeError) return error(err.message, 400, 'INVALID_COMPARE');
+          throw err;
+        }
 
-    // Empty is unset. Any supported code is read, a currency nothing was spent in as zeros.
-    const currency = searchParams.get('currency') || null;
-    if (currency !== null && !CURRENCY_CODES.includes(currency))
-      return error('Send a currency code, such as INR.', 400, 'INVALID_CURRENCY');
+        // Empty is unset. Any supported code is read, a currency nothing was spent in as zeros.
+        if (currency !== null && !CURRENCY_CODES.includes(currency))
+          return error('Send a currency code, such as INR.', 400, 'INVALID_CURRENCY');
 
-    const insights = await getGroupInsights(id, user.id, {
-      month: month ?? undefined,
-      compare,
-      timeZone,
-      currency: currency ?? undefined,
+        now = new Date();
+      },
+      read: async (_group, storedGroup) => {
+        const insights = await getGroupInsights(storedGroup, user.id, {
+          month: month ?? undefined,
+          now,
+          compare,
+          timeZone,
+          currency: currency ?? undefined,
+        });
+        if (!insights) return notFound('Group');
+        return success(insights);
+      },
     });
-    if (!insights) return notFound('Group');
-    return success(insights);
   } catch (err) {
     return failedRead(err, req);
   }
