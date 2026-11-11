@@ -189,11 +189,15 @@ export default function ExpenseFields({
   const countedPayers = multiPayer ? reading.payers.entries : payers;
   const payerName = memberName((multiPayer ? countedPayers[0]?.user : entry.payerId) || userId);
   // One payer is named even among several rows' mode, never "1 people paid" (#894).
-  const payerSummary = !countedPayers.length
-    ? 'Who paid?'
-    : multiPayer && countedPayers.length > 1
-      ? `${countedPayers.length}${NO_BREAK_SPACE}people paid`
-      : `${payerName} paid`;
+  const payerSummary = !multiPayer
+    ? entry.payerId
+      ? `${payerName} paid`
+      : 'Who paid?'
+    : !countedPayers.length
+      ? 'Who paid?'
+      : multiPayer && countedPayers.length > 1
+        ? `${countedPayers.length}${NO_BREAK_SPACE}people paid`
+        : `${payerName} paid`;
 
   const splitMethodLabel: Record<string, string> = {
     equal: 'Split equally',
@@ -277,7 +281,7 @@ export default function ExpenseFields({
     selectedMemberCount: participantIds.length,
     memberCount: members.length,
     multiPayerMode: multiPayer,
-    primaryPayerId: payers[0]?.user || userId,
+    primaryPayerId: (multiPayer ? payers[0]?.user : entry.payerId) || userId,
     currentUserId: userId,
   });
 
