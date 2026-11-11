@@ -200,6 +200,24 @@ export function readExpenseEntry(
     result = {
       kind: 'ready' as const,
       money,
+      // A recurring template stores the chosen weights, not today's allocated row amounts.
+      // Both projections come from this accepted reading; the caller retains its method name.
+      figures: {
+        amount: money.amount,
+        currency: money.currency,
+        paidBy: money.paidBy.map(({ user, amount }) => ({ user, amount })),
+        splitMethod: entry.splitMethod,
+        splitBetween: money.splitBetween.map((row) => ({
+          user: row.user,
+          ...(entry.splitMethod === 'exact' || entry.splitMethod === 'unequal'
+            ? { amount: row.amount }
+            : entry.splitMethod === 'percentage'
+              ? { percentage: 'percentage' in row ? row.percentage : undefined }
+              : entry.splitMethod === 'shares'
+                ? { shares: 'shares' in row ? row.shares : undefined }
+                : {}),
+        })),
+      },
       financialEdit:
         purpose.kind === 'new' ||
         decideExpenseMoneyEdit(purpose.saved, { ...money, splitMethod: entry.splitMethod })

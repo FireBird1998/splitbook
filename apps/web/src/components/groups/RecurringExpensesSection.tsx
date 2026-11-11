@@ -47,14 +47,13 @@ import {
 } from '@/components/expenses/expense-form-helpers';
 import type { GroupReadMember, GroupReadTag } from '@splitbook/shared/group-read';
 import type { IRecurringExpense, SplitMethod } from '@splitbook/shared/types';
-import { decideExpenseMoneyEdit } from '@splitbook/shared/expense-money-edit';
-import { formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
 import {
-  assertStoredExpenseMoney,
-  normalizeExpenseMoney,
-  parseAmountMinor,
-  toMajorAmount,
-} from '@splitbook/shared/exact-money';
+  readExpenseEntry,
+  recurringEntryPolicy,
+  type ExpenseEntry,
+} from '@splitbook/shared/expense-entry';
+import { formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
+import { assertStoredExpenseMoney } from '@splitbook/shared/exact-money';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { recurringRefusal } from '@/components/groups/recurring-refusal';
 import { RECURRING_SECTION_ID } from '@/components/groups/group-tabs';
@@ -69,26 +68,6 @@ interface RecurringExpensesSectionProps {
   /** The signed-in member, called "You" (#442). */
   viewerId: string;
   onNotify: (message: string) => void;
-}
-
-interface SplitDraft {
-  included: boolean;
-  amount: string;
-  percentage: string;
-  shares: string;
-}
-
-interface FormState {
-  description: string;
-  amount: string;
-  category: string;
-  tag: string;
-  paidByUser: string;
-  splitMethod: SplitMethod;
-  splits: Record<string, SplitDraft>;
-  dayOfMonth: string;
-  startsOn: string;
-  endsOn: string;
 }
 
 const SPLIT_METHOD_OPTIONS: Array<{ value: SplitMethod; label: string }> = [
@@ -111,65 +90,92 @@ function toDateInputValue(date: Date | string | null | undefined): string {
   return d.toISOString().split('T')[0];
 }
 
-function emptyForm(members: GroupReadMember[], activeTags: GroupReadTag[]): FormState {
-  const splits: Record<string, SplitDraft> = {};
-  for (const member of members) {
-    splits[member.user._id] = { included: true, amount: '', percentage: '', shares: '1' };
-  }
+function emptyEntry(
+  members: GroupReadMember[],
+  activeTags: GroupReadTag[],
+  currency: string,
+): ExpenseEntry {
   return {
     description: '',
     amount: '',
+    currency,
+    date: '',
     category: 'other',
-    tag: activeTags[0]?._id ?? '',
-    paidByUser: members[0]?.user._id ?? '',
+    tagId: activeTags[0]?._id ?? '',
+    payerId: members[0]?.user._id ?? '',
+    multiPayer: false,
+    payers: [],
     splitMethod: 'equal',
-    splits,
-    dayOfMonth: '1',
-    startsOn: toDateParam(new Date()),
-    endsOn: '',
+    splitValues: {},
+    participantIds: members.map((member) => member.user._id),
+    notes: '',
   };
 }
 
-function formFromTemplate(template: IRecurringExpense, members: GroupReadMember[]): FormState {
-  const base = emptyForm(members, []);
+// The recurring dialog retains a method's boxes when switching away and back. These are
+// interaction bookmarks, not another reading: only the active entry is shown and submitted.
+function methodValues(members: GroupReadMember[], template?: IRecurringExpense) {
   let storedMoney: ReturnType<typeof getStoredExpenseMoneyFields> | undefined;
-  try {
-    storedMoney = getStoredExpenseMoneyFields(template);
-  } catch {
-    // Invalid saved values remain visible for review; the problem badge explains
-    // why generation is stopped instead of silently repairing financial data.
+  if (template)
+    try {
+      storedMoney = getStoredExpenseMoneyFields(template);
+    } catch {
+      // Invalid saved values stay visible for review; don't silently repair the saved money.
+    }
+  const values: Record<'exact' | 'percentage' | 'shares', Record<string, string>> = {
+    exact: {},
+    percentage: {},
+    shares: {},
+  };
+  for (const { user } of members) {
+    const index =
+      template?.splitBetween.findIndex(
+        (s) => String(typeof s.user === 'object' ? s.user._id : s.user) === user._id,
+      ) ?? -1;
+    const split = template?.splitBetween[index];
+    values.exact[user._id] =
+      storedMoney?.splitBetween[index] ?? (split?.amount != null ? String(split.amount) : '');
+    values.percentage[user._id] = split?.percentage != null ? String(split.percentage) : '';
+    values.shares[user._id] = split?.shares != null ? String(split.shares) : '1';
   }
+  return { values, amount: storedMoney?.amount };
+}
+
+function entryFromTemplate(
+  template: IRecurringExpense,
+  members: GroupReadMember[],
+  currency: string,
+): ExpenseEntry {
+  const base = emptyEntry(members, [], currency);
+  const { values, amount } = methodValues(members, template);
   const payer = template.paidBy[0];
   const payerId = typeof payer?.user === 'object' ? payer.user._id : (payer?.user as string);
-  const splits: Record<string, SplitDraft> = { ...base.splits };
-  for (const member of members) {
-    const splitIndex = template.splitBetween.findIndex((s) => {
-      const id = typeof s.user === 'object' ? s.user._id : (s.user as string);
-      return String(id) === member.user._id;
-    });
-    const split = template.splitBetween[splitIndex];
-    splits[member.user._id] = {
-      included: !!split,
-      amount:
-        storedMoney?.splitBetween[splitIndex] ??
-        (split?.amount != null ? String(split.amount) : ''),
-      percentage: split?.percentage != null ? String(split.percentage) : '',
-      shares: split?.shares != null ? String(split.shares) : '1',
-    };
-  }
   return {
+    ...base,
     description: template.description,
-    amount: storedMoney?.amount ?? String(template.amount),
+    amount: amount ?? String(template.amount),
     category: template.category || 'other',
-    tag: template.tagId ?? template.tag,
-    paidByUser: payerId ? String(payerId) : base.paidByUser,
+    tagId: template.tagId ?? template.tag,
+    payerId: payerId ? String(payerId) : base.payerId,
     splitMethod: template.splitMethod,
-    splits,
-    dayOfMonth: String(template.dayOfMonth),
-    startsOn: toDateInputValue(template.startsOn),
-    endsOn: toDateInputValue(template.endsOn),
+    splitValues:
+      template.splitMethod === 'equal'
+        ? {}
+        : values[template.splitMethod === 'unequal' ? 'exact' : template.splitMethod],
+    participantIds: members
+      .filter(({ user }) =>
+        template.splitBetween.some(
+          (s) => String(typeof s.user === 'object' ? s.user._id : s.user) === user._id,
+        ),
+      )
+      .map(({ user }) => user._id),
   };
 }
+const scheduleFor = (template?: IRecurringExpense) => ({
+  dayOfMonth: template ? String(template.dayOfMonth) : '1',
+  startsOn: template ? toDateInputValue(template.startsOn) : toDateParam(new Date()),
+  endsOn: template ? toDateInputValue(template.endsOn) : '',
+});
 
 export default function RecurringExpensesSection({
   groupId,
@@ -198,7 +204,9 @@ export default function RecurringExpensesSection({
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<IRecurringExpense | null>(null);
-  const [form, setForm] = useState<FormState>(() => emptyForm(members, activeTags));
+  const [entry, setEntry] = useState(() => emptyEntry(members, activeTags, defaultCurrency));
+  const [schedule, setSchedule] = useState(() => scheduleFor());
+  const splitBookmarks = useRef(methodValues(members).values);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [formConflict, setFormConflict] = useState(false);
@@ -237,7 +245,9 @@ export default function RecurringExpensesSection({
 
   const openAddDialog = () => {
     setEditing(null);
-    setForm(emptyForm(members, activeTags));
+    setEntry(emptyEntry(members, activeTags, defaultCurrency));
+    setSchedule(scheduleFor());
+    splitBookmarks.current = methodValues(members).values;
     setFormError('');
     setFormConflict(false);
     setDialogOpen(true);
@@ -245,89 +255,51 @@ export default function RecurringExpensesSection({
 
   const openEditDialog = (template: IRecurringExpense) => {
     setEditing(template);
-    setForm(formFromTemplate(template, members));
+    setEntry(entryFromTemplate(template, members, defaultCurrency));
+    setSchedule(scheduleFor(template));
+    splitBookmarks.current = methodValues(members, template).values;
     setFormError('');
     setFormConflict(false);
     setDialogOpen(true);
   };
 
-  const setSplit = (userId: string, patch: Partial<SplitDraft>) => {
-    setForm((prev) => ({
-      ...prev,
-      splits: { ...prev.splits, [userId]: { ...prev.splits[userId], ...patch } },
-    }));
+  const setSplit = (userId: string, value: string) => {
+    setEntry((prev) => ({ ...prev, splitValues: { ...prev.splitValues, [userId]: value } }));
   };
-
+  const changeMethod = (method: SplitMethod) => {
+    const key = (value: SplitMethod) => (value === 'unequal' ? 'exact' : value);
+    if (entry.splitMethod !== 'equal')
+      splitBookmarks.current[key(entry.splitMethod) as 'exact' | 'percentage' | 'shares'] =
+        entry.splitValues;
+    setEntry({
+      ...entry,
+      splitMethod: method,
+      splitValues:
+        method === 'equal'
+          ? {}
+          : splitBookmarks.current[key(method) as 'exact' | 'percentage' | 'shares'],
+    });
+  };
+  const reading = readExpenseEntry(
+    entry,
+    editing ? { kind: 'edit', saved: editing } : { kind: 'new' },
+    recurringEntryPolicy,
+  );
   const validateForm = (): string | null => {
-    if (!form.description.trim()) return 'Description is required';
-    if (!form.tag) return 'Tag is required';
-    if (!form.paidByUser) return 'Choose who pays';
-    const included = members.filter((m) => form.splits[m.user._id]?.included);
-    if (included.length === 0) return 'Include at least one person in the split';
-    try {
-      resolveMoney();
-    } catch (err) {
-      return err instanceof Error ? err.message : 'Check the amount and split';
-    }
-    const day = Number(form.dayOfMonth);
+    if (!entry.description.trim()) return 'Description is required';
+    if (!entry.tagId) return 'Tag is required';
+    if (!entry.payerId) return 'Choose who pays';
+    if (!entry.participantIds.length) return 'Include at least one person in the split';
+    if (reading.result.kind === 'refused') return reading.result.problems[0].message;
+    const day = Number(schedule.dayOfMonth);
     if (!Number.isInteger(day) || day < 1 || day > 31) return 'Day of month must be 1–31';
-    if (!form.startsOn) return 'Start date is required';
-    if (form.endsOn && form.endsOn < form.startsOn)
+    if (!schedule.startsOn) return 'Start date is required';
+    if (schedule.endsOn && schedule.endsOn < schedule.startsOn)
       return 'End date must be on or after the start date';
     return null;
   };
-
-  const buildPayload = () => {
-    const amount = toMajorAmount(parseAmountMinor(form.amount, defaultCurrency), defaultCurrency);
-    const included = members.filter((m) => form.splits[m.user._id]?.included);
-    const splitBetween = included.map((m) => {
-      const draft = form.splits[m.user._id];
-      const entry: { user: string; amount?: number; percentage?: number; shares?: number } = {
-        user: m.user._id,
-      };
-      if (form.splitMethod === 'exact' || form.splitMethod === 'unequal') {
-        entry.amount = toMajorAmount(
-          parseAmountMinor(draft.amount, defaultCurrency),
-          defaultCurrency,
-        );
-      } else if (form.splitMethod === 'percentage') {
-        entry.percentage = Number(draft.percentage) || 0;
-      } else if (form.splitMethod === 'shares') {
-        entry.shares = Number(draft.shares) || 0;
-      }
-      return entry;
-    });
-    return {
-      description: form.description.trim(),
-      amount,
-      currency: defaultCurrency,
-      category: form.category,
-      ...(tags.some((tag) => tag._id === form.tag) || editing?.tagId === form.tag
-        ? { tagId: form.tag }
-        : { tag: form.tag }),
-      paidBy: [{ user: form.paidByUser, amount }],
-      splitMethod: form.splitMethod,
-      splitBetween,
-      dayOfMonth: Number(form.dayOfMonth),
-      startsOn: form.startsOn,
-      endsOn: form.endsOn || null,
-    };
-  };
-
-  const resolveMoney = () => {
-    const payload = buildPayload();
-    return editing
-      ? decideExpenseMoneyEdit(editing, payload).money
-      : normalizeExpenseMoney(payload);
-  };
-  const preview = (() => {
-    try {
-      return { money: resolveMoney(), error: '' };
-    } catch (err) {
-      return { money: null, error: err instanceof Error ? err.message : 'Invalid allocation' };
-    }
-  })();
-  const splitPreview = preview.money?.splitBetween ?? [];
+  const splitPreview = reading.result.kind === 'ready' ? reading.result.money.splitBetween : [];
+  const previewError = reading.result.kind === 'refused' ? reading.result.problems[0].message : '';
 
   const reloadLatest = async (target: 'form' | 'action') => {
     const id = target === 'form' ? editing?._id : selected?._id;
@@ -343,7 +315,9 @@ export default function RecurringExpensesSection({
         throw new Error('This recurring expense was deleted. Close this dialog to continue.');
       if (target === 'form') {
         setEditing(latest);
-        setForm(formFromTemplate(latest, members));
+        setEntry(entryFromTemplate(latest, members, defaultCurrency));
+        setSchedule(scheduleFor(latest));
+        splitBookmarks.current = methodValues(members, latest).values;
         setFormError('');
         setFormConflict(false);
       } else {
@@ -367,6 +341,8 @@ export default function RecurringExpensesSection({
       setFormError(validationMessage);
       return;
     }
+    if (reading.result.kind !== 'ready') return;
+    const { amount, currency, paidBy, splitMethod, splitBetween } = reading.result.figures;
     setSaving(true);
     setFormError('');
     try {
@@ -379,7 +355,21 @@ export default function RecurringExpensesSection({
           'Content-Type': 'application/json',
           ...(editing ? { 'X-Splitbook-Revision': String(editing.revision ?? 0) } : {}),
         },
-        body: JSON.stringify(buildPayload()),
+        body: JSON.stringify({
+          description: entry.description.trim(),
+          amount,
+          currency,
+          category: entry.category,
+          ...(tags.some((tag) => tag._id === entry.tagId) || editing?.tagId === entry.tagId
+            ? { tagId: entry.tagId }
+            : { tag: entry.tagId }),
+          paidBy,
+          splitMethod,
+          splitBetween,
+          dayOfMonth: Number(schedule.dayOfMonth),
+          startsOn: schedule.startsOn,
+          endsOn: schedule.endsOn || null,
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -690,8 +680,8 @@ export default function RecurringExpensesSection({
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
               label="Description"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              value={entry.description}
+              onChange={(e) => setEntry({ ...entry, description: e.target.value })}
               fullWidth
               size="small"
               placeholder="e.g. Rent"
@@ -701,8 +691,8 @@ export default function RecurringExpensesSection({
               <MoneyTextField
                 currency={defaultCurrency}
                 label="Amount"
-                value={form.amount}
-                onValueChange={(value) => setForm({ ...form, amount: value })}
+                value={entry.amount}
+                onValueChange={(value) => setEntry({ ...entry, amount: value })}
                 fullWidth
                 size="small"
                 slotProps={{
@@ -722,8 +712,8 @@ export default function RecurringExpensesSection({
               <TextField
                 select
                 label="Category"
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                value={entry.category}
+                onChange={(e) => setEntry({ ...entry, category: e.target.value })}
                 fullWidth
                 size="small"
               >
@@ -738,8 +728,8 @@ export default function RecurringExpensesSection({
               <TextField
                 select
                 label="Tag"
-                value={form.tag}
-                onChange={(e) => setForm({ ...form, tag: e.target.value })}
+                value={entry.tagId}
+                onChange={(e) => setEntry({ ...entry, tagId: e.target.value })}
                 fullWidth
                 size="small"
               >
@@ -752,8 +742,8 @@ export default function RecurringExpensesSection({
               <TextField
                 select
                 label="Paid by"
-                value={form.paidByUser}
-                onChange={(e) => setForm({ ...form, paidByUser: e.target.value })}
+                value={entry.payerId}
+                onChange={(e) => setEntry({ ...entry, payerId: e.target.value })}
                 fullWidth
                 size="small"
               >
@@ -767,8 +757,8 @@ export default function RecurringExpensesSection({
             <TextField
               select
               label="Split method"
-              value={form.splitMethod}
-              onChange={(e) => setForm({ ...form, splitMethod: e.target.value as SplitMethod })}
+              value={entry.splitMethod}
+              onChange={(e) => changeMethod(e.target.value as SplitMethod)}
               fullWidth
               size="small"
             >
@@ -795,16 +785,25 @@ export default function RecurringExpensesSection({
               </Typography>
               <Stack spacing={0.5}>
                 {members.map((member) => {
-                  const draft = form.splits[member.user._id];
-                  if (!draft) return null;
+                  const included = entry.participantIds.includes(member.user._id);
+                  const value = entry.splitValues[member.user._id] ?? '';
                   return (
                     <Stack key={member.user._id} direction="row" alignItems="center" spacing={1}>
                       <FormControlLabel
                         control={
                           <Checkbox
-                            checked={draft.included}
+                            checked={included}
                             onChange={(e) =>
-                              setSplit(member.user._id, { included: e.target.checked })
+                              setEntry({
+                                ...entry,
+                                participantIds: members
+                                  .filter(({ user }) =>
+                                    user._id === member.user._id
+                                      ? e.target.checked
+                                      : entry.participantIds.includes(user._id),
+                                  )
+                                  .map(({ user }) => user._id),
+                              })
                             }
                             size="small"
                           />
@@ -812,40 +811,38 @@ export default function RecurringExpensesSection({
                         label={member.user.name}
                         sx={{ flex: 1, minWidth: 0 }}
                       />
-                      {draft.included &&
-                        (form.splitMethod === 'exact' || form.splitMethod === 'unequal') && (
+                      {included &&
+                        (entry.splitMethod === 'exact' || entry.splitMethod === 'unequal') && (
                           <MoneyTextField
                             currency={defaultCurrency}
                             size="small"
                             label="Amount"
-                            value={draft.amount}
-                            onValueChange={(value) => setSplit(member.user._id, { amount: value })}
+                            value={value}
+                            onValueChange={(value) => setSplit(member.user._id, value)}
                             sx={{ width: 120 }}
                             slotProps={{
                               htmlInput: { inputMode: precision === 0 ? 'numeric' : 'decimal' },
                             }}
                           />
                         )}
-                      {draft.included && form.splitMethod === 'percentage' && (
+                      {included && entry.splitMethod === 'percentage' && (
                         <TextField
                           type="number"
                           size="small"
                           label="%"
-                          value={draft.percentage}
-                          onChange={(e) =>
-                            setSplit(member.user._id, { percentage: e.target.value })
-                          }
+                          value={value}
+                          onChange={(e) => setSplit(member.user._id, e.target.value)}
                           sx={{ width: 96 }}
                           slotProps={{ htmlInput: { min: 0, max: 100 } }}
                         />
                       )}
-                      {draft.included && form.splitMethod === 'shares' && (
+                      {included && entry.splitMethod === 'shares' && (
                         <TextField
                           type="number"
                           size="small"
                           label="Shares"
-                          value={draft.shares}
-                          onChange={(e) => setSplit(member.user._id, { shares: e.target.value })}
+                          value={value}
+                          onChange={(e) => setSplit(member.user._id, e.target.value)}
                           sx={{ width: 96 }}
                           slotProps={{ htmlInput: { min: 0, step: '1' } }}
                         />
@@ -854,9 +851,9 @@ export default function RecurringExpensesSection({
                   );
                 })}
               </Stack>
-              {form.amount && preview.error && (
+              {entry.amount && previewError && (
                 <Box role="status" sx={{ color: 'status.negative' }}>
-                  {preview.error}
+                  {previewError}
                 </Box>
               )}
               {splitPreview.length > 0 && (
@@ -874,8 +871,8 @@ export default function RecurringExpensesSection({
               <TextField
                 label="Day of month"
                 type="number"
-                value={form.dayOfMonth}
-                onChange={(e) => setForm({ ...form, dayOfMonth: e.target.value })}
+                value={schedule.dayOfMonth}
+                onChange={(e) => setSchedule({ ...schedule, dayOfMonth: e.target.value })}
                 fullWidth
                 size="small"
                 helperText="Short months use their last day — e.g. 31 → Feb 28"
@@ -884,8 +881,8 @@ export default function RecurringExpensesSection({
               <TextField
                 label="Starts on"
                 type="date"
-                value={form.startsOn}
-                onChange={(e) => setForm({ ...form, startsOn: e.target.value })}
+                value={schedule.startsOn}
+                onChange={(e) => setSchedule({ ...schedule, startsOn: e.target.value })}
                 fullWidth
                 size="small"
                 slotProps={{ inputLabel: { shrink: true } }}
@@ -893,8 +890,8 @@ export default function RecurringExpensesSection({
               <TextField
                 label="Ends on (optional)"
                 type="date"
-                value={form.endsOn}
-                onChange={(e) => setForm({ ...form, endsOn: e.target.value })}
+                value={schedule.endsOn}
+                onChange={(e) => setSchedule({ ...schedule, endsOn: e.target.value })}
                 fullWidth
                 size="small"
                 slotProps={{ inputLabel: { shrink: true } }}

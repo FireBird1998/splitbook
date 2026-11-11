@@ -48,7 +48,7 @@ const text = (node: ReactTestInstance): string =>
         .replace(/[\t\r\n ]+/g, ' ')
         .trim();
 
-async function read(row: TypedEntry, edit: boolean): Promise<Reading> {
+async function read(row: TypedEntry, edit: boolean, roundTrip = false): Promise<Reading> {
   if (row.multiPayer || row.savedZeroPayer)
     return {
       result: {
@@ -188,6 +188,24 @@ async function read(row: TypedEntry, edit: boolean): Promise<Reading> {
           .findAllByType(Checkbox)
           [index].props.onChange({ target: { checked: false } }),
       );
+  if (roundTrip) {
+    await change('Split method', 'shares');
+    const shares = () =>
+      root()
+        .findAllByType(TextField)
+        .filter((n) => n.props.label === 'Shares');
+    expect(shares().map((n) => n.props.value)).toEqual(['1', '1']);
+    await act(async () => shares()[0].props.onChange({ target: { value: '7' } }));
+    await change('Split method', 'exact');
+    expect(
+      root()
+        .findAllByType(MoneyTextField)
+        .slice(1)
+        .map((n) => n.props.value),
+    ).toEqual(['60', '40']);
+    await change('Split method', 'shares');
+    expect(shares().map((n) => n.props.value)).toEqual(['7', '1']);
+  }
   const before = text(root());
   const fields = root()
     .findAllByType(TextField)
@@ -215,7 +233,7 @@ async function read(row: TypedEntry, edit: boolean): Promise<Reading> {
 it('records recurring Add and Edit through the actual form controls (#1111)', async () => {
   // The template's relative date label is part of the recording; midnight must not change it.
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date(day + 'T12:00:00.000Z'));
+  vi.setSystemTime(new Date(day + 'T12:00:00'));
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('window', {
     location: { hash: '' },
@@ -231,3 +249,21 @@ it('records recurring Add and Edit through the actual form controls (#1111)', as
   );
   // One test drives the real dialog through 62 entries; a CI runner needs more than the default.
 }, 120_000);
+it('preserves separately typed amounts and shares across a split-method round trip', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  await read(
+    {
+      ...entries[0],
+      splitMethod: 'exact',
+      splitValues: { [people[0].id]: '60', [people[1].id]: '40' },
+    },
+    false,
+    true,
+  );
+});
