@@ -20,6 +20,8 @@ import {
   memberProblems,
   payerListedTwice,
   PAYER_LISTED_TWICE,
+  SPLIT_LISTED_TWICE,
+  splitListedTwice,
   type ReviewItemModel,
 } from '@splitbook/shared/to-review';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
@@ -199,6 +201,7 @@ export default function ToReviewPanel({
             changes={editor.changes}
             context={context}
             listedTwice={listedTwice}
+            splitProblem={splitListedTwice(item.needs) ? SPLIT_LISTED_TWICE : undefined}
             onChange={(changes) => {
               setAcknowledgedVersion(null);
               editor.change(changes);

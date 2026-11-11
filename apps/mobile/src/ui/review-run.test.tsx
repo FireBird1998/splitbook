@@ -773,7 +773,8 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
     const words = 'The same person is listed twice. Choose who shared it.';
     const tile = tree.root.findAll(
-      (node) => String(node.type) === 'Pressable' &&
+      (node) =>
+        String(node.type) === 'Pressable' &&
         String(node.props.accessibilityLabel).startsWith('Split:'),
     )[0];
     expect(tile.props.accessibilityLabel).toContain(words);

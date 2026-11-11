@@ -124,8 +124,10 @@ function validationNeed(reason: string, path: readonly PropertyKey[]): ReviewNee
     return { field: 'paidBy', reason: 'payer-total' };
   if (reason === 'Percentages must add up to 100')
     return { field: 'splitBetween', reason: 'percentage-total' };
-  if (reason === 'Each person can appear only once' &&
-    (field === 'paidBy' || field === 'splitBetween'))
+  if (
+    reason === 'Each person can appear only once' &&
+    (field === 'paidBy' || field === 'splitBetween')
+  )
     return { field, reason: 'listed-twice' };
   const precision = reason.match(DECIMALS)?.[1];
   return {

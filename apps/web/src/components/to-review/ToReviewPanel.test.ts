@@ -267,9 +267,14 @@ describe('what an assistant left to the member, in the web To review panel (#683
     const html = markup(
       ['splitBetween: Each person can appear only once'],
       {
-        description: 'Station dinner', amount: 30, currency: 'INR', date: '2026-10-16',
-        paidBy: [{ user: alex, amount: 30 }], splitMethod: 'equal',
-        splitBetween: [{ user: alex }, { user: sam }, { user: sam }], tag: 'Food',
+        description: 'Station dinner',
+        amount: 30,
+        currency: 'INR',
+        date: '2026-10-16',
+        paidBy: [{ user: alex, amount: 30 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }, { user: sam }, { user: sam }],
+        tag: 'Food',
       },
       ['splitBetween'],
     );

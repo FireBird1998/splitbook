@@ -13,6 +13,7 @@ export default function ReviewExpenseFields({
   context,
   onChange,
   listedTwice,
+  splitProblem,
 }: {
   entry: IncompleteExpenseEntry;
   original: ExpenseDraftValues;
@@ -20,6 +21,7 @@ export default function ReviewExpenseFields({
   context: DraftContext;
   onChange: (changes: Partial<IncompleteExpenseEntry>) => void;
   listedTwice?: readonly string[];
+  splitProblem?: string;
 }) {
   const [multiple, setMultiple] = useState(false);
   const loneAmount = entry.payers[0]?.amount;
@@ -75,6 +77,7 @@ export default function ReviewExpenseFields({
     <ExpenseFields
       review
       listedTwice={listedTwice}
+      splitProblem={splitProblem}
       entry={shown}
       reading={reading}
       editEntry={edit}
