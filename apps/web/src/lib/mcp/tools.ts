@@ -17,6 +17,7 @@ import { MCP_DRAFT_SCOPE } from './config';
 /** What a tool answers for each refusal the services throw; anything else gets a retry hint. */
 const REFUSALS = {
   FORBIDDEN: 'FORBIDDEN',
+  NOT_FOUND: 'Group not found',
   GROUP_ARCHIVED: 'GROUP_ARCHIVED',
   DRAFT_NOT_FOUND: 'DRAFT_NOT_FOUND',
   STALE_REVISION: 'STALE_REVISION',

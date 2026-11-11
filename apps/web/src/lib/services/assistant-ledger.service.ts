@@ -1,6 +1,5 @@
-import { readGroupLedgers } from '@/lib/group-ledger-read';
+import { readGroupLedger, readGroupLedgers } from '@/lib/group-ledger-read';
 import 'server-only';
-import { assistantGroupFilter } from '@splitbook/shared/assistant-reach';
 import connectDB from '@/lib/db';
 import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Registered for the rule's admin, populated below
@@ -90,25 +89,13 @@ function assistantExpense(expense: RecordedExpense, member: ReturnType<typeof as
   };
 }
 
-/**
- * A Group the reader belongs to and their connection reaches: not one they left out (#617), nor
- * one whose admins don't allow assistants (#621). One out of reach answers exactly as a Group
- * that doesn't exist.
- */
-export async function requireLedgerMembership(reader: LedgerReader, groupId: string) {
-  await connectDB();
-  const reach = assistantGroupFilter({
-    memberId: draftObjectId.parse(reader.id),
-    excludedGroupIds: reader.excludedGroupIds,
-  });
-  const group = await Group.findOne({
-    ...reach,
-    _id: { ...reach._id, $eq: draftObjectId.parse(groupId) },
-  })
-    .populate('members.user', 'name')
-    .lean();
-  if (!group) throw new Error('GROUP_NOT_FOUND');
-  return group;
+/** Identity from the validated grant; grant authorization stays in the transport. */
+function assistantActor(reader: LedgerReader) {
+  return {
+    kind: 'assistant' as const,
+    id: draftObjectId.parse(reader.id),
+    excludedGroupIds: reader.excludedGroupIds ?? [],
+  };
 }
 
 /** A Group as an assistant sees it in a list: no members, Expenses or Balances. */
@@ -141,33 +128,26 @@ export type ApprovalGroup = AssistantGroup & {
 
 export const assistantLedgerService = {
   async groups(reader: LedgerReader, after?: string) {
-    await connectDB();
-    const reach = assistantGroupFilter({
-      memberId: draftObjectId.parse(reader.id),
-      excludedGroupIds: reader.excludedGroupIds,
-    });
-    const groups = await Group.find({
-      ...reach,
-      // Groups out of reach are filtered in the query, so a page is never short of what it says.
-      _id: {
-        ...reach._id,
-        ...(after ? { $gt: draftObjectId.parse(after) } : {}),
+    const cursor = after ? draftObjectId.parse(after).toLowerCase() : undefined;
+    return readGroupLedgers({
+      actor: assistantActor(reader),
+      archived: 'include',
+      recurring: 'recorded-only',
+      sort: { _id: 1 },
+      read: async (groups) => {
+        const page = groups.filter((group) => !cursor || String(group._id) > cursor).slice(0, 51);
+        return {
+          groups: page.slice(0, 50).map((group) => ({
+            ...assistantGroup(group),
+            alternateCurrencies: normaliseExtraCurrencies(
+              group.defaultCurrency,
+              group.alternateCurrencies,
+            ),
+          })),
+          next: page.length > 50 ? String(page[49]._id) : null,
+        };
       },
-    })
-      .sort({ _id: 1 })
-      .limit(51)
-      .select('name defaultCurrency alternateCurrencies category isArchived')
-      .lean();
-    return {
-      groups: groups.slice(0, 50).map((group) => ({
-        ...assistantGroup(group),
-        alternateCurrencies: normaliseExtraCurrencies(
-          group.defaultCurrency,
-          group.alternateCurrencies,
-        ),
-      })),
-      next: groups.length > 50 ? String(groups[49]._id) : null,
-    };
+    });
   },
   /** Every Group the member belongs to, as the approval page lists them to tick or leave out. */
   async approvalGroups(memberId: string): Promise<ApprovalGroup[]> {
@@ -207,81 +187,105 @@ export const assistantLedgerService = {
     });
   },
   async context(reader: LedgerReader, groupId: string) {
-    const group = await requireLedgerMembership(reader, groupId);
-    return {
-      id: String(group._id),
-      name: group.name,
-      currency: group.defaultCurrency,
-      alternateCurrencies: normaliseExtraCurrencies(
-        group.defaultCurrency,
-        group.alternateCurrencies,
-      ),
-      members: group.members.map((member) => assistantMembers(reader.id)(member.user)),
-      tags: group.tags
-        .filter((tag) => !tag.isArchived && !tag.isDeleted)
-        .map((tag) => ({ id: String(tag._id), name: tag.name })),
-      categories: EXPENSE_CATEGORIES.map(({ id, label }) => ({ id, label })),
-    };
+    return readGroupLedger({
+      actor: assistantActor(reader),
+      groupId,
+      recurring: 'recorded-only',
+      read: async (group) => {
+        return {
+          id: String(group._id),
+          name: group.name,
+          currency: group.defaultCurrency,
+          alternateCurrencies: normaliseExtraCurrencies(
+            group.defaultCurrency,
+            group.alternateCurrencies,
+          ),
+          members: group.members.map((member) => assistantMembers(reader.id)(member.user)),
+          tags: group.tags
+            .filter((tag) => !tag.isArchived && !tag.isDeleted)
+            .map((tag) => ({ id: String(tag._id), name: tag.name })),
+          categories: EXPENSE_CATEGORIES.map(({ id, label }) => ({ id, label })),
+        };
+      },
+    });
   },
   async balances(reader: LedgerReader, groupId: string) {
-    await requireLedgerMembership(reader, groupId);
-    const read = await balanceService.getGroupBalances(groupId, {
-      includeDebtsBeforeSimplifying: false,
-    });
-    if (!read) throw new Error('GROUP_NOT_FOUND');
-    const member = assistantMembers(reader.id);
-    const bucket = (balances: Pick<typeof read, 'currency' | 'balances' | 'debts'>) => ({
-      currency: balances.currency,
-      balances: balances.balances.map((row) => ({ user: member(row.user), balance: row.balance })),
-      debts: balances.debts.map((debt) => ({
-        from: member(debt.from),
-        to: member(debt.to),
-        amount: debt.amount,
-      })),
-    });
-    return {
-      balances: {
-        ...bucket(read),
-        byCurrency: read.byCurrency.map(bucket),
-        hasMixedCurrencies: read.hasMixedCurrencies,
+    return readGroupLedger({
+      actor: assistantActor(reader),
+      groupId,
+      recurring: 'recorded-only',
+      read: async (group) => {
+        const read = await balanceService.getGroupBalances(group, {
+          includeDebtsBeforeSimplifying: false,
+        });
+        if (!read) throw new Error('Admitted Group was not supplied to Balances');
+        const member = assistantMembers(reader.id);
+        const bucket = (balances: Pick<typeof read, 'currency' | 'balances' | 'debts'>) => ({
+          currency: balances.currency,
+          balances: balances.balances.map((row) => ({
+            user: member(row.user),
+            balance: row.balance,
+          })),
+          debts: balances.debts.map((debt) => ({
+            from: member(debt.from),
+            to: member(debt.to),
+            amount: debt.amount,
+          })),
+        });
+        return {
+          balances: {
+            ...bucket(read),
+            byCurrency: read.byCurrency.map(bucket),
+            hasMixedCurrencies: read.hasMixedCurrencies,
+          },
+          context:
+            'All recorded Expenses and Settlements, per currency. Positive means owed to the member; negative means the member owes. Scheduled recurring Expenses not yet recorded are excluded. This read creates nothing.',
+        };
       },
-      context:
-        'All recorded Expenses and Settlements, per currency. Positive means owed to the member; negative means the member owes. Scheduled recurring Expenses not yet recorded are excluded. This read creates nothing.',
-    };
+    });
   },
   async spending(
     reader: LedgerReader,
     input: { groupId: string; from: string; to: string; page: number; limit: number },
   ) {
-    await requireLedgerMembership(reader, input.groupId);
-    const result = await expenseService.getGroupExpenses(
-      input.groupId,
-      {
-        dateFrom: input.from,
-        dateTo: input.to,
-        page: input.page,
-        limit: input.limit,
-        sortBy: 'date',
-        sortOrder: 'desc',
+    return readGroupLedger({
+      actor: assistantActor(reader),
+      groupId: input.groupId,
+      recurring: 'recorded-only',
+      read: async (group) => {
+        const result = await expenseService.getGroupExpenses(
+          group,
+          {
+            dateFrom: input.from,
+            dateTo: input.to,
+            page: input.page,
+            limit: input.limit,
+            sortBy: 'date',
+            sortOrder: 'desc',
+          },
+          reader.id,
+        );
+        return {
+          expenses: result.expenses.map((expense) =>
+            assistantExpense(expense as unknown as RecordedExpense, assistantMembers(reader.id)),
+          ),
+          pagination: result.pagination,
+          // The canonical UI also has legacy default-currency-only scalar totals. An
+          // assistant response exposes only explicitly denominated, full-range totals.
+          summary: {
+            count: result.summary.count,
+            totalsByCurrency: result.summary.totalsByCurrency,
+          },
+          range: {
+            from: input.from,
+            to: input.to,
+            timezone: 'UTC',
+            boundaries: 'Inclusive calendar dates, 00:00:00 through 23:59:59.999 UTC',
+          },
+          context:
+            'Totals cover all matching recorded Expenses, not just this page; currencies are separate. Does not materialize scheduled recurring Expenses.',
+        };
       },
-      reader.id,
-    );
-    return {
-      expenses: result.expenses.map((expense) =>
-        assistantExpense(expense as unknown as RecordedExpense, assistantMembers(reader.id)),
-      ),
-      pagination: result.pagination,
-      // The canonical UI also has legacy default-currency-only scalar totals. An
-      // assistant response exposes only explicitly denominated, full-range totals.
-      summary: { count: result.summary.count, totalsByCurrency: result.summary.totalsByCurrency },
-      range: {
-        from: input.from,
-        to: input.to,
-        timezone: 'UTC',
-        boundaries: 'Inclusive calendar dates, 00:00:00 through 23:59:59.999 UTC',
-      },
-      context:
-        'Totals cover all matching recorded Expenses, not just this page; currencies are separate. Does not materialize scheduled recurring Expenses.',
-    };
+    });
   },
 };

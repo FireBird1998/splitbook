@@ -251,7 +251,18 @@ async function mutate<T>(
   const scope = access(actor, groupId);
   const drafts = await collection();
   await actor.authorize?.();
-  await requireMembership(scope, undefined, refuseArchived, assistantReach(actor));
+  if (actor.assistant) {
+    await requireAccount(scope);
+    await readGroupLedger({
+      actor: { kind: 'assistant', id: actor.id, excludedGroupIds: actor.excludedGroupIds ?? [] },
+      groupId,
+      recurring: 'recorded-only',
+      validate: (group) => {
+        if (refuseArchived && group.isArchived) throw new Refusal('GROUP_ARCHIVED');
+      },
+      read: async () => undefined,
+    });
+  } else await requireMembership(scope, undefined, refuseArchived);
   // No count-then-insert fallback: it would violate the per-member cap under concurrency.
   if (!(await supportsGroupTransactions())) throw new Refusal('DRAFT_TRANSACTIONS_REQUIRED');
   return withGroupMutation(String(scope.group), async (session) => {
@@ -642,12 +653,11 @@ export const expenseDraftService = {
           .limit(ACTIVE_DRAFTS_PER_MEMBER)
           .toArray()
       ).map((record) => present(record, currencies));
-    // Assistant reads move in #1124, retaining their distinct out-of-reach answer until then.
-    if (actor.assistant)
-      return read(await requireMembership(scope, undefined, false, assistantReach(actor)));
     await requireAccount(scope);
     return readGroupLedger({
-      actor: { kind: 'member', id: actor.id },
+      actor: actor.assistant
+        ? { kind: 'assistant', id: actor.id, excludedGroupIds: actor.excludedGroupIds ?? [] }
+        : { kind: 'member', id: actor.id },
       groupId,
       recurring: 'recorded-only',
       read: (_group, storedGroup) =>
