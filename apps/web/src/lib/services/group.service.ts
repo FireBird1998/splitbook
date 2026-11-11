@@ -1,3 +1,5 @@
+import type { LedgerReadGroup } from '@/lib/group-ledger-read';
+import { isGroupAdmin, withMemberEmails } from '@/lib/group-member-emails';
 import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
 import {
@@ -209,6 +211,16 @@ export class GroupService {
     if (!viewerId) return withReadableCurrencies(group);
     const latest = await latestExpenseCurrencies([group._id], viewerId);
     return readableFor(group, latest.get(String(group._id)) ?? null);
+  }
+
+  /** Project the already admitted Group for its member's detail read. */
+  async readForMember(group: LedgerReadGroup, viewer: { id: string; email?: string | null }) {
+    const latest = await latestExpenseCurrencies([group._id], viewer.id);
+    return withMemberEmails(
+      readableFor(group, latest.get(String(group._id)) ?? null),
+      viewer,
+      isGroupAdmin(group, viewer.id),
+    );
   }
 
   /**

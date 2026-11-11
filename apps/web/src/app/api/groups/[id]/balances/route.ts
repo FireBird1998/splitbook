@@ -1,15 +1,6 @@
-import {
-  getAuthUser,
-  unauthorized,
-  forbidden,
-  notFound,
-  success,
-  failedRead,
-  routeIds,
-} from '@/lib/utils/api-response';
-import { groupService } from '@/lib/services/group.service';
+import { getAuthUser, unauthorized, success, failedRead, routeIds } from '@/lib/utils/api-response';
 import { balanceService } from '@/lib/services/balance.service';
-import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
+import { readGroupLedger } from '@/lib/group-ledger-read';
 
 // GET /api/groups/[id]/balances — Get group balances
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -19,17 +10,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await routeIds(params);
 
-    const isMember = await groupService.isMember(id, user.id!);
-    if (!isMember) return forbidden();
-
-    // Lazy-on-read: materialize due recurring expenses before computing, so
-    // Balances agree with the Group and Expense reads a client starts beside it.
-    await recurringExpenseService.generateDueExpenses(id);
-
-    const balances = await balanceService.getGroupBalances(id, { viewerId: user.id! });
-    if (!balances) return notFound('Group');
-
-    return success(balances);
+    return success(
+      await readGroupLedger({
+        actor: { kind: 'member', id: user.id! },
+        groupId: id,
+        deletionMarker: 'allow-retained-members',
+        recurring: 'materialize',
+        read: (group) => balanceService.getGroupBalances(group, { viewerId: user.id! }),
+      }),
+    );
   } catch (err) {
     return failedRead(err, req);
   }

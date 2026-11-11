@@ -1,3 +1,4 @@
+import type { LedgerReadGroup } from '@/lib/group-ledger-read';
 import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
@@ -74,13 +75,15 @@ export class BalanceService {
    * Calculate balances for a group.
    */
   async getGroupBalances(
-    groupId: string,
+    groupOrId: string | LedgerReadGroup,
     {
       includeDebtsBeforeSimplifying = true,
       viewerId,
     }: { includeDebtsBeforeSimplifying?: boolean; viewerId?: string } = {},
   ) {
     await connectDB();
+
+    const groupId = typeof groupOrId === 'string' ? groupOrId : String(groupOrId._id);
 
     // Get all non-deleted expenses and settlements
     const [storedExpenses, storedSettlements, group] = await Promise.all([
@@ -90,7 +93,9 @@ export class BalanceService {
       Settlement.find({ group: groupId })
         .select('group currency moneyVersion amount amountMinor paidBy paidTo')
         .lean(),
-      Group.findById(groupId).populate('members.user', PERSON_FIELDS).lean(),
+      typeof groupOrId === 'string'
+        ? Group.findById(groupId).populate('members.user', PERSON_FIELDS).lean()
+        : groupOrId,
     ]);
 
     if (!group) return null;
