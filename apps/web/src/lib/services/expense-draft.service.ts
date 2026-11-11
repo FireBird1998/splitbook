@@ -1,5 +1,6 @@
 import { Refusal } from '@splitbook/shared/refusals';
 import 'server-only';
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   isGroupCurrency,
   normaliseExtraCurrencies,
@@ -125,13 +126,7 @@ function assistantReach(actor: DraftActor) {
     : null;
 }
 
-async function requireMembership(
-  scope: ReturnType<typeof access>,
-  session?: mongoose.ClientSession,
-  /** A save or an assistant's preparation, which an archived Group refuses (#578). */
-  refuseArchived = false,
-  reach: ReturnType<typeof assistantReach> = null,
-) {
+async function requireAccount(scope: ReturnType<typeof access>, session?: mongoose.ClientSession) {
   const account = await mongoose.connection
     .db!.collection('users')
     .findOne(
@@ -139,6 +134,16 @@ async function requireMembership(
       { session, projection: { _id: 1 } },
     );
   if (!account) throw new Refusal('FORBIDDEN');
+}
+
+async function requireMembership(
+  scope: ReturnType<typeof access>,
+  session?: mongoose.ClientSession,
+  /** A save or an assistant's preparation, which an archived Group refuses (#578). */
+  refuseArchived = false,
+  reach: ReturnType<typeof assistantReach> = null,
+) {
+  await requireAccount(scope, session);
   const filter = reach ? assistantGroupFilter({ memberId: scope.owner, ...reach }) : null;
   const group = await mongoose.connection
     .db!.collection('groups')
@@ -313,14 +318,27 @@ async function reviewDraft(
   const scope = access(actor, groupId);
   const drafts = await collection();
   await requireMembership(scope, session);
+  return readDraftReview(scope, drafts, groupId, draftId, session);
+}
+
+async function readDraftReview(
+  scope: ReturnType<typeof access>,
+  drafts: Awaited<ReturnType<typeof collection>>,
+  groupId: string,
+  draftId: string,
+  session?: mongoose.ClientSession,
+  admittedGroup?: IGroupDocument,
+): Promise<DraftReview> {
   const record = await drafts.findOne(
     { ...scope, _id: new mongoose.Types.ObjectId(draftObjectId.parse(draftId)), state: 'active' },
     { session },
   );
   if (!record) throw new Refusal('DRAFT_NOT_FOUND');
-  const group = await Group.findById(groupId)
-    .session(session ?? null)
-    .lean();
+  const group =
+    admittedGroup ??
+    (await Group.findById(groupId)
+      .session(session ?? null)
+      .lean());
   if (!group) throw new Refusal('FORBIDDEN');
   const values = withGroupCurrency(record.values, group.defaultCurrency);
   const { problems, allocation } = reviewValues(record, group);
@@ -387,7 +405,18 @@ async function reviewDraft(
 }
 
 export const expenseDraftService = {
-  review: reviewDraft,
+  async review(actor: DraftActor, groupId: string, draftId: string): Promise<DraftReview> {
+    const scope = access(actor, groupId);
+    const drafts = await collection();
+    await requireAccount(scope);
+    return readGroupLedger({
+      actor: { kind: 'member', id: actor.id },
+      groupId,
+      recurring: 'recorded-only',
+      read: (_group, storedGroup) =>
+        readDraftReview(scope, drafts, groupId, draftId, undefined, storedGroup),
+    });
+  },
   /** One read across current Groups. No mutation fence, writes or per-item Expense queries. */
   async toReview(actor: DraftActor): Promise<ToReviewRead> {
     const drafts = await collection();
@@ -583,15 +612,32 @@ export const expenseDraftService = {
   async list(actor: DraftActor, groupId: string) {
     const scope = access(actor, groupId);
     const drafts = await collection();
-    const currencies = await requireMembership(scope, undefined, false, assistantReach(actor));
-    // Each owner's active Drafts in this Group are bounded by the per-member limit.
-    return (
-      await drafts
-        .find({ ...scope, state: 'active' })
-        .sort({ createdAt: 1, _id: 1 })
-        .limit(ACTIVE_DRAFTS_PER_MEMBER)
-        .toArray()
-    ).map((record) => present(record, currencies));
+    const read = async (currencies: GroupCurrencyList) =>
+      // Each owner's active Drafts in this Group are bounded by the per-member limit.
+      (
+        await drafts
+          .find({ ...scope, state: 'active' })
+          .sort({ createdAt: 1, _id: 1 })
+          .limit(ACTIVE_DRAFTS_PER_MEMBER)
+          .toArray()
+      ).map((record) => present(record, currencies));
+    // Assistant reads move in #1124, retaining their distinct out-of-reach answer until then.
+    if (actor.assistant)
+      return read(await requireMembership(scope, undefined, false, assistantReach(actor)));
+    await requireAccount(scope);
+    return readGroupLedger({
+      actor: { kind: 'member', id: actor.id },
+      groupId,
+      recurring: 'recorded-only',
+      read: (_group, storedGroup) =>
+        read({
+          defaultCurrency: storedGroup.defaultCurrency,
+          alternateCurrencies: normaliseExtraCurrencies(
+            storedGroup.defaultCurrency,
+            storedGroup.alternateCurrencies,
+          ),
+        }),
+    });
   },
 
   async create(actor: DraftActor, groupId: string, input: unknown, key: string) {
