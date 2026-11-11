@@ -10,11 +10,11 @@ import {
 } from '@splitbook/shared/validators/expense-draft';
 import { Alert, Button, Link, Stack, Typography } from '@mui/material';
 import type { ExpenseDraft } from '@splitbook/shared/expense-draft';
-import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
+import { draftForExpenseEntry } from '@splitbook/shared/expense-entry-draft';
+import { formSummaryPolicy } from '@splitbook/shared/expense-entry';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import { toReviewHref } from '@splitbook/shared/api-paths';
 import { apiFetch } from '@/lib/utils/api-fetch';
-import { readAmountEntry } from '@splitbook/shared/amount-entry';
 export function useKeepExpenseDraft({
   draft,
   groupId,
@@ -86,7 +86,7 @@ export function useKeepExpenseDraft({
         setPending(false);
         void mutate();
         void refresh(TO_REVIEW_KEY);
-        if (attemptValues.current === JSON.stringify(draft.values)) onKept();
+        if (attemptValues.current === JSON.stringify(draft.entry)) onKept();
         else
           setError(
             'The earlier version was kept in To review. Your newer changes are still in this form.',
@@ -94,46 +94,14 @@ export function useKeepExpenseDraft({
         attemptValues.current = null;
         return;
       }
-      const v = draft.values;
       // Resolve a retained request first; a new local refusal is never an uncertain save.
-      const amount = readAmountEntry(v.amount, v.currency);
+      const amount = draft.reading().fields.amountReading;
       if (amount.status === 'invalid') {
         setError(amount.message);
         return;
       }
-      const entries: DraftEntries = {
-        description: v.description,
-        amount: v.amount,
-        currency: v.currency,
-        date: v.date,
-        category: v.category,
-        notes: v.notes,
-        splitMethod: v.splitMethod,
-        ...(/^[a-f0-9]{24}$/i.test(v.tag) ? { tagId: v.tag } : { tag: v.tag }),
-      };
-      for (const payer of v.payers) {
-        entries[`paidBy.${payer.user}`] = 'yes';
-        entries[`paidBy.${payer.user}.amount`] = v.multiPayerMode ? payer.amount : v.amount;
-      }
-      for (const id of v.selectedMembers) {
-        entries[`splitBetween.${id}`] = 'yes';
-        if (v.splitMethod !== 'equal') {
-          const field =
-            v.splitMethod === 'percentage'
-              ? 'percentage'
-              : v.splitMethod === 'shares'
-                ? 'shares'
-                : 'amount';
-          entries[`splitBetween.${id}.${field}`] =
-            (v.splitMethod === 'percentage'
-              ? v.customPercentages
-              : v.splitMethod === 'shares'
-                ? v.customShares
-                : v.customAmounts)[id] ?? '';
-        }
-      }
-      attemptValues.current = JSON.stringify(draft.values);
-      await client.create(draftValues(entries));
+      attemptValues.current = JSON.stringify(draft.entry);
+      await client.create(draftForExpenseEntry(draft.entry, formSummaryPolicy));
       attemptValues.current = null;
       void mutate();
       void refresh(TO_REVIEW_KEY);

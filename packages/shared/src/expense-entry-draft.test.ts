@@ -38,7 +38,15 @@ it('leaves a Draft’s missing choices and figures not given in the entry', () =
 });
 
 it('changes a note without inventing omitted facts or losing a retained Tag name and item', () => {
-  const from = {description: 'Lunch', tag: 'Food', predefinedItem: 'Coffee', paidBy: [{user: alex}], splitBetween: [{user: sam}]};
-  const entry = {...entryForExpenseDraft(from), notes: 'Receipt checked'};
-  expect(draftForExpenseEntry(entry, expenseEntryPolicy, {from, changed: {notes: true}})).toEqual({...from, notes: 'Receipt checked'});
+  const from = {
+    description: 'Lunch',
+    tag: 'Food',
+    predefinedItem: 'Coffee',
+    paidBy: [{ user: alex }],
+    splitBetween: [{ user: sam }],
+  };
+  const entry = { ...entryForExpenseDraft(from), notes: 'Receipt checked' };
+  expect(
+    draftForExpenseEntry(entry, expenseEntryPolicy, { from, changed: { notes: true } }),
+  ).toEqual({ ...from, notes: 'Receipt checked' });
 });
