@@ -116,7 +116,7 @@ export class ExpenseService {
       actorId: userId,
       model: Expense,
       transactions: 'allow-standalone',
-      compatibility: { membership: 'actor-before-retry', standaloneArchive: 'fence-only' },
+      compatibility: { membership: 'actor-before-retry' },
       retry: requestKey
         ? { key: requestKey, legacyTagAlias: data.tag, raceCommand: 'original' }
         : undefined,

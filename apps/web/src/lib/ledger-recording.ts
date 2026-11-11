@@ -72,7 +72,6 @@ export interface LedgerRecording<
   transactions: 'allow-standalone' | { required: Refusal };
   compatibility?: {
     membership: 'before-retry-and-at-commit' | 'actor-before-retry' | 'template-validated';
-    standaloneArchive?: 'fence-only';
     archive?: 'before-generation';
   };
   retry?: SubmissionRetry | TemplateMonthRetry;
@@ -197,12 +196,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
         const group = await Group.findById(groupId);
         if (!group) throw new Refusal('FORBIDDEN');
         if (group.isArchived && description.compatibility?.archive !== 'before-generation') {
-          // Standalone payments historically rely on the fence's earlier archive check.
-          // A real independent archive can commit after it, while currencies are being locked.
-          const legacyStandalone =
-            description.compatibility?.standaloneArchive === 'fence-only' &&
-            !(await supportsGroupTransactions());
-          if (!legacyStandalone) throw new Refusal('GROUP_ARCHIVED');
+          throw new Refusal('GROUP_ARCHIVED');
         }
         if (description.compatibility?.membership !== 'template-validated') checkMembers(group);
         if (submission?.atCommit) {
@@ -346,8 +340,10 @@ export async function changeLedgerExpense({
         await lockRestoredCurrency(groupId, expense.currency, expenseId);
       else if (originalCurrency !== expense.currency)
         await lockLedgerCurrency(groupId, expense.currency);
+      const committedGroup = await Group.findById(groupId);
+      if (!committedGroup) throw new Refusal('FORBIDDEN');
+      if (committedGroup.isArchived) throw new Refusal('GROUP_ARCHIVED');
       if (event && expenseChangeAlertsEnabled()) {
-        const committedGroup = await Group.findById(groupId).select('members').lean();
         const members = new Set(
           (committedGroup?.members ?? []).map((member) => String(member.user)),
         );

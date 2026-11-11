@@ -1,8 +1,4 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { runStandaloneCase } from './test-utils/standalone-case';
 import Group from './models/Group';
 import { Types } from 'mongoose';
 import { groupService } from './services/group.service';
@@ -39,39 +35,15 @@ it('keeps the Expense Activity time captured before waiting for its fence', asyn
   expect(feed.body.data.activities[0].createdAt).toBe(fixture.clock.toISOString());
 });
 
-it('preserves a standalone Expense when an archive commits after its fence check', async () => {
-  if (process.env.EXPENSE_ARCHIVE_STANDALONE !== 'true') {
-    const uri = process.env.STANDALONE_TEST_MONGODB_URI;
-    if (!uri) throw new Error('Standalone payment coverage requires STANDALONE_TEST_MONGODB_URI');
-    const directory = await mkdtemp(join(tmpdir(), 'splitbook-expense-'));
-    try {
-      await promisify(execFile)(
-        process.execPath,
-        [
-          resolve('node_modules/vitest/vitest.mjs'),
-          'run',
-          'src/lib/expense-recording.integration.test.ts',
-          '-t',
-          'preserves a standalone Expense',
-          '--maxWorkers',
-          '1',
-        ],
-        {
-          cwd: process.cwd(),
-          timeout: 15000,
-          env: {
-            ...process.env,
-            TEST_MONGODB_URI: uri,
-            EXPENSE_ARCHIVE_STANDALONE: 'true',
-            RECORDING_STANDALONE_RESULT: join(directory, 'unused.json'),
-          },
-        },
-      );
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
+it('refuses a standalone Expense when an archive commits after its fence check', async () => {
+  if (
+    await runStandaloneCase(
+      'src/lib/expense-recording.integration.test.ts',
+      'refuses a standalone Expense',
+      'EXPENSE_ARCHIVE_STANDALONE',
+    )
+  )
     return;
-  }
   const update = Group.collection.updateOne;
   let archived = false;
   vi.spyOn(Group.collection, 'updateOne').mockImplementation(async (...args) => {
@@ -85,11 +57,11 @@ it('preserves a standalone Expense when an archive commits after its fence check
   });
   const answer = await fixture.send();
   expect(archived).toBe(true);
-  expect(answer.status).toBe(201);
+  expect(answer.status).toBe(409);
   const feed = await fixture.http(fixture.routes.feed.GET, 'GET', 'activity');
   expect(
     feed.body.data.activities.filter((event: { type: string }) => event.type === 'expense_added'),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
   expect((await Group.findById(fixture.groupId))!.isArchived).toBe(true);
 });
 
@@ -125,3 +97,52 @@ it.each([false, true])(
     }
   },
 );
+
+it('refuses a standalone restoration when an archive commits after its currency check', async () => {
+  if (
+    await runStandaloneCase(
+      'src/lib/expense-recording.integration.test.ts',
+      'refuses a standalone restoration',
+      'RESTORE_ARCHIVE_STANDALONE',
+    )
+  )
+    return;
+  const saved = await fixture.send();
+  expect(saved.status).toBe(201);
+  const params = Promise.resolve({ id: fixture.groupId, expenseId: saved.body.data._id as string });
+  const suffix = `expenses/${saved.body.data._id}`;
+  const deleted = await fixture.http(
+    (req) => fixture.routes.expense.DELETE(req, { params }),
+    'DELETE',
+    suffix,
+    undefined,
+    { 'X-Splitbook-Revision': '0' },
+  );
+  expect(deleted.status).toBe(200);
+  const update = Group.collection.updateOne;
+  let archived = false;
+  vi.spyOn(Group.collection, 'updateOne').mockImplementation(async (...args) => {
+    const result = await update.apply(Group.collection, args);
+    if (!archived && !Array.isArray(args[1]) && args[1].$set?.currencyLocked === true) {
+      archived = true;
+      await groupService.archive(fixture.groupId, DEMO_PERSONA_IDS.alex);
+    }
+    return result;
+  });
+  const restored = await fixture.http(
+    (req) => fixture.routes.expense.PATCH(req, { params }),
+    'PATCH',
+    suffix,
+    { isDeleted: false },
+    { 'X-Splitbook-Revision': '1' },
+  );
+  expect(archived).toBe(true);
+  expect(restored.status).toBe(409);
+  expect(restored.body.code).toBe('GROUP_ARCHIVED');
+  const read = await fixture.http(
+    (req) => fixture.routes.expense.GET(req, { params }),
+    'GET',
+    suffix,
+  );
+  expect(read.body.data.isDeleted).toBe(true);
+});

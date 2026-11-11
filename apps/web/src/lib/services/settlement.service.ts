@@ -54,7 +54,6 @@ export class SettlementService {
       transactions: 'allow-standalone',
       compatibility: {
         membership: 'before-retry-and-at-commit',
-        standaloneArchive: 'fence-only',
       },
       command: () => command,
       retry: requestKey ? { key: requestKey } : undefined,

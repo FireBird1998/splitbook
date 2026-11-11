@@ -259,6 +259,8 @@ it.") and changes nothing: an Expense's create, edit, restore and delete, a
 payment, a To review save (`POST /api/groups/[id]/drafts/save`), and an
 assistant's `create_drafts` and `replace_draft`. The check is made inside the
 write's own Group fence, so an archive that commits first stops a racing save.
+The final Group read also enforces archive on a database without transactions, including restoring or moving an Expense's currency: an archive seen there refuses **409 `GROUP_ARCHIVED`** before the record is saved.
+
 Reads are unchanged, a member's own Drafts and discards still work, and a retry
 of an Expense, payment or To review save recorded before the archive is still
 confirmed. `apps/web/src/app/api/groups/[id]/archived-group-writes.integration.test.ts`
