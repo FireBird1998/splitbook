@@ -217,7 +217,20 @@ export function expenseEntryLint(root) {
         'src/**/*.{test,spec}.{ts,tsx}',
         'src/**/{test-utils,test-support,fixtures,__fixtures__,__mocks__}/**',
       ],
-      languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: root } },
+      languageOptions: {
+        parserOptions: {
+          // Existing lint-contract suites submit these virtual files through lintText.
+          // They get a real program too; none is exempt from the entry rule.
+          projectService: {
+            allowDefaultProject: [
+              'src/lint-sample.ts',
+              'src/data/sample-controller.ts',
+              'src/ui/sample-screen.tsx',
+            ],
+          },
+          tsconfigRootDir: root,
+        },
+      },
       plugins: { 'expense-entry': entryTranslationPlugin },
       rules: { 'expense-entry/no-local-reading': 'error' },
     },

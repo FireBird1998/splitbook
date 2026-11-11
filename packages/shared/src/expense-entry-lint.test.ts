@@ -104,3 +104,17 @@ it.each([
     ),
   ).toEqual([]);
 });
+
+it('is enabled for a production form by each package lint command', async () => {
+  const { ESLint } = await import('eslint');
+  const { fileURLToPath } = await import('node:url');
+  for (const [directory, form] of [
+    ['../../../apps/mobile/', 'src/data/expense-draft.ts'],
+    ['../../../apps/web/', 'src/components/expenses/ExpenseFields.tsx'],
+    ['../', 'src/expense-draft.ts'],
+  ]) {
+    const eslint = new ESLint({ cwd: fileURLToPath(new URL(directory, import.meta.url)) });
+    const config = await eslint.calculateConfigForFile(form);
+    expect(config.rules['expense-entry/no-local-reading']).toEqual([2]);
+  }
+});
