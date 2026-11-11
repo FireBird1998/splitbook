@@ -84,10 +84,12 @@ export const notificationTransitions = {
   off: ['loading', 'pending', 'offline'],
   loading: ['ready', 'blocked', 'offline', 'error', 'off'],
   pending: ['ready', 'denied', 'blocked', 'offline', 'error', 'off'],
-  ready: ['loading', 'pending', 'offline', 'off'],
+  // ready → blocked: foreground return to Settings after Android revokes permission.
+  ready: ['loading', 'pending', 'offline', 'off', 'blocked'],
   offline: ['loading', 'pending', 'off'],
   denied: ['loading', 'pending', 'offline', 'off'],
-  blocked: ['loading', 'pending', 'offline', 'off'],
+  // blocked → ready: foreground return to Settings after permission is granted in Android.
+  blocked: ['loading', 'pending', 'offline', 'off', 'ready'],
   error: ['loading', 'pending', 'offline', 'off'],
 } as const satisfies Transitions<import('./notification-controls').NotificationControls['status']>;
 
