@@ -458,3 +458,14 @@ it('answers across Groups with the recorded ledger when a due insertion fails', 
     await Expense.db.db!.command({ collMod: 'expenses', validator: {} });
   }
 });
+
+it('materializes the one-Group ledger at the same instant the reader uses', async () => {
+  const access = await fixture.arrange('member');
+  const amounts = await readGroupLedger({
+    actor: { kind: 'member', id: access.actorId },
+    groupId: access.groupId,
+    now: new Date('2026-10-31T12:00:00Z'),
+    read: async (group) => (await Expense.find({ group: group._id })).map((row) => row.amount),
+  });
+  expect(amounts).toEqual([120]);
+});

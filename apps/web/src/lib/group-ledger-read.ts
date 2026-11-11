@@ -23,6 +23,7 @@ export interface GroupLedgerRead<T> {
   missingGroup?: 'forbidden' | 'not-found';
   deletionMarker?: 'refuse' | 'allow-retained-members';
   recurring?: 'materialize' | 'recorded-only';
+  now?: Date;
   /** Minimum Group role for this read. */
   requiredRole?: 'member' | 'admin';
   /** Preserve admission before request validation, and validation before any materialization. */
@@ -38,6 +39,7 @@ export async function readGroupLedger<T>({
   deletionMarker = 'refuse',
   recurring = 'materialize',
   requiredRole = 'member',
+  now = new Date(),
   validate,
   read,
 }: GroupLedgerRead<T>): Promise<T> {
@@ -64,7 +66,8 @@ export async function readGroupLedger<T>({
   let result: T;
   if (validation !== undefined) result = validation;
   else {
-    if (recurring === 'materialize') await recurringExpenseService.generateDueExpenses(groupId);
+    if (recurring === 'materialize')
+      await recurringExpenseService.generateDueExpenses(groupId, now);
     result = await read(group, storedGroup);
   }
   if (!(await Group.exists(access))) throw new Refusal('FORBIDDEN');
