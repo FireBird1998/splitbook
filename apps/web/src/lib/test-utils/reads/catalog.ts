@@ -54,7 +54,7 @@ export const groupReads: GroupRead[] = [
     file: 'groups/[id]/activity/route.ts',
     load: () => import('@/app/api/groups/[id]/activity/route'),
     path: group('/activity'),
-    addsDue: false,
+    addsDue: true,
     scope: 'group',
   },
   {
@@ -63,7 +63,7 @@ export const groupReads: GroupRead[] = [
     file: 'groups/[id]/expenses/[expenseId]/route.ts',
     load: () => import('@/app/api/groups/[id]/expenses/[expenseId]/route'),
     path: group('/expenses/e10000000000000000000001'),
-    addsDue: false,
+    addsDue: true,
     scope: 'group',
   },
   {
@@ -72,7 +72,7 @@ export const groupReads: GroupRead[] = [
     file: 'groups/[id]/expenses/check-duplicate/route.ts',
     load: () => import('@/app/api/groups/[id]/expenses/check-duplicate/route'),
     path: group('/expenses/check-duplicate?description=Due%20rent&amount=600&date=2026-11-01'),
-    addsDue: false,
+    addsDue: true,
     scope: 'group',
   },
   {
@@ -81,7 +81,7 @@ export const groupReads: GroupRead[] = [
     file: 'groups/[id]/settlements/route.ts',
     load: () => import('@/app/api/groups/[id]/settlements/route'),
     path: group('/settlements'),
-    addsDue: false,
+    addsDue: true,
     scope: 'group',
   },
   {
@@ -184,7 +184,7 @@ export const groupReads: GroupRead[] = [
     load: () => import('@/app/api/groups/[id]/drafts/review/route'),
     path: group('/drafts/review'),
     body: (state) => ({ ids: [state === 'admin' ? readIds.otherDraft : readIds.draft] }),
-    addsDue: false,
+    addsDue: true,
     scope: 'group',
   },
 ];
@@ -218,7 +218,7 @@ export const acrossReads: HttpRead[] = [
     file: 'user/activity/route.ts',
     load: () => import('@/app/api/user/activity/route'),
     path: () => '/api/user/activity',
-    addsDue: false,
+    addsDue: true,
     scope: 'across',
   },
   {
@@ -226,7 +226,7 @@ export const acrossReads: HttpRead[] = [
     file: 'search/route.ts',
     load: () => import('@/app/api/search/route'),
     path: () => '/api/search?q=rent',
-    addsDue: false,
+    addsDue: true,
     scope: 'across',
   },
   {
@@ -234,7 +234,7 @@ export const acrossReads: HttpRead[] = [
     file: 'user/to-review/route.ts',
     load: () => import('@/app/api/user/to-review/route'),
     path: () => '/api/user/to-review',
-    addsDue: false,
+    addsDue: true,
     scope: 'across',
   },
   {

@@ -22,7 +22,6 @@ export interface GroupLedgerRead<T> {
   groupId: string;
   missingGroup?: 'forbidden' | 'not-found';
   deletionMarker?: 'refuse' | 'allow-retained-members';
-  recurring?: 'materialize' | 'recorded-only';
   now?: Date;
   /** Minimum Group role for this read. */
   requiredRole?: 'member' | 'admin';
@@ -32,17 +31,28 @@ export interface GroupLedgerRead<T> {
 }
 
 /** Supply the admitted Group to the read; refuse access revoked while it was running. */
-export async function readGroupLedger<T>({
-  actor,
-  groupId,
-  missingGroup = 'forbidden',
-  deletionMarker = 'refuse',
-  recurring = 'materialize',
-  requiredRole = 'member',
-  now = new Date(),
-  validate,
-  read,
-}: GroupLedgerRead<T>): Promise<T> {
+export function readGroupLedger<T>(input: GroupLedgerRead<T>): Promise<T> {
+  return readOne(input, true);
+}
+
+/** Member metadata needs admission but no ledger generation. Assistant operations still generate. */
+export function readGroupMetadata<T>(input: GroupLedgerRead<T>): Promise<T> {
+  return readOne(input, false);
+}
+
+async function readOne<T>(
+  {
+    actor,
+    groupId,
+    missingGroup = 'forbidden',
+    deletionMarker = 'refuse',
+    requiredRole = 'member',
+    now = new Date(),
+    validate,
+    read,
+  }: GroupLedgerRead<T>,
+  ledger: boolean,
+): Promise<T> {
   if (!Types.ObjectId.isValid(groupId)) throw new Refusal('INVALID_ID');
   groupId = new Types.ObjectId(groupId).toHexString();
   const access = groupAccess(actor, { groupId, deletionMarker, requiredRole });
@@ -66,8 +76,8 @@ export async function readGroupLedger<T>({
   let result: T;
   if (validation !== undefined) result = validation;
   else {
-    if (recurring === 'materialize')
-      await recurringExpenseService.generateDueExpenses(groupId, now);
+    if (ledger || actor.kind === 'assistant')
+      await recurringExpenseService.generateDueExpensesForGroups([groupId], now);
     result = await read(group, storedGroup);
   }
   if (!(await Group.exists(access))) throw groupReadRefusal(actor);
@@ -82,7 +92,6 @@ export type GroupLedgersRead<T, Field extends keyof LedgerReadGroup | undefined 
   actor: LedgerReadActor;
   archived: 'include' | 'exclude';
   deletionMarker?: GroupLedgerRead<T>['deletionMarker'];
-  recurring?: GroupLedgerRead<T>['recurring'];
   now?: Date;
   sort?: Partial<Record<'name' | 'updatedAt' | '_id', 1 | -1>>;
   /**
@@ -102,21 +111,33 @@ export type GroupLedgersRead<T, Field extends keyof LedgerReadGroup | undefined 
   );
 
 /** Read the ledger over the Groups the actor may currently see. */
-export async function readGroupLedgers<
-  T,
-  Field extends keyof LedgerReadGroup | undefined = undefined,
->({
-  actor,
-  archived,
-  deletionMarker = 'refuse',
-  recurring = 'materialize',
-  now = new Date(),
-  groupIds,
-  page,
-  fields,
-  sort = {},
-  read,
-}: GroupLedgersRead<T, Field>): Promise<T> {
+export function readGroupLedgers<T, Field extends keyof LedgerReadGroup | undefined = undefined>(
+  input: GroupLedgersRead<T, Field>,
+): Promise<T> {
+  return readAcross(input, true);
+}
+
+/** Metadata lists use the same admission, order, projection and refill without a member ledger read. */
+export function readGroupsMetadata<T, Field extends keyof LedgerReadGroup | undefined = undefined>(
+  input: GroupLedgersRead<T, Field>,
+): Promise<T> {
+  return readAcross(input, false);
+}
+
+async function readAcross<T, Field extends keyof LedgerReadGroup | undefined = undefined>(
+  {
+    actor,
+    archived,
+    deletionMarker = 'refuse',
+    now = new Date(),
+    groupIds,
+    page,
+    fields,
+    sort = {},
+    read,
+  }: GroupLedgersRead<T, Field>,
+  ledger: boolean,
+): Promise<T> {
   const access = {
     $and: [
       groupAccess(actor, { archived, deletionMarker }),
@@ -153,7 +174,10 @@ export async function readGroupLedgers<
             })),
             { path: 'members.user', select: PERSON_FIELDS, options: { lean: true } },
           );
-    if (recurring === 'materialize') {
+    if (
+      (ledger || actor.kind === 'assistant') &&
+      storedGroups.some((group) => !materialized.has(String(group._id)))
+    ) {
       await recurringExpenseService.generateDueExpensesForGroups(
         storedGroups.map((group) => String(group._id)).filter((id) => !materialized.has(id)),
         now,

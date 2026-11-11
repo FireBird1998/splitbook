@@ -310,16 +310,29 @@ Across reads accept `page` for an exclusive id cursor and query limit, and `fiel
 for projected Group columns. `_id` accompanies projections. Selecting members
 populates them. Page delivery rechecks access and refills after an observed revocation.
 
-**Current materializing reads (#1119, part one):** Group details, Expenses,
-Balances, Insights, Trip summary, Home balances, member spending, and export
-(including the statement) ask the module to add due recurring Expenses first.
-A Trip invokes generation but its Theme admits no recurring template.
-The Groups list, Group and Home Activity, search, one Expense, duplicate warning,
-recurring-template list, currency settings, rate suggestions, Tags, Draft reads,
-page titles, invite-link and assistant-reach reads use the recorded ledger.
-Connected assistants use the module and record due recurring Expenses before each Group operation (#1126), including context and Draft operations. This replaces their earlier recorded-only rule.
-Part two applies the owner's four decisions about generation, missing Groups
-and deletion markers.
+**Ledger generation (#1126):** every Group ledger read records due recurring
+Expenses before it reads data. This includes Group details, Expenses (also one
+Expense), Balances, Insights, Trip summary, payments, Group and Home Activity,
+search, duplicate warnings, Draft review, To review, Home balances, spending,
+exports and the Debt calculated before recording a payment. Every assistant Group
+operation also generates, including context and Draft operations, replacing the
+earlier no-ledger-write rule.
+
+Member metadata operations (`readGroupMetadata`, `readGroupsMetadata`) retain the
+same admission and delivery checks but avoid generation: rate suggestions,
+invite links, assistant reach, Tags and receipts, currencies, recurring-template
+settings, private Draft listings, page titles, the Groups list and assistant
+approval choices show no saved Expense, total or Activity entry. The member's
+latest manual-Expense currency in the Groups list explicitly excludes generated
+Expenses. Assistant metadata operations still generate under decision 1.
+
+The across operations support exclusive-id `page`, `fields` projections and
+bounded refill after revocation. Assistant `list_groups` still queries 51
+projected Groups to deliver 50 with its existing `next` cursor. The module runs
+one due check per operation, once per newly admitted page Group; nothing due
+costs one schedule aggregate including the product-switch record. A switch
+transition still performs its durable bookkeeping. Empty refill batches do not
+run generation again.
 
 The generator remains idempotent under concurrent reads. An archived Group or a
 disabled recurring switch adds nothing and advances no template marker. Reads

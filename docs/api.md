@@ -1430,19 +1430,31 @@ Recurring generation recognises an already recorded template/Month before refusi
 
 Generation rechecks that the Group is open at the Expense commit. If an archive wins that race, the triggering read still answers normally, adds no Expense for that Month and leaves its marker unchanged so a later eligible read can retry it. The template's creator remains the recorded actor and receives no alert for that Expense. Payers and split participants are checked again at commit. If a participant leaves before that point, the read still succeeds without that Expense or a marker advance; a later eligible read can add the Month.
 
-Household-themed Groups only (`category: "home"`). The Group ledger read module
-currently invokes lazy generation for Group details, Expenses, Balances, Insights,
-Trip summary (whose Theme adds nothing), Home balances, member spending, and
-export including the statement. The Groups list, Group/Home Activity, search,
-one Expense, duplicate warnings, recurring-template lists, currency settings,
-rate suggestions, Tags, Draft reads, page titles, invite links and assistant reach
-read recorded data only. Connected assistants also still read recorded data only. They use
-`readGroupLedger` and `readGroupLedgers` with an assistant actor. The across
-operation accepts `page: { after, limit }` and `fields`. Assistant `list_groups`
-queries 51 projected Groups to deliver 50 and its existing `next` cursor.
-The module refills a page after access is revoked and recomputes the reply.
+Household-themed Groups only (`category: "home"`).
 
-These are the preserved part-one choices of #1119, not the part-two rule.
+**Ledger generation (#1126):** every Group ledger read records due recurring
+Expenses before it reads data. This includes Group details, Expenses (also one
+Expense), Balances, Insights, Trip summary, payments, Group and Home Activity,
+search, duplicate warnings, Draft review, To review, Home balances, spending,
+exports and the Debt calculated before recording a payment. Every assistant Group
+operation also generates, including context and Draft operations, replacing the
+earlier no-ledger-write rule.
+
+Member metadata operations (`readGroupMetadata`, `readGroupsMetadata`) retain the
+same admission and delivery checks but avoid generation: rate suggestions,
+invite links, assistant reach, Tags and receipts, currencies, recurring-template
+settings, private Draft listings, page titles, the Groups list and assistant
+approval choices show no saved Expense, total or Activity entry. The member's
+latest manual-Expense currency in the Groups list explicitly excludes generated
+Expenses. Assistant metadata operations still generate under decision 1.
+
+The across operations support exclusive-id `page`, `fields` projections and
+bounded refill after revocation. Assistant `list_groups` still queries 51
+projected Groups to deliver 50 with its existing `next` cursor. The module runs
+one due check per operation, once per newly admitted page Group; nothing due
+costs one schedule aggregate including the product-switch record. A switch
+transition still performs its durable bookkeeping. Empty refill batches do not
+run generation again.
 
 Generation also runs on template creation/edit and before a member's leave or removal is checked. An archived Group materializes
 nothing. A template in its problem state that includes a member keeps them in the
@@ -2829,7 +2841,3 @@ temporary failure still records its next attempt time, so turning recovery on wi
 retries it. Unsetting `ANDROID_NOTIFICATION_SENDS_ENABLED` pauses every send, recovery included,
 and keeps the work for later; neither switch changes any financial save. Scheduling is external
 (`docs/runbooks/android-notifications.md`, "Recovery trigger").
-
-### Connected assistant recurring generation (#1126)
-
-Assistant Group operations add due recurring Expenses before reading, including context and Draft operations. This replaces the earlier recorded-only rule. Generation attributes the Expense and Activity to the template creator and may notify other involved members; the creator receives no self-alert. Grant, reach, archive and retry rules still apply.

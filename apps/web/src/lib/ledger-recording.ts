@@ -72,6 +72,8 @@ export interface LedgerRecording<
   command: (context: { group?: IGroupDocument; receipt?: HydratedDocument<T> }) => Command;
   currencies: readonly CurrencyUse[];
   checkPeople?: (members: Set<string>) => void;
+  /** An admitted new payment's Debt read, after receipt lookup and before the write transaction. */
+  beforeRecord?: () => Promise<void>;
   prepareResponseRecord?: (
     record: HydratedDocument<T>,
     context: {
@@ -161,6 +163,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
       throw description.transactions.required;
     if (admittedGroup.isArchived) throw new Refusal('GROUP_ARCHIVED');
     checkMembers(admittedGroup);
+    await description.beforeRecord?.();
     committed = await withGroupMutation(
       groupId,
       async (session) => {

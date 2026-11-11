@@ -1,4 +1,4 @@
-import { readGroupLedger, readGroupLedgers } from '@/lib/group-ledger-read';
+import { readGroupsMetadata, readGroupLedger, readGroupLedgers } from '@/lib/group-ledger-read';
 import 'server-only';
 import connectDB from '@/lib/db';
 import Group from '@/lib/models/Group';
@@ -152,11 +152,10 @@ export const assistantLedgerService = {
   /** Every Group the member belongs to, as the approval page lists them to tick or leave out. */
   async approvalGroups(memberId: string): Promise<ApprovalGroup[]> {
     await connectDB();
-    return readGroupLedgers({
+    return readGroupsMetadata({
       actor: { kind: 'member', id: draftObjectId.parse(memberId) },
       archived: 'include',
       deletionMarker: 'refuse',
-      recurring: 'recorded-only',
       sort: { name: 1, _id: 1 },
       read: async (_groups, storedGroups) => {
         const groups = await Group.populate<{

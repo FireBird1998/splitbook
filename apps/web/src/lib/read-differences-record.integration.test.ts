@@ -5,7 +5,7 @@ import RecurringExpense from './models/RecurringExpense';
 import { readFixture, readIds } from './test-utils/reads/fixture';
 import { groupReads, acrossReads, exportReads } from './test-utils/reads/catalog';
 import { httpRead } from './test-utils/reads/http';
-import { readGrant } from './test-utils/reads/mcp';
+import { readGrant, mcpRead } from './test-utils/reads/mcp';
 vi.mock('next/headers', async () => (await import('./test-utils/signed-in-route')).nextHeaders);
 vi.mock('next/server', async (original) =>
   (await import('./test-utils/signed-in-route')).nextServer(original),
@@ -25,7 +25,7 @@ for (const [name, id] of [
       }),
     );
     expect(record.answer.status).toBe(name === 'malformed Expense' ? 400 : 404);
-    expect(record.addedDueExpense).toBe(false);
+    expect(record.addedDueExpense).toBe(name !== 'malformed Expense');
   });
 for (const state of ['member', 'outsider', 'malformed'] as const)
   it(`Drafts off / ${state}`, async () => {
@@ -117,3 +117,32 @@ it('Group / a member reads a Not allowed Group', async () => {
   expect(record.answer.status).toBe(200);
   expect(record.addedDueExpense).toBe(true);
 });
+
+for (const name of [
+  'Activity',
+  'Home Activity',
+  'Search',
+  'Duplicate warning',
+  'Draft review',
+  'To review',
+  'Payments',
+])
+  it(`${name} agrees before and after opening Expenses`, async () => {
+    const selected = [...groupReads, ...acrossReads].find((entry) => entry.name === name)!;
+    const first = await httpRead(fixture, selected, 'member');
+    expect(first.status).toBe(200);
+    await httpRead(fixture, read('Expenses'), 'member');
+    expect(await httpRead(fixture, selected, 'member')).toEqual(first);
+  });
+for (const tool of ['group_balances', 'group_spending'] as const)
+  it(`${tool} agrees before and after a member opens Expenses`, async () => {
+    const grant = await readGrant(fixture.cookies.sam);
+    const args =
+      tool === 'group_balances'
+        ? { groupId: readIds.group }
+        : { groupId: readIds.group, from: '2026-11-01', to: '2026-11-30' };
+    const first = await mcpRead(grant.token, tool, args);
+    expect(JSON.stringify(first)).toContain(tool === 'group_balances' ? '340' : 'Due rent');
+    await httpRead(fixture, read('Expenses'), 'member');
+    expect(await mcpRead(grant.token, tool, args)).toEqual(first);
+  });

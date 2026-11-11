@@ -121,7 +121,7 @@ export class UserActivityService {
    * latest changes (#309). Archived Groups are left out, as they are from Home's Groups and
    * totals. A Group the member has left, or never joined, contributes nothing.
    *
-   * Read-only: unlike a Group's own Activity read, it doesn't publish events whose
+   * After recurring generation, unlike a Group's own Activity read, it doesn't recover events whose
    * publication failed (`activityService.recoverGroupActivity`). Those appear here once that
    * Group's Activity is read, or the next write to the same record publishes them.
    */
@@ -131,7 +131,6 @@ export class UserActivityService {
       actor: { kind: 'member', id: userId },
       archived: 'exclude',
       deletionMarker: 'allow-retained-members',
-      recurring: 'recorded-only',
       read: async (groups) => {
         if (groups.length === 0) return { activities: [] as UserActivityEvent[], limit: size };
         const groupsById = new Map(groups.map((group) => [String(group._id), group]));

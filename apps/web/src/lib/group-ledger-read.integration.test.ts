@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { Types } from 'mongoose';
-import type { CommandSucceededEvent } from 'mongodb';
+import type { CommandStartedEvent, CommandSucceededEvent } from 'mongodb';
 import Expense from './models/Expense';
 import Group from './models/Group';
 import RecurringExpense from './models/RecurringExpense';
@@ -11,7 +11,12 @@ import { expenseService } from './services/expense.service';
 import { balanceService } from './services/balance.service';
 import { Refusal } from '@splitbook/shared/refusals';
 import { readCases, readFixture, readIds } from './test-utils/reads/fixture';
-import { readGroupLedger, readGroupLedgers, type LedgerReadGroup } from './group-ledger-read';
+import {
+  readGroupMetadata,
+  readGroupLedger,
+  readGroupLedgers,
+  type LedgerReadGroup,
+} from './group-ledger-read';
 
 // Observe the real database replies for the bounded-query regression below.
 if (process.env.TEST_MONGODB_URI) {
@@ -179,13 +184,12 @@ it('keeps the marker compatibility setting from widening assistant access', asyn
     }),
   ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 });
-it('can read the recorded ledger without adding the due Month', async () => {
+it('reads member metadata without adding a due Month', async () => {
   const access = await fixture.arrange('member');
   await expect(
-    readGroupLedger({
-      actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [] },
+    readGroupMetadata({
+      actor: { kind: 'member', id: access.actorId },
       groupId: access.groupId,
-      recurring: 'recorded-only',
       read: async (group) =>
         (await Expense.find({ group: group._id })).map((expense) => expense.amount),
     }),
@@ -294,7 +298,6 @@ for (const state of ['member', 'admin', 'archived'] as const)
       actor: { kind: 'member', id: access.actorId },
       groupId: access.groupId,
       requiredRole: 'admin',
-      recurring: 'recorded-only',
       read: async (group) => group.name,
     });
     if (state === 'admin') await expect(result).resolves.toBe('Reads Household');
@@ -307,7 +310,6 @@ it('allows an archived admin to read', async () => {
       actor: { kind: 'member', id: DEMO_PERSONA_IDS.alex },
       groupId: readIds.group,
       requiredRole: 'admin',
-      recurring: 'recorded-only',
       read: async (group) => group.name,
     }),
   ).resolves.toBe('Reads Household');
@@ -318,7 +320,6 @@ it('withholds an admin result after demotion during the read', async () => {
     actor: { kind: 'member', id: access.actorId },
     groupId: access.groupId,
     requiredRole: 'admin',
-    recurring: 'recorded-only',
     read: async (group) => {
       await Group.updateOne(
         { _id: group._id, 'members.user': access.actorId },
@@ -336,7 +337,6 @@ it('reads only the member’s admitted Groups across the ledger', async () => {
     readGroupLedgers({
       actor: { kind: 'member', id: access.actorId },
       archived: 'exclude',
-      recurring: 'recorded-only',
       read: async (groups) => groups.map((group) => group.name),
     }),
   ).resolves.toEqual(['Reads Household', 'Control Trip']);
@@ -346,7 +346,6 @@ it('recomputes a list’s aggregate after one Group revokes access during the re
   const result = await readGroupLedgers({
     actor: { kind: 'member', id: access.actorId },
     archived: 'include',
-    recurring: 'recorded-only',
     read: async (groups) => {
       await Group.updateOne(
         { _id: readIds.group },
@@ -388,7 +387,6 @@ it('refuses the whole selected export when a Group revokes access during its rea
     readGroupLedgers({
       actor: { kind: 'member', id: access.actorId },
       archived: 'include',
-      recurring: 'recorded-only',
       groupIds: [readIds.control, readIds.group],
       read: async (groups) => {
         await Group.updateOne(
@@ -406,7 +404,6 @@ it('keeps the read’s Group order when listing by name', async () => {
     readGroupLedgers({
       actor: { kind: 'member', id: access.actorId },
       archived: 'include',
-      recurring: 'recorded-only',
       sort: { name: 1, _id: 1 },
       read: async (groups) => groups.map((group) => group.name),
     }),
@@ -418,7 +415,6 @@ for (const archived of ['include', 'exclude'] as const)
     const names = await readGroupLedgers({
       actor: { kind: 'member', id: access.actorId },
       archived,
-      recurring: 'recorded-only',
       read: async (groups) => groups.map((group) => group.name),
     });
     expect(names).toEqual(
@@ -432,7 +428,6 @@ for (const deletionMarker of ['refuse', 'allow-retained-members'] as const)
       actor: { kind: 'member', id: access.actorId },
       archived: 'include',
       deletionMarker,
-      recurring: 'recorded-only',
       read: async (groups) => groups.map((group) => group.name),
     });
     expect(names).toEqual(
@@ -446,7 +441,6 @@ it('applies exclusions and the Assistant rule when listing an assistant’s Grou
     actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [readIds.control] },
     archived: 'include',
     deletionMarker: 'allow-retained-members',
-    recurring: 'recorded-only',
     read: async (groups) => groups.map((group) => group.name),
   });
   expect(names).toEqual([]);
@@ -514,7 +508,6 @@ it('reads 51 projected Group documents for a page among 120 admitted Groups', as
     const page = await readGroupLedgers({
       actor: { kind: 'member', id: access.actorId },
       archived: 'include',
-      recurring: 'recorded-only',
       sort: { _id: 1 },
       page: { limit: 51 },
       fields: ['name'],
@@ -556,7 +549,6 @@ it('refills an exclusive id page after access is revoked and keeps next consiste
   const result = await readGroupLedgers({
     actor: { kind: 'member', id: access.actorId },
     archived: 'include',
-    recurring: 'recorded-only',
     sort: { _id: 1 },
     page: { after: String(ids[0]), limit: 4 },
     fields: ['name'],
@@ -581,4 +573,69 @@ it('requires the field type when an explicit result type selects fields', () => 
     .parameter(0)
     .toHaveProperty('fields')
     .toBeUndefined();
+});
+
+it('uses one schedule query and no separate switch query when no Month is due', async () => {
+  const access = await fixture.arrange('member');
+  await RecurringExpense.updateOne(
+    { _id: readIds.template },
+    { $set: { lastGeneratedFor: '2026-11' } },
+  );
+  const commands: CommandStartedEvent[] = [];
+  const client = Group.db.getClient();
+  const observe = (event: CommandStartedEvent) => commands.push(event);
+  client.on('commandStarted', observe);
+  try {
+    await readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      read: async (group) => expect(await Expense.countDocuments({ group: group._id })).toBe(1),
+    });
+  } finally {
+    client.off('commandStarted', observe);
+  }
+  const dueChecks = commands.filter(({ command }) =>
+    ['recurringexpenses', 'productswitches'].includes(command.find ?? command.aggregate),
+  );
+  expect(dueChecks).toHaveLength(1);
+});
+it('records due rent before calculating the Debt cleared by a payment', async () => {
+  const access = await fixture.arrange('member');
+  const { createSettlementBatch } = await import('./services/settlement-batch.service');
+  const result = await createSettlementBatch(
+    access.groupId,
+    {
+      paidTo: DEMO_PERSONA_IDS.alex,
+      paidCurrency: 'INR',
+      settlements: [{ currency: 'INR', amount: 1 }],
+    },
+    access.actorId,
+    'due-rent-payment-1126',
+  );
+  expect(result.settlements[0].pairDebtBeforeMinor).toBe(-34000);
+});
+
+it('a payment receipt retry does not recalculate Debt or generate another Month', async () => {
+  const access = await fixture.arrange('member');
+  const { createSettlementBatch } = await import('./services/settlement-batch.service');
+  const payment = {
+    paidTo: DEMO_PERSONA_IDS.alex,
+    paidCurrency: 'INR',
+    settlements: [{ currency: 'INR', amount: 1 }],
+  };
+  const first = await createSettlementBatch(
+    access.groupId,
+    payment,
+    access.actorId,
+    'rent-payment-retry-1126',
+  );
+  vi.setSystemTime(new Date(2026, 11, 11, 12));
+  const retry = await createSettlementBatch(
+    access.groupId,
+    payment,
+    access.actorId,
+    'rent-payment-retry-1126',
+  );
+  expect(String(retry.settlements[0]._id)).toBe(String(first.settlements[0]._id));
+  expect(await Expense.countDocuments({ recurringExpense: readIds.template })).toBe(1);
 });

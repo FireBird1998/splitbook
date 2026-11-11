@@ -1,4 +1,4 @@
-import { readGroupLedger } from '@/lib/group-ledger-read';
+import { readGroupMetadata } from '@/lib/group-ledger-read';
 import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { z } from 'zod';
 import { CURRENCY_CODES } from '@splitbook/shared/currency';
@@ -22,10 +22,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!user) response = unauthorized();
     else {
       const { id } = await routeIds(params);
-      response = await readGroupLedger({
+      response = await readGroupMetadata({
         actor: { kind: 'member', id: user.id },
         groupId: id,
-        recurring: 'recorded-only',
+
         deletionMarker: 'allow-retained-members',
         read: async () => {
           const parsed = query.safeParse(Object.fromEntries(new URL(req.url).searchParams));

@@ -2,7 +2,7 @@
 
 exports[`Activity / admin 1`] = `
 {
-  "addedDueExpense": false,
+  "addedDueExpense": true,
   "after": {
     "activities": [
       {
@@ -30,6 +30,34 @@ exports[`Activity / admin 1`] = `
           "currency": "INR",
           "description": "Control rent",
           "expenseId": "<controlExpense-1>",
+        },
+        "type": "expense_added",
+      },
+      {
+        "__v": 0,
+        "_id": "<activities-1>",
+        "actor": "<member-a>",
+        "createdAt": "<read-time>",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 600,
+          "currency": "INR",
+          "description": "Due rent",
+          "expenseId": "<expenses-1>",
+          "period": "2026-11",
+          "recurring": true,
+          "recurringExpenseId": "<template-1>",
+        },
+        "notificationContext": {
+          "eventId": "<activities-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "<read-time>",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<expenses-1>",
+          "version": 2,
         },
         "type": "expense_added",
       },
@@ -113,6 +141,52 @@ exports[`Activity / admin 1`] = `
       },
     ],
     "expenses": [
+      {
+        "_id": "<expenses-1>",
+        "amount": 600,
+        "amountMinor": 60000,
+        "category": "housing",
+        "createdAt": "<read-time>",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Due rent",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "paidBy": [
+          {
+            "amount": 600,
+            "amountMinor": 60000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": "2026-11",
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": "<template-1>",
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-a>",
+          },
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-b>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Groceries",
+        "tagId": "<tag-1>",
+        "updatedAt": "<read-time>",
+      },
       {
         "_id": "<expense-1>",
         "amount": 120,
@@ -236,6 +310,7 @@ exports[`Activity / admin 1`] = `
             "user": "<member-b>",
           },
         ],
+        "mutationSequence": 4,
         "name": "Reads Household",
         "startDate": null,
         "tags": [
@@ -319,7 +394,7 @@ exports[`Activity / admin 1`] = `
         "endsOn": null,
         "group": "<group-1>",
         "isPaused": false,
-        "lastGeneratedFor": null,
+        "lastGeneratedFor": "2026-11",
         "moneyVersion": 1,
         "paidBy": [
           {
@@ -373,6 +448,27 @@ exports[`Activity / admin 1`] = `
         "activities": [
           {
             "__v": 0,
+            "_id": "<activities-1>",
+            "actor": {
+              "_id": "<member-a>",
+              "image": "https://read-fixture.example.test/photo.png",
+              "name": "Alex Rivera",
+            },
+            "createdAt": "<read-time>",
+            "group": "<group-1>",
+            "metadata": {
+              "amount": 600,
+              "currency": "INR",
+              "description": "Due rent",
+              "expenseId": "<expenses-1>",
+              "period": "2026-11",
+              "recurring": true,
+              "recurringExpenseId": "<template-1>",
+            },
+            "type": "expense_added",
+          },
+          {
+            "__v": 0,
             "_id": "<activity-1>",
             "actor": {
               "_id": "<member-a>",
@@ -393,7 +489,7 @@ exports[`Activity / admin 1`] = `
         "pagination": {
           "limit": 20,
           "page": 1,
-          "total": 1,
+          "total": 2,
           "totalPages": 1,
         },
       },
@@ -2352,7 +2448,7 @@ exports[`Activity / malformed 1`] = `
 
 exports[`Activity / member 1`] = `
 {
-  "addedDueExpense": false,
+  "addedDueExpense": true,
   "after": {
     "activities": [
       {
@@ -2380,6 +2476,34 @@ exports[`Activity / member 1`] = `
           "currency": "INR",
           "description": "Control rent",
           "expenseId": "<controlExpense-1>",
+        },
+        "type": "expense_added",
+      },
+      {
+        "__v": 0,
+        "_id": "<activities-1>",
+        "actor": "<member-a>",
+        "createdAt": "<read-time>",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 600,
+          "currency": "INR",
+          "description": "Due rent",
+          "expenseId": "<expenses-1>",
+          "period": "2026-11",
+          "recurring": true,
+          "recurringExpenseId": "<template-1>",
+        },
+        "notificationContext": {
+          "eventId": "<activities-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "<read-time>",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<expenses-1>",
+          "version": 2,
         },
         "type": "expense_added",
       },
@@ -2463,6 +2587,52 @@ exports[`Activity / member 1`] = `
       },
     ],
     "expenses": [
+      {
+        "_id": "<expenses-1>",
+        "amount": 600,
+        "amountMinor": 60000,
+        "category": "housing",
+        "createdAt": "<read-time>",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Due rent",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "paidBy": [
+          {
+            "amount": 600,
+            "amountMinor": 60000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": "2026-11",
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": "<template-1>",
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-a>",
+          },
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-b>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Groceries",
+        "tagId": "<tag-1>",
+        "updatedAt": "<read-time>",
+      },
       {
         "_id": "<expense-1>",
         "amount": 120,
@@ -2586,6 +2756,7 @@ exports[`Activity / member 1`] = `
             "user": "<member-b>",
           },
         ],
+        "mutationSequence": 4,
         "name": "Reads Household",
         "startDate": null,
         "tags": [
@@ -2669,7 +2840,7 @@ exports[`Activity / member 1`] = `
         "endsOn": null,
         "group": "<group-1>",
         "isPaused": false,
-        "lastGeneratedFor": null,
+        "lastGeneratedFor": "2026-11",
         "moneyVersion": 1,
         "paidBy": [
           {
@@ -2723,6 +2894,27 @@ exports[`Activity / member 1`] = `
         "activities": [
           {
             "__v": 0,
+            "_id": "<activities-1>",
+            "actor": {
+              "_id": "<member-a>",
+              "image": "https://read-fixture.example.test/photo.png",
+              "name": "Alex Rivera",
+            },
+            "createdAt": "<read-time>",
+            "group": "<group-1>",
+            "metadata": {
+              "amount": 600,
+              "currency": "INR",
+              "description": "Due rent",
+              "expenseId": "<expenses-1>",
+              "period": "2026-11",
+              "recurring": true,
+              "recurringExpenseId": "<template-1>",
+            },
+            "type": "expense_added",
+          },
+          {
+            "__v": 0,
             "_id": "<activity-1>",
             "actor": {
               "_id": "<member-a>",
@@ -2743,7 +2935,7 @@ exports[`Activity / member 1`] = `
         "pagination": {
           "limit": 20,
           "page": 1,
-          "total": 1,
+          "total": 2,
           "totalPages": 1,
         },
       },

@@ -65,8 +65,9 @@ The owner's first part-two decision (#1126) now makes every assistant Group
 operation record due recurring Expenses before reading, including context and
 Draft operations. It supersedes the earlier no-ledger-write rule. Generated
 Expenses and Activity are attributed to the template creator and may notify
-other involved members under the usual no-self-alert rule. The other three
-part-two decisions follow. Archived inclusion, admin-only assistant reach,
+other involved members under the usual no-self-alert rule. Every ledger read now generates first; member metadata operations retain
+admission without generation. Missing Groups and deletion markers are the
+remaining two part-two decisions. Archived inclusion, admin-only assistant reach,
 list ordering and selected exports keep their established contracts. Writes
 use their recording boundary. Current generation choices are listed in
 [architecture](../architecture.md#api-request-flow) and

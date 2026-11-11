@@ -53,7 +53,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       actor: { kind: 'member', id: user.id! },
       groupId: id,
       deletionMarker: 'allow-retained-members',
-      recurring: 'recorded-only',
       read: async () => {
         const settlements = await settlementService.getGroupSettlements(id);
         return success(settlements);

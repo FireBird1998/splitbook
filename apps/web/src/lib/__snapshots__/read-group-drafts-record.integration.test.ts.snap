@@ -2,7 +2,7 @@
 
 exports[`Draft review / admin 1`] = `
 {
-  "addedDueExpense": false,
+  "addedDueExpense": true,
   "after": {
     "activities": [
       {
@@ -30,6 +30,34 @@ exports[`Draft review / admin 1`] = `
           "currency": "INR",
           "description": "Control rent",
           "expenseId": "<controlExpense-1>",
+        },
+        "type": "expense_added",
+      },
+      {
+        "__v": 0,
+        "_id": "<activities-1>",
+        "actor": "<member-a>",
+        "createdAt": "<read-time>",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 600,
+          "currency": "INR",
+          "description": "Due rent",
+          "expenseId": "<expenses-1>",
+          "period": "2026-11",
+          "recurring": true,
+          "recurringExpenseId": "<template-1>",
+        },
+        "notificationContext": {
+          "eventId": "<activities-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "<read-time>",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<expenses-1>",
+          "version": 2,
         },
         "type": "expense_added",
       },
@@ -113,6 +141,52 @@ exports[`Draft review / admin 1`] = `
       },
     ],
     "expenses": [
+      {
+        "_id": "<expenses-1>",
+        "amount": 600,
+        "amountMinor": 60000,
+        "category": "housing",
+        "createdAt": "<read-time>",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Due rent",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "paidBy": [
+          {
+            "amount": 600,
+            "amountMinor": 60000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": "2026-11",
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": "<template-1>",
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-a>",
+          },
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-b>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Groceries",
+        "tagId": "<tag-1>",
+        "updatedAt": "<read-time>",
+      },
       {
         "_id": "<expense-1>",
         "amount": 120,
@@ -236,6 +310,7 @@ exports[`Draft review / admin 1`] = `
             "user": "<member-b>",
           },
         ],
+        "mutationSequence": 4,
         "name": "Reads Household",
         "startDate": null,
         "tags": [
@@ -319,7 +394,7 @@ exports[`Draft review / admin 1`] = `
         "endsOn": null,
         "group": "<group-1>",
         "isPaused": false,
-        "lastGeneratedFor": null,
+        "lastGeneratedFor": "2026-11",
         "moneyVersion": 1,
         "paidBy": [
           {
@@ -428,7 +503,13 @@ exports[`Draft review / admin 1`] = `
               "tagId": "<tag-1>",
             },
           },
-          "duplicates": [],
+          "duplicates": [
+            {
+              "description": "Due rent",
+              "id": "<expenses-1>",
+              "kind": "expense",
+            },
+          ],
           "problems": [],
           "review": "<digest-1>",
         },
@@ -2410,7 +2491,7 @@ exports[`Draft review / malformed 1`] = `
 
 exports[`Draft review / member 1`] = `
 {
-  "addedDueExpense": false,
+  "addedDueExpense": true,
   "after": {
     "activities": [
       {
@@ -2438,6 +2519,34 @@ exports[`Draft review / member 1`] = `
           "currency": "INR",
           "description": "Control rent",
           "expenseId": "<controlExpense-1>",
+        },
+        "type": "expense_added",
+      },
+      {
+        "__v": 0,
+        "_id": "<activities-1>",
+        "actor": "<member-a>",
+        "createdAt": "<read-time>",
+        "group": "<group-1>",
+        "metadata": {
+          "amount": 600,
+          "currency": "INR",
+          "description": "Due rent",
+          "expenseId": "<expenses-1>",
+          "period": "2026-11",
+          "recurring": true,
+          "recurringExpenseId": "<template-1>",
+        },
+        "notificationContext": {
+          "eventId": "<activities-1>",
+          "groupId": "<group-1>",
+          "kind": "expense_added",
+          "occurredAt": "<read-time>",
+          "recipientIds": [
+            "<member-b>",
+          ],
+          "recordId": "<expenses-1>",
+          "version": 2,
         },
         "type": "expense_added",
       },
@@ -2521,6 +2630,52 @@ exports[`Draft review / member 1`] = `
       },
     ],
     "expenses": [
+      {
+        "_id": "<expenses-1>",
+        "amount": 600,
+        "amountMinor": 60000,
+        "category": "housing",
+        "createdAt": "<read-time>",
+        "createdBy": "<member-a>",
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Due rent",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "paidBy": [
+          {
+            "amount": 600,
+            "amountMinor": 60000,
+            "user": "<member-a>",
+          },
+        ],
+        "pendingActivity": [],
+        "period": "2026-11",
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": "<template-1>",
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-a>",
+          },
+          {
+            "amount": 300,
+            "amountMinor": 30000,
+            "user": "<member-b>",
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Groceries",
+        "tagId": "<tag-1>",
+        "updatedAt": "<read-time>",
+      },
       {
         "_id": "<expense-1>",
         "amount": 120,
@@ -2644,6 +2799,7 @@ exports[`Draft review / member 1`] = `
             "user": "<member-b>",
           },
         ],
+        "mutationSequence": 4,
         "name": "Reads Household",
         "startDate": null,
         "tags": [
@@ -2727,7 +2883,7 @@ exports[`Draft review / member 1`] = `
         "endsOn": null,
         "group": "<group-1>",
         "isPaused": false,
-        "lastGeneratedFor": null,
+        "lastGeneratedFor": "2026-11",
         "moneyVersion": 1,
         "paidBy": [
           {
@@ -2836,7 +2992,13 @@ exports[`Draft review / member 1`] = `
               "tagId": "<tag-1>",
             },
           },
-          "duplicates": [],
+          "duplicates": [
+            {
+              "description": "Due rent",
+              "id": "<expenses-1>",
+              "kind": "expense",
+            },
+          ],
           "problems": [],
           "review": "<digest-1>",
         },

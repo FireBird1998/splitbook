@@ -321,11 +321,10 @@ export class RecurringExpenseService {
 
   /**
    * Lazy-on-read generation, owned by group-ledger-read.ts after actor admission.
-   * Part one (#1119) materializes for Group details, Expenses, Balances, Insights,
-   * Trip summary (a no-op for that Theme), Home balances, spending and export/statement.
-   * Other reads select the module's recorded-only mode, including assistant tools.
-   * Across reads may select a bounded page and fields. Creating/editing a template
-   * and leaving/removing a member also call generation as writes.
+   * Every ledger read, for a member or assistant, checks due schedules first.
+   * Assistant Group metadata and Draft operations do too (#1126); member metadata
+   * uses admission alone. Across reads may select a bounded page and fields.
+   * Creating/editing a template and leaving/removing a member also generate as writes.
    * Idempotent under concurrency via
    * the unique (recurringExpense, period) index; `lastGeneratedFor` advances
    * monotonically via $max.
@@ -354,7 +353,7 @@ export class RecurringExpenseService {
    *
    * It costs one query for the whole list, plus one generation run per Group that has a month
    * to add, one Group after another: a Group with nothing due (or no template) is never run,
-   * so a member with many Households pays nothing extra on most reads. The switch (#289) is read once. While it is off nothing is generated
+   * so a member with many Households pays nothing extra on most reads. The switch record is included in that same schedule query. While it is off nothing is generated
    * and the run only records that it is off, as a single Group's read does; while it is on, the
    * first run after it was turned back on records when, even if none of these Groups has a
    * template. Like `generateDueExpenses`, this never throws into the read path.
@@ -372,19 +371,43 @@ export class RecurringExpenseService {
         );
         return { generated };
       }
-      await lastSwitchedOnAt(now).catch((err: unknown) =>
-        console.error('Could not read when recurring Expenses were turned on:', err),
-      );
-      if (groupIds.length === 0) return { generated };
-
-      // One read of every template's schedule finds the Groups with a month to add. Most reads
-      // find none, so no Group is run at all. A Group with one is run as its own read would be,
-      // which applies everything this check leaves out (the Theme, the turn-on month, problem
-      // states), so the check only has to never miss a due month.
+      // One schedule query also reads the switch record. Preserve turn-on bookkeeping
+      // even with no due schedule, without a separate switch query on ordinary reads.
       const currentPeriod = toPeriod(now);
-      const schedules = await RecurringExpense.find({ group: { $in: groupIds } })
-        .select('group dayOfMonth startsOn endsOn isPaused lastGeneratedFor')
-        .lean();
+      type Schedule = Pick<
+        IRecurringExpenseDocument,
+        'group' | 'dayOfMonth' | 'startsOn' | 'endsOn' | 'isPaused' | 'lastGeneratedFor'
+      >;
+      const records = await RecurringExpense.aggregate<
+        (Schedule & { kind: 'schedule' }) | { kind: 'switch'; enabled: boolean }
+      >([
+        { $match: { group: { $in: groupIds.map((id) => new mongoose.Types.ObjectId(id)) } } },
+        {
+          $project: {
+            kind: { $literal: 'schedule' },
+            group: 1,
+            dayOfMonth: 1,
+            startsOn: 1,
+            endsOn: 1,
+            isPaused: 1,
+            lastGeneratedFor: 1,
+          },
+        },
+        {
+          $unionWith: {
+            coll: ProductSwitch.collection.name,
+            pipeline: [
+              { $match: { _id: RECURRING_SWITCH } },
+              { $project: { _id: 0, kind: { $literal: 'switch' }, enabled: 1 } },
+            ],
+          },
+        },
+      ]);
+      if (records.some((record) => record.kind === 'switch' && !record.enabled))
+        await lastSwitchedOnAt(now).catch((err: unknown) =>
+          console.error('Could not read when recurring Expenses were turned on:', err),
+        );
+      const schedules = records.filter((record) => record.kind === 'schedule');
       const due = new Set(
         schedules
           .filter((schedule) => getDuePeriods(schedule, currentPeriod).length > 0)

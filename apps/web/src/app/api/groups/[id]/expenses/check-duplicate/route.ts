@@ -20,7 +20,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       actor: { kind: 'member', id: user.id! },
       groupId: id,
       deletionMarker: 'allow-retained-members',
-      recurring: 'recorded-only',
       read: async () => {
         const { searchParams } = new URL(req.url);
         const description = searchParams.get('description');

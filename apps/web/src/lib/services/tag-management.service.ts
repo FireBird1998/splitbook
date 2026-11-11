@@ -1,4 +1,4 @@
-import { readGroupLedger } from '@/lib/group-ledger-read';
+import { readGroupMetadata } from '@/lib/group-ledger-read';
 import { Refusal } from '@splitbook/shared/refusals';
 import 'server-only';
 import mongoose from 'mongoose';
@@ -80,10 +80,9 @@ function applied(receipt: Receipt, current: TagSnapshot): TagActionResult {
 }
 export const tagManagementService = {
   async snapshot(groupId: string, actorId: string): Promise<TagSnapshot> {
-    return readGroupLedger({
+    return readGroupMetadata({
       actor: { kind: 'member', id: actorId },
       groupId,
-      recurring: 'recorded-only',
       read: async (_group, storedGroup) => snapshot(storedGroup, actorId),
     });
   },
@@ -94,10 +93,9 @@ export const tagManagementService = {
       actor: new mongoose.Types.ObjectId(actorId),
       requestId,
     });
-    return readGroupLedger<TagActionResult>({
+    return readGroupMetadata<TagActionResult>({
       actor: { kind: 'member', id: actorId },
       groupId,
-      recurring: 'recorded-only',
       read: async (_group, storedGroup) => {
         const current = snapshot(storedGroup, actorId);
         return receipt

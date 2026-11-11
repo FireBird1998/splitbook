@@ -1,4 +1,4 @@
-import { readGroupLedger } from '@/lib/group-ledger-read';
+import { readGroupMetadata } from '@/lib/group-ledger-read';
 import {
   getAuthUser,
   unauthorized,
@@ -37,11 +37,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await routeIds(params);
 
-    return await readGroupLedger({
+    return await readGroupMetadata({
       actor: { kind: 'member', id: user.id! },
       groupId: id,
       missingGroup: 'not-found',
-      recurring: 'recorded-only',
+
       deletionMarker: 'allow-retained-members',
       read: async (group) => {
         if (

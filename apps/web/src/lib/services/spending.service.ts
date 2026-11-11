@@ -47,7 +47,7 @@ export async function getMemberSpending(
     actor: { kind: 'member', id: userId },
     archived: 'exclude',
     deletionMarker: 'allow-retained-members',
-    recurring: 'materialize',
+
     now,
     sort: { name: 1, _id: 1 },
     read: async (groups) => {

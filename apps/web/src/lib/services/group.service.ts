@@ -1,4 +1,8 @@
-import { readGroupLedger, readGroupLedgers, type LedgerReadGroup } from '@/lib/group-ledger-read';
+import {
+  readGroupsMetadata,
+  readGroupMetadata,
+  type LedgerReadGroup,
+} from '@/lib/group-ledger-read';
 import { isGroupAdmin, withMemberEmails } from '@/lib/group-member-emails';
 import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
@@ -96,11 +100,10 @@ export class GroupService {
   /** Request-scoped title read; the page supplies generic metadata when access is refused. */
   getMemberName = cache(async (groupId: string, userId: string) => {
     try {
-      return await readGroupLedger({
+      return await readGroupMetadata({
         actor: { kind: 'member', id: userId },
         groupId,
         deletionMarker: 'allow-retained-members',
-        recurring: 'recorded-only',
         read: async (group) => ({ name: group.name }),
       });
     } catch (cause) {
@@ -189,11 +192,10 @@ export class GroupService {
    * Get all groups the user is a member of.
    */
   async getUserGroups(userId: string, includeArchived: boolean = false) {
-    return readGroupLedgers({
+    return readGroupsMetadata({
       actor: { kind: 'member', id: userId },
       archived: includeArchived ? 'include' : 'exclude',
       deletionMarker: 'allow-retained-members',
-      recurring: 'recorded-only',
       sort: { updatedAt: -1 },
       read: async (groups) => {
         const latest = await latestExpenseCurrencies(
