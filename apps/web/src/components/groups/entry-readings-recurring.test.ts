@@ -48,7 +48,12 @@ const text = (node: ReactTestInstance): string =>
         .replace(/[\t\r\n ]+/g, ' ')
         .trim();
 
-async function read(row: TypedEntry, edit: boolean, roundTrip = false): Promise<Reading> {
+async function read(
+  row: TypedEntry,
+  edit: boolean,
+  roundTrip = false,
+  changeGroup = false,
+): Promise<Reading> {
   if (row.multiPayer || row.savedZeroPayer)
     return {
       result: {
@@ -81,46 +86,45 @@ async function read(row: TypedEntry, edit: boolean, roundTrip = false): Promise<
     }
     return Response.json({ status: 200, data: edit ? [template] : [] });
   });
-  await act(async () => {
-    renderer = create(
+  const tree = (currency = 'INR', groupPeople = people) =>
+    createElement(
+      SWRConfig,
+      { value: { provider: () => new Map(), dedupingInterval: 0 } },
       createElement(
-        SWRConfig,
-        { value: { provider: () => new Map(), dedupingInterval: 0 } },
-        createElement(
-          ThemeProvider,
-          { theme: createAppTheme('light') },
-          createElement(RecurringExpensesSection, {
-            groupId,
-            defaultCurrency: 'INR',
-            viewerId: alex,
-            onNotify: () => {},
-            tags: [
-              {
-                _id: tagId,
-                name: 'Shared',
-                isArchived: false,
-                isDeleted: false,
-                createdAt: day + 'T00:00:00.000Z',
-              },
-            ],
-            members: people.map((p) => ({
-              user: { _id: p.id, name: p.name, image: undefined },
-              role: 'member' as const,
-              joinedAt: day + 'T00:00:00.000Z',
-            })),
-          }),
-        ),
-      ),
-      {
-        createNodeMock: () => ({
-          style: {},
-          focus() {},
-          addEventListener() {},
-          removeEventListener() {},
-          scrollIntoView() {},
+        ThemeProvider,
+        { theme: createAppTheme('light') },
+        createElement(RecurringExpensesSection, {
+          groupId,
+          defaultCurrency: currency,
+          viewerId: alex,
+          onNotify: () => {},
+          tags: [
+            {
+              _id: tagId,
+              name: 'Shared',
+              isArchived: false,
+              isDeleted: false,
+              createdAt: day + 'T00:00:00.000Z',
+            },
+          ],
+          members: groupPeople.map((p) => ({
+            user: { _id: p.id, name: p.name, image: undefined },
+            role: 'member' as const,
+            joinedAt: day + 'T00:00:00.000Z',
+          })),
         }),
-      },
+      ),
     );
+  await act(async () => {
+    renderer = create(tree(), {
+      createNodeMock: () => ({
+        style: {},
+        focus() {},
+        addEventListener() {},
+        removeEventListener() {},
+        scrollIntoView() {},
+      }),
+    });
   });
   const root = () => renderer!.root;
   if (edit) {
@@ -206,6 +210,15 @@ async function read(row: TypedEntry, edit: boolean, roundTrip = false): Promise<
     await change('Split method', 'shares');
     expect(shares().map((n) => n.props.value)).toEqual(['7', '1']);
   }
+  if (changeGroup) {
+    await act(async () =>
+      renderer!.update(
+        tree('JPY', [people[1], { id: 'a00000000000000000000004', name: 'New Person' }]),
+      ),
+    );
+    // Existing boxes follow the latest Group; newly arriving members get boxes on the next open.
+    expect(root().findAllByType(Checkbox)).toHaveLength(1);
+  }
   const before = text(root());
   const fields = root()
     .findAllByType(TextField)
@@ -266,4 +279,19 @@ it('preserves separately typed amounts and shares across a split-method round tr
     false,
     true,
   );
+});
+
+it('uses the current Group currency and members if its read changes while the dialog is open', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  const cell = await read({ ...entries[0], payerId: people[1].id }, false, false, true);
+  expect(cell.result).toMatchObject({
+    kind: 'command',
+    value: { currency: 'JPY', splitBetween: [{ user: people[1].id }] },
+  });
 });
