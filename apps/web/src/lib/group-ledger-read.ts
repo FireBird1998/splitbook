@@ -74,18 +74,25 @@ export async function readGroupLedger<T>({
   return result;
 }
 
-export type GroupLedgersRead<T, Field extends keyof LedgerReadGroup = keyof LedgerReadGroup> = {
+type GroupReadField<Field> = undefined extends Field
+  ? keyof LedgerReadGroup
+  : Exclude<Field, undefined>;
+
+export type GroupLedgersRead<T, Field extends keyof LedgerReadGroup | undefined = undefined> = {
   actor: LedgerReadActor;
   archived: 'include' | 'exclude';
   deletionMarker?: GroupLedgerRead<T>['deletionMarker'];
   recurring?: GroupLedgerRead<T>['recurring'];
   now?: Date;
   sort?: Partial<Record<'name' | 'updatedAt' | '_id', 1 | -1>>;
-  /** Select top-level Group fields with `_id`. Selecting members also populates them. */
-  fields?: readonly Field[];
+  /**
+   * Select Group fields with `_id`. Selecting members also populates them.
+   * Infer Field, or supply it alongside an explicit result type.
+   */
+  fields?: readonly Exclude<Field, undefined>[] & (undefined extends Field ? never : unknown);
   read: (
-    groups: Pick<LedgerReadGroup, Field | '_id'>[],
-    storedGroups: Pick<IGroupDocument, Field | '_id'>[],
+    groups: Pick<LedgerReadGroup, GroupReadField<Field> | '_id'>[],
+    storedGroups: Pick<IGroupDocument, GroupReadField<Field> | '_id'>[],
   ) => Promise<T>;
 } &
   /** An exclusive id boundary and query limit, applied with this read's sort. */
@@ -97,7 +104,7 @@ export type GroupLedgersRead<T, Field extends keyof LedgerReadGroup = keyof Ledg
 /** Read the ledger over the Groups the actor may currently see. */
 export async function readGroupLedgers<
   T,
-  Field extends keyof LedgerReadGroup = keyof LedgerReadGroup,
+  Field extends keyof LedgerReadGroup | undefined = undefined,
 >({
   actor,
   archived,
@@ -159,7 +166,10 @@ export async function readGroupLedgers<
   // Recompute aggregates and capped lists over admitted Groups.
   // Page queries exclude every Group whose access was revoked.
   while (true) {
-    const result = await read(groups as Pick<LedgerReadGroup, Field | '_id'>[], storedGroups);
+    const result = await read(
+      groups as Pick<LedgerReadGroup, GroupReadField<Field> | '_id'>[],
+      storedGroups,
+    );
     const current = await Group.find({
       $and: [access, { _id: { $in: storedGroups.map((group) => group._id) } }],
     })

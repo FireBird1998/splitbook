@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { Types } from 'mongoose';
 import type { CommandSucceededEvent } from 'mongodb';
 import Expense from './models/Expense';
@@ -11,7 +11,7 @@ import { expenseService } from './services/expense.service';
 import { balanceService } from './services/balance.service';
 import { Refusal } from '@splitbook/shared/refusals';
 import { readCases, readFixture, readIds } from './test-utils/reads/fixture';
-import { readGroupLedger, readGroupLedgers } from './group-ledger-read';
+import { readGroupLedger, readGroupLedgers, type LedgerReadGroup } from './group-ledger-read';
 
 // Observe the real database replies for the bounded-query regression below.
 if (process.env.TEST_MONGODB_URI) {
@@ -520,6 +520,7 @@ it('reads 51 projected Group documents for a page among 120 admitted Groups', as
       fields: ['name'],
       read: async (groups) => groups,
     });
+    expectTypeOf(page).toEqualTypeOf<Pick<LedgerReadGroup, '_id' | 'name'>[]>();
     expect(groupBatches).toEqual([51, 51]); // Admission, then the delivery-time id probe.
     expect(userReads).toBe(0);
     expect(page).toHaveLength(51);
@@ -573,4 +574,11 @@ it('refills an exclusive id page after access is revoked and keeps next consiste
     ['Group 3', 'Group 4', 'Group 5', 'Group 6'],
   ]);
   expect(result).toEqual({ groups: ['Group 3', 'Group 4', 'Group 5'], next: String(ids[4]) });
+});
+
+it('requires the field type when an explicit result type selects fields', () => {
+  expectTypeOf(readGroupLedgers<number>)
+    .parameter(0)
+    .toHaveProperty('fields')
+    .toBeUndefined();
 });
