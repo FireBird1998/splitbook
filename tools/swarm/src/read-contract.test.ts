@@ -203,6 +203,22 @@ it.each([
   ).toMatchObject([{ operation: 'membership' }]);
 });
 it.each([
+  'const find = Groups.findOne.bind(Groups); find(filter);',
+  'const {findOne: find} = Groups; find(filter);',
+])('does not lose the membership filter on an aliased Group query (%s)', (body) => {
+  expect(
+    checkReadSources([
+      {
+        path: 'apps/web/src/lib/models/Group.ts',
+        source: 'const Group = {}; export default Group;',
+      },
+      route(
+        `import Groups from '@/lib/models/Group'; const filter = {'members.user': actor}; export async function GET() { ${body} }`,
+      ),
+    ]),
+  ).toMatchObject([{ operation: 'membership' }]);
+});
+it.each([
   "recurring['generateDueExpenses'](id);",
   'const generate = recurring.generateDueExpenses.bind(recurring); generate(id);',
 ])('keeps bracket and bound generator calls visible (%s)', (body) => {

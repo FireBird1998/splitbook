@@ -140,6 +140,14 @@ export function checkReadSources(
           value.arguments[0].text === 'groups'),
     );
   }
+  function receiver(node: ts.Node): ts.Node | undefined {
+    if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
+      return node.expression;
+    if (ts.isBindingElement(node)) {
+      const binding = node.parent.parent;
+      if (ts.isVariableDeclaration(binding)) return binding.initializer;
+    }
+  }
   function named(node: ts.Node, name: string, file: string): boolean {
     return origins(
       node,
@@ -300,24 +308,34 @@ export function checkReadSources(
     )
       report(node, 'membership');
     else if (
-      (ts.isPropertyAccessExpression(node.expression) ||
-        ts.isElementAccessExpression(node.expression)) &&
-      (([
-        'find',
-        'findOne',
-        'exists',
-        'findOneAndUpdate',
-        'countDocuments',
-        'updateOne',
-        'updateMany',
-        'deleteOne',
-        'deleteMany',
-      ].some((name) => property(node.expression, name)) &&
-        groupModel(node.expression.expression) &&
-        !!node.arguments[0] &&
+      (origins(node.expression, (value) => {
+        const target = receiver(value);
+        return (
+          !!target &&
+          groupModel(target) &&
+          [
+            'find',
+            'findOne',
+            'exists',
+            'findOneAndUpdate',
+            'countDocuments',
+            'updateOne',
+            'updateMany',
+            'deleteOne',
+            'deleteMany',
+          ].some((name) => property(value, name))
+        );
+      }) &&
+        node.arguments[0] &&
         membershipFilter(node.arguments[0])) ||
-        (['some', 'find', 'filter', 'every'].some((name) => property(node.expression, name)) &&
-          origins(node.expression.expression, (value) => property(value, 'members'))))
+      origins(node.expression, (value) => {
+        const target = receiver(value);
+        return (
+          !!target &&
+          ['some', 'find', 'filter', 'every'].some((name) => property(value, name)) &&
+          origins(target, (value) => property(value, 'members'))
+        );
+      })
     )
       report(node, 'membership');
   }
