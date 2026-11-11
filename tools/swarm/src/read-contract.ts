@@ -193,6 +193,58 @@ export function checkReadSources(
       if (ts.isVariableDeclaration(binding)) return binding.initializer;
     }
   }
+  function memberList(node: ts.Node, seen = new Set<ts.Node>()): boolean {
+    if (seen.has(node)) return false;
+    seen.add(node);
+    return origins(node, (value) => {
+      if (property(value, 'members')) return true;
+      if (
+        ts.isNewExpression(value) &&
+        ts.isIdentifier(value.expression) &&
+        value.expression.text === 'Set' &&
+        value.arguments?.[0]
+      )
+        return memberList(value.arguments[0], seen);
+      if (
+        ts.isCallExpression(value) &&
+        ['map', 'filter'].some((name) => property(value.expression, name))
+      ) {
+        const target = receiver(value.expression);
+        return !!target && memberList(target, seen);
+      }
+      return false;
+    });
+  }
+  function contains(node: ts.Node, match: (value: ts.Node) => boolean): boolean {
+    return match(node) || !!node.forEachChild((child) => contains(child, match));
+  }
+  function comparesLoopMember(loop: ts.ForOfStatement): boolean {
+    const binding = ts.isVariableDeclarationList(loop.initializer)
+      ? loop.initializer.declarations[0]?.name
+      : loop.initializer;
+    if (!binding) return false;
+    const bindings = new Set<ts.Symbol>();
+    contains(binding, (value) => {
+      const found = ts.isIdentifier(value) ? symbol(value) : undefined;
+      if (found) bindings.add(found);
+      return false;
+    });
+    return contains(
+      loop.statement,
+      (value) =>
+        ts.isBinaryExpression(value) &&
+        [
+          ts.SyntaxKind.EqualsEqualsToken,
+          ts.SyntaxKind.EqualsEqualsEqualsToken,
+          ts.SyntaxKind.ExclamationEqualsToken,
+          ts.SyntaxKind.ExclamationEqualsEqualsToken,
+        ].includes(value.operatorToken.kind) &&
+        contains(
+          value,
+          (part) => ts.isIdentifier(part) && !!symbol(part) && bindings.has(symbol(part)!),
+        ),
+    );
+  }
   function named(node: ts.Node, name: string, file: string): boolean {
     return origins(
       node,
@@ -300,6 +352,10 @@ export function checkReadSources(
       });
   }
   for (const node of nodes) {
+    if (ts.isForOfStatement(node) && memberList(node.expression) && comparesLoopMember(node)) {
+      report(node, 'membership');
+      continue;
+    }
     if (!ts.isCallExpression(node)) continue;
     if (
       ['getGroupInsights', 'getTripSummary'].some((name) =>
@@ -377,8 +433,10 @@ export function checkReadSources(
         const target = receiver(value);
         return (
           !!target &&
-          ['some', 'find', 'filter', 'every'].some((name) => property(value, name)) &&
-          origins(target, (value) => property(value, 'members'))
+          ['some', 'find', 'filter', 'every', 'findIndex', 'includes', 'has'].some((name) =>
+            property(value, name),
+          ) &&
+          memberList(target)
         );
       })
     )

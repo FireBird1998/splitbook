@@ -285,3 +285,14 @@ it.each([
   };
   expect(checkReadSources([moved], [exception])).toHaveLength(2);
 });
+
+it.each([
+  'group.members.map(member => member.user).includes(actor);',
+  'new Set(group.members.map(member => member.user)).has(actor);',
+  'group.members.findIndex(member => member.user === actor);',
+  'for (const member of group.members) { if (member.user === actor) return true; }',
+])('refuses membership decisions through derived member lists (%s)', (body) => {
+  expect(checkReadSources([route(`export async function GET() { ${body} }`)])).toMatchObject([
+    { operation: 'membership' },
+  ]);
+});

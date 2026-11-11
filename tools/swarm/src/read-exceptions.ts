@@ -710,4 +710,34 @@ export const readExceptions = [
     reason:
       'A client form selects member labels or controls from already delivered Group data; it does not admit a server ledger read.',
   },
+  {
+    path: 'apps/web/src/lib/ledger-recording.ts',
+    within: 'FunctionDeclaration recordLedger#1/ArrowFunction checkMembers#1',
+    operation: 'membership',
+    site: 'members.has(actorId)',
+    reason:
+      'The ledger recording boundary verifies the member actor before a new save and at its commit.',
+  },
+  {
+    path: 'apps/web/src/lib/ledger-recording.ts',
+    within: 'FunctionDeclaration requireCommitGroup#1',
+    operation: 'membership',
+    site: 'members.has(actorId)',
+    reason: 'Expense mutation rechecks the member actor at the financial commit fence.',
+  },
+  {
+    path: 'apps/web/src/lib/services/group.service.ts',
+    within: 'MethodDeclaration GroupService.leave#1',
+    operation: 'membership',
+    site: "others.some((m)=>m.role==='admin')",
+    reason: 'Leaving checks whether another admin remains before permitting the member departure.',
+  },
+  {
+    path: 'apps/web/src/lib/services/search.service.ts',
+    within: 'MethodDeclaration SearchService.search#1/ArrowFunction read#1',
+    operation: 'membership',
+    site: "for(const{user}ofgroup.members){if(!user||typeofuser.name!=='string')continue;constid=String(user._id);if(id===userId)continue;constknown=people.get(id);if(known)known.groupCount+=1;elseif(matchesSearch(user.name,terms))people.set(id,{id,name:user.name,groupId:String(group._id),groupName:group.name,groupCount:1,});}",
+    reason:
+      'The admitted across-Group read projects people results from its supplied members, checking name availability and omitting the viewer.',
+  },
 ] satisfies readonly AllowedReadSite[];
