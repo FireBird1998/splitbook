@@ -482,10 +482,9 @@ export class RecurringExpenseService {
           try {
             const result = await recordLedger({
               groupId,
-              actorId: String(template.createdBy),
+              actor: { id: String(template.createdBy), source: 'template-creator' },
               model: Expense,
               transactions: 'allow-standalone',
-              compatibility: { membership: 'template-validated' },
               retry: { template: template._id, period, lookup: 'on-duplicate' },
               command: () => ({ period }),
               currencies: [{ currency: template.currency, rule: 'listed' }],

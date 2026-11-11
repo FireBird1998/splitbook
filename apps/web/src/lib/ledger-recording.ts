@@ -68,12 +68,9 @@ export interface LedgerRecording<
   Command extends Record<string, unknown> = Record<string, unknown>,
 > {
   groupId: string;
-  actorId: string;
+  actor: { id: string; source: 'member' | 'template-creator' };
   model: Model<T>;
   transactions: 'allow-standalone' | { required: Refusal };
-  compatibility?: {
-    membership: 'before-retry-and-at-commit' | 'actor-before-retry' | 'template-validated';
-  };
   retry?: SubmissionRetry | TemplateMonthRetry;
   command: (context: { group?: IGroupDocument; receipt?: HydratedDocument<T> }) => Command;
   currencies: readonly CurrencyUse[];
@@ -98,7 +95,8 @@ export interface LedgerRecording<
 export async function recordLedger<T extends LedgerRecord, Command extends Record<string, unknown>>(
   description: LedgerRecording<T, Command>,
 ) {
-  const { groupId, actorId, model, retry } = description;
+  const { groupId, actor, model, retry } = description;
+  const actorId = actor.id;
   const submission = retry && 'key' in retry ? retry : undefined;
   const month = retry && 'template' in retry ? retry : undefined;
   await connectDB();
@@ -114,20 +112,14 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
   };
   const checkMembers = (group: IGroupDocument, includePeople = true) => {
     const members = new Set(group.members.map((member) => String(member.user)));
-    if (description.compatibility?.membership !== 'template-validated' && !members.has(actorId))
-      throw new Refusal('FORBIDDEN');
+    if (actor.source === 'member' && !members.has(actorId)) throw new Refusal('FORBIDDEN');
     if (includePeople) description.checkPeople?.(members);
   };
   let admittedGroup: IGroupDocument | undefined;
-  // Admission is separate from commit-time checks: an Expense replay may name a former member.
-  if (
-    description.compatibility?.membership &&
-    description.compatibility.membership !== 'template-validated'
-  ) {
-    admittedGroup = (await Group.findById(groupId)) ?? undefined;
-    if (!admittedGroup) throw new Refusal('FORBIDDEN');
-    checkMembers(admittedGroup, description.compatibility.membership !== 'actor-before-retry');
-  }
+  // A receipt is admitted by current actor access, before judging a new save's people.
+  admittedGroup = (await Group.findById(groupId)) ?? undefined;
+  if (!admittedGroup) throw new Refusal('FORBIDDEN');
+  checkMembers(admittedGroup, false);
   const lookup = async () => {
     if (month)
       return model
@@ -173,20 +165,17 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
   const command = normalize(first);
   const existing = await confirm(first, command);
   if (existing) return publish(existing, 'replayed');
-  if (description.transactions !== 'allow-standalone' && !(await supportsGroupTransactions()))
-    throw description.transactions.required;
-  if (
-    admittedGroup?.isArchived &&
-    description.compatibility?.membership !== 'before-retry-and-at-commit'
-  )
-    throw new Refusal('GROUP_ARCHIVED');
-  if (description.currenciesAt === 'before-fence') await lockCurrencies(description.currencies);
-  const prepared =
-    description.prepareAt === 'commit'
-      ? undefined
-      : await description.prepare(command, admittedGroup);
   let committed: { records: HydratedDocument<T>[]; outcome: 'created' | 'replayed' };
   try {
+    if (description.transactions !== 'allow-standalone' && !(await supportsGroupTransactions()))
+      throw description.transactions.required;
+    if (admittedGroup.isArchived) throw new Refusal('GROUP_ARCHIVED');
+    checkMembers(admittedGroup);
+    if (description.currenciesAt === 'before-fence') await lockCurrencies(description.currencies);
+    const prepared =
+      description.prepareAt === 'commit'
+        ? undefined
+        : await description.prepare(command, admittedGroup);
     committed = await withGroupMutation(
       groupId,
       async (session) => {
@@ -199,12 +188,13 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
         if (group.isArchived) {
           throw new Refusal('GROUP_ARCHIVED');
         }
-        checkMembers(group);
+        checkMembers(group, false);
         if (submission?.atCommit) {
           const receipt = await lookup();
           const concurrent = receipt ? await confirm(receipt, normalize(receipt)) : null;
           if (concurrent) return { records: concurrent, outcome: 'replayed' as const };
         }
+        checkMembers(group);
         const descriptions = prepared ?? (await description.prepare(command, admittedGroup));
         const result: HydratedDocument<T>[] = [];
         for (const [index, entry] of descriptions.entries()) {
@@ -253,7 +243,13 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
       { ledger: true },
     );
   } catch (error) {
-    if (retry && (error as { code?: number }).code === 11000) {
+    if (
+      retry &&
+      ((error as { code?: number }).code === 11000 || (submission && error instanceof Refusal))
+    ) {
+      const current = await Group.findById(groupId);
+      if (!current) throw new Refusal('FORBIDDEN');
+      checkMembers(current, false);
       const receipt = await lookup();
       const raced = receipt
         ? await confirm(

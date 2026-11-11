@@ -2214,11 +2214,33 @@ exports[`single-settlement record of recordings > retry after the named person l
     },
     {
       "body": {
-        "code": "INVALID_MEMBERS",
-        "error": "Both payer and recipient must be group members",
-        "status": 422,
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:00.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:00.000Z",
+        },
+        "status": 201,
       },
-      "status": 422,
+      "status": 201,
     },
   ],
   "before": {

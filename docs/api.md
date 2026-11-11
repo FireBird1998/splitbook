@@ -2809,3 +2809,5 @@ temporary failure still records its next attempt time, so turning recovery on wi
 retries it. Unsetting `ANDROID_NOTIFICATION_SENDS_ENABLED` pauses every send, recovery included,
 and keeps the work for later; neither switch changes any financial save. Scheduling is external
 (`docs/runbooks/android-notifications.md`, "Recovery trigger").
+
+Payment and Expense creation retries first admit the current actor, then recognise the matching stored receipt, before checking a new save. A named party's departure or a later archive does not refuse an already recorded payment: the retry confirms it with **201** and its original IDs. A departed actor still answers **403 `FORBIDDEN`**. For new saves, archive refusal precedes participant validation; for an existing key, a changed body answers **409 `IDEMPOTENCY_CONFLICT`** before participant validation.

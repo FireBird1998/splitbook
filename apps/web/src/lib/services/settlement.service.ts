@@ -49,12 +49,9 @@ export class SettlementService {
       records: [settlement],
     } = await recordLedger({
       groupId,
-      actorId: userId,
+      actor: { id: userId, source: 'member' },
       model: Settlement,
       transactions: 'allow-standalone',
-      compatibility: {
-        membership: 'before-retry-and-at-commit',
-      },
       command: () => command,
       retry: requestKey ? { key: requestKey } : undefined,
       currencies: [

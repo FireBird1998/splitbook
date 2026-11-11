@@ -45,7 +45,7 @@ function recordResult(
 ) {
   return recordLedger({
     groupId,
-    actorId: alice,
+    actor: { id: alice, source: 'member' },
     model: Expense,
     transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
     command: () => ({ description: 'A record', amount: 10 }),
@@ -150,23 +150,17 @@ describe('ledger recording', () => {
           return transaction(write, options);
         },
       );
-      await expect(
-        record(randomUUID(), {
-          compatibility: { membership: 'before-retry-and-at-commit' },
-        }),
-      ).rejects.toMatchObject({ message: person === alice ? 'FORBIDDEN' : 'INVALID_MEMBERS' });
+      await expect(record(randomUUID())).rejects.toMatchObject({
+        message: person === alice ? 'FORBIDDEN' : 'INVALID_MEMBERS',
+      });
       expect(await Expense.countDocuments()).toBe(0);
       expect(await Activity.countDocuments()).toBe(0);
     },
   );
-  it('still checks payment participants before ordinary replay until the retry policy is unified', async () => {
+  it('confirms a payment receipt for a current actor after a named person leaves', async () => {
     const key = randomUUID();
-    const compatibility = { membership: 'before-retry-and-at-commit' as const };
-    const [saved] = await record(key, { compatibility });
+    const [saved] = await record(key);
     await Group.updateOne({ _id: groupId }, { $pull: { members: { user: bob } } });
-    await expect(record(key, { compatibility })).rejects.toMatchObject({
-      message: 'INVALID_MEMBERS',
-    });
     expect(String((await record(key))[0]._id)).toBe(String(saved._id));
   });
   it.each(['always', 'payments', 'expense-changes'] as const)(

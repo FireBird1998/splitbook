@@ -39,10 +39,9 @@ export async function createSettlementBatch(
   const ids = rows.map(() => new Types.ObjectId());
   const { records: saved } = await recordLedger({
     groupId,
-    actorId: userId,
+    actor: { id: userId, source: 'member' },
     model: Settlement,
     transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
-    compatibility: { membership: 'before-retry-and-at-commit' },
     command: () => command,
     retry: { key: requestKey, receipt: 'ordered-records', atCommit: true },
     currencies: [],

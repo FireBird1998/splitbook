@@ -113,10 +113,9 @@ export class ExpenseService {
       records: [expense],
     } = await recordLedger({
       groupId,
-      actorId: userId,
+      actor: { id: userId, source: 'member' },
       model: Expense,
       transactions: 'allow-standalone',
-      compatibility: { membership: 'actor-before-retry' },
       retry: requestKey
         ? { key: requestKey, legacyTagAlias: data.tag, raceCommand: 'original' }
         : undefined,
