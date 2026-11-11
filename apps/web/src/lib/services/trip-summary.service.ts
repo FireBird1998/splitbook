@@ -1,7 +1,6 @@
 import type { LedgerReadGroup } from '@/lib/group-ledger-read';
 import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
-import Group from '@/lib/models/Group';
 import Settlement from '@/lib/models/Settlement';
 import User from '@/lib/models/User';
 import { inSupportedCurrencies } from '@splitbook/shared/currency';
@@ -37,8 +36,6 @@ export interface TripSummaryResponse extends Omit<TripSummary, 'suggestedPayment
 
 export type TripSummaryResult =
   | { kind: 'summary'; summary: TripSummaryResponse }
-  /** No Group with this id. */
-  | { kind: 'missing' }
   /** The Group's Theme isn't Trip: only a Trip has a Trip summary. */
   | { kind: 'not-a-trip' };
 
@@ -62,23 +59,15 @@ export type TripSummaryResult =
  *   when they have left the Group with a balance open, as Balances does; never by email.
  */
 export async function getTripSummary(
-  groupOrId: string | LedgerReadGroup,
+  group: LedgerReadGroup,
   userId: string,
-  { timeZone, currency: requestedCurrency }: { timeZone: string; currency?: string; now?: Date },
+  { timeZone, currency: requestedCurrency }: { timeZone: string; currency?: string },
 ): Promise<TripSummaryResult> {
-  const groupId = typeof groupOrId === 'string' ? groupOrId : String(groupOrId._id);
+  const groupId = String(group._id);
   // Fails before any read when the zone is wrong.
   const zone = readTimeZone(timeZone);
   await connectDB();
 
-  const group =
-    typeof groupOrId === 'string'
-      ? await Group.findById(groupId)
-          .select('category defaultCurrency alternateCurrencies startDate endDate tags members')
-          .populate('members.user', 'name')
-          .lean()
-      : groupOrId;
-  if (!group) return { kind: 'missing' };
   if (!hasTripSummary(group.category)) return { kind: 'not-a-trip' };
 
   const [storedExpenses, storedSettlements] = await Promise.all([

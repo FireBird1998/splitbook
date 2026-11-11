@@ -17,22 +17,6 @@ export const refusalExceptions = [
     reason: 'Trusted command fingerprints require finite JSON-compatible values.',
   },
   {
-    path: 'apps/web/src/lib/services/assistant-ledger.service.ts',
-    code: 'GROUP_NOT_FOUND',
-    when: '!group',
-    within: 'requireLedgerMembership',
-    reason:
-      'Assistant protocol hides missing and excluded Groups alike. Its HTTP fallthrough stays a fault until the owner decides #1086.',
-  },
-  {
-    path: 'apps/web/src/lib/services/assistant-ledger.service.ts',
-    code: 'GROUP_NOT_FOUND',
-    when: '!read',
-    within: 'balances',
-    reason:
-      'Assistant protocol hides missing and excluded Groups alike. Its HTTP fallthrough stays a fault until the owner decides #1086.',
-  },
-  {
     path: 'apps/web/src/lib/services/expense-draft.service.ts',
     code: 'GROUP_NOT_FOUND',
     when: 'reach',

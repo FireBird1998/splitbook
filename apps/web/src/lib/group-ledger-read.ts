@@ -23,6 +23,7 @@ export interface GroupLedgerRead<T> {
   missingGroup?: 'forbidden' | 'not-found';
   deletionMarker?: 'refuse' | 'allow-retained-members';
   recurring?: 'materialize' | 'recorded-only';
+  now?: Date;
   /** Minimum Group role for this read. */
   requiredRole?: 'member' | 'admin';
   /** Preserve admission before request validation, and validation before any materialization. */
@@ -38,6 +39,7 @@ export async function readGroupLedger<T>({
   deletionMarker = 'refuse',
   recurring = 'materialize',
   requiredRole = 'member',
+  now = new Date(),
   validate,
   read,
 }: GroupLedgerRead<T>): Promise<T> {
@@ -53,7 +55,7 @@ export async function readGroupLedger<T>({
       !(await Group.exists({ _id: groupId }))
     )
       throw new Refusal('NOT_FOUND', { resource: 'Group' });
-    throw new Refusal('FORBIDDEN');
+    throw groupReadRefusal(actor);
   }
   // Keep stored member identities for review fingerprints and member-id computations.
   const group = await Group.populate<{ members: LedgerReadGroup['members'] }>(
@@ -64,10 +66,11 @@ export async function readGroupLedger<T>({
   let result: T;
   if (validation !== undefined) result = validation;
   else {
-    if (recurring === 'materialize') await recurringExpenseService.generateDueExpenses(groupId);
+    if (recurring === 'materialize')
+      await recurringExpenseService.generateDueExpenses(groupId, now);
     result = await read(group, storedGroup);
   }
-  if (!(await Group.exists(access))) throw new Refusal('FORBIDDEN');
+  if (!(await Group.exists(access))) throw groupReadRefusal(actor);
   return result;
 }
 
@@ -106,7 +109,7 @@ export async function readGroupLedgers<T>({
     const byId = new Map(storedGroups.map((group) => [String(group._id), group]));
     storedGroups = groupIds.map((id) => {
       const group = byId.get(id);
-      if (!group) throw new Refusal('FORBIDDEN');
+      if (!group) throw groupReadRefusal(actor);
       return group;
     });
   }
@@ -133,7 +136,7 @@ export async function readGroupLedgers<T>({
       .lean();
     const admitted = new Set(current.map((group) => String(group._id)));
     if (storedGroups.every((group) => admitted.has(String(group._id)))) return result;
-    if (groupIds) throw new Refusal('FORBIDDEN');
+    if (groupIds) throw groupReadRefusal(actor);
     storedGroups = storedGroups.filter((group) => admitted.has(String(group._id)));
     groups = groups.filter((group) => admitted.has(String(group._id)));
   }
@@ -159,7 +162,7 @@ function groupAccess(
     groupId &&
     actor.excludedGroupIds.some((id) => id.toLowerCase() === groupId)
   )
-    throw new Refusal('FORBIDDEN');
+    throw groupReadRefusal(actor);
   return {
     ...(groupId
       ? { _id: groupId }
@@ -175,4 +178,11 @@ function groupAccess(
     ...(archived === 'exclude' ? { isArchived: false } : {}),
     ...(actor.kind === 'assistant' ? { assistantRule: { $ne: 'not_allowed' as const } } : {}),
   };
+}
+
+/** Inaccessible Groups are indistinguishable to an assistant; tools supply their own words. */
+function groupReadRefusal(actor: LedgerReadActor) {
+  return actor.kind === 'assistant'
+    ? new Refusal('NOT_FOUND', { resource: 'Group' })
+    : new Refusal('FORBIDDEN');
 }

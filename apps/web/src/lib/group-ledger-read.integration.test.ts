@@ -55,7 +55,12 @@ for (const kind of ['member', 'assistant'] as const)
           expect(reached).toBe(true);
         } else {
           await expect(result).rejects.toMatchObject({
-            code: state === 'malformed' ? 'INVALID_ID' : 'FORBIDDEN',
+            code:
+              state === 'malformed'
+                ? 'INVALID_ID'
+                : kind === 'assistant'
+                  ? 'NOT_FOUND'
+                  : 'FORBIDDEN',
           });
           expect(reached).toBe(false);
         }
@@ -118,7 +123,9 @@ for (const scenario of [
         return Expense.find({ group: group._id }).lean();
       },
     });
-    const refused = expect(reading).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    const refused = expect(reading).rejects.toMatchObject({
+      code: scenario.kind === 'assistant' ? 'NOT_FOUND' : 'FORBIDDEN',
+    });
     await entered.promise;
     if (scenario.change === 'membership')
       await groupService.removeMember(access.groupId, access.actorId, DEMO_PERSONA_IDS.alex);
@@ -162,7 +169,7 @@ it('keeps the marker compatibility setting from widening assistant access', asyn
       deletionMarker: 'allow-retained-members',
       read: async (group) => group.name,
     }),
-  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  ).rejects.toMatchObject({ code: 'NOT_FOUND' });
 });
 it('can read the recorded ledger without adding the due Month', async () => {
   const access = await fixture.arrange('member');
@@ -269,7 +276,7 @@ for (const state of ['missing', 'outsider'] as const)
         missingGroup: 'not-found',
         read: async (group) => group.name,
       }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
 for (const state of ['member', 'admin', 'archived'] as const)
@@ -457,4 +464,15 @@ it('answers across Groups with the recorded ledger when a due insertion fails', 
   } finally {
     await Expense.db.db!.command({ collMod: 'expenses', validator: {} });
   }
+});
+
+it('materializes the one-Group ledger at the same instant the reader uses', async () => {
+  const access = await fixture.arrange('member');
+  const amounts = await readGroupLedger({
+    actor: { kind: 'member', id: access.actorId },
+    groupId: access.groupId,
+    now: new Date('2026-10-31T12:00:00Z'),
+    read: async (group) => (await Expense.find({ group: group._id })).map((row) => row.amount),
+  });
+  expect(amounts).toEqual([120]);
 });

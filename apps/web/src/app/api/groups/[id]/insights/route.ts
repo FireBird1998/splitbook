@@ -2,7 +2,6 @@ import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   error,
   getAuthUser,
-  notFound,
   failedRead,
   success,
   unauthorized,
@@ -39,12 +38,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const currency = searchParams.get('currency') || null;
     let timeZone: string;
     let compare: number;
-    let now: Date;
-    return await readGroupLedger({
+    const now = new Date();
+    return await readGroupLedger<Response>({
       actor: { kind: 'member', id: user.id },
       groupId: id,
       deletionMarker: 'allow-retained-members',
       recurring: 'materialize',
+      now,
       validate: () => {
         try {
           timeZone = readTimeZone(searchParams.get('tz'));
@@ -65,8 +65,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         // Empty is unset. Any supported code is read, a currency nothing was spent in as zeros.
         if (currency !== null && !CURRENCY_CODES.includes(currency))
           return error('Send a currency code, such as INR.', 400, 'INVALID_CURRENCY');
-
-        now = new Date();
       },
       read: async (_group, storedGroup) => {
         const insights = await getGroupInsights(storedGroup, user.id, {
@@ -76,7 +74,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           timeZone,
           currency: currency ?? undefined,
         });
-        if (!insights) return notFound('Group');
         return success(insights);
       },
     });
