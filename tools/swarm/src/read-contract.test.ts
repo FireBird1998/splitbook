@@ -296,3 +296,60 @@ it.each([
     { operation: 'membership' },
   ]);
 });
+
+it.each([
+  "const filter = {}; filter['members.user'] = actor; Groups.findOne(filter);",
+  "Groups.aggregate([{$match: {'members.user': actor}}]);",
+  "Groups.where('members.user').equals(actor);",
+  "Groups.find().where({'members.user': actor});",
+  "Groups.collection.findOne({'members.user': actor});",
+  "const name = 'groups'; db.collection(name).findOne({'members.user': actor});",
+])('refuses membership queries through filters and collection forms (%s)', (body) => {
+  expect(
+    checkReadSources([
+      {
+        path: 'apps/web/src/lib/models/Group.ts',
+        source: 'const Group = {}; export default Group;',
+      },
+      route(`import Groups from '@/lib/models/Group'; export async function GET() { ${body} }`),
+    ]),
+  ).toMatchObject([{ operation: 'membership' }]);
+});
+
+it('keeps a bound where path visible through its alias', () => {
+  expect(
+    checkReadSources([
+      {
+        path: 'apps/web/src/lib/models/Group.ts',
+        source: 'const Group = {}; export default Group;',
+      },
+      route(`import Group from '@/lib/models/Group';
+      const where = Group.where.bind(Group); where('members.user');`),
+    ]),
+  ).toMatchObject([{ operation: 'membership' }]);
+});
+
+it('tracks a filter mutation through its local alias', () => {
+  expect(
+    checkReadSources([
+      {
+        path: 'apps/web/src/lib/models/Group.ts',
+        source: 'const Group = {}; export default Group;',
+      },
+      route(`import Group from '@/lib/models/Group'; const filter = {}; const same = filter;
+      same['members.user'] = actor; Group.findOne(filter);`),
+    ]),
+  ).toMatchObject([{ operation: 'membership' }]);
+});
+
+it('allows member projections that make no comparison', () => {
+  expect(
+    checkReadSources([
+      route(`export function labels(group) {
+    const names = group.members.map(member => member.user.name);
+    for (const member of group.members) names.push(member.user.name);
+    return names;
+  }`),
+    ]),
+  ).toEqual([]);
+});

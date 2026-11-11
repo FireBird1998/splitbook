@@ -153,19 +153,18 @@ export function checkReadSources(
       (ts.isBindingElement(node) && (node.propertyName ?? node.name).getText() === name)
     );
   }
+  const mutatedFilters = new Set<ts.Symbol>();
+  function membershipPath(node: ts.Node): boolean {
+    const key = ts.isComputedPropertyName(node) ? node.expression : node;
+    return /^members(?:\.|$)/.test(literal(key) ?? (ts.isIdentifier(key) ? key.text : ''));
+  }
   function membershipFilter(node: ts.Node, seen = new Set<ts.Node>()): boolean {
     if (seen.has(node)) return false;
     seen.add(node);
     return origins(node, (value) => {
-      if (
-        ts.isPropertyAssignment(value) &&
-        /^members(?:\.|$)/.test(
-          ts.isComputedPropertyName(value.name)
-            ? (literal(value.name.expression) ?? '')
-            : value.name.getText().replace(/^['"]|['"]$/g, ''),
-        )
-      )
-        return true;
+      const binding = symbol(ts.isVariableDeclaration(value) ? value.name : value);
+      if (binding && mutatedFilters.has(binding)) return true;
+      if (ts.isPropertyAssignment(value) && membershipPath(value.name)) return true;
       let found = false;
       value.forEachChild((child) => {
         if (membershipFilter(child, seen)) found = true;
@@ -173,17 +172,27 @@ export function checkReadSources(
       return found;
     });
   }
-  function groupModel(node: ts.Node): boolean {
-    return origins(
-      node,
-      (value) =>
-        value.getSourceFile().fileName.endsWith('/lib/models/Group.ts') ||
-        (ts.isCallExpression(value) &&
-          property(value.expression, 'collection') &&
-          !!value.arguments[0] &&
-          ts.isStringLiteralLike(value.arguments[0]) &&
-          value.arguments[0].text === 'groups'),
-    );
+  function groupModel(node: ts.Node, seen = new Set<ts.Node>()): boolean {
+    if (seen.has(node)) return false;
+    seen.add(node);
+    return origins(node, (value) => {
+      if (value.getSourceFile().fileName.endsWith('/lib/models/Group.ts')) return true;
+      const target = receiver(value);
+      if (target && property(value, 'collection') && groupModel(target, seen)) return true;
+      if (!ts.isCallExpression(value)) return false;
+      if (
+        property(value.expression, 'collection') &&
+        value.arguments[0] &&
+        literal(value.arguments[0]) === 'groups'
+      )
+        return true;
+      const query = receiver(value.expression);
+      return (
+        !!query &&
+        ['find', 'findOne', 'findById', 'where'].some((name) => property(value.expression, name)) &&
+        groupModel(query, seen)
+      );
+    });
   }
   function receiver(node: ts.Node): ts.Node | undefined {
     if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
@@ -287,6 +296,16 @@ export function checkReadSources(
       node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
       node.operatorToken.kind <= ts.SyntaxKind.LastAssignment
     ) {
+      if (
+        (ts.isPropertyAccessExpression(node.left) && membershipPath(node.left.name)) ||
+        (ts.isElementAccessExpression(node.left) && membershipPath(node.left.argumentExpression))
+      ) {
+        origins(node.left.expression, (value) => {
+          const found = symbol(ts.isVariableDeclaration(value) ? value.name : value);
+          if (found) mutatedFilters.add(found);
+          return false;
+        });
+      }
       let target: ts.Node = node.left;
       while (ts.isPropertyAccessExpression(target) || ts.isElementAccessExpression(target))
         target = target.expression;
@@ -416,6 +435,8 @@ export function checkReadSources(
           groupModel(target) &&
           [
             'find',
+            'aggregate',
+            'where',
             'findOne',
             'exists',
             'findOneAndUpdate',
@@ -428,7 +449,9 @@ export function checkReadSources(
         );
       }) &&
         node.arguments[0] &&
-        membershipFilter(node.arguments[0])) ||
+        (membershipFilter(node.arguments[0]) ||
+          (origins(node.expression, (value) => property(value, 'where')) &&
+            membershipPath(node.arguments[0])))) ||
       origins(node.expression, (value) => {
         const target = receiver(value);
         return (
