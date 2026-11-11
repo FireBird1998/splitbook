@@ -1,10 +1,10 @@
-import type { ExpenseEntry } from './expense-entry';
+import type { IncompleteExpenseEntry } from './expense-entry';
 import { expenseEntryPolicy, type ExpenseEntryPolicy } from './expense-entry';
 import { draftValues, type DraftEntries } from './persistent-draft-editor';
 import type { ExpenseDraftValues } from './validators/expense-draft';
 
 /** An incomplete Draft is kept as typed text; no amount is filled in for the member. */
-export function entryForExpenseDraft(values: ExpenseDraftValues = {}): ExpenseEntry {
+export function entryForExpenseDraft(values: ExpenseDraftValues = {}): IncompleteExpenseEntry {
   const part =
     values.splitMethod === 'percentage'
       ? 'percentage'
@@ -26,7 +26,7 @@ export function entryForExpenseDraft(values: ExpenseDraftValues = {}): ExpenseEn
         user: row.user,
         amount: row.amount === undefined ? '' : String(row.amount),
       })) ?? [],
-    splitMethod: values.splitMethod ?? 'equal',
+    splitMethod: values.splitMethod ?? '',
     participantIds: values.splitBetween?.map((row) => row.user) ?? [],
     splitValues: Object.fromEntries(
       (values.splitBetween ?? []).map((row) => [
@@ -39,7 +39,7 @@ export function entryForExpenseDraft(values: ExpenseDraftValues = {}): ExpenseEn
 
 /** Finish later keeps zero rows and omits boxes left blank; it never completes an Expense. */
 export function draftForExpenseEntry(
-  entry: ExpenseEntry,
+  entry: IncompleteExpenseEntry,
   policy: ExpenseEntryPolicy = expenseEntryPolicy,
 ): ExpenseDraftValues {
   const fields: DraftEntries = {

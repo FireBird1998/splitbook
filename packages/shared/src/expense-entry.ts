@@ -34,7 +34,7 @@ import type { ExpenseSplitMethod } from './split-calculation';
  * What a member has typed for an Expense, before it is read. The device stores these fields
  * unchanged (version 1): one active split-value map and the entries for both payer modes.
  */
-export interface ExpenseEntry {
+export interface ExpenseEntry<Method extends ExpenseSplitMethod | '' = ExpenseSplitMethod> {
   amount: string;
   currency: string;
   description: string;
@@ -42,13 +42,16 @@ export interface ExpenseEntry {
   payerId: string;
   multiPayer: boolean;
   payers: { user: string; amount: string }[];
-  splitMethod: ExpenseSplitMethod;
+  splitMethod: Method;
   splitValues: Record<string, string>;
   participantIds: string[];
   tagId: string;
   category: string;
   notes: string;
 }
+
+/** To review can ask for a split method that was not given. */
+export type IncompleteExpenseEntry = ExpenseEntry<ExpenseSplitMethod | ''>;
 
 export type ExpenseEntryPurpose = { kind: 'new' } | { kind: 'edit'; saved: StoredExpenseMoney };
 
@@ -99,7 +102,7 @@ export const recurringEntryPolicy: ExpenseEntryPolicy = {
 
 /** One entry supplies both the displayed split and the command; callers cannot supply an allocator. */
 export function readExpenseEntry(
-  entry: ExpenseEntry,
+  entry: IncompleteExpenseEntry,
   purpose: ExpenseEntryPurpose,
   policy: ExpenseEntryPolicy = expenseEntryPolicy,
 ) {
@@ -109,6 +112,8 @@ export function readExpenseEntry(
   const payerIds = entry.multiPayer ? countedPayers.map((payer) => payer.user) : [singlePayer];
   const allocate = (multiPayer: boolean) => {
     try {
+      const splitMethod = entry.splitMethod;
+      if (!splitMethod) throw new Error('Choose how this Expense is split.');
       // The complete-form guard counts whole share parts before allocating (#1111).
       if (
         policy.feedback === 'form-summary' &&
@@ -138,7 +143,7 @@ export function readExpenseEntry(
         amount: total,
         currency: entry.currency,
         paidBy: multiPayer ? countedPayers : [{ user: singlePayer, amount: entry.amount }],
-        splitMethod: entry.splitMethod,
+        splitMethod,
         splitBetween: entry.participantIds.map((user) => ({
           user,
           ...(entry.splitMethod === 'unequal' || entry.splitMethod === 'exact'
@@ -169,10 +174,14 @@ export function readExpenseEntry(
       throw policy.feedback === 'allocation-summary' ? error : inAmountWords(error, entry.currency);
     }
   };
-  const { problems, status, ...breakdown } = splitBreakdown(entry, allocate);
+  const { problems, status, ...breakdown } = splitBreakdown(
+    { ...entry, splitMethod: entry.splitMethod || 'equal' },
+    allocate,
+  );
   const errors: Partial<Record<string, string>> = {};
   for (const [id, problem] of Object.entries(problems))
-    if (problem) errors[id] = entryError(splitChoiceOf(entry.splitMethod), problem, entry.currency);
+    if (problem)
+      errors[id] = entryError(splitChoiceOf(entry.splitMethod || 'equal'), problem, entry.currency);
   const splitStatus:
     | Exclude<SplitBreakdown['status'], { kind: 'problem' }>
     | { kind: 'problem'; message: string } =
@@ -229,8 +238,10 @@ export function readExpenseEntry(
       },
       financialEdit:
         purpose.kind === 'new' ||
-        decideExpenseMoneyEdit(purpose.saved, { ...money, splitMethod: entry.splitMethod })
-          .financialEdit,
+        decideExpenseMoneyEdit(purpose.saved, {
+          ...money,
+          splitMethod: entry.splitMethod || 'equal',
+        }).financialEdit,
     };
   } catch (cause) {
     const error =
@@ -285,7 +296,7 @@ export function readExpenseEntry(
 }
 
 function allocationProblem(
-  entry: ExpenseEntry,
+  entry: IncompleteExpenseEntry,
   error: unknown,
   payers: { ids: string[]; entries: PayerEntry[] },
 ) {
@@ -383,7 +394,7 @@ export function roundingNote(
 }
 
 /** Totals shown under the boxes: unreadable totals stay a dash, never a rounded amount. */
-function enteredTotals(entry: ExpenseEntry) {
+function enteredTotals(entry: IncompleteExpenseEntry) {
   const { amount, currency, splitMethod, participantIds, splitValues } = entry;
   const sum = (values: string[], digits: number) => {
     try {

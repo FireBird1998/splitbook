@@ -20,8 +20,18 @@ it('keeps zero payers and omits a blank share when an entry is set aside', () =>
 });
 
 it('leaves a Draft’s missing choices and figures not given in the entry', () => {
-  expect(entryForExpenseDraft({description: 'Lunch', paidBy: [{user: alex}], splitBetween: [{user: sam}]})).toMatchObject({
-    amount: '', currency: '', category: '', splitMethod: '',
-    payers: [{user: alex, amount: ''}], splitValues: {[sam]: ''},
+  expect(
+    entryForExpenseDraft({
+      description: 'Lunch',
+      paidBy: [{ user: alex }],
+      splitBetween: [{ user: sam }],
+    }),
+  ).toMatchObject({
+    amount: '',
+    currency: '',
+    category: '',
+    splitMethod: '',
+    payers: [{ user: alex, amount: '' }],
+    splitValues: { [sam]: '' },
   });
 });
