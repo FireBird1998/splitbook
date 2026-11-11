@@ -229,4 +229,5 @@ it('records recurring Add and Edit through the actual form controls (#1111)', as
   await expect(await recording(cells)).toMatchFileSnapshot(
     '../../../../../test/expense-entry-readings/recordings/web-recurring.json',
   );
-});
+  // One test drives the real dialog through 62 entries; a CI runner needs more than the default.
+}, 120_000);
