@@ -268,7 +268,9 @@ describe('a member’s own Drafts once the Group is Not allowed (#621)', () => {
     expect((await setRule(groupId, await signIn('alex'), 'not_allowed')).status).toBe(200);
 
     // The assistant loses the Group at once…
-    await expect(expenseDraftService.list(assistant, groupId)).rejects.toThrow('GROUP_NOT_FOUND');
+    await expect(expenseDraftService.list(assistant, groupId)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
     // …while Sam still reviews what it prepared, and can discard it.
     const cookie = await signIn('sam');
     const listed = await callRoute(drafts.GET, {
