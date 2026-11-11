@@ -107,3 +107,91 @@ for (const change of ['membership', 'assistant-rule', 'deletion'] as const)
     continueRead.resolve();
     await refused;
   });
+
+it('retains the named missing-Group answer', async () => {
+  const access = await fixture.arrange('missing');
+  await expect(
+    readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      missingGroup: 'not-found',
+      read: async (group) => group.name,
+    }),
+  ).rejects.toMatchObject({ code: 'NOT_FOUND', data: { resource: 'Group' } });
+});
+it('retains a member read of a deletion marker with membership intact', async () => {
+  const access = await fixture.arrange('deletion-marker');
+  await expect(
+    readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      deletionMarker: 'allow-retained-members',
+      read: async (group) => group,
+    }),
+  ).resolves.toMatchObject({ name: 'Reads Household' });
+  expect(await Expense.countDocuments({ recurringExpense: readIds.template })).toBe(0);
+});
+it('keeps the marker compatibility setting from widening assistant access', async () => {
+  const access = await fixture.arrange('deletion-marker');
+  await expect(
+    readGroupLedger({
+      actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [] },
+      groupId: access.groupId,
+      deletionMarker: 'allow-retained-members',
+      read: async (group) => group.name,
+    }),
+  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+});
+it('can read the recorded ledger without adding the due Month', async () => {
+  const access = await fixture.arrange('member');
+  await expect(
+    readGroupLedger({
+      actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [] },
+      groupId: access.groupId,
+      recurring: 'recorded-only',
+      read: async (group) =>
+        (await Expense.find({ group: group._id })).map((expense) => expense.amount),
+    }),
+  ).resolves.toEqual([120]);
+});
+it('validates an admitted request before materializing its due Month', async () => {
+  const access = await fixture.arrange('member');
+  await expect(
+    readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      validate: () => {
+        throw new Refusal('INVALID_ID');
+      },
+      read: async (group) => group.name,
+    }),
+  ).rejects.toMatchObject({ code: 'INVALID_ID' });
+  expect(await Expense.countDocuments({ recurringExpense: readIds.template })).toBe(0);
+});
+it('refuses an outsider before validating the request', async () => {
+  const access = await fixture.arrange('outsider');
+  await expect(
+    readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      validate: () => {
+        throw new Refusal('INVALID_ID');
+      },
+      read: async (group) => group.name,
+    }),
+  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+});
+it('adds a due Month once for two concurrent readers', async () => {
+  const access = await fixture.arrange('member');
+  const description = {
+    actor: { kind: 'member' as const, id: access.actorId },
+    groupId: access.groupId,
+    read: async () =>
+      (await Expense.find({ recurringExpense: readIds.template })).map((expense) => expense.amount),
+  };
+  const results = await Promise.all([readGroupLedger(description), readGroupLedger(description)]);
+  expect(results).toEqual([[600], [600]]);
+  expect(
+    await Expense.countDocuments({ recurringExpense: readIds.template, period: '2026-11' }),
+  ).toBe(1);
+});
