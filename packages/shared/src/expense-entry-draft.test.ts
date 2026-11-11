@@ -50,3 +50,22 @@ it('changes a note without inventing omitted facts or losing a retained Tag name
     draftForExpenseEntry(entry, expenseEntryPolicy, { from, changed: { notes: true } }),
   ).toEqual({ ...from, notes: 'Receipt checked' });
 });
+
+it('keeps unedited split facts for a box edit and replaces them for a sheet edit', () => {
+  const from = {amount: 100, currency: 'INR', splitMethod: 'shares' as const,
+    splitBetween: [{user: alex, amount: 50, percentage: 50, shares: 1}, {user: sam, amount: 50, percentage: 50, shares: 1}]};
+  const entry = {...entryForExpenseDraft(from), splitValues: {[alex]: '2', [sam]: '1'}};
+  const policy = {...expenseEntryPolicy, splitEdit: 'patch' as const};
+  expect(draftForExpenseEntry(entry, policy, {from, changed: {splitValues: true}}).splitBetween).toEqual([
+    {user: alex, amount: 50, percentage: 50, shares: 2}, {user: sam, amount: 50, percentage: 50, shares: 1},
+  ]);
+  expect(draftForExpenseEntry(entry, expenseEntryPolicy, {from, changed: {splitValues: true}}).splitBetween).toEqual([
+    {user: alex, shares: 2}, {user: sam, shares: 1},
+  ]);
+});
+it('merges repeated people for one-box-per-person fields and retains rows for the sheet projection', () => {
+  const from = {paidBy: [{user: alex, amount: 40}, {user: alex, amount: 60}]};
+  const policy = {...expenseEntryPolicy, repeatedPeople: 'merge' as const};
+  expect(entryForExpenseDraft(from, policy).payers).toEqual([{user: alex, amount: '60'}]);
+  expect(entryForExpenseDraft(from).payers).toEqual([{user: alex, amount: '40'}, {user: alex, amount: '60'}]);
+});
