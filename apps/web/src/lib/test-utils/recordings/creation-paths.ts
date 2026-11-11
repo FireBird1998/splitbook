@@ -36,9 +36,7 @@ export function recordCreationPaths(recording: Recording) {
       try {
         const recorded = await recording.capture(() => recording.send(), before);
         expect(removed).toBe(true);
-        expect((recorded.answers as Answer).status).toBe(
-          recording.writer === 'single-settlement' ? 500 : 403,
-        );
+        expect((recorded.answers as Answer).status).toBe(403);
       } finally {
         spy.mockRestore();
       }
@@ -112,7 +110,7 @@ export function recordCreationPaths(recording: Recording) {
       const duplicate = await racing;
       const ordinary = await recording.send();
       const after = await recording.state();
-      expect([duplicate.body.data.tag, ordinary.body.data.tag]).toEqual(['Food', 'Meals']);
+      expect([duplicate.body.data.tag, ordinary.body.data.tag]).toEqual(['Meals', 'Meals']);
       expect(
         recording.names.normalise({ before, first, duplicate, ordinary, after }),
       ).toMatchSnapshot();
@@ -185,7 +183,7 @@ export function recordCreationPaths(recording: Recording) {
         spy.mockRestore();
         const ordinary = await recording.send();
         const after = await recording.state();
-        expect([committed.status, duplicate.status, ordinary.status]).toEqual([201, 409, 201]);
+        expect([committed.status, duplicate.status, ordinary.status]).toEqual([201, 201, 201]);
         expect(
           recording.names.normalise({ before, committed, duplicate, ordinary, after }),
         ).toMatchSnapshot();
@@ -362,7 +360,7 @@ export function recordCreationPaths(recording: Recording) {
         const recorded = await recording.capture(() => recording.send());
         expect(recorded.after.expenses).toHaveLength(0);
         expect(recorded.after.activities).toHaveLength(0);
-        expect(recorded.after.group?.currencyLocked).toBe(recording.writer === 'recurring-expense');
+        expect(recorded.after.group?.currencyLocked).toBe(false);
       } finally {
         await mongoose.connection.db!.command({ collMod: 'expenses', validator: {} });
       }

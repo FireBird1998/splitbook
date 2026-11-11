@@ -67,7 +67,7 @@ async function storedAttempts(page: Page): Promise<StoredAttempt[]> {
  * How one settlement POST is answered: `lose` commits it and drops the reply,
  * `pass` lets it through, and a status answers without reaching the server.
  */
-type Answer = 'lose' | 'pass' | { status: number; error: string };
+type Answer = 'lose' | 'drop' | 'pass' | { status: number; error: string };
 type Post = { key: string; body: string; storedBeforeSend: StoredAttempt[] };
 
 /** Records every settlement POST any tab of the browser sends, answering the nth with `answers[n]`. */
@@ -89,6 +89,8 @@ async function settlementPosts(context: BrowserContext, ledger: Ledger, answers:
       expect(committed.status()).toBe(201);
       return route.abort('failed');
     }
+    // The request never reaches the server, so the next send is a new save, not a retry.
+    if (answer === 'drop') return route.abort('failed');
     return route.fulfill({ status: answer.status, json: { error: answer.error } });
   });
   return posts;
@@ -471,11 +473,12 @@ test('a 4xx on a retry keeps the payment and shows why, and a later Record still
 }) => {
   await joinGroup(ledger.priya, ledger.alex, ledger.groupB);
   await owes(ledger, 'sam', ALEX, 300);
-  const posts = await settlementPosts(page.context(), ledger, ['lose']);
+  const posts = await settlementPosts(page.context(), ledger, ['drop']);
   await openBalancesAsSam(page, ledger);
   await loseFirstReply(page, '300');
 
-  // The server rechecks both parties before it looks for the replay. Alex is still owed, so he
+  // The first send never arrived, so the server judges this one as a new payment and rechecks
+  // both parties (#1109 confirms only a payment it already recorded). Alex is still owed, so he
   // is removed as removal allowed before #875.
   await removeWithOpenBalance(ledger.groupB, ALEX);
   const { form, amount, save, recorded } = paymentForm(page);
@@ -493,6 +496,27 @@ test('a 4xx on a retry keeps the payment and shows why, and a later Record still
   await save.click();
   await expect(recorded).toBeVisible();
   expect(posts.map((post) => post.key)).toEqual([posts[0].key, posts[0].key, posts[0].key]);
+  const state = await ledgerState(ledger.sam, ledger);
+  expect(state.settlements).toHaveLength(1);
+  expect(state.recorded).toBe(1);
+  expect(await storedAttempts(page)).toEqual([]);
+});
+
+test('a retry of a payment the server recorded is confirmed after the other person leaves (#1109)', async ({
+  page,
+  ledger,
+}) => {
+  await joinGroup(ledger.priya, ledger.alex, ledger.groupB);
+  await owes(ledger, 'sam', ALEX, 300);
+  const posts = await settlementPosts(page.context(), ledger, ['lose']);
+  await openBalancesAsSam(page, ledger);
+  await loseFirstReply(page, '300');
+
+  await removeWithOpenBalance(ledger.groupB, ALEX);
+  const { save, recorded } = paymentForm(page);
+  await save.click();
+  await expect(recorded).toBeVisible();
+  expect(posts.map((post) => post.key)).toEqual([posts[0].key, posts[0].key]);
   const state = await ledgerState(ledger.sam, ledger);
   expect(state.settlements).toHaveLength(1);
   expect(state.recorded).toBe(1);

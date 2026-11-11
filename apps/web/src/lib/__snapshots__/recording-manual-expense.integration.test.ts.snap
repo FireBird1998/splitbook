@@ -943,7 +943,7 @@ exports[`manual-expense record of recordings > a reused old Tag name conflicts i
         "__v": 0,
         "_id": "<event-1>",
         "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
+        "createdAt": "2026-11-11T12:00:01.000Z",
         "group": "<group-1>",
         "metadata": {
           "amount": 120,
@@ -955,7 +955,7 @@ exports[`manual-expense record of recordings > a reused old Tag name conflicts i
           "eventId": "<event-1>",
           "groupId": "<group-1>",
           "kind": "expense_added",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
+          "occurredAt": "2026-11-11T12:00:01.000Z",
           "recipientIds": [
             "<member-b>",
             "<member-c>",
@@ -1127,11 +1127,67 @@ exports[`manual-expense record of recordings > a reused old Tag name conflicts i
   },
   "duplicate": {
     "body": {
-      "code": "IDEMPOTENCY_CONFLICT",
-      "error": "This submission key was already used for different data. Start a new submission.",
-      "status": 409,
+      "data": {
+        "_id": "<expense-1>",
+        "amount": 120,
+        "amountMinor": 12000,
+        "category": "food",
+        "createdAt": "2026-11-11T12:00:01.000Z",
+        "createdBy": {
+          "_id": "<member-a>",
+          "name": "Alex Rivera",
+        },
+        "currency": "INR",
+        "date": "2026-11-01T00:00:00.000Z",
+        "deletedAt": null,
+        "deletedBy": null,
+        "description": "Recorded dinner",
+        "editHistory": [],
+        "group": "<group-1>",
+        "isDeleted": false,
+        "moneyVersion": 1,
+        "notes": "",
+        "paidBy": [
+          {
+            "amount": 120,
+            "amountMinor": 12000,
+            "user": {
+              "_id": "<member-a>",
+              "name": "Alex Rivera",
+            },
+          },
+        ],
+        "period": null,
+        "predefinedItem": null,
+        "receiptUrl": null,
+        "recurringExpense": null,
+        "revision": 0,
+        "splitBetween": [
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": {
+              "_id": "<member-b>",
+              "name": "Sam Chen",
+            },
+          },
+          {
+            "amount": 60,
+            "amountMinor": 6000,
+            "user": {
+              "_id": "<member-c>",
+              "name": "Priya Shah",
+            },
+          },
+        ],
+        "splitMethod": "equal",
+        "tag": "Meals",
+        "tagId": "<tag-food-1>",
+        "updatedAt": "2026-11-11T12:00:01.000Z",
+      },
+      "status": 201,
     },
-    "status": 409,
+    "status": 201,
   },
   "ordinary": {
     "body": {
@@ -3659,7 +3715,7 @@ exports[`manual-expense record of recordings > the duplicate-race response keeps
           },
         ],
         "splitMethod": "equal",
-        "tag": "Food",
+        "tag": "Meals",
         "tagId": "<tag-food-1>",
         "updatedAt": "2026-11-11T12:00:01.000Z",
       },

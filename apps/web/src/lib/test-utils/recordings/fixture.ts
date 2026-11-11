@@ -29,7 +29,6 @@ export type Writer =
   | 'restore'
   | 'tag-change';
 const { alex, sam, priya } = DEMO_PERSONA_IDS;
-const clock = new Date('2026-11-11T12:00:00.000Z');
 const requestOwner = new AsyncLocalStorage<string>();
 type Handler = (
   request: Request,
@@ -52,7 +51,11 @@ async function handlers() {
 }
 
 /** A real database and signed-in exported HTTP handlers. Only Next's request scope is supplied. */
-export function recordingFixture(writer: Writer, namespace: string = writer) {
+export function recordingFixture(
+  writer: Writer,
+  namespace: string = writer,
+  clock = new Date('2026-11-11T12:00:00.000Z'),
+) {
   const db = integrationTestDb(`recording-${namespace}`);
   let routes: Awaited<ReturnType<typeof handlers>>;
   let cookie: string;
@@ -67,7 +70,7 @@ export function recordingFixture(writer: Writer, namespace: string = writer) {
   let recordingStarted = false;
   let requestNumber = 0;
   const isChange = ['edit', 'delete', 'restore', 'tag-change'].includes(writer);
-  const fenceNumber = isChange || writer === 'recurring-expense' ? 2 : 1;
+  const fenceNumber = isChange ? 2 : 1;
 
   const expenseBody = (changes: object = {}) => ({
     description: 'Recorded dinner',

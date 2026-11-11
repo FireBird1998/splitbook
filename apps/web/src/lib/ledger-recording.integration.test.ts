@@ -32,6 +32,7 @@ beforeEach(async () => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 afterAll(db.teardown);
 
@@ -41,16 +42,16 @@ function recordResult(
   overrides: Partial<LedgerRecording<IExpenseDocument>> = {},
   alertSwitch: 'always' | 'payments' | 'expense-changes' = 'always',
   documentOverrides: Partial<IExpenseDocument> = {},
-  event?: { metadata: Record<string, unknown>; occurredAt: Date },
+  event?: { metadata: Record<string, unknown> },
 ) {
   return recordLedger({
     groupId,
-    actorId: alice,
+    actor: { id: alice, source: 'member' },
     model: Expense,
     transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
     command: () => ({ description: 'A record', amount: 10 }),
     retry: { key },
-    currencies: [{ currency: 'INR', rule: 'listed' }],
+    currencies: [{ currency: 'INR', rule: 'new-money' }],
     checkPeople(members) {
       if (!members.has(bob)) throw new Refusal('INVALID_MEMBERS');
     },
@@ -78,7 +79,6 @@ function recordResult(
               activity: {
                 type: 'expense_added',
                 metadata: event?.metadata ?? { expenseId: String(id), description: 'A record' },
-                occurredAt: event?.occurredAt,
                 alert: {
                   kind: 'expense_added',
                   involved: [alice, bob, bob, carol],
@@ -135,32 +135,32 @@ describe('ledger recording', () => {
   it.each([
     ['actor', alice],
     ['named person', bob],
-  ])('can preserve a recording when the %s leaves after its pre-retry check', async (_, person) => {
-    const transaction = mongoose.connection.transaction.bind(mongoose.connection);
-    vi.spyOn(mongoose.connection, 'transaction').mockImplementationOnce(async (write, options) => {
-      await mongoose.connection
-        .db!.collection<IGroupDocument>('groups')
-        .updateOne(
-          { _id: new Types.ObjectId(groupId) },
-          { $pull: { members: { user: new Types.ObjectId(person) } } },
-        );
-      return transaction(write, options);
-    });
-    await record(randomUUID(), {
-      compatibility: { membership: 'before-retry', missingGroup: 'fault' },
-    });
-    expect(await Expense.countDocuments()).toBe(1);
-    const event = await Activity.findOne({ type: 'expense_added' }).select('+notificationContext');
-    expect(event!.notificationContext!.recipientIds).toEqual(person === bob ? [] : [bob]);
-  });
-  it('can preserve pre-retry membership checks without checking again at the commit', async () => {
+  ])(
+    'refuses a payment recording when the %s leaves after its admission check',
+    async (_, person) => {
+      const transaction = mongoose.connection.transaction.bind(mongoose.connection);
+      vi.spyOn(mongoose.connection, 'transaction').mockImplementationOnce(
+        async (write, options) => {
+          await mongoose.connection
+            .db!.collection<IGroupDocument>('groups')
+            .updateOne(
+              { _id: new Types.ObjectId(groupId) },
+              { $pull: { members: { user: new Types.ObjectId(person) } } },
+            );
+          return transaction(write, options);
+        },
+      );
+      await expect(record(randomUUID())).rejects.toMatchObject({
+        message: person === alice ? 'FORBIDDEN' : 'INVALID_MEMBERS',
+      });
+      expect(await Expense.countDocuments()).toBe(0);
+      expect(await Activity.countDocuments()).toBe(0);
+    },
+  );
+  it('confirms a payment receipt for a current actor after a named person leaves', async () => {
     const key = randomUUID();
-    const compatibility = { membership: 'before-retry' as const, missingGroup: 'fault' as const };
-    const [saved] = await record(key, { compatibility });
+    const [saved] = await record(key);
     await Group.updateOne({ _id: groupId }, { $pull: { members: { user: bob } } });
-    await expect(record(key, { compatibility })).rejects.toMatchObject({
-      message: 'INVALID_MEMBERS',
-    });
     expect(String((await record(key))[0]._id)).toBe(String(saved._id));
   });
   it.each(['always', 'payments', 'expense-changes'] as const)(
@@ -374,31 +374,27 @@ describe('changing a ledger Expense', () => {
 });
 
 describe('private recording intent', () => {
-  it('keeps the original event payload and timestamp after caller values change', async () => {
-    const when = new Date('2026-09-16T12:00:00Z');
+  it('keeps its commit timestamp and original payload after caller values change', async () => {
+    const when = new Date(2026, 8, 16, 12);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(when);
     const metadata = { description: 'Original', changes: { amount: { old: 10, new: 20 } } };
-    const result = await recordResult(
-      randomUUID(),
-      {},
-      'always',
-      {},
-      { metadata, occurredAt: when },
-    );
+    const result = await recordResult(randomUUID(), {}, 'always', {}, { metadata });
     metadata.description = 'Changed later';
     metadata.changes.amount.new = 99;
-    when.setUTCFullYear(2030);
+    vi.setSystemTime(new Date(2030, 8, 16, 12));
     const intent = result.records[0].pendingActivity[0];
     expect(intent.metadata).toEqual({
       description: 'Original',
       changes: { amount: { old: 10, new: 20 } },
     });
-    expect(intent.occurredAt.toISOString()).toBe('2026-09-16T12:00:00.000Z');
+    expect(intent.occurredAt.toISOString()).toBe(when.toISOString());
     const activity = await Activity.findOne({ type: 'expense_added' });
     expect(activity!.metadata).toEqual({
       description: 'Original',
       changes: { amount: { old: 10, new: 20 } },
     });
-    expect(activity!.createdAt.toISOString()).toBe('2026-09-16T12:00:00.000Z');
+    expect(activity!.createdAt.toISOString()).toBe(when.toISOString());
   });
   it('accepts the hundredth pending event and refuses another without dropping any', async () => {
     const [saved] = await record();

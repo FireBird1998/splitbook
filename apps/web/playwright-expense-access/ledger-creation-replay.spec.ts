@@ -122,7 +122,7 @@ test('Expense replay survives participant departure while a new creation is reje
   expect(await assertEffects(ledger.priya, ledger.groupB, 'expenses', [first._id])).toEqual(before);
 });
 
-test('Settlement replay rechecks both parties and denies a removed actor', async ({ ledger }) => {
+test('Settlement replay confirms a former party and denies a removed actor', async ({ ledger }) => {
   const body = settlementInput();
   const path = `/api/groups/${ledger.groupB}/settlements`;
   const recipientHeaders = keyHeaders();
@@ -139,7 +139,7 @@ test('Settlement replay rechecks both parties and denies a removed actor', async
   await removeWithOpenBalance(ledger.groupB, sam);
   const before = await snapshot(ledger.priya, ledger.groupB);
   const partyDenied = await ledger.priya.post(path, { data: body, headers: recipientHeaders });
-  expect(partyDenied.status(), await partyDenied.text()).toBe(422);
+  expect((await dataOf(partyDenied, 201))._id).toBe(recipientWrite._id);
   const actorDenied = await ledger.sam.post(path, { data: body, headers: payerHeaders });
   expect(actorDenied.status(), await actorDenied.text()).toBe(403);
   expect(

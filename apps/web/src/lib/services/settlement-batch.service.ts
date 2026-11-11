@@ -39,14 +39,12 @@ export async function createSettlementBatch(
   const ids = rows.map(() => new Types.ObjectId());
   const { records: saved } = await recordLedger({
     groupId,
-    actorId: userId,
+    actor: { id: userId, source: 'member' },
     model: Settlement,
     transactions: { required: new Refusal('SETTLEMENT_TRANSACTIONS_REQUIRED') },
-    compatibility: { membership: 'before-retry-and-at-commit' },
     command: () => command,
-    retry: { key: requestKey, receipt: 'ordered-records', atCommit: true },
+    retry: { key: requestKey, receipt: 'ordered-batch', confirmCompetingBatchBeforeRows: true },
     currencies: [],
-    prepareAt: 'commit',
     async prepareResponseRecord(row) {
       await row.populate([
         { path: 'paidBy', select: PERSON_FIELDS },
@@ -65,8 +63,8 @@ export async function createSettlementBatch(
       return rows.map((row, index) => ({
         id: ids[index],
         currencies: [
-          { currency: row.currency, rule: 'held-by-ledger' },
-          { currency: data.paidCurrency, rule: 'listed' },
+          { currency: row.currency, rule: 'existing-debt' },
+          { currency: data.paidCurrency, rule: 'new-money' },
         ],
         async build() {
           const amountMinor = parseAmountMinor(row.amount, row.currency);

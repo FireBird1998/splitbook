@@ -8,6 +8,7 @@ import { ensureLedgerWriteIndexes } from './ledger-indexes';
 import { lockLedgerCurrency } from './ledger-currency';
 import Settlement from './models/Settlement';
 import { MoneyValidationError } from '@splitbook/shared/exact-money';
+import { assertExpenseParticipants } from '@splitbook/shared/expense-validation';
 import { assertExpectedRevision } from './ledger-revision';
 import Expense, { type IExpenseDocument } from './models/Expense';
 import {
@@ -35,7 +36,6 @@ interface NewLedgerRecord<T> {
   document: Parameters<Model<T>['create']>[0] & object;
   activity: {
     type: ActivityType;
-    occurredAt?: Date;
     metadata: Record<string, unknown>;
     alert: {
       kind: NotificationKind;
@@ -44,7 +44,7 @@ interface NewLedgerRecord<T> {
     };
   };
 }
-type CurrencyUse = { currency: string; rule: 'listed' | 'held-by-ledger' };
+type CurrencyUse = { currency: string; rule: 'new-money' | 'existing-debt' };
 export interface LedgerRecordDescription<T> {
   id: Types.ObjectId;
   currencies?: readonly CurrencyUse[];
@@ -52,45 +52,29 @@ export interface LedgerRecordDescription<T> {
 }
 interface SubmissionRetry {
   key: string;
-  receipt?: 'ordered-records';
-  atCommit?: true;
-  raceCommand?: 'original';
-  legacyTagAlias?: string;
+  receipt?: 'ordered-batch';
+  confirmCompetingBatchBeforeRows?: true;
+  submittedTagAlias?: string;
 }
 interface TemplateMonthRetry {
   template: Types.ObjectId;
   period: string;
-  lookup?: 'on-duplicate';
 }
 export interface LedgerRecording<
   T extends LedgerRecord,
   Command extends Record<string, unknown> = Record<string, unknown>,
 > {
   groupId: string;
-  actorId: string;
+  actor: { id: string; source: 'member' | 'template-creator' };
   model: Model<T>;
   transactions: 'allow-standalone' | { required: Refusal };
-  compatibility?: {
-    membership:
-      | 'before-retry'
-      | 'before-retry-and-at-commit'
-      | 'actor-before-retry'
-      | 'template-validated';
-    missingGroup?: 'fault';
-    standaloneArchive?: 'fence-only';
-    archive?: 'before-generation';
-  };
   retry?: SubmissionRetry | TemplateMonthRetry;
   command: (context: { group?: IGroupDocument; receipt?: HydratedDocument<T> }) => Command;
   currencies: readonly CurrencyUse[];
-  currenciesAt?: 'before-fence';
   checkPeople?: (members: Set<string>) => void;
-  /** The batch reads presentation data after its commit-time replay; other writers prepare before the fence. */
-  prepareAt?: 'commit';
   prepareResponseRecord?: (
     record: HydratedDocument<T>,
     context: {
-      outcome: 'created' | 'replayed' | 'raced';
       group?: IGroupDocument;
     },
   ) => Promise<unknown>;
@@ -104,38 +88,30 @@ export interface LedgerRecording<
 export async function recordLedger<T extends LedgerRecord, Command extends Record<string, unknown>>(
   description: LedgerRecording<T, Command>,
 ) {
-  const { groupId, actorId, model, retry } = description;
+  const { groupId, actor, model, retry } = description;
+  const actorId = actor.id;
   const submission = retry && 'key' in retry ? retry : undefined;
   const month = retry && 'template' in retry ? retry : undefined;
   await connectDB();
-  await ensureLedgerWriteIndexes();
   const source = model.collection.collectionName;
   if (source !== 'expenses' && source !== 'settlements')
     throw new Error('Ledger recording needs an Expense or Settlement model');
   const lockCurrencies = async (currencies: readonly CurrencyUse[]) => {
     for (const use of currencies) {
-      if (use.rule === 'held-by-ledger') await lockClearedCurrency(groupId, use.currency);
+      if (use.rule === 'existing-debt') await lockClearedCurrency(groupId, use.currency);
       else await lockLedgerCurrency(groupId, use.currency);
     }
   };
   const checkMembers = (group: IGroupDocument, includePeople = true) => {
     const members = new Set(group.members.map((member) => String(member.user)));
-    if (!members.has(actorId)) throw new Refusal('FORBIDDEN');
+    if (actor.source === 'member' && !members.has(actorId)) throw new Refusal('FORBIDDEN');
     if (includePeople) description.checkPeople?.(members);
   };
   let admittedGroup: IGroupDocument | undefined;
-  // Admission is separate from commit-time checks: an Expense replay may name a former member.
-  if (
-    description.compatibility?.membership &&
-    description.compatibility.membership !== 'template-validated'
-  ) {
-    admittedGroup = (await Group.findById(groupId)) ?? undefined;
-    if (!admittedGroup) {
-      if (description.compatibility?.missingGroup === 'fault') throw new Error('Group not found');
-      throw new Refusal('FORBIDDEN');
-    }
-    checkMembers(admittedGroup, description.compatibility.membership !== 'actor-before-retry');
-  }
+  // A receipt is admitted by current actor access, before judging a new save's people.
+  admittedGroup = (await Group.findById(groupId)) ?? undefined;
+  if (!admittedGroup) throw new Refusal('FORBIDDEN');
+  checkMembers(admittedGroup, false);
   const lookup = async () => {
     if (month)
       return model
@@ -165,64 +141,45 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
       throw new Error('Incomplete stored Settlement batch');
     return first.batchSettlementIds.map((id) => saved.find((row) => row._id.equals(id))!);
   };
-  const publish = async (
-    rows: HydratedDocument<T>[],
-    outcome: 'created' | 'replayed' | 'raced',
-  ) => {
+  const publish = async (rows: HydratedDocument<T>[], created: boolean) => {
     for (const row of rows) {
       await afterGroupCommit(() =>
         activityService.publishPending(source, row._id, row.pendingActivity),
       );
-      await description.prepareResponseRecord?.(row, { outcome, group: admittedGroup });
+      await description.prepareResponseRecord?.(row, { group: admittedGroup });
     }
-    return { records: rows, created: outcome === 'created' };
+    return { records: rows, created };
   };
-  const first = month?.lookup === 'on-duplicate' ? null : await lookup();
+  const first = await lookup();
   const command = normalize(first);
   const existing = await confirm(first, command);
-  if (existing) return publish(existing, 'replayed');
-  if (description.transactions !== 'allow-standalone' && !(await supportsGroupTransactions()))
-    throw description.transactions.required;
-  if (
-    admittedGroup?.isArchived &&
-    description.compatibility?.membership !== 'before-retry-and-at-commit'
-  )
-    throw new Refusal('GROUP_ARCHIVED');
-  if (description.currenciesAt === 'before-fence') await lockCurrencies(description.currencies);
-  const prepared =
-    description.prepareAt === 'commit'
-      ? undefined
-      : await description.prepare(command, admittedGroup);
-  let committed: { records: HydratedDocument<T>[]; outcome: 'created' | 'replayed' };
+  if (existing) return publish(existing, false);
+  await ensureLedgerWriteIndexes();
+  let committed: { records: HydratedDocument<T>[]; created: boolean };
   try {
+    if (description.transactions !== 'allow-standalone' && !(await supportsGroupTransactions()))
+      throw description.transactions.required;
+    if (admittedGroup.isArchived) throw new Refusal('GROUP_ARCHIVED');
+    checkMembers(admittedGroup);
     committed = await withGroupMutation(
       groupId,
       async (session) => {
         if (description.transactions !== 'allow-standalone' && !session)
           throw description.transactions.required;
-        if (description.currenciesAt !== 'before-fence')
-          await lockCurrencies(description.currencies);
+        await lockCurrencies(description.currencies);
         const group = await Group.findById(groupId);
         if (!group) throw new Refusal('FORBIDDEN');
-        if (group.isArchived && description.compatibility?.archive !== 'before-generation') {
-          // Standalone payments historically rely on the fence's earlier archive check.
-          // A real independent archive can commit after it, while currencies are being locked.
-          const legacyStandalone =
-            description.compatibility?.standaloneArchive === 'fence-only' &&
-            !(await supportsGroupTransactions());
-          if (!legacyStandalone) throw new Refusal('GROUP_ARCHIVED');
+        if (group.isArchived) {
+          throw new Refusal('GROUP_ARCHIVED');
         }
-        if (
-          description.compatibility?.membership !== 'before-retry' &&
-          description.compatibility?.membership !== 'template-validated'
-        )
-          checkMembers(group);
-        if (submission?.atCommit) {
+        checkMembers(group, false);
+        if (submission?.confirmCompetingBatchBeforeRows) {
           const receipt = await lookup();
           const concurrent = receipt ? await confirm(receipt, normalize(receipt)) : null;
-          if (concurrent) return { records: concurrent, outcome: 'replayed' as const };
+          if (concurrent) return { records: concurrent, created: false };
         }
-        const descriptions = prepared ?? (await description.prepare(command, admittedGroup));
+        checkMembers(group);
+        const descriptions = await description.prepare(command, admittedGroup);
         const result: HydratedDocument<T>[] = [];
         for (const [index, entry] of descriptions.entries()) {
           await lockCurrencies(entry.currencies ?? []);
@@ -232,7 +189,6 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
             record.activity.type,
             actorId,
             record.activity.metadata,
-            record.activity.occurredAt,
           );
           const alert = record.activity.alert;
           const capture =
@@ -254,10 +210,10 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
               createdBy: actorId,
               creationRequest:
                 index === 0 && submission
-                  ? createRequestMetadata(submission.key, command, submission.legacyTagAlias)
+                  ? createRequestMetadata(submission.key, command, submission.submittedTagAlias)
                   : undefined,
               batchSettlementIds:
-                index === 0 && submission?.receipt === 'ordered-records'
+                index === 0 && submission?.receipt === 'ordered-batch'
                   ? descriptions.map((entry) => entry.id)
                   : undefined,
               ...(month ? { recurringExpense: month.template, period: month.period } : {}),
@@ -265,24 +221,26 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
             }),
           );
         }
-        return { records: result, outcome: 'created' as const };
+        return { records: result, created: true };
       },
-      { ledger: description.compatibility?.archive !== 'before-generation' },
+      { ledger: true },
     );
   } catch (error) {
-    if (retry && (error as { code?: number }).code === 11000) {
+    if (
+      retry &&
+      ((error as { code?: number }).code === 11000 || (submission && error instanceof Refusal))
+    ) {
+      const current = await Group.findById(groupId);
+      if (!current) throw new Refusal('FORBIDDEN');
+      checkMembers(current, false);
+      admittedGroup = current;
       const receipt = await lookup();
-      const raced = receipt
-        ? await confirm(
-            receipt,
-            submission?.raceCommand === 'original' ? command : normalize(receipt),
-          )
-        : null;
-      if (raced) return publish(raced, 'raced');
+      const raced = receipt ? await confirm(receipt, normalize(receipt)) : null;
+      if (raced) return publish(raced, false);
     }
     throw error;
   }
-  return publish(committed.records, committed.outcome);
+  return publish(committed.records, committed.created);
 }
 
 /** The trusted session actor and the requested Expense's Group always travel together. */
@@ -299,8 +257,18 @@ export interface LedgerExpenseChange {
     expense: HydratedDocument<IExpenseDocument>,
     group: IGroupDocument,
   ) => {
+    financialEdit?: boolean;
     activity?: { type: 'expense_updated' | 'expense_deleted'; metadata: Record<string, unknown> };
   } | null;
+}
+
+async function requireCommitGroup(groupId: string, actorId?: string) {
+  const group = await Group.findById(groupId);
+  if (!group) throw new Refusal('FORBIDDEN');
+  if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
+  const members = new Set(group.members.map((member) => String(member.user)));
+  if (actorId !== undefined && !members.has(actorId)) throw new Refusal('FORBIDDEN');
+  return { group, members };
 }
 
 /** Change once under the displayed revision; callers cannot separate loading from committing. */
@@ -317,8 +285,9 @@ export async function changeLedgerExpense({
   // Old Expenses get their first revision even when the displayed revision is absent.
   await withGroupMutation(
     groupId,
-    async (session) =>
-      Expense.collection.updateOne(
+    async (session) => {
+      await requireCommitGroup(groupId, actorId);
+      return Expense.collection.updateOne(
         {
           _id: new Types.ObjectId(expenseId),
           group: new Types.ObjectId(groupId),
@@ -326,7 +295,8 @@ export async function changeLedgerExpense({
         },
         { $set: { revision: 0 } },
         { session },
-      ),
+      );
+    },
     { ledger: true },
   );
   const expense = await Expense.findOne({ _id: expenseId, group: groupId }).select(
@@ -358,15 +328,16 @@ export async function changeLedgerExpense({
         await lockRestoredCurrency(groupId, expense.currency, expenseId);
       else if (originalCurrency !== expense.currency)
         await lockLedgerCurrency(groupId, expense.currency);
-      if (event && expenseChangeAlertsEnabled()) {
-        const committedGroup = await Group.findById(groupId).select('members').lean();
-        const members = new Set(
-          (committedGroup?.members ?? []).map((member) => String(member.user)),
-        );
+      const { members } = await requireCommitGroup(groupId, actorId);
+      if (prepared.financialEdit || (wasDeleted && !expense.isDeleted))
+        assertExpenseParticipants(members, expense.paidBy, expense.splitBetween);
+      if (event) {
         const intent = expense.pendingActivity.find(
           (pending) => String(pending._id) === String(event._id),
         );
-        if (intent)
+        event.occurredAt = new Date();
+        if (intent) intent.occurredAt = event.occurredAt;
+        if (intent && expenseChangeAlertsEnabled())
           intent.notificationContext = ledgerNotificationContext(
             event,
             prepared.activity!.type,
@@ -391,14 +362,13 @@ function makePendingActivity(
   type: ActivityType,
   actorId: string,
   metadata: Record<string, unknown> = {},
-  occurredAt: Date = new Date(),
 ): IPendingActivity {
   return {
     _id: new Types.ObjectId(),
     group: new Types.ObjectId(groupId),
     type,
     actor: new Types.ObjectId(actorId),
-    occurredAt: new Date(occurredAt),
+    occurredAt: new Date(),
     // Snapshot now: callers may subsequently mutate an expense or a changes object.
     metadata: JSON.parse(JSON.stringify(metadata)) as Record<string, unknown>,
   };

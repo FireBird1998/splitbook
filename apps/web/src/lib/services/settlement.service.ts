@@ -49,19 +49,14 @@ export class SettlementService {
       records: [settlement],
     } = await recordLedger({
       groupId,
-      actorId: userId,
+      actor: { id: userId, source: 'member' },
       model: Settlement,
       transactions: 'allow-standalone',
-      compatibility: {
-        membership: 'before-retry',
-        missingGroup: 'fault',
-        standaloneArchive: 'fence-only',
-      },
       command: () => command,
       retry: requestKey ? { key: requestKey } : undefined,
       currencies: [
-        { currency: data.currency, rule: 'held-by-ledger' },
-        ...(data.paidCurrency ? [{ currency: data.paidCurrency, rule: 'listed' as const }] : []),
+        { currency: data.currency, rule: 'existing-debt' },
+        ...(data.paidCurrency ? [{ currency: data.paidCurrency, rule: 'new-money' as const }] : []),
       ],
       checkPeople(memberIds) {
         assertSettlementMembers(memberIds, paidBy, data.paidTo);

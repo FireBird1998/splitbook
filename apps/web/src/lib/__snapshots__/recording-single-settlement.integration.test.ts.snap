@@ -915,36 +915,7 @@ exports[`single-settlement record of recordings > actor is no longer a member be
 exports[`single-settlement record of recordings > actor leaves between the checks and the commit 1`] = `
 {
   "after": {
-    "activities": [
-      {
-        "__v": 0,
-        "_id": "<event-1>",
-        "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
-        "group": "<group-1>",
-        "metadata": {
-          "amount": 30,
-          "currency": "INR",
-          "paidBy": "<member-a>",
-          "paidByName": "Alex Rivera",
-          "paidTo": "<member-b>",
-          "paidToName": "Sam Chen",
-          "settlementId": "<settlement-1>",
-        },
-        "notificationContext": {
-          "eventId": "<event-1>",
-          "groupId": "<group-1>",
-          "kind": "settlement_recorded",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
-          "recipientIds": [
-            "<member-b>",
-          ],
-          "recordId": "<settlement-1>",
-          "version": 2,
-        },
-        "type": "settlement_recorded",
-      },
-    ],
+    "activities": [],
     "drafts": [],
     "expenses": [],
     "group": {
@@ -952,7 +923,7 @@ exports[`single-settlement record of recordings > actor leaves between the check
         "EUR",
         "USD",
       ],
-      "currencyLocked": true,
+      "currencyLocked": false,
       "defaultCurrency": "INR",
       "isArchived": false,
       "members": [
@@ -960,60 +931,16 @@ exports[`single-settlement record of recordings > actor leaves between the check
         "<member-c>",
       ],
     },
-    "settlements": [
-      {
-        "__v": 0,
-        "_id": "<settlement-1>",
-        "amount": 30,
-        "amountMinor": 3000,
-        "createdAt": "2026-11-11T12:00:00.000Z",
-        "createdBy": "<member-a>",
-        "creationRequest": {
-          "fingerprint": "<digest-1>",
-          "fingerprintVersion": 1,
-          "key": "recording-submission-0001",
-        },
-        "currency": "INR",
-        "group": "<group-1>",
-        "moneyVersion": 1,
-        "note": "Recorded payment",
-        "paidBy": "<member-a>",
-        "paidTo": "<member-b>",
-        "pendingActivity": [],
-        "updatedAt": "2026-11-11T12:00:00.000Z",
-      },
-    ],
+    "settlements": [],
     "templates": [],
   },
   "answers": {
     "body": {
-      "data": {
-        "__v": 0,
-        "_id": "<settlement-1>",
-        "amount": 30,
-        "amountMinor": 3000,
-        "createdAt": "2026-11-11T12:00:00.000Z",
-        "createdBy": {
-          "_id": "<member-a>",
-          "name": "Alex Rivera",
-        },
-        "currency": "INR",
-        "group": "<group-1>",
-        "moneyVersion": 1,
-        "note": "Recorded payment",
-        "paidBy": {
-          "_id": "<member-a>",
-          "name": "Alex Rivera",
-        },
-        "paidTo": {
-          "_id": "<member-b>",
-          "name": "Sam Chen",
-        },
-        "updatedAt": "2026-11-11T12:00:00.000Z",
-      },
-      "status": 201,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
-    "status": 201,
+    "status": 403,
   },
   "before": {
     "activities": [],
@@ -1833,34 +1760,7 @@ exports[`single-settlement record of recordings > named person is no longer a me
 exports[`single-settlement record of recordings > named person leaves between the checks and the commit 1`] = `
 {
   "after": {
-    "activities": [
-      {
-        "__v": 0,
-        "_id": "<event-1>",
-        "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
-        "group": "<group-1>",
-        "metadata": {
-          "amount": 30,
-          "currency": "INR",
-          "paidBy": "<member-a>",
-          "paidByName": "Alex Rivera",
-          "paidTo": "<member-b>",
-          "paidToName": "Sam Chen",
-          "settlementId": "<settlement-1>",
-        },
-        "notificationContext": {
-          "eventId": "<event-1>",
-          "groupId": "<group-1>",
-          "kind": "settlement_recorded",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
-          "recipientIds": [],
-          "recordId": "<settlement-1>",
-          "version": 2,
-        },
-        "type": "settlement_recorded",
-      },
-    ],
+    "activities": [],
     "drafts": [],
     "expenses": [],
     "group": {
@@ -1868,7 +1768,7 @@ exports[`single-settlement record of recordings > named person leaves between th
         "EUR",
         "USD",
       ],
-      "currencyLocked": true,
+      "currencyLocked": false,
       "defaultCurrency": "INR",
       "isArchived": false,
       "members": [
@@ -1876,60 +1776,16 @@ exports[`single-settlement record of recordings > named person leaves between th
         "<member-c>",
       ],
     },
-    "settlements": [
-      {
-        "__v": 0,
-        "_id": "<settlement-1>",
-        "amount": 30,
-        "amountMinor": 3000,
-        "createdAt": "2026-11-11T12:00:00.000Z",
-        "createdBy": "<member-a>",
-        "creationRequest": {
-          "fingerprint": "<digest-1>",
-          "fingerprintVersion": 1,
-          "key": "recording-submission-0001",
-        },
-        "currency": "INR",
-        "group": "<group-1>",
-        "moneyVersion": 1,
-        "note": "Recorded payment",
-        "paidBy": "<member-a>",
-        "paidTo": "<member-b>",
-        "pendingActivity": [],
-        "updatedAt": "2026-11-11T12:00:00.000Z",
-      },
-    ],
+    "settlements": [],
     "templates": [],
   },
   "answers": {
     "body": {
-      "data": {
-        "__v": 0,
-        "_id": "<settlement-1>",
-        "amount": 30,
-        "amountMinor": 3000,
-        "createdAt": "2026-11-11T12:00:00.000Z",
-        "createdBy": {
-          "_id": "<member-a>",
-          "name": "Alex Rivera",
-        },
-        "currency": "INR",
-        "group": "<group-1>",
-        "moneyVersion": 1,
-        "note": "Recorded payment",
-        "paidBy": {
-          "_id": "<member-a>",
-          "name": "Alex Rivera",
-        },
-        "paidTo": {
-          "_id": "<member-b>",
-          "name": "Sam Chen",
-        },
-        "updatedAt": "2026-11-11T12:00:00.000Z",
-      },
-      "status": 201,
+      "code": "INVALID_MEMBERS",
+      "error": "Both payer and recipient must be group members",
+      "status": 422,
     },
-    "status": 201,
+    "status": 422,
   },
   "before": {
     "activities": [],
@@ -2358,11 +2214,33 @@ exports[`single-settlement record of recordings > retry after the named person l
     },
     {
       "body": {
-        "code": "INVALID_MEMBERS",
-        "error": "Both payer and recipient must be group members",
-        "status": 422,
+        "data": {
+          "__v": 0,
+          "_id": "<settlement-1>",
+          "amount": 30,
+          "amountMinor": 3000,
+          "createdAt": "2026-11-11T12:00:00.000Z",
+          "createdBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "currency": "INR",
+          "group": "<group-1>",
+          "moneyVersion": 1,
+          "note": "Recorded payment",
+          "paidBy": {
+            "_id": "<member-a>",
+            "name": "Alex Rivera",
+          },
+          "paidTo": {
+            "_id": "<member-b>",
+            "name": "Sam Chen",
+          },
+          "updatedAt": "2026-11-11T12:00:00.000Z",
+        },
+        "status": 201,
       },
-      "status": 422,
+      "status": 201,
     },
   ],
   "before": {
@@ -2561,10 +2439,11 @@ exports[`single-settlement record of recordings > the Group vanishes after route
   },
   "answers": {
     "body": {
-      "error": "Internal server error",
-      "status": 500,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
-    "status": 500,
+    "status": 403,
   },
   "before": {
     "activities": [],
