@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { readExpenseEntry, recurringEntryPolicy } from './expense-entry';
-import { entries, alex, sam } from './test-support/expense-entry-cases';
+import { entries, alex, sam, savedFor } from './test-support/expense-entry-cases';
 
 it('refuses a blank recurring amount at its row instead of supplying zero', () => {
   const entry = entries.find((entry) => entry.id === 'amounts-partly-blank')!;
@@ -50,5 +50,19 @@ it('reports an unreadable total before an over-precise split amount in a templat
   expect(readExpenseEntry(entry, { kind: 'new' }, recurringEntryPolicy).result).toMatchObject({
     kind: 'refused',
     problems: [{ field: 'form', message: 'Enter a valid decimal amount' }],
+  });
+});
+
+it('keeps the recurring whole-currency precision refusal verbatim', () => {
+  expect(readExpenseEntry({...entries[0], currency: 'JPY', amount: '1.5'}, {kind: 'new'}, recurringEntryPolicy).result).toMatchObject({
+    kind: 'refused', problems: [{field: 'form', message: 'Amount supports at most 0 decimal places'}],
+  });
+});
+it('keeps submitted participant order separately from an unchanged historical preview', () => {
+  const original = entries[0];
+  const entry = {...original, participantIds: [sam, alex]};
+  expect(readExpenseEntry(entry, {kind: 'edit', saved: savedFor(original)}, recurringEntryPolicy).result).toMatchObject({
+    kind: 'ready', figures: {splitBetween: [{user: sam}, {user: alex}]},
+    money: {splitBetween: [{user: alex}, {user: sam}]},
   });
 });
