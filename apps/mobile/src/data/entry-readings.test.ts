@@ -1,3 +1,4 @@
+import { draftEntryCases } from '@splitbook/shared/test-support/draft-entry-cases';
 import { ReviewRunOverlay } from '../ui/review-run';
 import { TextInput } from 'react-native';
 import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
@@ -34,6 +35,7 @@ import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import {
   entries,
+  alex,
   day,
   groupId,
   tagId,
@@ -430,5 +432,23 @@ it('records Android To review changes through its existing form conversion (#111
   }
   await expect(await recording(cells)).toMatchFileSnapshot(
     '../../../../test/expense-entry-readings/recordings/android-review.json',
+  );
+});
+
+it('records review edits of extra split facts and repeated people (#1115)', async () => {
+  const cells: Record<string, unknown> = {};
+  for (const row of draftEntryCases) {
+    const form = reviewForm(row.values, 'INR');
+    const result = reviewFormChange(
+      row.values,
+      row.change === 'shares'
+        ? { splitValues: { [alex]: '2', [people[1].id]: '1' } }
+        : { notes: 'Checked' },
+      'INR',
+    );
+    cells[row.id] = { payers: form.payers, result };
+  }
+  await expect(await recording(cells)).toMatchFileSnapshot(
+    '../../../../test/expense-entry-readings/supplemental/android-review.json',
   );
 });

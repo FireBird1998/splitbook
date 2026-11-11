@@ -1,3 +1,4 @@
+import { draftEntryCases } from '@splitbook/shared/test-support/draft-entry-cases';
 import { recording } from '@splitbook/shared/test-support/expense-entry-recording';
 import { createElement, useLayoutEffect, useState } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
@@ -7,7 +8,11 @@ import { SWRConfig } from 'swr';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ExpenseDraft } from '@splitbook/shared/expense-draft';
 import { formatCurrency } from '@splitbook/shared/currency';
-import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
+import {
+  draftEntries,
+  draftValues,
+  type DraftEntries,
+} from '@splitbook/shared/persistent-draft-editor';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { useKeepExpenseDraft } from '@/components/drafts/KeepExpenseDraft';
 import ReviewExpenseFields from '@/components/to-review/ReviewExpenseFields';
@@ -289,5 +294,47 @@ it('records web Finish later through its real hook and request (#1111)', async (
   }
   await expect(await recording(cells)).toMatchFileSnapshot(
     '../../../../../test/expense-entry-readings/recordings/web-finish-later.json',
+  );
+});
+
+it('records review edits of extra split facts and repeated people (#1115)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', { addEventListener() {}, removeEventListener() {} });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  const cells: Record<string, unknown> = {};
+  for (const row of draftEntryCases) {
+    let input = draftEntries(row.values);
+    function Form() {
+      const [entries, setEntries] = useState(input);
+      useLayoutEffect(() => {
+        input = entries;
+      });
+      return createElement(ReviewExpenseFields, {
+        entries,
+        context: { members: people, tags: [], currency: 'INR' },
+        onChange: (patch) => setEntries((prior) => ({ ...prior, ...patch })),
+      });
+    }
+    await act(async () => {
+      renderer = create(
+        createElement(ThemeProvider, { theme: createAppTheme('light') }, createElement(Form)),
+      );
+    });
+    const payers = renderer!.root.findByType(ExpenseFields).props.values.payers;
+    await act(async () =>
+      renderer!.root
+        .findByType(ExpenseFields)
+        .props.edit(
+          row.change === 'shares'
+            ? { customShares: { [alex]: '2', [people[1].id]: '1' } }
+            : { notes: 'Checked' },
+        ),
+    );
+    cells[row.id] = { payers, result: draftValues(input) };
+    await act(async () => renderer!.unmount());
+    renderer = undefined;
+  }
+  await expect(await recording(cells)).toMatchFileSnapshot(
+    '../../../../../test/expense-entry-readings/supplemental/web-review.json',
   );
 });

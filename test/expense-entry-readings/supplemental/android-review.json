@@ -1,0 +1,34 @@
+{
+  "other-split-parts": {
+    "payers": [{ "user": "a00000000000000000000001", "amount": "100" }],
+    "result": {
+      "description": "Lunch",
+      "amount": 100,
+      "currency": "INR",
+      "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+      "splitMethod": "shares",
+      "splitBetween": [
+        { "user": "a00000000000000000000001", "shares": 2 },
+        { "user": "a00000000000000000000002", "shares": 1 }
+      ]
+    }
+  },
+  "repeated-payer": {
+    "payers": [
+      { "user": "a00000000000000000000001", "amount": "40" },
+      { "user": "a00000000000000000000001", "amount": "60" }
+    ],
+    "result": {
+      "description": "Lunch",
+      "amount": 100,
+      "currency": "INR",
+      "paidBy": [{ "user": "a00000000000000000000001", "amount": 60 }],
+      "splitMethod": "equal",
+      "splitBetween": [
+        { "user": "a00000000000000000000001" },
+        { "user": "a00000000000000000000002" }
+      ],
+      "notes": "Checked"
+    }
+  }
+}
