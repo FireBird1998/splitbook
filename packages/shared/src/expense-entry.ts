@@ -60,7 +60,7 @@ export interface ExpenseEntryPolicy {
   singlePayer: 'first-row' | 'field';
   splitPreview: 'whole-expense' | 'independent-split';
   roundingNote: 'show' | 'hide';
-  weightInput: 'numbers' | 'decimal-units';
+  weightInput: 'numbers' | 'numbers-or-zero' | 'decimal-units';
   /** A form summary prioritizes the empty whole-share count; entry corrections mark each box. */
   feedback: 'form-summary' | 'allocation-summary' | 'entry-corrections';
 }
@@ -94,6 +94,7 @@ export const recurringEntryPolicy: ExpenseEntryPolicy = {
   blankSplitAmount: 'refuse',
   singlePayer: 'field',
   feedback: 'allocation-summary',
+  weightInput: 'numbers-or-zero',
 };
 
 /** One entry supplies both the displayed split and the command; callers cannot supply an allocator. */
@@ -121,9 +122,11 @@ export function readExpenseEntry(
       const weight = (user: string, digits: number) => {
         const text =
           entry.splitValues[user] || (digits === 0 && policy.blankShare === 'one' ? '1' : '0');
-        return policy.weightInput === 'numbers'
-          ? Number(text)
-          : parseDecimalUnits(text, digits) / (digits === 2 ? 100 : 1);
+        return policy.weightInput === 'numbers-or-zero'
+          ? Number(text) || 0
+          : policy.weightInput === 'numbers'
+            ? Number(text)
+            : parseDecimalUnits(text, digits) / (digits === 2 ? 100 : 1);
       };
       const input = {
         amount: entry.amount,
