@@ -584,6 +584,28 @@ describe('settling up in several currencies at once (#734)', () => {
     expect(records.size).toBe(1);
   });
 
+  it('removes a batch refused as archived and retains its two names after the purge (#1153)', async () => {
+    const message = 'This Group was archived, so nothing more can be saved in it.';
+    const { controller, records } = await opened(({ pathname }, init) =>
+      pathname.endsWith('/settlements/batch') && init.method === 'POST'
+        ? json({ status: 409, code: 'GROUP_ARCHIVED', error: message }, 409)
+        : undefined,
+    );
+    await controller.recordSettlement();
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'blocked',
+      message,
+      attempt: null,
+      group: null,
+      balances: [],
+    });
+    expect(controller.getSnapshot().settlement.known).toEqual({
+      [alex]: 'Alex Rivera',
+      [sam]: 'Sam Chen',
+    });
+  });
+
   it('says a retry refused because its Debts changed wasn’t recorded, and keeps nothing to retry (#802)', async () => {
     let posts = 0;
     const { controller, batches, create, records } = await opened(({ pathname }, init) => {

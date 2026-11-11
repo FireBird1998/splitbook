@@ -5539,6 +5539,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       completed = false,
       // Whether the payment went out: until then, a failure can't have recorded it (#334).
       sending = false;
+    let checkedGroup = state.group;
+    const removeStoredAttempt = async () => {
+      const sent = attempt;
+      if (!sent) return;
+      await lease.write(async () => {
+        const value = await storage.load(lease.accountId, groupId);
+        if (value === null) return;
+        const pending = parseSettlementAttempt(value, lease.accountId, groupId).attempt;
+        if (pending.key === sent.key && pending.body === sent.body)
+          await storage.remove(lease.accountId, groupId);
+      });
+    };
     publish({ ...snapshot, settlement: { ...state, status: 'saving', message: null } });
     try {
       // The Group the sheet's check named stands (#333): Splitbook checks members, currency and
@@ -5550,6 +5562,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         balances: await settlementBalances(groupId, owner),
       };
       if (!current(owner) || view !== route || !owns()) return;
+      checkedGroup = context.group;
       assertSettlementMembers(
         new Set(context.group.members.map((m) => m.user.id)),
         draft.paidBy,
@@ -5697,13 +5710,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       );
       if (settlingUp) parseRecordedBatch(response, groupId, attempt.body);
       else parseRecordedSettlement(response, groupId, attempt.body);
-      await lease.write(async () => {
-        const saved = await storage.load(lease.accountId, groupId);
-        if (saved === null) return;
-        const currentAttempt = parseSettlementAttempt(saved, lease.accountId, groupId).attempt;
-        if (currentAttempt.key === attempt!.key && currentAttempt.body === attempt!.body)
-          await storage.remove(lease.accountId, groupId);
-      });
+      await removeStoredAttempt();
       completed = true;
       // The record is gone from this device, so Balances no longer offers it.
       if (current(owner) && snapshot.pendingPayment?.groupId === groupId) {
@@ -5724,12 +5731,43 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         (!owns() && !(error instanceof RequestError && [403, 404, 422].includes(error.status)))
       )
         return;
-      // An archived Group refused it outright, after confirming any earlier try: nothing was
-      // recorded. The form says so and is blocked, as for a Group that was lost (#578).
       if (refusedAsArchived(error)) {
+        let message = error.message;
+        if (sending) {
+          // The payment endpoint confirms a landed key before its archive check. Its refusal
+          // proves nothing was recorded (#1153); a refused preflight read proves no such thing.
+          try {
+            await removeStoredAttempt();
+            attempt = null;
+          } catch (cleanupError) {
+            if (cleanupError instanceof Superseded || !current(owner)) return;
+            // The denial already journalled cleanup. A failed removal stays locked until it
+            // succeeds; it must not turn a definite refusal into an offered Retry or Discard.
+            message += ` ${financialCleanupMessage}`;
+          }
+        }
+        if (!current(owner) || view !== route) return;
+        // Only the parties' display names survive this specific refusal. The Group, its saved
+        // reads and actual access-denial privacy rules still go through the normal purge.
+        const known = Object.fromEntries(
+          [draft.paidBy, draft.paidTo].flatMap((id) => {
+            const name =
+              checkedGroup?.members.find(({ user }) => user.id === id)?.user.name ??
+              state.known[id];
+            return name ? [[id, name]] : [];
+          }),
+        );
         publish({
           ...snapshot,
-          settlement: { ...snapshot.settlement, status: 'blocked', message: error.message },
+          ...(sending && snapshot.pendingPayment?.groupId === groupId && !attempt
+            ? { pendingPayment: null }
+            : {}),
+          settlement: {
+            ...snapshot.settlement,
+            status: 'blocked',
+            message,
+            ...(sending ? { attempt, known, accessLost: false } : {}),
+          },
         });
         return;
       }
@@ -5767,13 +5805,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         isBatchBody(attempt.body);
       if (attempt && correction && (!state.attempt || debtsChanged)) {
         try {
-          await lease.write(async () => {
-            const value = await storage.load(lease.accountId, groupId);
-            if (value === null) return;
-            const pending = parseSettlementAttempt(value, lease.accountId, groupId).attempt;
-            if (pending.key === attempt!.key && pending.body === attempt!.body)
-              await storage.remove(lease.accountId, groupId);
-          });
+          await removeStoredAttempt();
           attempt = null;
           if (!current(owner) || view !== route) return;
           publish({

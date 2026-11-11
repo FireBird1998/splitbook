@@ -513,10 +513,96 @@ describe('native payment recording', () => {
 
     expect(records.size).toBe(0);
     expect(controller.getSnapshot().settlement).toMatchObject({
-      status: 'blocked', message, attempt: null, group: null, balances: [],
+      status: 'blocked',
+      message,
+      attempt: null,
+      group: null,
+      balances: [],
     });
-    expect(controller.getSnapshot().settlement.known).toEqual({ [actor]: 'Alex', [recipient]: 'Sam' });
+    expect(controller.getSnapshot().settlement.known).toEqual({
+      [actor]: 'Alex',
+      [recipient]: 'Sam',
+    });
     expect(controller.getSnapshot().pendingPayment).toBeNull();
+  });
+
+  it('clears a lost-reply attempt when the payment endpoint then definitively refuses it as archived (#1153)', async () => {
+    let posts = 0;
+    const { controller, records } = setup((path, init) => {
+      if (!path.endsWith('/settlements') || init.method !== 'POST') return undefined;
+      return ++posts === 1
+        ? Promise.reject(new Error('Lost reply'))
+        : json(
+            {
+              code: 'GROUP_ARCHIVED',
+              error: 'This Group was archived, so nothing more can be saved in it.',
+            },
+            409,
+          );
+    });
+    await controller.signIn('alex');
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    await controller.recordSettlement();
+    expect(records.size).toBe(1);
+    await controller.recordSettlement();
+    expect(posts).toBe(2);
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().settlement.attempt).toBeNull();
+  });
+
+  it('keeps an unconfirmed attempt when only its preflight read is refused as archived (#1153)', async () => {
+    let archived = false;
+    const { controller, records } = setup((path, init) => {
+      if (path.endsWith('/balances') && archived)
+        return json(
+          {
+            code: 'GROUP_ARCHIVED',
+            error: 'This Group was archived, so nothing more can be saved in it.',
+          },
+          409,
+        );
+      if (path.endsWith('/settlements') && init.method === 'POST')
+        return Promise.reject(new Error('Lost reply'));
+      return undefined;
+    });
+    await controller.signIn('alex');
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    await controller.recordSettlement();
+    const attempt = controller.getSnapshot().settlement.attempt;
+    archived = true;
+    await controller.recordSettlement();
+    expect(records.size).toBe(1);
+    expect(controller.getSnapshot().settlement).toMatchObject({ status: 'blocked', attempt });
+    expect(controller.getSnapshot().settlement.known).toEqual({});
+  });
+
+  it('locks a definite archive refusal when its local attempt cannot be removed (#1153)', async () => {
+    const { controller, records, device } = setup((path, init) =>
+      path.endsWith('/settlements') && init.method === 'POST'
+        ? json(
+            {
+              code: 'GROUP_ARCHIVED',
+              error: 'This Group was archived, so nothing more can be saved in it.',
+            },
+            409,
+          )
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    device.failRemoval = true;
+    await controller.recordSettlement();
+    expect(records.size).toBe(1);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'blocked',
+      accessLost: false,
+    });
+    expect(controller.getSnapshot().settlement.message).toContain(
+      'They stay locked. Restart to retry cleanup.',
+    );
   });
 
   it('unlocks a definitively rejected new submission for correction without losing input', async () => {

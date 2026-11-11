@@ -9,6 +9,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { emptySettlement, type SettlementState } from '../data/settlement';
+import { testPhone } from '../test-utils/test-phone';
+import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
 import {
   GroupBalancesView,
@@ -318,6 +320,77 @@ describe('Balances destination', () => {
 });
 
 describe('Record payment sheet states', () => {
+  it.each([
+    ['GROUP_ARCHIVED', 409, 'This Group was archived, so nothing more can be saved in it.'],
+    ['FORBIDDEN', 403, 'This payment can’t be recorded with your current access or details.'],
+    ['INVALID_MEMBERS', 422, 'The payer or recipient is no longer a Group member.'],
+  ] as const)(
+    'renders a payment refused with %s from the controller (#1153)',
+    async (code, status, words) => {
+      const server = fakeSplitbook();
+      const groupId = server.world.groups[0]._id;
+      server.world.balances[groupId] = {
+        byCurrency: [
+          {
+            currency: 'INR',
+            balances: [],
+            debts: [
+              {
+                from: { _id: you, name: 'Alex Rivera' },
+                to: { _id: sam, name: 'Sam Chen' },
+                amount: 10,
+              },
+            ],
+          },
+        ],
+      };
+      server.reply('POST', `/api/groups/${groupId}/settlements`, () =>
+        Response.json({ status, code, error: words }, { status }),
+      );
+      const phone = testPhone(server);
+      const controller = phone.open();
+      try {
+        await controller.signIn('alex');
+        await controller.openSettlements(groupId);
+        controller.selectSettlement(you, sam, 'INR');
+        await controller.recordSettlement();
+        const state = controller.getSnapshot().settlement;
+        const root = render(
+          <RecordPaymentSheet
+            visible
+            state={state}
+            currentUserId={you}
+            today="Today"
+            onChange={vi.fn()}
+            onLeaveField={vi.fn()}
+            onAcknowledge={vi.fn()}
+            onRecord={vi.fn()}
+            onRetry={vi.fn()}
+            onClose={vi.fn()}
+            onDiscard={vi.fn()}
+          />,
+        );
+        expect(text(root)).toContain(words);
+        if (code === 'GROUP_ARCHIVED') {
+          expect(text(root)).toContain('Sam Chen');
+          expect(text(root)).not.toMatch(/Former member|may already be recorded|If access returns/);
+          expect(labelled(root, 'Discard unconfirmed payment')).toHaveLength(0);
+          expect(labelled(root, 'Retry payment')).toHaveLength(0);
+        } else if (code === 'FORBIDDEN') {
+          // The route checks membership before replaying a key: a denied call may follow a
+          // recorded send, so this remains blocked until the Group's own read or explicit cleanup.
+          expect(state.status).toBe('blocked');
+          expect(phone.stores.settlementAttempts.records.size).toBe(1);
+        } else {
+          expect(state.attempt).toBeNull();
+          expect(phone.stores.settlementAttempts.records.size).toBe(0);
+        }
+      } finally {
+        controller.dispose();
+      }
+    },
+  );
+
   const base = (overrides: Partial<SettlementState>): SettlementState => ({
     ...emptySettlement(),
     groupId: 'b00000000000000000000001',
