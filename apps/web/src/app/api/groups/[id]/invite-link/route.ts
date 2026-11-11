@@ -1,7 +1,7 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   getAuthUser,
   unauthorized,
-  forbidden,
   notFound,
   success,
   serverError,
@@ -37,20 +37,27 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await routeIds(params);
 
-    const group = await groupService.getById(id);
-    if (!group) return notFound('Group');
+    return await readGroupLedger({
+      actor: { kind: 'member', id: user.id! },
+      groupId: id,
+      missingGroup: 'not-found',
+      recurring: 'recorded-only',
+      deletionMarker: 'allow-retained-members',
+      read: async (group) => {
+        if (
+          !group.inviteCode ||
+          !group.inviteCodeExpiresAt ||
+          new Date() > group.inviteCodeExpiresAt
+        ) {
+          return success({ inviteCode: null, inviteUrl: null, expiresAt: null });
+        }
 
-    const isMember = await groupService.isMember(id, user.id!);
-    if (!isMember) return forbidden();
-
-    if (!group.inviteCode || !group.inviteCodeExpiresAt || new Date() > group.inviteCodeExpiresAt) {
-      return success({ inviteCode: null, inviteUrl: null, expiresAt: null });
-    }
-
-    return success({
-      inviteCode: group.inviteCode,
-      inviteUrl: `${process.env.NEXT_PUBLIC_APP_URL}/join/${group.inviteCode}`,
-      expiresAt: group.inviteCodeExpiresAt,
+        return success({
+          inviteCode: group.inviteCode,
+          inviteUrl: `${process.env.NEXT_PUBLIC_APP_URL}/join/${group.inviteCode}`,
+          expiresAt: group.inviteCodeExpiresAt,
+        });
+      },
     });
   } catch (err) {
     return serverError(err);
