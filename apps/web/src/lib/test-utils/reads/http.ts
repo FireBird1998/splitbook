@@ -13,7 +13,7 @@ export async function httpRead(
   const access = await fixture.arrange(state);
   const route = await read.load();
   const handler = read.method === 'POST' ? route.POST : route.GET;
-  if (!handler) throw new Error(`Missing ${read.method ?? 'GET'} handler for ${read.name}`);
+  if (!handler) throw new Error(`Missing handler for ${read.name}`);
   const headers: Record<string, string> = {};
   const answer = await callRoute(
     async (req, context) => {
