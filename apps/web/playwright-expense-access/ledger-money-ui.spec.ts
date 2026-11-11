@@ -84,7 +84,8 @@ for (const layout of [
     await expect(weights).toHaveCount(3);
     for (let index = 0; index < 3; index += 1) await expect(weights.nth(index)).toHaveValue('1');
     await weights.first().fill('1.5');
-    await expect(dialog.getByText('Use a whole number of shares.', { exact: true })).toBeVisible();
+    // The box says it, and so does the form's summary above Save.
+    await expect(dialog.getByText('Use a whole number of shares.', { exact: true })).toHaveCount(2);
     for (let index = 0; index < 3; index += 1) await weights.nth(index).fill('1');
     await expect(dialog.getByText(/=\s*¥33$/)).toHaveCount(2);
     await expect(dialog.getByText(/=\s*¥34$/)).toHaveCount(1);
