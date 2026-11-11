@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { escapeRegex } from '@splitbook/shared/escape-regex';
 import { splitChoiceOf, splitMethodFor, type SplitChoice } from '@splitbook/shared/expense-split';
 import { readExpenseDraft, type ExpenseDraft } from '../data/expense-draft';
-import { roundingNote, type SplitStatus } from '../data/expense-split';
+import { roundingNote } from '@splitbook/shared/expense-entry';
 import { acceptsNumericText } from '../data/field-feedback';
 import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
@@ -347,7 +347,7 @@ function SplitFooter({
   spoken,
   money,
 }: {
-  status: SplitStatus;
+  status: ReturnType<typeof readExpenseDraft>['split']['status'];
   draft: ExpenseDraft;
   summary: ReturnType<typeof readExpenseDraft>['splitSummary'];
   total: number | null;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ExpenseDraft } from './expense-draft';
-import { previewSplit, roundingNote } from './expense-split';
+import { readExpenseEntry, roundingNote, type ExpenseEntry as ExpenseDraft } from './expense-entry';
+const previewSplit = (entry: ExpenseDraft) => readExpenseEntry(entry, { kind: 'new' }).split;
 
 const [you, sam, priya] = [
   'a00000000000000000000001',
@@ -107,4 +107,41 @@ describe('split preview', () => {
     // The money rules' own message, when they refuse the split for another reason.
     expect(problem(draft({ participantIds: [you, you] }))).toBe('Each person can appear only once');
   });
+});
+
+it.each([
+  ['unequal', ' ', 'INR', 'Use digits and one decimal point, such as 250.50.'],
+  ['percentage', ' ', 'INR', 'Use digits and one decimal point, such as 33.5.'],
+  ['shares', '\t', 'INR', 'Use a whole number of shares.'],
+  ['unequal', '10000000.01', 'INR', 'That’s more than the Expense total.'],
+  ['unequal', '10000001', 'JPY', 'That’s more than the Expense total.'],
+] as const)('explains the %s entry %s in %s at its box', (method, value, currency, words) => {
+  expect(entryError(method, value, currency)).toBe(words);
+});
+it.each([
+  ['INR', '10000000.00'],
+  ['JPY', '10000000'],
+] as const)('accepts the largest %s amount in a split box', (currency, value) => {
+  expect(entryError('unequal', value, currency)).toBeUndefined();
+});
+it('retains partial allocations and an exact remaining total while boxes are incomplete', () => {
+  expect(
+    previewSplit(draft({ splitMethod: 'unequal', splitValues: { [you]: '1000', [sam]: '200' } })),
+  ).toMatchObject({
+    shares: { [you]: 100000, [sam]: 20000, [priya]: 0 },
+    status: { kind: 'remaining', unit: 'amount', entered: 120000, target: 124950 },
+  });
+  expect(
+    previewSplit(
+      draft({ splitMethod: 'percentage', splitValues: { [you]: '50', [sam]: '33.33' } }),
+    ),
+  ).toMatchObject({
+    shares: { [you]: 62475, [sam]: 41645, [priya]: 0 },
+    status: { kind: 'remaining', unit: 'percent', entered: 8333, target: 10000 },
+  });
+});
+it('keeps every entered Amount visible when the Expense total is unreadable', () => {
+  expect(
+    previewSplit(draft({ amount: '12.345', splitMethod: 'unequal', splitValues: { [you]: '5' } })),
+  ).toMatchObject({ total: null, shares: { [you]: 500 }, status: { kind: 'no-amount' } });
 });

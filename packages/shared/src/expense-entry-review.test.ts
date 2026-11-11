@@ -3,9 +3,9 @@ import {
   expenseDifferences,
   rebaseExpenseEntries,
   resolveExpenseReview,
-  type ExpenseEntries,
+  type ExpenseEntry,
   type ExpenseReviewEntries,
-} from './expense-review';
+} from './expense-entry';
 
 // Fictional member ids only.
 const alex = 'a00000000000000000000001';
@@ -13,7 +13,7 @@ const sam = 'a00000000000000000000002';
 const priya = 'a00000000000000000000003';
 
 /** The saved Expense an edit began from: ₹30.00 dinner Alex paid, split equally three ways. */
-const start: ExpenseEntries = {
+const start: ExpenseEntry = {
   amount: '30',
   currency: 'INR',
   description: 'Dinner',

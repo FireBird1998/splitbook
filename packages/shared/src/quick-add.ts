@@ -1247,26 +1247,3 @@ export function quickAddEntry(
     splitValues: {},
   };
 }
-
-/** Compatibility for old editor callers; Quick add itself hands the form an ExpenseEntry. */
-export function quickAddDraftValues(
-  read: QuickAddRead,
-  choices: QuickAddChoices,
-  context: Pick<QuickAddContext, 'currency' | 'viewerId' | 'members'>,
-) {
-  const entry = quickAddEntry(read, choices, context);
-  return {
-    description: entry.description,
-    amount: entry.amount,
-    currency: entry.currency,
-    date: entry.date,
-    tag: entry.tagId,
-    splitMethod: entry.splitMethod,
-    payers: entry.payers,
-    multiPayerMode: entry.multiPayer,
-    selectedMembers: entry.participantIds,
-    customAmounts: {},
-    customPercentages: {},
-    customShares: {},
-  };
-}

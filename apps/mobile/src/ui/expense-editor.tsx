@@ -33,7 +33,7 @@ import {
 import { AccessibilityInfo, ScrollView, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
-import { expenseDifferences } from '@splitbook/shared/expense-review';
+import { expenseDifferences } from '@splitbook/shared/expense-entry';
 import {
   closesToRecord,
   draftFromExpense,

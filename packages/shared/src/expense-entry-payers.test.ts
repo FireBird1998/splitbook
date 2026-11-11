@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  enteredPayers,
-  giveRest,
+  readExpenseEntry,
+  type ExpenseEntry,
   minorAmountText,
-  payerEntryProblem,
-  payerRemainder,
-  restRecipient,
   setPayerAmount,
-  type PayerEntries,
-} from './payer-remainder';
+} from './expense-entry';
 
+type PayerEntries = Pick<ExpenseEntry, 'amount' | 'currency' | 'payers'>;
 const [alex, sam, priya] = ['alex', 'sam', 'priya'];
 const members = [alex, sam, priya];
 const entries = (amount: string, payers: [string, string][], currency = 'INR'): PayerEntries => ({
@@ -17,6 +14,30 @@ const entries = (amount: string, payers: [string, string][], currency = 'INR'): 
   currency,
   payers: payers.map(([user, value]) => ({ user, amount: value })),
 });
+
+const payerEntry = (value: PayerEntries): ExpenseEntry => ({
+  ...value,
+  description: 'Lunch',
+  date: '2026-09-28',
+  payerId: alex,
+  multiPayer: true,
+  splitMethod: 'equal',
+  participantIds: members,
+  splitValues: {},
+  category: 'other',
+  tagId: '',
+  notes: '',
+});
+const readPayers = (value: PayerEntries) =>
+  readExpenseEntry(payerEntry(value), { kind: 'new' }).payers;
+const payerRemainder = (value: PayerEntries) => {
+  const { totalMinor, remainingMinor, assignedMinor, problems } = readPayers(value);
+  return { totalMinor, remainingMinor, assignedMinor, problems };
+};
+const enteredPayers = (payers: PayerEntries['payers']) =>
+  readPayers({ amount: '100', currency: 'INR', payers }).entries;
+const payerEntryProblem = (amount: string, currency: string) =>
+  readPayers(entries('100', [[alex, amount]], currency)).problems[alex];
 
 describe('payer remainder', () => {
   it('counts what is left of the total, exactly', () => {
@@ -142,65 +163,5 @@ describe('payer entries', () => {
     ]);
     expect(setPayerAmount(payers, alex, '')).toEqual([]);
     expect(setPayerAmount(payers, sam, '')).toEqual(payers);
-  });
-});
-
-describe('give the rest', () => {
-  it('fills the remaining amount into the first member with nothing entered', () => {
-    const draft = entries('1249.50', [
-      [alex, '1000.00'],
-      [sam, '200.00'],
-    ]);
-    expect(restRecipient(draft, members)).toBe(priya);
-    expect(giveRest(draft, members)).toEqual({
-      payers: [
-        { user: alex, amount: '1000.00' },
-        { user: sam, amount: '200.00' },
-        { user: priya, amount: '49.50' },
-      ],
-    });
-    const filled = { ...draft, ...giveRest(draft, members)! };
-    expect(payerRemainder(filled).remainingMinor).toBe(0);
-  });
-
-  it('follows the Group’s order, and counts someone who entered 0 as having entered nothing', () => {
-    const draft = entries('100', [
-      [priya, '60'],
-      [alex, '0'],
-      [sam, ''],
-    ]);
-    expect(restRecipient(draft, members)).toBe(alex);
-    expect(giveRest(draft, members)?.payers).toEqual([
-      { user: priya, amount: '60' },
-      { user: alex, amount: '40.00' },
-      { user: sam, amount: '' },
-    ]);
-    expect(restRecipient(entries('100', []), members)).toBe(alex);
-  });
-
-  it('offers nothing when the total adds up, is exceeded, is unknown or an entry needs fixing', () => {
-    const cases = [
-      entries('100', [[alex, '100']]),
-      entries('100', [[alex, '120']]),
-      entries('', [[alex, '20']]),
-      entries('100', [
-        [alex, '20'],
-        [sam, '1.234'],
-      ]),
-    ];
-    for (const draft of cases) {
-      expect(restRecipient(draft, members)).toBeNull();
-      expect(giveRest(draft, members)).toBeNull();
-    }
-  });
-
-  it('never gives the rest to someone outside the Group, or when everyone has an entry', () => {
-    const everyone = entries('100', [
-      [alex, '10'],
-      [sam, '10'],
-      [priya, '10'],
-    ]);
-    expect(restRecipient(everyone, members)).toBeNull();
-    expect(restRecipient(entries('100', [['former', '10']]), [])).toBeNull();
   });
 });

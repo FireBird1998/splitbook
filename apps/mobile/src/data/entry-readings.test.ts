@@ -16,9 +16,13 @@ import { recording } from '@splitbook/shared/test-support/expense-entry-recordin
 import { afterEach, expect, it, vi } from 'vitest';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
-import { payerRemainder } from '@splitbook/shared/payer-remainder';
-import { expenseDifferences } from '@splitbook/shared/expense-review';
+const payerRemainder = (draft: ExpenseDraft) => {
+  const { totalMinor, assignedMinor, remainingMinor, problems } = readExpenseDraft(draft).payers;
+  return { totalMinor, assignedMinor, remainingMinor, problems };
+};
+import { expenseDifferences } from '@splitbook/shared/expense-entry';
 import {
+  readExpenseDraft,
   buildExpenseBody,
   buildExpensePatch,
   expenseMoney,
@@ -28,8 +32,9 @@ import {
   type ExpenseDraft,
 } from './expense-draft';
 import { expenseRecordSchema } from './expense-record';
-import { previewSplit, roundingNote } from './expense-split';
-import { payerEntryError } from './payer-remainder';
+import { roundingNote } from '@splitbook/shared/expense-entry';
+const previewSplit = (draft: ExpenseDraft) => readExpenseDraft(draft).split;
+
 import { reviewForm, reviewFormChange } from './review-form';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
@@ -132,7 +137,7 @@ async function shown(draft: ExpenseDraft) {
       ...payerRemainder(draft),
       errors: Object.fromEntries(
         draft.payers
-          .map((p) => [p.user, payerEntryError(p.amount, draft.currency)])
+          .map((p) => [p.user, readExpenseDraft({ ...draft, payers: [p] }).payers.errors[p.user]])
           .filter(([, error]) => error),
       ),
     },

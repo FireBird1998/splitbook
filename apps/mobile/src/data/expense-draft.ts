@@ -20,7 +20,7 @@ import {
   rebaseExpenseEntries,
   resolveExpenseReview,
   type ExpenseMoneyField,
-} from '@splitbook/shared/expense-review';
+} from '@splitbook/shared/expense-entry';
 import { calendarDateError } from './field-feedback';
 import {
   readExpenseEntry,
