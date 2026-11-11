@@ -39,3 +39,11 @@ it('returns the template figures separately from its allocated preview without c
     money: { splitBetween: [{ amountMinor: 6667 }, { amountMinor: 3333 }] },
   });
 });
+
+it('reports an unreadable total before an over-precise split amount in a template', () => {
+  const entry = {...entries[0], amount: 'word', splitMethod: 'exact' as const,
+    splitValues: {[alex]: '0.005', [sam]: '0'}};
+  expect(readExpenseEntry(entry, {kind: 'new'}, recurringEntryPolicy).result).toMatchObject({
+    kind: 'refused', problems: [{field: 'form', message: 'Enter a valid decimal amount'}],
+  });
+});
