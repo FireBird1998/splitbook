@@ -293,36 +293,40 @@ Client Component
     → proxy (session-cookie check — 401 JSON for anonymous /api/*)
       → Next.js API Route (/api/...)
         → Auth guard (getAuthUser)
-          → Membership / admin guard (groupService.isMember, or service-side assertAdmin)
-            → Zod validation (parse body/query)
-              → Service layer (business logic + assert* invariants)
-                → Mongoose model (database)
-                  → Return JSON response
+          → Request validation (at the read's established point)
+            → Group ledger read module (actor admission → optional generation → admitted Group)
+              → Service projection / Mongoose ledger read
+                → Delivery-time access check → JSON response
 ```
 
-Guards are layered, and the layers are not equivalent: `getAuthUser` establishes
-_who_, `isMember` establishes _access to this group_, and only some services then
-check _role_. Expense mutation stops at membership.
+`getAuthUser` establishes who is asking. `readGroupLedger` and `readGroupLedgers`
+in `src/lib/group-ledger-read.ts` own read admission and delivery-time access checks.
+They pass the admitted Group to the read; a route or projection must not repeat
+its membership lookup. Writes keep their access checks in their recording or
+Group mutation, not in this read module. `pnpm check:reads` enforces that boundary,
+with exact reviewed sites for writes, projections, notifications and maintenance.
+Connected assistant reads also use these operations with an assistant actor.
+Across reads accept `page` for an exclusive id cursor and query limit, and `fields`
+for projected Group columns. `_id` accompanies projections. Selecting members
+populates them. Page delivery rechecks access and refills after an observed revocation.
 
-> **Four GET routes write.** `GET /api/groups/[id]`,
-> `GET /api/groups/[id]/expenses` and `GET /api/groups/[id]/balances` call
-> `recurringExpenseService.generateDueExpenses` after the membership check,
-> materializing any due recurring expenses. This is a deliberate design choice
-> (see [`v4/README.md`](v4/README.md) Phase 3), but it means those reads are not
-> side-effect free. Balances materialize too because clients start the Balances
-> read beside the Group and Expense reads; computing first would show last
-> month's figures next to this month's Expense (#240). The cross-group
-> `GET /api/user/balances` materializes too (#306), for every Group of the
-> member that has a recurring template, one Group after another, so Home and the
-> sidebar agree with each Group's page. Leaving a Group
-> (`POST /api/groups/[id]/leave`) materializes too, before its settle-up check,
-> and is refused with `LEAVE_CONFLICT` when that run didn't finish (#253); an
-> admin removing a member does the same, refused with `REMOVAL_CONFLICT` (#875).
-> Both are also refused while a template in its problem state includes the
-> member, whose missed months it would add without them once repaired (#257). An
-> archived Group generates nothing on any of these reads or a leave, and its
-> templates' markers don't move, so a member who still has an archived Household
-> open never adds a month's Expenses to it.
+**Current materializing reads (#1119, part one):** Group details, Expenses,
+Balances, Insights, Trip summary, Home balances, member spending, and export
+(including the statement) ask the module to add due recurring Expenses first.
+A Trip invokes generation but its Theme admits no recurring template.
+The Groups list, Group and Home Activity, search, one Expense, duplicate warning,
+recurring-template list, currency settings, rate suggestions, Tags, Draft reads,
+page titles, invite-link and assistant-reach reads use the recorded ledger.
+Connected assistants use the module with `recurring: 'recorded-only'`.
+Part two applies the owner's four decisions about generation, missing Groups
+and deletion markers.
+
+The generator remains idempotent under concurrent reads. An archived Group or a
+disabled recurring switch adds nothing and advances no template marker. Reads
+still ignore an incomplete generation report. Leaving/removing a member checks
+that report before allowing departure (`LEAVE_CONFLICT` / `REMOVAL_CONFLICT`),
+and refuses a broken template that still includes the departing member. Creating
+and editing a template also invoke generation as part of the write.
 
 ### Real-time Sync Flow
 

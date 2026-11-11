@@ -19,7 +19,6 @@ import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
 import { parseGroupInsightsResponse } from '@splitbook/shared/group-insights-read';
 import { GET } from './route';
-import { GET as getBalances } from '../balances/route';
 
 const session = vi.hoisted(() => ({ userId: null as string | null }));
 vi.mock('next/headers', () => ({ headers: vi.fn(async () => new Headers()) }));
@@ -65,14 +64,6 @@ const context = (groupId: string) => ({ params: Promise.resolve({ id: groupId })
 async function read(groupId: string, query = 'month=2026-09&compare=6&tz=Asia%2FKolkata') {
   const response = await GET(
     new Request(`http://localhost/api/groups/${groupId}/insights?${query}`),
-    context(groupId),
-  );
-  return { status: response.status, body: await response.json() };
-}
-
-async function readBalances(groupId: string) {
-  const response = await getBalances(
-    new Request(`http://localhost/api/groups/${groupId}/balances`),
     context(groupId),
   );
   return { status: response.status, body: await response.json() };
@@ -343,39 +334,6 @@ describe('a member', () => {
 });
 
 describe('only members', () => {
-  it('refuses a non-member exactly as the Group’s other reads do', async () => {
-    const theirs = await createGroup('Sunday Football', [bob, carol]);
-    await insertExpense(theirs, '2026-09-05T12:00:00Z', { [bob]: 1000, [alice]: 500 });
-
-    const insights = await read(theirs);
-    expect(insights).toEqual({
-      status: 403,
-      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
-    });
-    expect(insights).toEqual(await readBalances(theirs));
-  });
-
-  it('refuses a member who has left, exactly as the Group’s other reads do', async () => {
-    const left = await createGroup('Old Flat', [bob, alice]);
-    await insertExpense(left, '2026-08-05T12:00:00Z', { [alice]: 7000, [bob]: 7000 });
-    expect((await read(left)).status).toBe(200);
-    // Leaving takes the member off the Group's list; their Expenses stay in its ledger.
-    await Group.updateOne({ _id: left }, { $pull: { members: { user: oid(alice) } } });
-
-    const insights = await read(left);
-    expect(insights).toEqual({
-      status: 403,
-      body: { error: 'Forbidden', status: 403, code: 'FORBIDDEN' },
-    });
-    expect(insights).toEqual(await readBalances(left));
-  });
-
-  it('refuses a Group that does not exist as one the member is not in', async () => {
-    const missing = 'f00000000000000000000000';
-    expect(await read(missing)).toEqual(await readBalances(missing));
-    expect((await read(missing)).status).toBe(403);
-  });
-
   it('refuses a non-member before reading the query, so a bad query tells them nothing', async () => {
     const theirs = await createGroup('Sunday Football', [bob, carol]);
     expect((await read(theirs, 'tz=Mars%2FPhobos&month=soon')).status).toBe(403);

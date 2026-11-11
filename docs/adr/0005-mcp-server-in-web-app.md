@@ -53,3 +53,17 @@ applies too. If the request expires during sign-in, both the details read and co
 submission reject it, and the page asks the member to restart from the assistant. Other
 sessions and existing connections are unchanged. This uses Better Auth's signed requests
 and consent endpoints rather than introducing a second authorization flow.
+
+## Delivery status: 11 November 2026 (#1119, part one)
+
+The first delivery step exists in `apps/web/src/lib/group-ledger-read.ts`.
+Member and Connected assistant reads use actor admission, the admitted Group,
+optional recurring generation and a delivery-time access check. `pnpm check:reads`
+guards that boundary. The across operation supports an exclusive id `page` and
+`fields` projection, including bounded page refill after access revocation.
+Assistant reads currently choose `recurring: 'recorded-only'`. Part two applies
+the owner's four decisions. Archived inclusion, admin-only assistant reach,
+list ordering and selected exports keep their established contracts. Writes
+use their recording boundary. Current generation choices are listed in
+[architecture](../architecture.md#api-request-flow) and
+[the API contract](../api.md#recurring-expenses).

@@ -68,6 +68,7 @@ describe('gate', () => {
       ['format check', 'pass'],
       ['refusal contract', 'pass'],
       ['ledger recording contract', 'pass'],
+      ['Group ledger read contract', 'pass'],
       ['unit tests', 'pass'],
       ['ceilings', 'skip'],
       ['backend', 'pass'],
@@ -82,6 +83,7 @@ describe('gate', () => {
       'pnpm format:check',
       'pnpm check:refusals',
       'pnpm check:recordings',
+      'pnpm check:reads',
       'pnpm --recursive --workspace-concurrency=1 test:unit',
       'node seed.mjs',
       'node start.mjs',
@@ -433,4 +435,12 @@ it('fails the gate when the ledger recording contract fails', async () => {
   expect(verdict.verdict).toBe('fail');
   expect(step(verdict, 'ledger recording contract')?.status).toBe('fail');
   expect(step(verdict, 'unit tests')?.status).toBe('pass');
+});
+
+it('fails the gate when the Group ledger read contract fails', async () => {
+  const fake = world();
+  fake.exitCodes = (launch) => (launch.args.includes('check:reads') ? 1 : 0);
+  const verdict = await runGate(fake, { root: worktree() });
+  expect(verdict.verdict).toBe('fail');
+  expect(step(verdict, 'Group ledger read contract')?.status).toBe('fail');
 });
