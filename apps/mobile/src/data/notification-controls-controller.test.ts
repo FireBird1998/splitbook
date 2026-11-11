@@ -318,6 +318,35 @@ describe('Settings notification controls at the controller/native seam', () => {
     expect(controller.getSnapshot().notifications.hasConfirmed).toBe(true);
     expect(notifications.requestPermission).toHaveBeenCalledOnce();
   });
+  it.each([
+    ['blocked', 'granted', 'ready'],
+    ['granted', 'blocked', 'blocked'],
+  ] as const)(
+    'keeps the notification flow declared when Settings resumes after %s → %s (#1128)',
+    async (initial, next, status) => {
+      const { controller, notifications, writes } = device();
+      await controller.signIn('alex');
+      await controller.enableNotifications();
+      notifications.permission.mockResolvedValue(initial);
+      controller.openSettings();
+      await controller.refreshNotifications();
+      expect(controller.getSnapshot().notifications.status).toBe(
+        initial === 'granted' ? 'ready' : 'blocked',
+      );
+      const confirmed = controller.getSnapshot().notifications.confirmed;
+      const writesBeforeResume = writes.length;
+      for (const method of ['permission', 'requestPermission', 'token', 'clear'] as const)
+        notifications[method].mockClear();
+      notifications.permission.mockResolvedValue(next);
+      await controller.refresh('foreground');
+      expect(controller.getSnapshot().notifications).toMatchObject({ status, confirmed });
+      expect(notifications.permission).toHaveBeenCalledOnce();
+      expect(notifications.requestPermission).not.toHaveBeenCalled();
+      expect(notifications.token).not.toHaveBeenCalled();
+      expect(notifications.clear).not.toHaveBeenCalled();
+      expect(writes).toHaveLength(writesBeforeResume);
+    },
+  );
   it('drops a native token that arrives after account invalidation without uploading it', async () => {
     const { controller, notifications, writes } = device();
     await controller.signIn('alex');
