@@ -347,3 +347,46 @@ it('records review edits of extra split facts and repeated people (#1115)', asyn
     '../../../../../test/expense-entry-readings/supplemental/web-review.json',
   );
 });
+
+it('starts review Shares at one and fills a newly ticked person’s box (#1117 decision 1)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', { addEventListener() {}, removeEventListener() {} });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  let tree: ReactTestRenderer;
+  function Form() {
+    const [entry, setEntry] = useState(() =>
+      entryForExpenseDraft({
+        amount: 100,
+        currency: 'INR',
+        splitMethod: 'equal',
+        paidBy: [{ user: alex, amount: 100 }],
+        splitBetween: [{ user: alex }],
+      }),
+    );
+    return createElement(ReviewExpenseFields, {
+      entry,
+      original: {},
+      context: { members: people, tags: [], currency: 'INR' },
+      onChange: (patch) => setEntry((prior) => ({ ...prior, ...patch })),
+    });
+  }
+  await act(async () => {
+    tree = create(
+      createElement(ThemeProvider, { theme: createAppTheme('light') }, createElement(Form)),
+    );
+  });
+  try {
+    await act(async () => tree.root.findByType(ExpenseFields).props.chooseSplitMethod('shares'));
+    expect(tree.root.findByType(ExpenseFields).props.entry.splitValues[alex]).toBe('1');
+    const check = tree.root.findAll(
+      (node) =>
+        typeof node.props.onChange === 'function' &&
+        node.props.checked === false &&
+        node.props.slotProps?.input?.['aria-label'] === `Share with ${people[1].name}`,
+    )[0];
+    await act(async () => check.props.onChange({ target: { checked: true } }));
+    expect(tree.root.findByType(ExpenseFields).props.entry.splitValues[people[1].id]).toBe('1');
+  } finally {
+    await act(async () => tree.unmount());
+  }
+});

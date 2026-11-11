@@ -213,9 +213,9 @@ it('records every column and every differing reading by entry (#1111)', async ()
   );
 });
 
-it('shows a partly blank share saved as one on the web, despite its two-share line (#1111 claim 1)', () => {
+it('shows a partly blank share saved as zero everywhere (#1117 decision 1)', () => {
   expect(money('web-new', 'shares-partly-blank').splitBetween.map((p) => p.amountMinor)).toEqual([
-    6667, 3333,
+    10000, 0,
   ]);
   for (const column of [
     'android-new',

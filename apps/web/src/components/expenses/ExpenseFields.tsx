@@ -231,6 +231,9 @@ export default function ExpenseFields({
 
   const handleMemberToggle = (memberId: string, checked: boolean) =>
     edit({
+      ...(checked && splitMethod === 'shares' && !splitValues[memberId]
+        ? { splitValues: { ...splitValues, [memberId]: '1' } }
+        : {}),
       participantIds: checked
         ? [...participantIds, memberId]
         : participantIds.filter((id) => id !== memberId),

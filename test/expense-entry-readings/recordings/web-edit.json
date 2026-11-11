@@ -370,8 +370,8 @@
         "amountMinor": 10000,
         "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
         "splitBetween": [
-          { "user": "a00000000000000000000001", "shares": 2, "amountMinor": 6667, "amount": 66.67 },
-          { "user": "a00000000000000000000002", "shares": 1, "amountMinor": 3333, "amount": 33.33 }
+          { "user": "a00000000000000000000001", "shares": 2, "amountMinor": 10000, "amount": 100 },
+          { "user": "a00000000000000000000002", "shares": 0, "amountMinor": 0, "amount": 0 }
         ],
         "category": "food",
         "date": "2026-11-10",
@@ -392,26 +392,21 @@
             {
               "user": "a00000000000000000000001",
               "shares": 2,
-              "amountMinor": 6667,
-              "amount": 66.67
+              "amountMinor": 10000,
+              "amount": 100
             },
-            {
-              "user": "a00000000000000000000002",
-              "shares": 1,
-              "amountMinor": 3333,
-              "amount": 33.33
-            }
+            { "user": "a00000000000000000000002", "shares": 0, "amountMinor": 0, "amount": 0 }
           ]
         },
         "error": ""
       },
       "perPerson": [
-        { "user": "a00000000000000000000001", "amount": "₹66.67" },
-        { "user": "a00000000000000000000002", "amount": "₹33.33" },
+        { "user": "a00000000000000000000001", "amount": "₹100.00" },
+        { "user": "a00000000000000000000002", "amount": "₹0.00" },
         { "user": "a00000000000000000000003", "amount": "—" }
       ],
       "advancedInitiallyOpen": true,
-      "formContents": "What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Less Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares = ₹66.67 Sam Chen ​ shares = ₹33.33 Priya Shah 2 shares · ₹50.00/share Hide options Notes (optional) Notes (optional)",
+      "formContents": "What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split by shares  · 2 of 3 members Less Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ​ shares = ₹100.00 Sam Chen ​ shares = ₹0.00 Priya Shah 2 shares · ₹50.00/share Hide options Notes (optional) Notes (optional)",
       "roundingNote": null
     }
   },

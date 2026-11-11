@@ -358,20 +358,14 @@
   "shares-partly-blank": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit"],
-        "reading": {
-          "kind": "allocation",
-          "amountMinor": 10000,
-          "currency": "INR",
-          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
-          "splitBetween": [
-            { "user": "a00000000000000000000001", "amountMinor": 6667, "shares": 2 },
-            { "user": "a00000000000000000000002", "amountMinor": 3333, "shares": 1 }
-          ]
-        }
-      },
-      {
-        "columns": ["web-recurring", "web-recurring.edit", "android-new", "android-edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "web-recurring",
+          "web-recurring.edit",
+          "android-new",
+          "android-edit"
+        ],
         "reading": {
           "kind": "allocation",
           "amountMinor": 10000,

@@ -51,7 +51,6 @@ export type IncompleteExpenseEntry = ExpenseEntry<ExpenseSplitMethod | ''>;
 export type ExpenseEntryPurpose = { kind: 'new' } | { kind: 'edit'; saved: StoredExpenseMoney };
 
 export interface ExpenseEntryPolicy {
-  blankShare: 'one' | 'zero';
   blankSplitAmount: 'zero' | 'refuse';
   payerRows: 'all' | 'nonzero';
   savedZeroPayers: 'keep' | 'unchanged';
@@ -62,7 +61,6 @@ export interface ExpenseEntryPolicy {
   feedback: 'form-summary' | 'allocation-summary' | 'entry-corrections';
 }
 export const expenseEntryPolicy: ExpenseEntryPolicy = {
-  blankShare: 'zero',
   blankSplitAmount: 'zero',
   payerRows: 'nonzero',
   savedZeroPayers: 'unchanged',
@@ -72,7 +70,6 @@ export const expenseEntryPolicy: ExpenseEntryPolicy = {
   feedback: 'entry-corrections',
 };
 export const formSummaryPolicy: ExpenseEntryPolicy = {
-  blankShare: 'one',
   blankSplitAmount: 'zero',
   payerRows: 'all',
   savedZeroPayers: 'keep',
@@ -85,7 +82,6 @@ export const formSummaryPolicy: ExpenseEntryPolicy = {
 /** The recurring form reports the allocator's refusal without the whole-share guard. */
 export const recurringEntryPolicy: ExpenseEntryPolicy = {
   ...formSummaryPolicy,
-  blankShare: 'zero',
   blankSplitAmount: 'refuse',
   feedback: 'allocation-summary',
   weightInput: 'numbers-or-zero',
@@ -121,8 +117,7 @@ export function readExpenseEntry(
           ? toMajorAmount(parseAmountMinor(entry.amount, entry.currency), entry.currency)
           : entry.amount;
       const weight = (user: string, digits: number) => {
-        const text =
-          entry.splitValues[user] || (digits === 0 && policy.blankShare === 'one' ? '1' : '0');
+        const text = entry.splitValues[user] || '0';
         return policy.weightInput === 'numbers-or-zero'
           ? Number(text) || 0
           : policy.weightInput === 'numbers'

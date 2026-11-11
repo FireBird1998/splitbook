@@ -115,7 +115,12 @@ export default function ReviewExpenseFields({
       chooseSplitMethod={(splitMethod) =>
         onChange({
           splitMethod,
-          splitValues: Object.fromEntries(Object.keys(entry.splitValues).map((id) => [id, ''])),
+          splitValues: Object.fromEntries(
+            [...new Set([...Object.keys(entry.splitValues), ...entry.participantIds])].map((id) => [
+              id,
+              splitMethod === 'shares' && entry.participantIds.includes(id) ? '1' : '',
+            ]),
+          ),
         })
       }
     />

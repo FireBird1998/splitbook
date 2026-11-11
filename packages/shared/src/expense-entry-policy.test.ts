@@ -2,12 +2,12 @@ import { expect, it } from 'vitest';
 import { readExpenseEntry, formSummaryPolicy } from './expense-entry';
 import { entries, savedFor, sam } from './test-support/expense-entry-cases';
 
-it('keeps a blank share as one for a complete-form save and zero in its displayed share count', () => {
+it('counts a blank share as zero both on save and in its displayed share count', () => {
   const entry = entries.find((entry) => entry.id === 'shares-partly-blank')!;
   const reading = readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy);
   expect(reading.result).toMatchObject({
     kind: 'ready',
-    money: { splitBetween: [{ amountMinor: 6667 }, { amountMinor: 3333 }] },
+    money: { splitBetween: [{ amountMinor: 10000 }, { amountMinor: 0 }] },
   });
   expect(reading.fields.sharesTotal).toBe(2);
   expect(reading.fields.perShareAmount).toBe(50);
@@ -83,7 +83,7 @@ it.each([
   ['shares', [6667, 3333], 1],
   ['multiple-payers', [5000, 5000], 2],
   ['leftover-cent', [3334, 3333, 3333], 1],
-  ['shares-partly-blank', [6667, 3333], 1],
+  ['shares-partly-blank', [10000, 0], 1],
   ['shares-one-zero', [10000, 0], 1],
   ['payers-zero', [5000, 5000], 2],
   ['single-payer-blank', [5000, 5000], 1],
@@ -142,5 +142,13 @@ it('reads one payer from the payer field for the web command (#1117 decision 7)'
   expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
     kind: 'ready',
     money: { paidBy: [{ user: sam, amountMinor: 10000 }] },
+  });
+});
+
+it('saves a blank share as zero on the complete form (#1117 decision 1)', () => {
+  const entry = entries.find((row) => row.id === 'shares-partly-blank')!;
+  expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+    kind: 'ready',
+    money: { splitBetween: [{ amountMinor: 10000 }, { amountMinor: 0 }] },
   });
 });

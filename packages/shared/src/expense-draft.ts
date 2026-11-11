@@ -218,7 +218,13 @@ export class ExpenseDraft {
   }
 
   chooseSplitMethod(splitMethod: ExpenseSplitMethod) {
-    return this.change({ splitMethod, splitValues: {} });
+    return this.change({
+      splitMethod,
+      splitValues:
+        splitMethod === 'shares'
+          ? Object.fromEntries(this.entry.participantIds.map((id) => [id, '1']))
+          : {},
+    });
   }
 
   reading() {
