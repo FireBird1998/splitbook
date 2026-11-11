@@ -151,7 +151,7 @@ describe('To review quick fixes', () => {
     );
     const fixes = toReviewQuickFixes(shared, context);
     expect(fixes.fixes).toEqual([]);
-    expect(fixes.stillNeeds).toEqual(['who paid']);
+    expect(fixes.stillNeeds).toEqual(['the amounts paid to add up to the total']);
   });
 
   it('summarises a Ready item, hiding a Category that is Other or matches the Tag', () => {
