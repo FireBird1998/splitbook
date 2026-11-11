@@ -24,7 +24,10 @@ export interface GroupLedgerRead<T> {
   /** Minimum Group role for this read. */
   requiredRole?: 'member' | 'admin';
   /** Preserve admission before request validation, and validation before any materialization. */
-  validate?: (group: LedgerReadGroup, storedGroup: IGroupDocument) => void | NoInfer<T>;
+  validate?: (
+    group: LedgerReadGroup,
+    storedGroup: IGroupDocument,
+  ) => void | NoInfer<T> | Promise<void | NoInfer<T>>;
   read: (group: LedgerReadGroup, storedGroup: IGroupDocument) => Promise<T>;
 }
 
@@ -53,7 +56,7 @@ async function readOne<T>(
     { ...storedGroup, members: storedGroup.members.map((member) => ({ ...member })) },
     { path: 'members.user', select: PERSON_FIELDS, options: { lean: true } },
   );
-  const validation = validate?.(group, storedGroup);
+  const validation = await validate?.(group, storedGroup);
   let result: T;
   if (validation !== undefined) result = validation;
   else {
