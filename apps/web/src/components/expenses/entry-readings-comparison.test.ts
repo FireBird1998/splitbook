@@ -260,10 +260,9 @@ it('shows a blank split amount as zero, missing, or invalid (#1111 claim 3)', ()
       { field: 'splitBetween.1.amount', message: 'Enter an amount for each person in the split' },
     ],
   });
-  expect(cell('web-recurring', 'amounts-partly-blank').result).toEqual({
-    kind: 'refusal',
-    issues: [{ field: '', message: 'Enter a valid decimal amount' }],
-  });
+  expect(
+    money('web-recurring', 'amounts-partly-blank').splitBetween.map((row) => row.amountMinor),
+  ).toEqual([10000, 0]);
 });
 it('shows blank payer refusal, dropping, and the lone-payer completion (#1111 claim 4)', () => {
   expect(money('web-new', 'payers-partly-blank').paidBy).toEqual([

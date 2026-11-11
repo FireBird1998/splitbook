@@ -881,7 +881,14 @@
   "amounts-partly-blank": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit", "android-new", "android-edit"],
+        "columns": [
+          "web-new",
+          "web-edit",
+          "web-recurring",
+          "web-recurring.edit",
+          "android-new",
+          "android-edit"
+        ],
         "reading": {
           "kind": "allocation",
           "amountMinor": 10000,
@@ -891,13 +898,6 @@
             { "user": "a00000000000000000000001", "amountMinor": 10000 },
             { "user": "a00000000000000000000002", "amountMinor": 0 }
           ]
-        }
-      },
-      {
-        "columns": ["web-recurring", "web-recurring.edit"],
-        "reading": {
-          "kind": "refusal",
-          "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
         }
       },
       {

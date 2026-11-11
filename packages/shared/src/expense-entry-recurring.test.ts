@@ -2,11 +2,11 @@ import { expect, it } from 'vitest';
 import { readExpenseEntry, recurringEntryPolicy } from './expense-entry';
 import { entries, alex, sam, savedFor } from './test-support/expense-entry-cases';
 
-it('refuses a blank recurring amount at its row instead of supplying zero', () => {
+it('reads a blank recurring split amount as zero', () => {
   const entry = entries.find((entry) => entry.id === 'amounts-partly-blank')!;
   expect(readExpenseEntry(entry, { kind: 'new' }, recurringEntryPolicy).result).toMatchObject({
-    kind: 'refused',
-    problems: [{ field: 'form', message: 'Enter a valid decimal amount' }],
+    kind: 'ready',
+    money: { splitBetween: [{ amountMinor: 10000 }, { amountMinor: 0 }] },
   });
 });
 
@@ -75,5 +75,18 @@ it('keeps submitted participant order separately from an unchanged historical pr
     kind: 'ready',
     figures: { splitBetween: [{ user: sam }, { user: alex }] },
     money: { splitBetween: [{ user: alex }, { user: sam }] },
+  });
+});
+
+it('counts a blank recurring split amount as zero (#1117 decision 3)', () => {
+  const entry = entries.find((row) => row.id === 'amounts-partly-blank')!;
+  expect(readExpenseEntry(entry, { kind: 'new' }, recurringEntryPolicy).result).toMatchObject({
+    kind: 'ready',
+    figures: {
+      splitBetween: [
+        { user: alex, amount: 100 },
+        { user: sam, amount: 0 },
+      ],
+    },
   });
 });

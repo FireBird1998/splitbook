@@ -312,3 +312,16 @@ it('uses the current Group currency and members if its read changes while the di
     value: { currency: 'JPY', splitBetween: [{ user: people[1].id }] },
   });
 });
+
+it('submits a recurring split with a cleared amount as zero (#1117 decision 3)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  expect(
+    (await read(entries.find((row) => row.id === 'amounts-partly-blank')!, false)).result,
+  ).toMatchObject({ kind: 'command', value: { splitBetween: [{ amount: 100 }, { amount: 0 }] } });
+});
