@@ -339,17 +339,6 @@
   },
   "payers-partly-blank": {
     "result": {
-      "kind": "refusal",
-      "issues": [
-        {
-          "field": "paidBy.1.amount",
-          "message": "Invalid input: expected number, received undefined"
-        }
-      ]
-    }
-  },
-  "payers-zero": {
-    "result": {
       "kind": "command",
       "value": {
         "description": "Groceries",
@@ -357,10 +346,7 @@
         "currency": "INR",
         "category": "food",
         "date": "2026-11-10T00:00:00.000Z",
-        "paidBy": [
-          { "user": "a00000000000000000000001", "amount": 100 },
-          { "user": "a00000000000000000000002", "amount": 0 }
-        ],
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
         "splitMethod": "equal",
         "splitBetween": [
           { "user": "a00000000000000000000001" },
@@ -376,10 +362,40 @@
         "currency": "INR",
         "amount": 100,
         "amountMinor": 10000,
-        "paidBy": [
-          { "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 },
-          { "user": "a00000000000000000000002", "amount": 0, "amountMinor": 0 }
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "splitBetween": [
+          { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
+          { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
+        ]
+      }
+    }
+  },
+  "payers-zero": {
+    "result": {
+      "kind": "command",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10T00:00:00.000Z",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001" },
+          { "user": "a00000000000000000000002" }
         ],
+        "tagId": "c00000000000000000000001",
+        "notes": ""
+      }
+    },
+    "shown": {
+      "allocation": {
+        "moneyVersion": 1,
+        "currency": "INR",
+        "amount": 100,
+        "amountMinor": 10000,
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
         "splitBetween": [
           { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
           { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }

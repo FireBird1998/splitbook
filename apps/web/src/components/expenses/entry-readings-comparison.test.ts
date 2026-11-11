@@ -234,20 +234,20 @@ it('shows a partly blank share saved as zero everywhere (#1117 decision 1)', () 
     formContents: expect.stringContaining('2\u00a0shares\u00a0· ₹50.00/share'),
   });
 });
-it('shows a zero payer sent or retained except by Android save (#1111 claim 2)', () => {
-  expect(resultValue('web-new', 'payers-zero').paidBy.map((p) => p.user)).toEqual([alex, sam]);
-  expect(resultValue('android-new', 'payers-zero').paidBy.map((p) => p.user)).toEqual([alex]);
+it('leaves unpaid people out of every new command and edited Draft (#1117 decision 2)', () => {
   for (const column of [
+    'web-new',
+    'android-new',
     'server-complete',
     'web-finish-later',
     'android-finish-later',
     'web-review',
     'android-review',
   ])
-    expect(resultValue(column, 'payers-zero').paidBy, column).toContainEqual({
-      user: sam,
-      amount: 0,
-    });
+    expect(
+      resultValue(column, 'payers-zero').paidBy.map((p) => p.user),
+      column,
+    ).toEqual([alex]);
 });
 it('shows a blank split amount as zero, missing, or invalid (#1111 claim 3)', () => {
   for (const column of ['web-new', 'android-new'])
@@ -266,14 +266,15 @@ it('shows a blank split amount as zero, missing, or invalid (#1111 claim 3)', ()
   });
 });
 it('shows blank payer refusal, dropping, and the lone-payer completion (#1111 claim 4)', () => {
-  expect(cell('web-new', 'payers-partly-blank').result.kind).toBe('refusal');
+  expect(money('web-new', 'payers-partly-blank').paidBy).toEqual([
+    { user: alex, amountMinor: 10000 },
+  ]);
   expect(money('android-new', 'payers-partly-blank').paidBy).toEqual([
     { user: alex, amountMinor: 10000 },
   ]);
-  expect(cell('server-complete', 'payers-partly-blank').result).toMatchObject({
-    kind: 'refusal',
-    issues: [{ field: 'paidBy.1.amount' }],
-  });
+  expect(money('server-complete', 'payers-partly-blank').paidBy).toEqual([
+    { user: alex, amountMinor: 10000 },
+  ]);
   expect(money('server-complete', 'lone-listed-payer-blank').paidBy).toEqual([
     { user: alex, amountMinor: 10000 },
   ]);
@@ -382,7 +383,6 @@ it('keeps a historical zero payer through a notes edit and records the money-cha
   });
   expect(money('web-edit', 'saved-zero-payer-money-change').paidBy).toEqual([
     { user: alex, amountMinor: 12000 },
-    { user: sam, amountMinor: 0 },
   ]);
   expect(money('android-edit', 'saved-zero-payer-money-change').paidBy).toEqual([
     { user: alex, amountMinor: 12000 },

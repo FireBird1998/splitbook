@@ -33,22 +33,22 @@ it('keeps complete-form refusals and numeric weights while withholding partial a
   });
 });
 
-it('keeps all entered payer rows, uses their first identity for one payer, and retains saved zero rows on a money edit', () => {
+it('drops unpaid rows and keeps saved zero rows only until money changes', () => {
   const zero = entries.find((entry) => entry.id === 'payers-zero')!;
   expect(readExpenseEntry(zero, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
     kind: 'ready',
-    money: { paidBy: [{ amountMinor: 10000 }, { user: sam, amountMinor: 0 }] },
+    money: { paidBy: [{ amountMinor: 10000 }] },
   });
   const blank = entries.find((entry) => entry.id === 'payers-partly-blank')!;
   expect(readExpenseEntry(blank, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
-    kind: 'refused',
+    kind: 'ready',
   });
   const changed = entries.find((entry) => entry.id === 'saved-zero-payer-money-change')!;
   expect(
     readExpenseEntry(changed, { kind: 'edit', saved: savedFor(changed) }, formSummaryPolicy).result,
   ).toMatchObject({
     kind: 'ready',
-    money: { paidBy: [{ amountMinor: 12000 }, { amountMinor: 0 }] },
+    money: { paidBy: [{ amountMinor: 12000 }] },
   });
   const single = entries.find((entry) => entry.id === 'single-payer-field-differs')!;
   expect(readExpenseEntry(single, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
@@ -57,17 +57,14 @@ it('keeps all entered payer rows, uses their first identity for one payer, and r
   });
 });
 
-it('honors removing a historical zero payer only under the keep-entered-rows policy', () => {
-  const original = entries.find((entry) => entry.id === 'saved-zero-payer-unchanged')!;
-  const entry = { ...original, payers: original.payers.slice(0, 1) };
-  const purpose = { kind: 'edit' as const, saved: savedFor(original) };
-  expect(readExpenseEntry(entry, purpose, formSummaryPolicy).result).toMatchObject({
-    kind: 'ready',
-    financialEdit: true,
-    money: { paidBy: [{ amountMinor: 10000 }] },
-  });
+it('retains an existing zero payer while no money value changes', () => {
+  const original = entries.find((row) => row.id === 'saved-zero-payer-unchanged')!;
   expect(
-    readExpenseEntry(entry, purpose, { ...formSummaryPolicy, savedZeroPayers: 'unchanged' }).result,
+    readExpenseEntry(
+      { ...original, payers: original.payers.slice(0, 1) },
+      { kind: 'edit', saved: savedFor(original) },
+      formSummaryPolicy,
+    ).result,
   ).toMatchObject({
     kind: 'ready',
     financialEdit: false,
@@ -85,7 +82,7 @@ it.each([
   ['leftover-cent', [3334, 3333, 3333], 1],
   ['shares-partly-blank', [10000, 0], 1],
   ['shares-one-zero', [10000, 0], 1],
-  ['payers-zero', [5000, 5000], 2],
+  ['payers-zero', [5000, 5000], 1],
   ['single-payer-blank', [5000, 5000], 1],
   ['amounts-partly-blank', [10000, 0], 1],
   ['percentage-partly-blank', [10000, 0], 1],
@@ -107,8 +104,7 @@ it.each([
   ['shares-all-blank', 'Each member needs at least 1 share'],
   ['shares-all-zero', 'Each member needs at least 1 share'],
   ['shares-fractional', 'Shares must be whole numbers within the supported range'],
-  ['payers-partly-blank', 'Enter a valid decimal amount'],
-  ['lone-listed-payer-blank', 'Enter a valid decimal amount'],
+  ['lone-listed-payer-blank', 'At least one payer and participant are required'],
   ['amounts-not-total', 'Split amounts must add up to the expense amount'],
   ['percentage-not-total', 'Percentages must add up to 100'],
   ['unreadable-amount', 'Enter a valid decimal amount'],
@@ -152,3 +148,16 @@ it('saves a blank share as zero on the complete form (#1117 decision 1)', () => 
     money: { splitBetween: [{ amountMinor: 10000 }, { amountMinor: 0 }] },
   });
 });
+
+it.each(['payers-zero', 'payers-partly-blank'])(
+  'leaves an unpaid row out of the web command for %s (#1117 decision 2)',
+  (id) => {
+    const entry = entries.find((row) => row.id === id)!;
+    expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+      kind: 'ready',
+      money: { paidBy: [{ user: entry.payerId, amountMinor: 10000 }] },
+    });
+    const result = readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).result;
+    if (result.kind === 'ready') expect(result.money.paidBy).toHaveLength(1);
+  },
+);

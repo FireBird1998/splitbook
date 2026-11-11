@@ -3,7 +3,7 @@ import { expect, it } from 'vitest';
 import { draftForExpenseEntry, entryForExpenseDraft } from './expense-entry-draft';
 import { entries, alex, sam } from './test-support/expense-entry-cases';
 
-it('keeps zero payers and omits a blank share when an entry is set aside', () => {
+it('omits unpaid people and a blank share when an entry is set aside', () => {
   const entry = {
     ...entries.find((row) => row.id === 'payers-zero')!,
     splitMethod: 'shares' as const,
@@ -11,10 +11,7 @@ it('keeps zero payers and omits a blank share when an entry is set aside', () =>
   };
   expect(draftForExpenseEntry(entry)).toMatchObject({
     amount: 100,
-    paidBy: [
-      { user: alex, amount: 100 },
-      { user: sam, amount: 0 },
-    ],
+    paidBy: [{ user: alex, amount: 100 }],
     splitBetween: [{ user: alex, shares: 2 }, { user: sam }],
   });
   expect(draftForExpenseEntry(entry).splitBetween![1]).not.toHaveProperty('shares');
@@ -176,4 +173,21 @@ it('keeps the entered several-payer mode when duplicate rows become one box (#11
       ],
     }),
   ).toMatchObject({ multiPayer: true, payers: [{ user: alex, amount: '60' }] });
+});
+
+it('omits unpaid people from Finish later and from a later note edit (#1117 decision 2)', () => {
+  const entry = entries.find((row) => row.id === 'payers-zero')!;
+  expect(draftForExpenseEntry(entry).paidBy).toEqual([{ user: alex, amount: 100 }]);
+  const from = {
+    paidBy: [
+      { user: alex, amount: 100 },
+      { user: sam, amount: 0 },
+    ],
+  };
+  expect(
+    draftForExpenseEntry(
+      { ...entryForExpenseDraft(from), notes: 'Checked' },
+      { from, changed: { notes: true } },
+    ).paidBy,
+  ).toEqual([{ user: alex, amount: 100 }]);
 });

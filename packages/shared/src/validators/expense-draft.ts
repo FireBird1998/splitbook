@@ -65,8 +65,19 @@ export const expenseDraftValuesSchema = expenseFields
 export const completeExpenseDraftSchema = z.preprocess((values) => {
   if (!values || typeof values !== 'object') return values;
   const draft = values as ExpenseDraftValues;
-  const [payer, ...others] = draft.paidBy ?? [];
-  return payer && !others.length && payer.amount === undefined
+  if (!Array.isArray(draft.paidBy)) return values;
+  if (draft.paidBy.length > 1)
+    return {
+      ...draft,
+      paidBy: draft.paidBy.filter(
+        (payer) =>
+          // Invalid rows still reach the command validator; only a readable unpaid row disappears.
+          !expenseDraftValuesSchema.shape.paidBy.unwrap().element.safeParse(payer).success ||
+          (payer.amount !== undefined && payer.amount !== 0),
+      ),
+    };
+  const [payer] = draft.paidBy;
+  return payer && payer.amount === undefined
     ? { ...draft, paidBy: [{ ...payer, amount: draft.amount ?? 0 }] }
     : draft;
 }, createExpenseSchema);

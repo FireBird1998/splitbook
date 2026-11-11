@@ -52,8 +52,6 @@ export type ExpenseEntryPurpose = { kind: 'new' } | { kind: 'edit'; saved: Store
 
 export interface ExpenseEntryPolicy {
   blankSplitAmount: 'zero' | 'refuse';
-  payerRows: 'all' | 'nonzero';
-  savedZeroPayers: 'keep' | 'unchanged';
   splitPreview: 'whole-expense' | 'independent-split';
   roundingNote: 'show' | 'hide';
   weightInput: 'numbers' | 'numbers-or-zero' | 'decimal-units';
@@ -62,8 +60,6 @@ export interface ExpenseEntryPolicy {
 }
 export const expenseEntryPolicy: ExpenseEntryPolicy = {
   blankSplitAmount: 'zero',
-  payerRows: 'nonzero',
-  savedZeroPayers: 'unchanged',
   splitPreview: 'independent-split',
   roundingNote: 'show',
   weightInput: 'decimal-units',
@@ -71,8 +67,6 @@ export const expenseEntryPolicy: ExpenseEntryPolicy = {
 };
 export const formSummaryPolicy: ExpenseEntryPolicy = {
   blankSplitAmount: 'zero',
-  payerRows: 'all',
-  savedZeroPayers: 'keep',
   splitPreview: 'whole-expense',
   roundingNote: 'hide',
   weightInput: 'numbers',
@@ -93,7 +87,7 @@ export function readExpenseEntry(
   purpose: ExpenseEntryPurpose,
   policy: ExpenseEntryPolicy = expenseEntryPolicy,
 ) {
-  const countedPayers = policy.payerRows === 'all' ? entry.payers : enteredPayers(entry.payers);
+  const countedPayers = enteredPayers(entry.payers);
   const singlePayer = entry.payerId;
   const payerIds = entry.multiPayer ? countedPayers.map((payer) => payer.user) : [singlePayer];
   const allocate = (multiPayer: boolean) => {
@@ -149,10 +143,7 @@ export function readExpenseEntry(
         })),
       };
       if (purpose.kind === 'new') return normalizeExpenseMoney(input);
-      const kept =
-        multiPayer && policy.savedZeroPayers === 'unchanged'
-          ? keepSavedPayers(purpose.saved, input)
-          : null;
+      const kept = multiPayer ? keepSavedPayers(purpose.saved, input) : null;
       return decideExpenseMoneyEdit(purpose.saved, kept ?? input).money;
     } catch (error) {
       // Part of a yen paid or shared: the amount field's words, as on the web (#755).
@@ -472,7 +463,7 @@ function isZero(amount: string) {
  * A blank entry, or one of 0, means that person paid nothing, so they aren't a payer (#187).
  * Their entry stays as typed, so "0" can still become "0.50".
  */
-const enteredPayers = (payers: PayerEntry[]) =>
+export const enteredPayers = (payers: PayerEntry[]) =>
   payers.filter((payer) => payer.amount.trim() && !isZero(payer.amount));
 
 /** Why one person's entry can't count yet. Blank entries and 0 are simply empty. */

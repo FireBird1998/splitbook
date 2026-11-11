@@ -525,6 +525,28 @@ describe('persistent private expense Drafts', () => {
     });
   });
 
+  it.each([0, undefined])(
+    'records no unpaid row when completing a Draft (%s, #1117 decision 2)',
+    async (amount) => {
+      const [complete] = await completeDrafts();
+      const values = {
+        ...complete.values!,
+        paidBy: [
+          { user: alice.id, amount: 450 },
+          { user: bob.id, ...(amount === undefined ? {} : { amount }) },
+        ],
+      };
+      const changed = await drafts.replace(alice, groupId, complete.id, values, complete.revision);
+      const reviewed = await drafts.review(alice, groupId, changed.id);
+      expect(reviewed.problems).toEqual([]);
+      expect((await drafts.save(alice, groupId, saveCommand(reviewed)))[0].status).toBe('saved');
+      const expense = await db().collection('expenses').findOne({ group });
+      expect(expense!.paidBy).toHaveLength(1);
+      expect(String(expense!.paidBy[0].user)).toBe(alice.id);
+      expect(expense!.paidBy[0].amountMinor).toBe(45000);
+    },
+  );
+
   it('saves an unspecified Category as Other, as Add expense does, without rewriting the item', async () => {
     const [complete] = await completeDrafts();
     const values = { ...complete.values };

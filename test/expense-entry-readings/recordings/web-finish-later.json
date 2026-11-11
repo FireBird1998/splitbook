@@ -248,10 +248,7 @@
         "currency": "INR",
         "category": "food",
         "date": "2026-11-10",
-        "paidBy": [
-          { "user": "a00000000000000000000001", "amount": 100 },
-          { "user": "a00000000000000000000002" }
-        ],
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
         "splitMethod": "equal",
         "splitBetween": [
           { "user": "a00000000000000000000001" },
@@ -271,10 +268,7 @@
         "currency": "INR",
         "category": "food",
         "date": "2026-11-10",
-        "paidBy": [
-          { "user": "a00000000000000000000001", "amount": 100 },
-          { "user": "a00000000000000000000002", "amount": 0 }
-        ],
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
         "splitMethod": "equal",
         "splitBetween": [
           { "user": "a00000000000000000000001" },
@@ -314,7 +308,6 @@
         "currency": "INR",
         "category": "food",
         "date": "2026-11-10",
-        "paidBy": [{ "user": "a00000000000000000000001" }],
         "splitMethod": "equal",
         "splitBetween": [
           { "user": "a00000000000000000000001" },

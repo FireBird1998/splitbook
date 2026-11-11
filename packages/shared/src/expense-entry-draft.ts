@@ -10,7 +10,7 @@ export interface DraftContext {
   viewerId?: string;
 }
 
-import type { IncompleteExpenseEntry } from './expense-entry';
+import { enteredPayers, type IncompleteExpenseEntry } from './expense-entry';
 import { expenseDraftValuesSchema, type ExpenseDraftValues } from './validators/expense-draft';
 
 type DraftEntries = Record<string, string>;
@@ -83,7 +83,7 @@ export function draftForExpenseEntry(
   ) {
     for (const key of Object.keys(fields)) if (key.startsWith('paidBy.')) delete fields[key];
     const payers = entry.multiPayer
-      ? entry.payers
+      ? enteredPayers(entry.payers)
       : [{ user: entry.payerId, amount: entry.amount }];
     for (const payer of payers) {
       if (update && !payer.user) continue;
@@ -167,7 +167,11 @@ function draftValues(entries: DraftEntries): ExpenseDraftValues {
           if (entries[`${key}.${part}`]?.trim()) row[part] = Number(entries[`${key}.${part}`]);
         return row;
       });
-    if (rows.length) value[kind] = rows;
+    const kept =
+      kind === 'paidBy' && rows.length > 1
+        ? rows.filter((row) => row.amount !== undefined && row.amount !== 0)
+        : rows;
+    if (kept.length) value[kind] = kept;
   }
   const parsed = expenseDraftValuesSchema.safeParse(value);
   if (!parsed.success)

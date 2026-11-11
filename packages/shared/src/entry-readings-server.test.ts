@@ -40,3 +40,17 @@ it('records server completion of each numeric Draft (#1111)', async () => {
     '../../../test/expense-entry-readings/recordings/server-complete.json',
   );
 });
+
+it.each([0, undefined])(
+  'completes a Draft without an unpaid row of %s (#1117 decision 2)',
+  (amount) => {
+    const row = numericDraft(entries.find((row) => row.id === 'multiple-payers')!);
+    row.paidBy = [
+      { user: entries[0].payerId, amount: 100 },
+      { user: entries[0].participantIds[1], amount },
+    ];
+    expect(completeExpenseDraftSchema.parse(row).paidBy).toEqual([
+      { user: entries[0].payerId, amount: 100 },
+    ]);
+  },
+);

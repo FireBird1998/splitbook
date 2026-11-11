@@ -170,7 +170,7 @@ describe('To review model', () => {
     const model = buildToReview(read([several, mismatched, unpaid, unpriced]), [], now);
     const facts = Object.fromEntries(model.items.map((item) => [item.id, item.missingFacts]));
     expect(model.ready.count).toBe(0);
-    expect(facts[several.draft.id]).toEqual(['who paid']);
+    expect(facts[several.draft.id]).toEqual(['the amounts paid to add up to the total']);
     // The payer doesn't add up to the amount: what it needs, not a missing amount (#506).
     expect(facts[mismatched.draft.id]).toEqual(['the amounts paid to add up to the total']);
     expect(facts[unpaid.draft.id]).toEqual(['who paid']);
@@ -622,7 +622,7 @@ describe('memberProblems (#435)', () => {
           paidBy: [{ user: sam, amount: 10 }, { user: alex }],
         },
       ),
-    ).toEqual(['The amount paid by Alex?']);
+    ).toEqual(['Who paid?', 'The amount paid by Alex?']);
   });
 
   it('names the person whose exact share was left out, not the Expense amount (#497)', () => {

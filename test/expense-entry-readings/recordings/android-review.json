@@ -754,10 +754,7 @@
         "currency": "INR",
         "category": "food",
         "date": "2026-11-10",
-        "paidBy": [
-          { "user": "a00000000000000000000001", "amount": 100 },
-          { "user": "a00000000000000000000002" }
-        ],
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
         "splitMethod": "equal",
         "splitBetween": [
           { "user": "a00000000000000000000001" },
@@ -769,7 +766,7 @@
     "shown": {
       "sheets": {
         "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
-        "payers": "Who paid? Done One person Several people Enter what each person paid. Together it must equal ₹100.00. AR You Alex Rivera SC Sam Chen PS Priya Shah Adds up ₹100.00 of ₹100.00 Entries stay in your draft. Done or Back keeps them."
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
       },
       "paidBySummary": "You",
       "split": {
@@ -780,76 +777,7 @@
       },
       "roundingNote": null,
       "payers": {
-        "visible": true,
-        "totalMinor": 10000,
-        "assignedMinor": 10000,
-        "remainingMinor": 0,
-        "problems": {},
-        "errors": {}
-      },
-      "reviewScreen": {
-        "text": "Maple House Review · 1 of 1 You set this aside Finish later · today 12:00 AM Amount Required INR Description Required Date Today, 10 Nov Paid by You Split Equally · 2 Tag Required Shared Who paid? · Choose Category and notes Optional One thing left before you can save: who paid Save expense Delete Skip for now",
-        "saveDisabled": true,
-        "fields": [
-          { "label": "Amount, Indian Rupee", "value": "100.00", "editable": true },
-          { "label": "Description", "value": "Groceries", "editable": true }
-        ],
-        "valuesKept": {
-          "description": "Groceries",
-          "amount": 100,
-          "currency": "INR",
-          "category": "food",
-          "date": "2026-11-10",
-          "paidBy": [
-            { "user": "a00000000000000000000001", "amount": 100 },
-            { "user": "a00000000000000000000002" }
-          ],
-          "splitMethod": "equal",
-          "splitBetween": [
-            { "user": "a00000000000000000000001" },
-            { "user": "a00000000000000000000002" }
-          ],
-          "tagId": "c00000000000000000000001"
-        }
-      }
-    }
-  },
-  "payers-zero": {
-    "result": {
-      "kind": "draft",
-      "value": {
-        "description": "Groceries",
-        "amount": 100,
-        "currency": "INR",
-        "category": "food",
-        "date": "2026-11-10",
-        "paidBy": [
-          { "user": "a00000000000000000000001", "amount": 100 },
-          { "user": "a00000000000000000000002", "amount": 0 }
-        ],
-        "splitMethod": "equal",
-        "splitBetween": [
-          { "user": "a00000000000000000000001" },
-          { "user": "a00000000000000000000002" }
-        ],
-        "tagId": "c00000000000000000000001"
-      }
-    },
-    "shown": {
-      "sheets": {
-        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
-        "payers": "Who paid? Done One person Several people Enter what each person paid. Together it must equal ₹100.00. AR You Alex Rivera SC Sam Chen PS Priya Shah Adds up ₹100.00 of ₹100.00 Entries stay in your draft. Done or Back keeps them."
-      },
-      "paidBySummary": "You",
-      "split": {
-        "total": 10000,
-        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
-        "errors": {},
-        "status": { "kind": "adds-up", "leftover": null }
-      },
-      "roundingNote": null,
-      "payers": {
-        "visible": true,
+        "visible": false,
         "totalMinor": 10000,
         "assignedMinor": 10000,
         "remainingMinor": 0,
@@ -869,10 +797,70 @@
           "currency": "INR",
           "category": "food",
           "date": "2026-11-10",
-          "paidBy": [
-            { "user": "a00000000000000000000001", "amount": 100 },
-            { "user": "a00000000000000000000002", "amount": 0 }
+          "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+          "splitMethod": "equal",
+          "splitBetween": [
+            { "user": "a00000000000000000000001" },
+            { "user": "a00000000000000000000002" }
           ],
+          "tagId": "c00000000000000000000001"
+        }
+      }
+    }
+  },
+  "payers-zero": {
+    "result": {
+      "kind": "draft",
+      "value": {
+        "description": "Groceries",
+        "amount": 100,
+        "currency": "INR",
+        "category": "food",
+        "date": "2026-11-10",
+        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "splitMethod": "equal",
+        "splitBetween": [
+          { "user": "a00000000000000000000001" },
+          { "user": "a00000000000000000000002" }
+        ],
+        "tagId": "c00000000000000000000001"
+      }
+    },
+    "shown": {
+      "sheets": {
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+      },
+      "paidBySummary": "You",
+      "split": {
+        "total": 10000,
+        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "errors": {},
+        "status": { "kind": "adds-up", "leftover": null }
+      },
+      "roundingNote": null,
+      "payers": {
+        "visible": false,
+        "totalMinor": 10000,
+        "assignedMinor": 10000,
+        "remainingMinor": 0,
+        "problems": {},
+        "errors": {}
+      },
+      "reviewScreen": {
+        "text": "Maple House Review · 1 of 1 You set this aside Finish later · today 12:00 AM Amount Required INR Description Required Date Today, 10 Nov Paid by You Split Equally · 2 Tag Required Shared You share ₹50.00 · Sam Chen shares ₹50.00 Category and notes Optional Save expense Delete Skip for now",
+        "saveDisabled": false,
+        "fields": [
+          { "label": "Amount, Indian Rupee", "value": "100.00", "editable": true },
+          { "label": "Description", "value": "Groceries", "editable": true }
+        ],
+        "valuesKept": {
+          "description": "Groceries",
+          "amount": 100,
+          "currency": "INR",
+          "category": "food",
+          "date": "2026-11-10",
+          "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
           "splitMethod": "equal",
           "splitBetween": [
             { "user": "a00000000000000000000001" },
@@ -955,7 +943,6 @@
         "currency": "INR",
         "category": "food",
         "date": "2026-11-10",
-        "paidBy": [{ "user": "a00000000000000000000001" }],
         "splitMethod": "equal",
         "splitBetween": [
           { "user": "a00000000000000000000001" },
@@ -966,15 +953,15 @@
     },
     "shown": {
       "sheets": {
-        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
-        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah"
+        "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You Sam Chen Priya Shah Not included Each person can appear only once",
+        "payers": "Who paid? Done One person Several people AR You Alex Rivera SC Sam Chen PS Priya Shah Group member is no longer in this Group. Choose who paid."
       },
-      "paidBySummary": "You",
+      "paidBySummary": "Group member",
       "split": {
         "total": 10000,
-        "shares": { "a00000000000000000000001": 5000, "a00000000000000000000002": 5000 },
+        "shares": {},
         "errors": {},
-        "status": { "kind": "adds-up", "leftover": null }
+        "status": { "kind": "problem", "message": "Each person can appear only once" }
       },
       "roundingNote": null,
       "payers": {
@@ -986,8 +973,8 @@
         "errors": {}
       },
       "reviewScreen": {
-        "text": "Maple House Review · 1 of 1 You set this aside Finish later · today 12:00 AM Amount Required INR Description Required Date Today, 10 Nov Paid by You Split Equally · 2 Tag Required Shared You share ₹50.00 · Sam Chen shares ₹50.00 Category and notes Optional Save expense Delete Skip for now",
-        "saveDisabled": false,
+        "text": "Maple House Review · 1 of 1 You set this aside Finish later · today 12:00 AM Amount Required INR Description Required Date Today, 10 Nov Paid by Choose Split Equally · 2 Tag Required Shared Who paid? · Choose Category and notes Optional One thing left before you can save: who paid Save expense Delete Skip for now",
+        "saveDisabled": true,
         "fields": [
           { "label": "Amount, Indian Rupee", "value": "100.00", "editable": true },
           { "label": "Description", "value": "Groceries", "editable": true }
@@ -998,7 +985,6 @@
           "currency": "INR",
           "category": "food",
           "date": "2026-11-10",
-          "paidBy": [{ "user": "a00000000000000000000001" }],
           "splitMethod": "equal",
           "splitBetween": [
             { "user": "a00000000000000000000001" },

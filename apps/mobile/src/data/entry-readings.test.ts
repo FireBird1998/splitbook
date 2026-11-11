@@ -84,7 +84,7 @@ async function sheets(draft: ExpenseDraft) {
     currentUserId: people[0].id,
     locked: false,
     persistence: 'saved' as const,
-    name: (id: string) => people.find((p) => p.id === id)!.name,
+    name: (id: string) => people.find((p) => p.id === id)?.name ?? 'Group member',
     onChange: () => {},
     onDone: () => {},
   };
@@ -121,14 +121,17 @@ async function shown(draft: ExpenseDraft) {
   return {
     sheets: await sheets(draft),
     paidBySummary: paidBySummary(draft, (id) =>
-      id === people[0].id ? 'You' : people.find((p) => p.id === id)!.name,
+      id === people[0].id ? 'You' : (people.find((p) => p.id === id)?.name ?? 'Group member'),
     ),
     split,
     roundingNote:
       split.status.kind === 'adds-up' && split.status.leftover
         ? roundingNote(
             split.status.leftover,
-            (id) => (id === people[0].id ? 'you' : people.find((p) => p.id === id)!.name),
+            (id) =>
+              id === people[0].id
+                ? 'you'
+                : (people.find((p) => p.id === id)?.name ?? 'Group member'),
             (minor) => moneyText(minor, draft.currency),
           )
         : null,

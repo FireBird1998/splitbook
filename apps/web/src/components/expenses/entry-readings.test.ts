@@ -352,7 +352,7 @@ it('starts review Shares at one and fills a newly ticked person’s box (#1117 d
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('window', { addEventListener() {}, removeEventListener() {} });
   vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
-  let tree: ReactTestRenderer;
+  let tree!: ReactTestRenderer;
   function Form() {
     const [entry, setEntry] = useState(() =>
       entryForExpenseDraft({
