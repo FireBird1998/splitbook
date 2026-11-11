@@ -197,7 +197,6 @@ export default function ExpenseFields({
   const [showMoreOptions, setShowMoreOptions] = useState(isEditMode);
   const {
     percentageTotal,
-    amountMinor,
     unequalMinor,
     payerMinor,
     parsedAmount,

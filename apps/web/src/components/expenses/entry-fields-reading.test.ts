@@ -50,7 +50,8 @@ for (const edit of [false, true]) {
   it.each(entries.filter((row) => edit || !row.savedZeroPayer))(
     'shows the recorded ' + (edit ? 'edit' : 'new') + ' fields through the ExpenseEntry props: $id',
     (row) => {
-      const { id, savedZeroPayer: _scenario, ...entry } = row;
+      const { id, ...entry } = row;
+      delete entry.savedZeroPayer;
       const draft = ExpenseDraft.open(context, edit ? savedFor(row) : null).change(entry);
       const shown = renderToStaticMarkup(
         createElement(

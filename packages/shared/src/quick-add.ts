@@ -1255,10 +1255,10 @@ export function quickAddDraftValues(
   choices: QuickAddChoices,
   context: Pick<QuickAddContext, 'currency' | 'viewerId' | 'members'>,
 ): Partial<ExpenseDraftValues> {
-  const {
-    category: _category,
-    notes: _notes,
-    ...values
-  } = expenseDraftValues(quickAddEntry(read, choices, context));
+  const values: Partial<ExpenseDraftValues> = expenseDraftValues(
+    quickAddEntry(read, choices, context),
+  );
+  delete values.category;
+  delete values.notes;
   return values;
 }

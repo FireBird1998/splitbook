@@ -353,9 +353,16 @@ export class ExpenseDraft {
 
 /** Compatibility projection for the existing Draft editors. Only the active map exists. */
 export function expenseDraftValues(entry: ExpenseEntry): ExpenseDraftValues {
-  const { payerId: _payer, participantIds, multiPayer, splitValues, tagId, ...rest } = entry;
+  const { participantIds, multiPayer, splitValues, tagId } = entry;
   return {
-    ...rest,
+    description: entry.description,
+    amount: entry.amount,
+    currency: entry.currency,
+    category: entry.category,
+    date: entry.date,
+    notes: entry.notes,
+    splitMethod: entry.splitMethod,
+    payers: entry.payers,
     tag: tagId,
     selectedMembers: participantIds,
     multiPayerMode: multiPayer,
@@ -426,7 +433,9 @@ export function expenseDraftChanges(
   change: Partial<ExpenseEntry>,
   method: ExpenseSplitMethod,
 ): Partial<ExpenseDraftValues> {
-  const { payerId: _payer, participantIds, multiPayer, splitValues, tagId, ...rest } = change;
+  const { participantIds, multiPayer, splitValues, tagId, ...rest } = change;
+  // The legacy editor chooses the payer from its rows; this copied patch has no payer field.
+  delete rest.payerId;
   const next = change.splitMethod ?? method;
   return {
     ...rest,
