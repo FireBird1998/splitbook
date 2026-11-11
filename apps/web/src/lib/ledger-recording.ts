@@ -8,6 +8,7 @@ import { ensureLedgerWriteIndexes } from './ledger-indexes';
 import { lockLedgerCurrency } from './ledger-currency';
 import Settlement from './models/Settlement';
 import { MoneyValidationError } from '@splitbook/shared/exact-money';
+import { assertExpenseParticipants } from '@splitbook/shared/expense-validation';
 import { assertExpectedRevision } from './ledger-revision';
 import Expense, { type IExpenseDocument } from './models/Expense';
 import {
@@ -281,6 +282,7 @@ export interface LedgerExpenseChange {
     expense: HydratedDocument<IExpenseDocument>,
     group: IGroupDocument,
   ) => {
+    financialEdit?: boolean;
     activity?: { type: 'expense_updated' | 'expense_deleted'; metadata: Record<string, unknown> };
   } | null;
 }
@@ -352,6 +354,8 @@ export async function changeLedgerExpense({
       else if (originalCurrency !== expense.currency)
         await lockLedgerCurrency(groupId, expense.currency);
       const { members } = await requireCommitGroup(groupId, actorId);
+      if (prepared.financialEdit || (wasDeleted && !expense.isDeleted))
+        assertExpenseParticipants(members, expense.paidBy, expense.splitBetween);
       if (event && expenseChangeAlertsEnabled()) {
         const intent = expense.pendingActivity.find(
           (pending) => String(pending._id) === String(event._id),

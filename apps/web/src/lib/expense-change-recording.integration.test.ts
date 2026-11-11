@@ -2,6 +2,7 @@ import { pendingActivityFixture as makePendingActivity } from '@/lib/test-utils/
 import { describe, expect, it, vi } from 'vitest';
 import { Types } from 'mongoose';
 import Expense from './models/Expense';
+import Group from './models/Group';
 import { DEMO_PERSONA_IDS } from './demo-personas';
 import { recordingFixture } from './test-utils/recordings/fixture';
 
@@ -133,3 +134,46 @@ it.each(['edit', 'delete', 'restore'] as const)(
     expect((await fixture.state()).expenses[0]).not.toHaveProperty('revision');
   },
 );
+
+it.each(['notes', 'Tag'] as const)(
+  'allows a %s-only edit of historical money naming a former member',
+  async (kind) => {
+    await fixture.remove(DEMO_PERSONA_IDS.sam);
+    const tag = (await Group.findById(fixture.groupId))!.tags.find(
+      (entry) => String(entry._id) !== fixture.foodId,
+    )!;
+    const answer = await fixture.send({
+      description: 'Recorded dinner',
+      ...(kind === 'notes' ? { notes: 'Historical note' } : { tagId: String(tag._id) }),
+    });
+    expect(answer.status).toBe(200);
+    expect(answer.body.data.amount).toBe(120);
+    expect(
+      answer.body.data.splitBetween.map((row: { user: { _id: string } }) => row.user._id),
+    ).toContain(DEMO_PERSONA_IDS.sam);
+  },
+);
+
+it('refuses a pure restoration if a participant leaves before its commit', async () => {
+  await Expense.collection.updateOne(
+    { _id: new Types.ObjectId(fixture.expenseId) },
+    { $set: { isDeleted: true } },
+  );
+  const pause = fixture.holdFence(2);
+  const pending = fixture.send({ isDeleted: false });
+  try {
+    await Promise.race([
+      pause.reached,
+      pending.then(() => {
+        throw new Error('Restore ended before fence');
+      }),
+    ]);
+    await fixture.remove(DEMO_PERSONA_IDS.sam);
+  } finally {
+    pause.restore();
+    pause.release();
+  }
+  const answer = await pending;
+  expect(answer.status).toBe(422);
+  expect(answer.body.code).toBe('INVALID_MEMBERS');
+});

@@ -500,6 +500,7 @@ export class ExpenseService {
             changes,
           });
         return {
+          financialEdit,
           activity:
             restoring || Object.keys(changes).length
               ? {

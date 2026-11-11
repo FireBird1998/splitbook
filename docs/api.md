@@ -1108,7 +1108,7 @@ No body needed. Adds the current user to the group. Returns `201` on join, or
 
 ## Expenses
 
-An edit, delete or restore checks the actor's current membership again at each write, including legacy revision initialization and the financial save. If the actor left after admission, it answers **403 `FORBIDDEN`** and does not apply the change.
+An edit, delete or restore checks the actor's current membership again at each write, including legacy revision initialization and the financial save. If the actor left after admission, it answers **403 `FORBIDDEN`** and does not apply the change. A financial edit or restoration also rechecks its resulting payers and split participants at commit; a departed participant answers **422 `INVALID_MEMBERS`**. Notes-only and Tag-only edits keep historical money naming former members.
 
 | Method | Path                                        | Description                |
 | ------ | ------------------------------------------- | -------------------------- |

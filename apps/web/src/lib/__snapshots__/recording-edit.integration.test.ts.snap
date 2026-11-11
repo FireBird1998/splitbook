@@ -7049,93 +7049,13 @@ exports[`edit record of recordings > named person is no longer a member before t
 exports[`edit record of recordings > named person leaves between the checks and the commit 1`] = `
 {
   "after": {
-    "activities": [
-      {
-        "__v": 0,
-        "_id": "<event-1>",
-        "actor": "<member-a>",
-        "createdAt": "2026-11-11T12:00:00.000Z",
-        "group": "<group-1>",
-        "metadata": {
-          "changes": {
-            "amount": {
-              "new": 240,
-              "old": 120,
-            },
-            "amountMinor": {
-              "new": 24000,
-              "old": 12000,
-            },
-            "description": {
-              "new": "Edited dinner",
-              "old": "Recorded dinner",
-            },
-            "paidBy": {
-              "new": [
-                {
-                  "amount": 240,
-                  "amountMinor": 24000,
-                  "user": "<member-a>",
-                },
-              ],
-              "old": [
-                {
-                  "amount": 120,
-                  "amountMinor": 12000,
-                  "user": "<member-a>",
-                },
-              ],
-            },
-            "splitBetween": {
-              "new": [
-                {
-                  "amount": 120,
-                  "amountMinor": 12000,
-                  "user": "<member-b>",
-                },
-                {
-                  "amount": 120,
-                  "amountMinor": 12000,
-                  "user": "<member-c>",
-                },
-              ],
-              "old": [
-                {
-                  "amount": 60,
-                  "amountMinor": 6000,
-                  "user": "<member-b>",
-                },
-                {
-                  "amount": 60,
-                  "amountMinor": 6000,
-                  "user": "<member-c>",
-                },
-              ],
-            },
-          },
-          "description": "Edited dinner",
-          "expenseId": "<expense-1>",
-        },
-        "notificationContext": {
-          "eventId": "<event-1>",
-          "groupId": "<group-1>",
-          "kind": "expense_updated",
-          "occurredAt": "2026-11-11T12:00:00.000Z",
-          "recipientIds": [
-            "<member-c>",
-          ],
-          "recordId": "<expense-1>",
-          "version": 2,
-        },
-        "type": "expense_updated",
-      },
-    ],
+    "activities": [],
     "drafts": [],
     "expenses": [
       {
         "_id": "<expense-1>",
-        "amount": 240,
-        "amountMinor": 24000,
+        "amount": 120,
+        "amountMinor": 12000,
         "category": "food",
         "createdAt": "2026-11-11T11:59:00.000Z",
         "createdBy": "<member-a>",
@@ -7150,77 +7070,16 @@ exports[`edit record of recordings > named person leaves between the checks and 
         "date": "2026-11-01T00:00:00.000Z",
         "deletedAt": null,
         "deletedBy": null,
-        "description": "Edited dinner",
-        "editHistory": [
-          {
-            "changes": {
-              "amount": {
-                "new": 240,
-                "old": 120,
-              },
-              "amountMinor": {
-                "new": 24000,
-                "old": 12000,
-              },
-              "description": {
-                "new": "Edited dinner",
-                "old": "Recorded dinner",
-              },
-              "paidBy": {
-                "new": [
-                  {
-                    "amount": 240,
-                    "amountMinor": 24000,
-                    "user": "<member-a>",
-                  },
-                ],
-                "old": [
-                  {
-                    "amount": 120,
-                    "amountMinor": 12000,
-                    "user": "<member-a>",
-                  },
-                ],
-              },
-              "splitBetween": {
-                "new": [
-                  {
-                    "amount": 120,
-                    "amountMinor": 12000,
-                    "user": "<member-b>",
-                  },
-                  {
-                    "amount": 120,
-                    "amountMinor": 12000,
-                    "user": "<member-c>",
-                  },
-                ],
-                "old": [
-                  {
-                    "amount": 60,
-                    "amountMinor": 6000,
-                    "user": "<member-b>",
-                  },
-                  {
-                    "amount": 60,
-                    "amountMinor": 6000,
-                    "user": "<member-c>",
-                  },
-                ],
-              },
-            },
-            "editedAt": "2026-11-11T12:00:00.000Z",
-            "editedBy": "<member-a>",
-          },
-        ],
+        "description": "Recorded dinner",
+        "editHistory": [],
         "group": "<group-1>",
         "isDeleted": false,
         "moneyVersion": 1,
         "notes": "",
         "paidBy": [
           {
-            "amount": 240,
-            "amountMinor": 24000,
+            "amount": 120,
+            "amountMinor": 12000,
             "user": "<member-a>",
           },
         ],
@@ -7229,23 +7088,23 @@ exports[`edit record of recordings > named person leaves between the checks and 
         "predefinedItem": null,
         "receiptUrl": null,
         "recurringExpense": null,
-        "revision": 1,
+        "revision": 0,
         "splitBetween": [
           {
-            "amount": 120,
-            "amountMinor": 12000,
+            "amount": 60,
+            "amountMinor": 6000,
             "user": "<member-b>",
           },
           {
-            "amount": 120,
-            "amountMinor": 12000,
+            "amount": 60,
+            "amountMinor": 6000,
             "user": "<member-c>",
           },
         ],
         "splitMethod": "equal",
         "tag": "Food",
         "tagId": "<tag-food-1>",
-        "updatedAt": "2026-11-11T12:00:00.000Z",
+        "updatedAt": "2026-11-11T11:59:00.000Z",
       },
     ],
     "group": {
@@ -7266,128 +7125,11 @@ exports[`edit record of recordings > named person leaves between the checks and 
   },
   "answers": {
     "body": {
-      "data": {
-        "_id": "<expense-1>",
-        "amount": 240,
-        "amountMinor": 24000,
-        "category": "food",
-        "createdAt": "2026-11-11T11:59:00.000Z",
-        "createdBy": {
-          "_id": "<member-a>",
-          "name": "Alex Rivera",
-        },
-        "currency": "INR",
-        "date": "2026-11-01T00:00:00.000Z",
-        "deletedAt": null,
-        "deletedBy": null,
-        "description": "Edited dinner",
-        "editHistory": [
-          {
-            "changes": {
-              "amount": {
-                "new": 240,
-                "old": 120,
-              },
-              "amountMinor": {
-                "new": 24000,
-                "old": 12000,
-              },
-              "description": {
-                "new": "Edited dinner",
-                "old": "Recorded dinner",
-              },
-              "paidBy": {
-                "new": [
-                  {
-                    "amount": 240,
-                    "amountMinor": 24000,
-                    "user": "<member-a>",
-                  },
-                ],
-                "old": [
-                  {
-                    "amount": 120,
-                    "amountMinor": 12000,
-                    "user": "<member-a>",
-                  },
-                ],
-              },
-              "splitBetween": {
-                "new": [
-                  {
-                    "amount": 120,
-                    "amountMinor": 12000,
-                    "user": "<member-b>",
-                  },
-                  {
-                    "amount": 120,
-                    "amountMinor": 12000,
-                    "user": "<member-c>",
-                  },
-                ],
-                "old": [
-                  {
-                    "amount": 60,
-                    "amountMinor": 6000,
-                    "user": "<member-b>",
-                  },
-                  {
-                    "amount": 60,
-                    "amountMinor": 6000,
-                    "user": "<member-c>",
-                  },
-                ],
-              },
-            },
-            "editedAt": "2026-11-11T12:00:00.000Z",
-            "editedBy": "<member-a>",
-          },
-        ],
-        "group": "<group-1>",
-        "isDeleted": false,
-        "moneyVersion": 1,
-        "notes": "",
-        "paidBy": [
-          {
-            "amount": 240,
-            "amountMinor": 24000,
-            "user": {
-              "_id": "<member-a>",
-              "name": "Alex Rivera",
-            },
-          },
-        ],
-        "period": null,
-        "predefinedItem": null,
-        "receiptUrl": null,
-        "recurringExpense": null,
-        "revision": 1,
-        "splitBetween": [
-          {
-            "amount": 120,
-            "amountMinor": 12000,
-            "user": {
-              "_id": "<member-b>",
-              "name": "Sam Chen",
-            },
-          },
-          {
-            "amount": 120,
-            "amountMinor": 12000,
-            "user": {
-              "_id": "<member-c>",
-              "name": "Priya Shah",
-            },
-          },
-        ],
-        "splitMethod": "equal",
-        "tag": "Food",
-        "tagId": "<tag-food-1>",
-        "updatedAt": "2026-11-11T12:00:00.000Z",
-      },
-      "status": 200,
+      "code": "INVALID_MEMBERS",
+      "error": "All payers and split participants must be group members",
+      "status": 422,
     },
-    "status": 200,
+    "status": 422,
   },
   "before": {
     "activities": [],

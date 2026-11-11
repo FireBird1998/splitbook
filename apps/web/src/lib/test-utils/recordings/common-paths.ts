@@ -136,7 +136,7 @@ export function recordCommonPaths(recording: Recording) {
       changes,
       recording.writer === 'edit' || recording.writer === 'restore' ? 1 : recording.fenceNumber,
     );
-    if (recording.writer === 'single-settlement')
+    if (['single-settlement', 'edit', 'restore'].includes(recording.writer))
       expect((recorded.answers as Answer).status).toBe(422);
   });
   it('two requests race with the same retry identity', async () => {
