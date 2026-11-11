@@ -28,10 +28,18 @@ import {
   prefixBesideChip,
   wholeUnit,
 } from '@splitbook/shared/currency';
-import { parseDecimalUnits, sumMinorAmounts, toMajorAmount } from '@splitbook/shared/exact-money';
-import { readAmountEntry } from '@splitbook/shared/amount-entry';
+import { toMajorAmount } from '@splitbook/shared/exact-money';
 import type { ExpenseSplitMethod } from '@splitbook/shared/split-calculation';
-import { type ExpenseDraftValues } from '@splitbook/shared/expense-draft';
+import {
+  expenseEntryFromValues,
+  expenseDraftChanges,
+  type ExpenseDraftValues,
+} from '@splitbook/shared/expense-draft';
+import {
+  readExpenseEntry,
+  formSummaryPolicy,
+  type ExpenseEntry,
+} from '@splitbook/shared/expense-entry';
 import { type ExpenseCurrencyChoice } from '@splitbook/shared/group-currencies';
 import Menu from '@mui/material/Menu';
 import Divider from '@mui/material/Divider';
@@ -52,11 +60,22 @@ import { memberLabel } from '@splitbook/shared/activity-timeline';
 import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
 import { scrollBox } from '@/components/common/scroll-box';
 
-export interface ExpenseFieldsProps {
-  values: Omit<ExpenseDraftValues, 'splitMethod'> & {
-    splitMethod: ExpenseDraftValues['splitMethod'] | '';
-  };
-  edit: (change: Partial<ExpenseDraftValues>) => void;
+type ExpenseFieldsInput =
+  | {
+      values: Omit<ExpenseDraftValues, 'splitMethod'> & {
+        splitMethod: ExpenseDraftValues['splitMethod'] | '';
+      };
+      edit: (change: Partial<ExpenseDraftValues>) => void;
+      entry?: never;
+      editEntry?: never;
+    }
+  | {
+      entry: ExpenseEntry;
+      editEntry: (change: Partial<ExpenseEntry>) => void;
+      values?: never;
+      edit?: never;
+    };
+export type ExpenseFieldsProps = ExpenseFieldsInput & {
   chooseSplitMethod: (method: ExpenseSplitMethod) => void;
   members: Array<{ user: { _id: string; name: string } }>;
   groupTags: GroupTagOption[];
@@ -89,11 +108,13 @@ export interface ExpenseFieldsProps {
   previewAmount: (id: string) => string;
   /** In review, payers the item names more than once: each shows once, and Paid by says so (#894). */
   listedTwice?: readonly string[];
-}
+};
 /** The Add expense fields, shared with To review. Persistence belongs to the caller. */
 export default function ExpenseFields({
-  values,
-  edit,
+  values: priorValues,
+  edit: editPrior,
+  entry: typedEntry,
+  editEntry,
   chooseSplitMethod,
   members,
   groupTags,
@@ -111,24 +132,26 @@ export default function ExpenseFields({
   addCurrency,
   listedTwice = [],
 }: ExpenseFieldsProps) {
+  // To review keeps its existing flat editor until #1115; Add/Edit hold only an entry.
+  const entry = typedEntry ?? expenseEntryFromValues(priorValues!);
+  const edit = (change: Partial<ExpenseEntry>) =>
+    typedEntry ? editEntry!(change) : editPrior!(expenseDraftChanges(change, entry.splitMethod));
   const {
     description,
     amount,
     currency,
     date,
-    splitMethod,
-    selectedMembers,
-    tag,
+    participantIds,
+    tagId: tag,
     notes,
     payers,
-    multiPayerMode,
-    customAmounts,
-    customPercentages,
-    customShares,
-  } = values;
-  // Why the amount can't be taken, in Record payment's words, from the one shared reading (#528).
+    multiPayer,
+    splitValues,
+  } = entry;
+  const splitMethod = typedEntry ? entry.splitMethod : priorValues!.splitMethod;
+  const reading = readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy);
   const amountReasonId = useId();
-  const amountReading = readAmountEntry(amount, currency);
+  const amountReading = reading.fields.amountReading;
   const amountReason = amountReading.status === 'invalid' ? amountReading.message : '';
   const groupNoun = getGroupTheme(groupCategory ?? 'other').nouns.singular;
   const groupNounTitle = groupNoun.charAt(0).toUpperCase() + groupNoun.slice(1);
@@ -161,68 +184,32 @@ export default function ExpenseFields({
   const unit = wholeUnit(currency);
   const [showSplitOptions, setShowSplitOptions] = useState(isEditMode);
   const [showMoreOptions, setShowMoreOptions] = useState(isEditMode);
-  // ─── Derived Values ────────────────────────────────
-  // Percentage total
-  const percentageTotal = selectedMembers.reduce(
-    (sum, id) => sum + (parseFloat(customPercentages[id]) || 0),
-    0,
-  );
-
-  const exactSum = (values: string[], precision: number) => {
-    try {
-      return sumMinorAmounts(values.map((value) => parseDecimalUnits(value || '0', precision)));
-    } catch {
-      return Number.NaN;
-    }
-  };
-  const amountMinor = exactSum(
-    [amount],
-    getCurrency(currency) ? getCurrencyPrecision(currency) : 2,
-  );
-  const unequalMinor = exactSum(
-    selectedMembers.map((id) => customAmounts[id]),
-    getCurrency(currency) ? getCurrencyPrecision(currency) : 2,
-  );
-  const percentageUnits = exactSum(
-    selectedMembers.map((id) => customPercentages[id]),
-    2,
-  );
-  const payerMinor = multiPayerMode
-    ? exactSum(
-        payers.map((payer) => payer.amount),
-        getCurrency(currency) ? getCurrencyPrecision(currency) : 2,
-      )
-    : amountMinor;
-  // Display figures use the same exact reading as validation, never a numeric prefix.
-  const majorAmount = (minor: number) => {
-    try {
-      return toMajorAmount(minor, currency);
-    } catch {
-      return null;
-    }
-  };
-  const parsedAmount = majorAmount(amountMinor) ?? 0;
+  const {
+    percentageTotal,
+    amountMinor,
+    unequalMinor,
+    payerMinor,
+    parsedAmount,
+    splitsBalanced,
+    percentagesBalanced,
+    payersBalanced,
+    sharesTotal,
+    perShareAmount,
+  } = reading.fields;
   const totalText = (minor: number) => {
-    const value = majorAmount(minor);
-    return value === null ? '—' : formatCurrency(value, currency);
+    try {
+      return formatCurrency(toMajorAmount(minor, currency), currency);
+    } catch {
+      return '—';
+    }
   };
-  const splitsBalanced = amountMinor > 0 && unequalMinor === amountMinor;
-  const percentagesBalanced = percentageUnits === 10000;
-  const payersBalanced = amountMinor > 0 && payerMinor === amountMinor;
-
-  // Shares total
-  const sharesTotal = selectedMembers.reduce(
-    (sum, id) => sum + (parseInt(customShares[id]) || 0),
-    0,
-  );
-  const perShareAmount = sharesTotal > 0 ? parsedAmount / sharesTotal : 0;
 
   // ─── Summary Line ──────────────────────────────────
   const payerName = memberName(payers[0]?.user || userId);
   // One payer is named even among several rows' mode, never "1 people paid" (#894).
   const payerSummary = !payers.length
     ? 'Who paid?'
-    : multiPayerMode && payers.length > 1
+    : multiPayer && payers.length > 1
       ? `${payers.length}${NO_BREAK_SPACE}people paid`
       : `${payerName} paid`;
 
@@ -235,9 +222,9 @@ export default function ExpenseFields({
   };
 
   const memberSummary =
-    selectedMembers.length === members.length
+    participantIds.length === members.length
       ? `All ${members.length}${NO_BREAK_SPACE}members`
-      : `${selectedMembers.length} of ${members.length}${NO_BREAK_SPACE}members`;
+      : `${participantIds.length} of ${members.length}${NO_BREAK_SPACE}members`;
 
   // ─── Handlers ──────────────────────────────────────
   const handlePredefinedItem = (itemId: string) => {
@@ -247,16 +234,16 @@ export default function ExpenseFields({
       edit({
         description: item.label,
         category: resolveExpenseCategory(itemId),
-        ...(matchingTag ? { tag: matchingTag } : {}),
+        ...(matchingTag ? { tagId: matchingTag } : {}),
       });
     }
   };
 
   const handleMemberToggle = (memberId: string, checked: boolean) =>
     edit({
-      selectedMembers: checked
-        ? [...selectedMembers, memberId]
-        : selectedMembers.filter((id) => id !== memberId),
+      participantIds: checked
+        ? [...participantIds, memberId]
+        : participantIds.filter((id) => id !== memberId),
     });
 
   const handleSplitMethodChange = (_: unknown, val: string | null) => {
@@ -292,9 +279,9 @@ export default function ExpenseFields({
 
   const hasNonDefaultSplit = isAdvancedSplit({
     splitMethod,
-    selectedMemberCount: selectedMembers.length,
+    selectedMemberCount: participantIds.length,
     memberCount: members.length,
-    multiPayerMode,
+    multiPayerMode: multiPayer,
     primaryPayerId: payers[0]?.user || userId,
     currentUserId: userId,
   });
@@ -560,7 +547,7 @@ export default function ExpenseFields({
               clickable
               color={tag === tagOptionValue(t) ? 'primary' : 'default'}
               variant={tag === tagOptionValue(t) ? 'filled' : 'outlined'}
-              onClick={() => edit({ tag: tagOptionValue(t) })}
+              onClick={() => edit({ tagId: tagOptionValue(t) })}
               aria-pressed={tag === tagOptionValue(t)}
             />
           ))}
@@ -649,7 +636,7 @@ export default function ExpenseFields({
                 {memberName(id) === 'You' ? 'You are' : `${memberName(id)} is`} listed twice.
               </Box>
             ))}
-            {!multiPayerMode ? (
+            {!multiPayer ? (
               <Stack spacing={1}>
                 <TextField
                   select
@@ -667,7 +654,7 @@ export default function ExpenseFields({
                 </TextField>
                 <Button
                   size="small"
-                  onClick={() => edit({ multiPayerMode: true })}
+                  onClick={() => edit({ multiPayer: true })}
                   sx={{
                     textTransform: 'none',
                     fontSize: 12,
@@ -755,7 +742,7 @@ export default function ExpenseFields({
                     size="small"
                     onClick={() => {
                       edit({
-                        multiPayerMode: false,
+                        multiPayer: false,
                         payers: [{ user: payers[0]?.user || userId, amount: '' }],
                       });
                     }}
@@ -827,7 +814,7 @@ export default function ExpenseFields({
             <Stack spacing={1}>
               {members.map((m) => {
                 const id = m.user._id;
-                const isSelected = selectedMembers.includes(id);
+                const isSelected = participantIds.includes(id);
 
                 return (
                   <Stack key={id} direction="row" alignItems="center" spacing={1}>
@@ -869,11 +856,11 @@ export default function ExpenseFields({
                     {(splitMethod === 'unequal' || splitMethod === 'exact') && isSelected && (
                       <MoneyTextField
                         currency={currency}
-                        value={customAmounts[id] || ''}
+                        value={splitValues[id] || ''}
                         onValueChange={(value) =>
                           edit({
-                            customAmounts: {
-                              ...customAmounts,
+                            splitValues: {
+                              ...splitValues,
                               [id]: value,
                             },
                           })
@@ -900,11 +887,11 @@ export default function ExpenseFields({
                         sx={{ flexShrink: 0 }}
                       >
                         <TextField
-                          value={customPercentages[id] || ''}
+                          value={splitValues[id] || ''}
                           onChange={(e) =>
                             edit({
-                              customPercentages: {
-                                ...customPercentages,
+                              splitValues: {
+                                ...splitValues,
                                 [id]: e.target.value,
                               },
                             })
@@ -923,7 +910,7 @@ export default function ExpenseFields({
                           }}
                         />
                         <Box sx={{ fontSize: 12, color: 'text.disabled' }}>%</Box>
-                        {parsedAmount > 0 && (customPercentages[id] || 0) && (
+                        {parsedAmount > 0 && (splitValues[id] || 0) && (
                           <Box sx={{ fontSize: 12, color: 'text.disabled' }}>
                             = {previewAmount(id)}
                           </Box>
@@ -939,11 +926,11 @@ export default function ExpenseFields({
                         sx={{ flexShrink: 0 }}
                       >
                         <TextField
-                          value={customShares[id] || ''}
+                          value={splitValues[id] || ''}
                           onChange={(e) =>
                             edit({
-                              customShares: {
-                                ...customShares,
+                              splitValues: {
+                                ...splitValues,
                                 [id]: e.target.value,
                               },
                             })
@@ -1045,7 +1032,7 @@ export default function ExpenseFields({
             <TextField
               select
               label="Category"
-              value={values.category}
+              value={entry.category}
               onChange={(event) => edit({ category: event.target.value })}
               size="small"
               fullWidth

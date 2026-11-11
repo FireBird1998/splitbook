@@ -3,6 +3,8 @@ import {
   normalizeExpenseMoney,
   parseAmountMinor,
   parseDecimalUnits,
+  sumMinorAmounts,
+  toMajorAmount,
 } from './exact-money';
 import {
   enteredPayers,
@@ -19,7 +21,7 @@ import {
   type SplitProblem,
   type SplitLeftover,
 } from './expense-split';
-import { amountExample, amountError, inAmountWords } from './amount-entry';
+import { amountExample, amountError, inAmountWords, readAmountEntry } from './amount-entry';
 import { getCurrencyPrecision } from './currency';
 import {
   decideExpenseMoneyEdit,
@@ -50,30 +52,87 @@ export interface ExpenseEntry {
 
 export type ExpenseEntryPurpose = { kind: 'new' } | { kind: 'edit'; saved: StoredExpenseMoney };
 
+export interface ExpenseEntryPolicy {
+  blankShare: 'one' | 'zero';
+  payerRows: 'all' | 'nonzero';
+  savedZeroPayers: 'keep' | 'unchanged';
+  singlePayer: 'first-row' | 'field';
+  splitPreview: 'whole-expense' | 'independent-split';
+  roundingNote: 'show' | 'hide';
+  weightInput: 'numbers' | 'decimal-units';
+  corrections: 'form' | 'fields';
+}
+export const expenseEntryPolicy: ExpenseEntryPolicy = {
+  blankShare: 'zero',
+  payerRows: 'nonzero',
+  savedZeroPayers: 'unchanged',
+  singlePayer: 'field',
+  splitPreview: 'independent-split',
+  roundingNote: 'show',
+  weightInput: 'decimal-units',
+  corrections: 'fields',
+};
+export const formSummaryPolicy: ExpenseEntryPolicy = {
+  blankShare: 'one',
+  payerRows: 'all',
+  savedZeroPayers: 'keep',
+  singlePayer: 'first-row',
+  splitPreview: 'whole-expense',
+  roundingNote: 'hide',
+  weightInput: 'numbers',
+  corrections: 'form',
+};
+
 /** One entry supplies both the displayed split and the command; callers cannot supply an allocator. */
-export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpose) {
-  const countedPayers = enteredPayers(entry.payers);
-  const payerIds = entry.multiPayer ? countedPayers.map((payer) => payer.user) : [entry.payerId];
+export function readExpenseEntry(
+  entry: ExpenseEntry,
+  purpose: ExpenseEntryPurpose,
+  policy: ExpenseEntryPolicy = expenseEntryPolicy,
+) {
+  const countedPayers = policy.payerRows === 'all' ? entry.payers : enteredPayers(entry.payers);
+  const singlePayer =
+    policy.singlePayer === 'first-row' ? (entry.payers[0]?.user ?? '') : entry.payerId;
+  const payerIds = entry.multiPayer ? countedPayers.map((payer) => payer.user) : [singlePayer];
   const allocate = (multiPayer: boolean) => {
     try {
+      // The complete-form guard counts whole share parts before allocating (#1111).
+      if (
+        policy.corrections === 'form' &&
+        entry.splitMethod === 'shares' &&
+        entry.participantIds.reduce(
+          (sum, id) => sum + (parseInt(entry.splitValues[id]) || 0),
+          0,
+        ) === 0
+      )
+        throw new Error('Each member needs at least 1 share');
+      const weight = (user: string, digits: number) => {
+        const text =
+          entry.splitValues[user] || (digits === 0 && policy.blankShare === 'one' ? '1' : '0');
+        return policy.weightInput === 'numbers'
+          ? Number(text)
+          : parseDecimalUnits(text, digits) / (digits === 2 ? 100 : 1);
+      };
       const input = {
         amount: entry.amount,
         currency: entry.currency,
-        paidBy: multiPayer ? countedPayers : [{ user: entry.payerId, amount: entry.amount }],
+        paidBy: multiPayer ? countedPayers : [{ user: singlePayer, amount: entry.amount }],
         splitMethod: entry.splitMethod,
         splitBetween: entry.participantIds.map((user) => ({
           user,
           ...(entry.splitMethod === 'unequal' || entry.splitMethod === 'exact'
             ? { amount: entry.splitValues[user] || '0' }
             : entry.splitMethod === 'percentage'
-              ? { percentage: parseDecimalUnits(entry.splitValues[user] || '0', 2) / 100 }
+              ? { percentage: weight(user, 2) }
               : entry.splitMethod === 'shares'
-                ? { shares: parseDecimalUnits(entry.splitValues[user] || '0', 0) }
+                ? { shares: weight(user, 0) }
                 : {}),
         })),
       };
       if (purpose.kind === 'new') return normalizeExpenseMoney(input);
-      const kept = multiPayer ? keepSavedPayers(purpose.saved, input) : null;
+      const kept =
+        multiPayer && policy.savedZeroPayers === 'unchanged'
+          ? keepSavedPayers(purpose.saved, input)
+          : null;
       return decideExpenseMoneyEdit(purpose.saved, kept ?? input).money;
     } catch (error) {
       // Part of a yen paid or shared: the amount field's words, as on the web (#755).
@@ -128,12 +187,32 @@ export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpo
       kind: 'refused' as const,
       error,
       problems: [
-        amount.error
-          ? { field: 'amount' as const, message: amount.error }
-          : allocationProblem(entry, error, payers),
+        policy.corrections === 'form'
+          ? {
+              field: 'form' as const,
+              message: error instanceof Error ? error.message : 'Invalid allocation',
+            }
+          : amount.error
+            ? { field: 'amount' as const, message: amount.error }
+            : allocationProblem(entry, error, payers),
       ],
     };
   }
+  if (policy.splitPreview === 'whole-expense') {
+    split.shares =
+      result.kind === 'ready'
+        ? Object.fromEntries(
+            result.money.splitBetween.map((row) => [String(row.user), row.amountMinor]),
+          )
+        : {};
+    if (result.kind === 'refused')
+      split.status = {
+        kind: 'problem',
+        message: result.error instanceof Error ? result.error.message : 'Invalid allocation',
+      };
+  }
+  if (policy.roundingNote === 'hide' && split.status.kind === 'adds-up')
+    split.status = { kind: 'adds-up', leftover: null };
   const splitSummary = {
     participants: entry.participantIds.length,
     shares:
@@ -149,7 +228,8 @@ export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpo
       return [id, Number.isFinite(value) ? value : 0];
     }),
   );
-  return { amount, split, splitSummary, shareSteps, payers, result };
+  const fields = enteredTotals(entry);
+  return { amount, split, splitSummary, shareSteps, payers, result, fields };
 }
 
 function allocationProblem(
@@ -248,4 +328,67 @@ export function roundingNote(
   const people =
     names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
   return `The leftover ${money(leftover.amountMinor)} goes to ${people} so the total is exact.`;
+}
+
+/** Totals shown under the boxes: unreadable totals stay a dash, never a rounded amount. */
+function enteredTotals(entry: ExpenseEntry) {
+  const { amount, currency, splitMethod, participantIds, splitValues } = entry;
+  const sum = (values: string[], digits: number) => {
+    try {
+      return sumMinorAmounts(values.map((value) => parseDecimalUnits(value || '0', digits)));
+    } catch {
+      return Number.NaN;
+    }
+  };
+  const digits = getCurrencyPrecision(currency);
+  const amountMinor = sum([amount], digits);
+  const unequalMinor =
+    splitMethod === 'exact' || splitMethod === 'unequal'
+      ? sum(
+          participantIds.map((id) => splitValues[id]),
+          digits,
+        )
+      : 0;
+  const percentageUnits =
+    splitMethod === 'percentage'
+      ? sum(
+          participantIds.map((id) => splitValues[id]),
+          2,
+        )
+      : 0;
+  const payerMinor = entry.multiPayer
+    ? sum(
+        entry.payers.map((payer) => payer.amount),
+        digits,
+      )
+    : amountMinor;
+  const sharesTotal =
+    splitMethod === 'shares'
+      ? participantIds.reduce((total, id) => total + (parseInt(splitValues[id]) || 0), 0)
+      : 0;
+  const percentageTotal =
+    splitMethod === 'percentage'
+      ? participantIds.reduce((total, id) => total + (parseFloat(splitValues[id]) || 0), 0)
+      : 0;
+  let parsedAmount = 0;
+  try {
+    parsedAmount = toMajorAmount(amountMinor, currency);
+  } catch {
+    /* An unreadable total shows no per-share amount. */
+  }
+  return {
+    amountReading: readAmountEntry(amount, currency),
+    amountMissing: !amount || Number(amount) <= 0,
+    amountMinor,
+    unequalMinor,
+    percentageUnits,
+    payerMinor,
+    splitsBalanced: amountMinor > 0 && unequalMinor === amountMinor,
+    percentagesBalanced: percentageUnits === 10000,
+    payersBalanced: amountMinor > 0 && payerMinor === amountMinor,
+    percentageTotal,
+    sharesTotal,
+    parsedAmount,
+    perShareAmount: sharesTotal > 0 ? parsedAmount / sharesTotal : 0,
+  };
 }
