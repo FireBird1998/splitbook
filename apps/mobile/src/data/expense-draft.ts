@@ -1,5 +1,5 @@
 import { expenseRecordSchema, storedExpenseMoney, type ExpenseRecord } from './expense-record';
-import { decideExpenseMoneyEdit, readExpenseMoney } from '@splitbook/shared/expense-money-edit';
+import { readExpenseMoney } from '@splitbook/shared/expense-money-edit';
 import { expenseDate, expenseDay } from '@splitbook/shared/expense-day';
 import {
   createExpenseSchema,
@@ -340,16 +340,6 @@ export function expenseMoney(draft: ExpenseDraft) {
   if (result.kind === 'refused') throw result.error;
   return result.money;
 }
-/** An edit re-checks current members only when it changes the saved allocation. */
-function changesExpenseMoney(draft: ExpenseDraft, money: ReturnType<typeof expenseMoney>) {
-  return (
-    !draft.original ||
-    decideExpenseMoneyEdit(storedExpenseMoney(draft.original), {
-      ...money,
-      splitMethod: draft.splitMethod,
-    }).financialEdit
-  );
-}
 export function previewExpense(draft: ExpenseDraft): ExpenseEditor['preview'] {
   try {
     return expenseMoney(draft).splitBetween;
@@ -588,8 +578,10 @@ export function resolveDraftReview(
 export function buildExpensePatch(draft: ExpenseDraft, context: ExpenseContext): string {
   const original = draft.original;
   if (!original || original.isDeleted) throw new Error('This Expense is deleted.');
-  const money = expenseMoney(draft);
-  const financial = changesExpenseMoney(draft, money);
+  const { result } = readExpenseDraft(draft);
+  if (result.kind === 'refused') throw result.error;
+  const { money, financialEdit: financial } = result;
+  // An edit re-checks current members only when it changes the saved allocation.
   if (financial)
     assertExpenseParticipants(
       new Set(context.group.members.map((member) => member.user.id)),
