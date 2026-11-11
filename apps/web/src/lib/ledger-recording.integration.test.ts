@@ -377,10 +377,22 @@ describe('private recording intent', () => {
   it('keeps the original event payload and timestamp after caller values change', async () => {
     const when = new Date('2026-09-16T12:00:00Z');
     const metadata = { description: 'Original', changes: { amount: { old: 10, new: 20 } } };
-    await recordResult(randomUUID(), {}, 'always', {}, { metadata, occurredAt: when });
+    const result = await recordResult(
+      randomUUID(),
+      {},
+      'always',
+      {},
+      { metadata, occurredAt: when },
+    );
     metadata.description = 'Changed later';
     metadata.changes.amount.new = 99;
     when.setUTCFullYear(2030);
+    const intent = result.records[0].pendingActivity[0];
+    expect(intent.metadata).toEqual({
+      description: 'Original',
+      changes: { amount: { old: 10, new: 20 } },
+    });
+    expect(intent.occurredAt.toISOString()).toBe('2026-09-16T12:00:00.000Z');
     const activity = await Activity.findOne({ type: 'expense_added' });
     expect(activity!.metadata).toEqual({
       description: 'Original',
