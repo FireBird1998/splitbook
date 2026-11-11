@@ -1682,25 +1682,16 @@
   "single-payer-field-differs": {
     "allocationsOrRefusals": [
       {
-        "columns": ["web-new", "web-edit", "server-complete", "web-finish-later", "web-review"],
-        "reading": {
-          "kind": "allocation",
-          "amountMinor": 10000,
-          "currency": "INR",
-          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
-          "splitBetween": [
-            { "user": "a00000000000000000000001", "amountMinor": 5000 },
-            { "user": "a00000000000000000000002", "amountMinor": 5000 }
-          ]
-        }
-      },
-      {
         "columns": [
+          "web-new",
+          "web-edit",
           "web-recurring",
           "web-recurring.edit",
           "android-new",
           "android-edit",
+          "web-finish-later",
           "android-finish-later",
+          "web-review",
           "android-review"
         ],
         "reading": {
@@ -1708,6 +1699,19 @@
           "amountMinor": 10000,
           "currency": "INR",
           "paidBy": [{ "user": "a00000000000000000000002", "amountMinor": 10000 }],
+          "splitBetween": [
+            { "user": "a00000000000000000000001", "amountMinor": 5000 },
+            { "user": "a00000000000000000000002", "amountMinor": 5000 }
+          ]
+        }
+      },
+      {
+        "columns": ["server-complete"],
+        "reading": {
+          "kind": "allocation",
+          "amountMinor": 10000,
+          "currency": "INR",
+          "paidBy": [{ "user": "a00000000000000000000001", "amountMinor": 10000 }],
           "splitBetween": [
             { "user": "a00000000000000000000001", "amountMinor": 5000 },
             { "user": "a00000000000000000000002", "amountMinor": 5000 }
@@ -1721,8 +1725,7 @@
       ["android-new"],
       ["android-edit"],
       ["server-complete"],
-      ["web-finish-later", "web-review"],
-      ["android-finish-later", "android-review"]
+      ["web-finish-later", "android-finish-later", "web-review", "android-review"]
     ],
     "displays": [
       ["web-new"],

@@ -55,7 +55,6 @@ export interface ExpenseEntryPolicy {
   blankSplitAmount: 'zero' | 'refuse';
   payerRows: 'all' | 'nonzero';
   savedZeroPayers: 'keep' | 'unchanged';
-  singlePayer: 'first-row' | 'field';
   splitPreview: 'whole-expense' | 'independent-split';
   roundingNote: 'show' | 'hide';
   weightInput: 'numbers' | 'numbers-or-zero' | 'decimal-units';
@@ -67,7 +66,6 @@ export const expenseEntryPolicy: ExpenseEntryPolicy = {
   blankSplitAmount: 'zero',
   payerRows: 'nonzero',
   savedZeroPayers: 'unchanged',
-  singlePayer: 'field',
   splitPreview: 'independent-split',
   roundingNote: 'show',
   weightInput: 'decimal-units',
@@ -78,7 +76,6 @@ export const formSummaryPolicy: ExpenseEntryPolicy = {
   blankSplitAmount: 'zero',
   payerRows: 'all',
   savedZeroPayers: 'keep',
-  singlePayer: 'first-row',
   splitPreview: 'whole-expense',
   roundingNote: 'hide',
   weightInput: 'numbers',
@@ -90,7 +87,6 @@ export const recurringEntryPolicy: ExpenseEntryPolicy = {
   ...formSummaryPolicy,
   blankShare: 'zero',
   blankSplitAmount: 'refuse',
-  singlePayer: 'field',
   feedback: 'allocation-summary',
   weightInput: 'numbers-or-zero',
 };
@@ -102,8 +98,7 @@ export function readExpenseEntry(
   policy: ExpenseEntryPolicy = expenseEntryPolicy,
 ) {
   const countedPayers = policy.payerRows === 'all' ? entry.payers : enteredPayers(entry.payers);
-  const singlePayer =
-    policy.singlePayer === 'first-row' ? (entry.payers[0]?.user ?? '') : entry.payerId;
+  const singlePayer = entry.payerId;
   const payerIds = entry.multiPayer ? countedPayers.map((payer) => payer.user) : [singlePayer];
   const allocate = (multiPayer: boolean) => {
     try {

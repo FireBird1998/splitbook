@@ -950,7 +950,7 @@
         "currency": "INR",
         "amount": 100,
         "amountMinor": 10000,
-        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "paidBy": [{ "user": "a00000000000000000000002", "amount": 100, "amountMinor": 10000 }],
         "splitBetween": [
           { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
           { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
@@ -969,7 +969,7 @@
           "currency": "INR",
           "amount": 100,
           "amountMinor": 10000,
-          "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+          "paidBy": [{ "user": "a00000000000000000000002", "amount": 100, "amountMinor": 10000 }],
           "splitBetween": [
             { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
             { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
@@ -983,7 +983,7 @@
         { "user": "a00000000000000000000003", "amount": "—" }
       ],
       "advancedInitiallyOpen": false,
-      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split equally  · 2 of 3 members Change Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah More options Notes (optional) Notes (optional)",
+      "formContents": "🛒 Groceries 🍕 Restaurant 🚗 Taxi / Uber ⛽ Gas / Fuel 🏨 Hotel 🏠 Airbnb ✈️ Flight 🚆 Train Ticket What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared Sam Chen paid  · Split equally  · 2 of 3 members Change Paid by Sam Chen ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah More options Notes (optional) Notes (optional)",
       "roundingNote": null
     }
   },

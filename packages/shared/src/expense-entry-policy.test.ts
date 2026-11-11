@@ -53,7 +53,7 @@ it('keeps all entered payer rows, uses their first identity for one payer, and r
   const single = entries.find((entry) => entry.id === 'single-payer-field-differs')!;
   expect(readExpenseEntry(single, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
     kind: 'ready',
-    money: { paidBy: [{ user: single.payers[0].user }] },
+    money: { paidBy: [{ user: single.payerId }] },
   });
 });
 
@@ -135,4 +135,12 @@ it('keeps an empty unknown-currency preview as a refusal instead of throwing', a
     date: '2026-11-11',
   }).change({ currency: '', amount: '' });
   expect(draft.preview()).toEqual({ money: null, error: 'INVALID_CURRENCY' });
+});
+
+it('reads one payer from the payer field for the web command (#1117 decision 7)', () => {
+  const entry = entries.find((row) => row.id === 'single-payer-field-differs')!;
+  expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+    kind: 'ready',
+    money: { paidBy: [{ user: sam, amountMinor: 10000 }] },
+  });
 });

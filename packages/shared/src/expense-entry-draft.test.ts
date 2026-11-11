@@ -1,7 +1,6 @@
 import { recording } from './test-support/expense-entry-recording';
 import { expect, it } from 'vitest';
 import { draftForExpenseEntry, entryForExpenseDraft } from './expense-entry-draft';
-import { expenseEntryPolicy } from './expense-entry';
 import { entries, alex, sam } from './test-support/expense-entry-cases';
 
 it('keeps zero payers and omits a blank share when an entry is set aside', () => {
@@ -47,9 +46,10 @@ it('changes a note without inventing omitted facts or losing a retained Tag name
     splitBetween: [{ user: sam }],
   };
   const entry = { ...entryForExpenseDraft(from), notes: 'Receipt checked' };
-  expect(
-    draftForExpenseEntry(entry, expenseEntryPolicy, { from, changed: { notes: true } }),
-  ).toEqual({ ...from, notes: 'Receipt checked' });
+  expect(draftForExpenseEntry(entry, { from, changed: { notes: true } })).toEqual({
+    ...from,
+    notes: 'Receipt checked',
+  });
 });
 
 it('keeps unedited split facts for both field and sheet edits', () => {
@@ -63,16 +63,14 @@ it('keeps unedited split facts for both field and sheet edits', () => {
     ],
   };
   const entry = { ...entryForExpenseDraft(from), splitValues: { [alex]: '2', [sam]: '1' } };
-  const policy = expenseEntryPolicy;
   expect(
-    draftForExpenseEntry(entry, policy, { from, changed: { splitValues: true } }).splitBetween,
+    draftForExpenseEntry(entry, { from, changed: { splitValues: true } }).splitBetween,
   ).toEqual([
     { user: alex, amount: 50, percentage: 50, shares: 2 },
     { user: sam, amount: 50, percentage: 50, shares: 1 },
   ]);
   expect(
-    draftForExpenseEntry(entry, expenseEntryPolicy, { from, changed: { splitValues: true } })
-      .splitBetween,
+    draftForExpenseEntry(entry, { from, changed: { splitValues: true } }).splitBetween,
   ).toEqual([
     { user: alex, amount: 50, percentage: 50, shares: 2 },
     { user: sam, amount: 50, percentage: 50, shares: 1 },
@@ -96,9 +94,7 @@ it('keeps an unreadable saved amount visible for correction instead of throwing 
 it('leaves an omitted split method to the caller’s explicit choice', () => {
   const from = { description: 'Lunch' };
   const entry = { ...entryForExpenseDraft(from), participantIds: [alex] };
-  expect(
-    draftForExpenseEntry(entry, expenseEntryPolicy, { from, changed: { participantIds: true } }),
-  ).toEqual({
+  expect(draftForExpenseEntry(entry, { from, changed: { participantIds: true } })).toEqual({
     description: 'Lunch',
     splitBetween: [{ user: alex }],
   });
@@ -108,17 +104,14 @@ it('keeps existing row positions when a field unticks and reticks a participant'
   const from = { splitMethod: 'equal' as const, splitBetween: [{ user: alex }, { user: sam }] };
   const entry = { ...entryForExpenseDraft(from), participantIds: [sam, alex] };
   expect(
-    draftForExpenseEntry(entry, expenseEntryPolicy, { from, changed: { participantIds: true } })
-      .splitBetween,
+    draftForExpenseEntry(entry, { from, changed: { participantIds: true } }).splitBetween,
   ).toEqual([{ user: alex }, { user: sam }]);
 });
 
 it('requires a Tag identity in every new entry (#1117 decision 12)', () => {
   const entry = { ...entries[0], tagId: 'Food' };
   expect(() => draftForExpenseEntry(entry)).toThrow('tagId: Invalid Tag identity');
-  expect(() => draftForExpenseEntry(entry, expenseEntryPolicy)).toThrow(
-    'tagId: Invalid Tag identity',
-  );
+  expect(() => draftForExpenseEntry(entry)).toThrow('tagId: Invalid Tag identity');
 });
 
 it('retains assistant split facts a sheet did not edit (#1117 decision 10)', () => {
@@ -131,8 +124,7 @@ it('retains assistant split facts a sheet did not edit (#1117 decision 10)', () 
   };
   const entry = { ...entryForExpenseDraft(from), splitValues: { [alex]: '2', [sam]: '1' } };
   expect(
-    draftForExpenseEntry(entry, expenseEntryPolicy, { from, changed: { splitValues: true } })
-      .splitBetween,
+    draftForExpenseEntry(entry, { from, changed: { splitValues: true } }).splitBetween,
   ).toEqual([
     { user: alex, amount: 50, percentage: 50, shares: 2 },
     { user: sam, amount: 50, percentage: 50, shares: 1 },

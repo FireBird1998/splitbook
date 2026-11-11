@@ -11,17 +11,9 @@ export interface DraftContext {
 }
 
 import type { IncompleteExpenseEntry } from './expense-entry';
-import { expenseEntryPolicy, type ExpenseEntryPolicy } from './expense-entry';
 import { expenseDraftValuesSchema, type ExpenseDraftValues } from './validators/expense-draft';
 
 type DraftEntries = Record<string, string>;
-
-export interface ExpenseDraftEntryPolicy {
-  singlePayer: ExpenseEntryPolicy['singlePayer'];
-}
-export const fieldDraftEntryPolicy: ExpenseDraftEntryPolicy = {
-  singlePayer: 'first-row',
-};
 
 /** An incomplete Draft is kept as typed text; no amount is filled in for the member. */
 export function entryForExpenseDraft(values: ExpenseDraftValues = {}): IncompleteExpenseEntry {
@@ -65,7 +57,6 @@ export function entryForExpenseDraft(values: ExpenseDraftValues = {}): Incomplet
 /** Finish later keeps zero rows and omits boxes left blank; it never completes an Expense. */
 export function draftForExpenseEntry(
   entry: IncompleteExpenseEntry,
-  policy: ExpenseDraftEntryPolicy = expenseEntryPolicy,
   update?: {
     from: ExpenseDraftValues;
     changed: Partial<Record<keyof IncompleteExpenseEntry, boolean>>;
@@ -87,15 +78,12 @@ export function draftForExpenseEntry(
     changed?.payerId ||
     changed?.payers ||
     changed?.multiPayer ||
-    (changed?.amount &&
-      update.from.paidBy?.length === 1 &&
-      (policy.singlePayer === 'field' || !entry.multiPayer))
+    (changed?.amount && update.from.paidBy?.length === 1)
   ) {
     for (const key of Object.keys(fields)) if (key.startsWith('paidBy.')) delete fields[key];
-    const payers =
-      entry.multiPayer || policy.singlePayer === 'first-row'
-        ? entry.payers
-        : [{ user: entry.payerId, amount: entry.amount }];
+    const payers = entry.multiPayer
+      ? entry.payers
+      : [{ user: entry.payerId, amount: entry.amount }];
     for (const payer of payers) {
       if (update && !payer.user) continue;
       fields[`paidBy.${payer.user}`] = 'yes';

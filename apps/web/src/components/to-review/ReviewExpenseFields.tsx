@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { draftForExpenseEntry, fieldDraftEntryPolicy } from '@splitbook/shared/expense-entry-draft';
+import { draftForExpenseEntry } from '@splitbook/shared/expense-entry-draft';
 import {
   readExpenseEntry,
   formSummaryPolicy,
@@ -83,7 +83,7 @@ export default function ReviewExpenseFields({
   try {
     const parsed = completeExpenseDraftSchema.safeParse(
       withGroupCurrency(
-        draftForExpenseEntry(entry, fieldDraftEntryPolicy, { from: original, changed: changes }),
+        draftForExpenseEntry(entry, { from: original, changed: changes }),
         context.currency,
       ),
     );

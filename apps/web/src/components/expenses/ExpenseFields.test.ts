@@ -28,6 +28,7 @@ function render(
     currency?: string;
     currencyChoices?: ExpenseCurrencyChoice[];
     currencyHint?: string | null;
+    payerId?: string;
     payers?: Array<{ user: string; amount: string }>;
   } = {},
 ) {
@@ -40,6 +41,7 @@ function render(
     date: '2026-10-18',
   }).change({
     description: 'Chai',
+    payerId: mode.payerId ?? YOU,
     amount,
     multiPayer: mode.multiPayerMode ?? false,
     payers: mode.payers ?? [{ user: YOU, amount }],
@@ -222,4 +224,10 @@ describe('who paid, in the summary (#894)', () => {
       ]),
     ).toContain('2 people paid');
   });
+});
+
+it('shows the selected payer field even if the remembered payer row differs (#1117 decision 7)', () => {
+  expect(text(render('100', { payerId: SAM, payers: [{ user: YOU, amount: '100' }] }))).toContain(
+    'Sam Chen paid',
+  );
 });

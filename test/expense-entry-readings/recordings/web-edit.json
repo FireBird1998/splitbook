@@ -950,10 +950,10 @@
         "currency": "INR",
         "amount": 100,
         "amountMinor": 10000,
-        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+        "paidBy": [{ "user": "a00000000000000000000002", "amount": 100, "amountMinor": 10000 }],
         "splitBetween": [
-          { "user": "a00000000000000000000001", "amount": 50, "amountMinor": 5000 },
-          { "user": "a00000000000000000000002", "amount": 50, "amountMinor": 5000 }
+          { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
+          { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
         ],
         "category": "food",
         "date": "2026-11-10",
@@ -969,10 +969,10 @@
           "currency": "INR",
           "amount": 100,
           "amountMinor": 10000,
-          "paidBy": [{ "user": "a00000000000000000000001", "amount": 100, "amountMinor": 10000 }],
+          "paidBy": [{ "user": "a00000000000000000000002", "amount": 100, "amountMinor": 10000 }],
           "splitBetween": [
-            { "user": "a00000000000000000000001", "amount": 50, "amountMinor": 5000 },
-            { "user": "a00000000000000000000002", "amount": 50, "amountMinor": 5000 }
+            { "user": "a00000000000000000000001", "amountMinor": 5000, "amount": 50 },
+            { "user": "a00000000000000000000002", "amountMinor": 5000, "amount": 50 }
           ]
         },
         "error": ""
@@ -983,7 +983,7 @@
         { "user": "a00000000000000000000003", "amount": "—" }
       ],
       "advancedInitiallyOpen": true,
-      "formContents": "What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared You paid  · Split equally  · 2 of 3 members Less Paid by You ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Notes (optional) Notes (optional)",
+      "formContents": "What was it for?  * What was it for? * Amount  * ​ INR ₹ Amount * Date Date Tag Shared Sam Chen paid  · Split equally  · 2 of 3 members Less Paid by Sam Chen ​ Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Notes (optional) Notes (optional)",
       "roundingNote": null
     }
   },

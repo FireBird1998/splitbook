@@ -8,11 +8,7 @@ import { SWRConfig } from 'swr';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ExpenseDraft } from '@splitbook/shared/expense-draft';
 import { formatCurrency } from '@splitbook/shared/currency';
-import {
-  entryForExpenseDraft,
-  draftForExpenseEntry,
-  fieldDraftEntryPolicy,
-} from '@splitbook/shared/expense-entry-draft';
+import { entryForExpenseDraft, draftForExpenseEntry } from '@splitbook/shared/expense-entry-draft';
 import type { IncompleteExpenseEntry } from '@splitbook/shared/expense-entry';
 import type { ExpenseDraftValues as NumericDraft } from '@splitbook/shared/validators/expense-draft';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
@@ -50,8 +46,7 @@ const changeReview = (prior: ReviewInput, patch: Partial<IncompleteExpenseEntry>
     ...Object.fromEntries(Object.keys(patch).map((key) => [key, true])),
   },
 });
-const reviewValue = (input: ReviewInput) =>
-  draftForExpenseEntry(input.entry, fieldDraftEntryPolicy, input);
+const reviewValue = (input: ReviewInput) => draftForExpenseEntry(input.entry, input);
 
 const context = {
   groupId,

@@ -1,13 +1,16 @@
 import { expect, it } from 'vitest';
 import { entryForExpenseDraft, draftForExpenseEntry } from './expense-entry-draft';
-import { expenseEntryPolicy, type IncompleteExpenseEntry } from './expense-entry';
+import { type IncompleteExpenseEntry } from './expense-entry';
 import type { ExpenseDraftValues } from './validators/expense-draft';
 const foodId = 'a00000000000000000000001';
 const read = (from: ExpenseDraftValues, change: Partial<IncompleteExpenseEntry> = {}) =>
-  draftForExpenseEntry({ ...entryForExpenseDraft(from), ...change }, expenseEntryPolicy, {
-    from,
-    changed: Object.fromEntries(Object.keys(change).map((key) => [key, true])),
-  });
+  draftForExpenseEntry(
+    { ...entryForExpenseDraft(from), ...change },
+    {
+      from,
+      changed: Object.fromEntries(Object.keys(change).map((key) => [key, true])),
+    },
+  );
 it('clears a named Tag when the member selects Not specified', () => {
   expect(read({ description: 'Dinner', tag: 'Food' }, { tagId: '' })).toEqual({
     description: 'Dinner',

@@ -924,7 +924,7 @@
         "currency": "INR",
         "category": "food",
         "date": "2026-11-10",
-        "paidBy": [{ "user": "a00000000000000000000001", "amount": 100 }],
+        "paidBy": [{ "user": "a00000000000000000000002", "amount": 100 }],
         "splitMethod": "equal",
         "splitBetween": [
           { "user": "a00000000000000000000001" },
@@ -934,13 +934,13 @@
       }
     },
     "shown": {
-      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared You paid  · Split equally  · 2 of 3 members Less Paid by Paid by You Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
+      "formContents": "What was it for? * What was it for? * Amount * Amount * Currency 🇮🇳 INR Currency Household currency Date Date Tag Shared Sam Chen paid  · Split equally  · 2 of 3 members Less Paid by Paid by Sam Chen Paid by Split payment between multiple people Split method Equal Unequal % Shares Split between You ₹50.00 Sam Chen ₹50.00 Priya Shah Hide options Category Food & Drink Category Notes (optional) Notes (optional)",
       "fields": [
         { "label": "", "value": "Groceries", "type": "text" },
         { "label": "", "value": "100.00", "type": "text" },
         { "label": "", "value": "INR" },
         { "label": "", "value": "2026-11-10", "type": "date" },
-        { "label": "", "value": "a00000000000000000000001" },
+        { "label": "", "value": "a00000000000000000000002" },
         { "label": "Share with You", "value": "", "type": "checkbox" },
         { "label": "Share with Sam Chen", "value": "", "type": "checkbox" },
         { "label": "Share with Priya Shah", "value": "", "type": "checkbox" },

@@ -323,7 +323,7 @@ it('shows the three no-share wordings, including both Android correction surface
 });
 it('shows the separate single-payer field and the zero-payer conflict comparison (#1111)', () => {
   expect(money('web-new', 'single-payer-field-differs').paidBy).toEqual([
-    { user: alex, amountMinor: 10000 },
+    { user: sam, amountMinor: 10000 },
   ]);
   expect(money('android-new', 'single-payer-field-differs').paidBy).toEqual([
     { user: sam, amountMinor: 10000 },

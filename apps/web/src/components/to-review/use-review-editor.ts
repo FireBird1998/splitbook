@@ -2,11 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { draftEditQueue } from '@splitbook/shared/draft-edit-queue';
 import { describeDraftChange } from '@splitbook/shared/to-review';
-import {
-  entryForExpenseDraft,
-  draftForExpenseEntry,
-  fieldDraftEntryPolicy,
-} from '@splitbook/shared/expense-entry-draft';
+import { entryForExpenseDraft, draftForExpenseEntry } from '@splitbook/shared/expense-entry-draft';
 import type { IncompleteExpenseEntry } from '@splitbook/shared/expense-entry';
 import type { PersistedExpenseDraft } from '@splitbook/shared/validators/expense-draft';
 import type { WebReviewClient } from './review-client';
@@ -21,8 +17,7 @@ const editing = (draft: PersistedExpenseDraft): EntryEdit => ({
   from: draft.values ?? {},
   changed: {},
 });
-const valuesFor = (edit: EntryEdit) =>
-  draftForExpenseEntry(edit.entry, fieldDraftEntryPolicy, edit);
+const valuesFor = (edit: EntryEdit) => draftForExpenseEntry(edit.entry, edit);
 
 /** The Draft left To review elsewhere, so typing for it is obsolete and is never sent. */
 class RemovedElsewhere extends Error {}

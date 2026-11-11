@@ -186,7 +186,7 @@ export default function ExpenseFields({
   };
 
   // ─── Summary Line ──────────────────────────────────
-  const payerName = memberName(payers[0]?.user || userId);
+  const payerName = memberName((multiPayer ? payers[0]?.user : entry.payerId) || userId);
   // One payer is named even among several rows' mode, never "1 people paid" (#894).
   const payerSummary = !payers.length
     ? 'Who paid?'
@@ -255,6 +255,7 @@ export default function ExpenseFields({
 
   const updatePayer = (index: number, field: 'user' | 'amount', value: string) => {
     edit({
+      ...(index === 0 && field === 'user' ? { payerId: value } : {}),
       payers: (payers.length ? payers : [{ user: '', amount: '' }]).map((p, i) =>
         i === index ? { ...p, [field]: value } : p,
       ),
@@ -631,7 +632,7 @@ export default function ExpenseFields({
                 <TextField
                   select
                   label={review ? 'Paid by' : undefined}
-                  value={payers[0]?.user || userId}
+                  value={entry.payerId}
                   onChange={(e) => updatePayer(0, 'user', e.target.value)}
                   size="small"
                   fullWidth
@@ -733,6 +734,7 @@ export default function ExpenseFields({
                     onClick={() => {
                       edit({
                         multiPayer: false,
+                        payerId: payers[0]?.user || userId,
                         payers: [{ user: payers[0]?.user || userId, amount: '' }],
                       });
                     }}
