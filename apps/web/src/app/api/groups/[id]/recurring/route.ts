@@ -1,7 +1,7 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   getAuthUser,
   unauthorized,
-  forbidden,
   success,
   notFound,
   serverError,
@@ -9,7 +9,6 @@ import {
   readJson,
   routeIds,
 } from '@/lib/utils/api-response';
-import { groupService } from '@/lib/services/group.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { createRecurringExpenseSchema } from '@splitbook/shared/validators/recurring-expense';
 import { assertRecurringExpensesOn } from '@/lib/recurring-expenses-switch';
@@ -46,11 +45,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await routeIds(params);
 
-    const isMember = await groupService.isMember(id, user.id!);
-    if (!isMember) return forbidden();
-
-    const templates = await recurringExpenseService.list(id);
-    return success(templates);
+    return await readGroupLedger({
+      actor: { kind: 'member', id: user.id! },
+      groupId: id,
+      deletionMarker: 'allow-retained-members',
+      recurring: 'recorded-only',
+      read: async (_group, storedGroup) => success(await recurringExpenseService.list(storedGroup)),
+    });
   } catch (err) {
     return serverError(err);
   }

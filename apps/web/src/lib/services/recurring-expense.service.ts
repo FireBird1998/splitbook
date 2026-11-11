@@ -193,10 +193,14 @@ export class RecurringExpenseService {
    * List a group's recurring templates (any member may read). While recurring Expenses are
    * off, none is listed; the stored templates stay as they are.
    */
-  async list(groupId: string) {
+  async list(groupOrId: string | IGroupDocument) {
+    const groupId = typeof groupOrId === 'string' ? groupOrId : String(groupOrId._id);
     if (!recurringExpensesEnabled()) return [];
     await connectDB();
-    const group = await Group.findById(groupId).select('tags').lean();
+    const group =
+      typeof groupOrId === 'string'
+        ? await Group.findById(groupId).select('tags').lean()
+        : groupOrId;
     const templates = await RecurringExpense.find({ group: groupId })
       .populate('paidBy.user', PERSON_FIELDS)
       .populate('splitBetween.user', PERSON_FIELDS)
