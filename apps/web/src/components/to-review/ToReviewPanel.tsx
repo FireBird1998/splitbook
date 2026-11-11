@@ -14,7 +14,7 @@ import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
-import { type DraftContext } from '@splitbook/shared/persistent-draft-editor';
+import { type DraftContext } from '@splitbook/shared/expense-entry-draft';
 import type { PersistedExpenseDraft } from '@splitbook/shared/validators/expense-draft';
 import {
   memberProblems,

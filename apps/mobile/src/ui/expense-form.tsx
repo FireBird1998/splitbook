@@ -21,7 +21,7 @@ import {
   isMoneyField,
   type ExpenseMoneyField,
   type ExpenseVersionField,
-} from '@splitbook/shared/expense-review';
+} from '@splitbook/shared/expense-entry';
 import {
   expenseFieldLabels,
   type ExpenseDraft,

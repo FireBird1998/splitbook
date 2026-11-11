@@ -1,3 +1,4 @@
+import { expenseEntryLint } from '../../packages/shared/eslint/expense-entry.mjs';
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
@@ -33,6 +34,7 @@ export default defineConfig([
   globalIgnores(['node_modules/**', '.expo/**', 'android/**', 'ios/**', 'dist/**']),
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  ...expenseEntryLint(import.meta.dirname),
   {
     files: ['metro.config.js', 'plugins/*.js'],
     rules: { '@typescript-eslint/no-require-imports': 'off' },

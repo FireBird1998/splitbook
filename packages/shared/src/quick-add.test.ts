@@ -3,7 +3,6 @@ import { toDateParam } from './date';
 import { ExpenseDraft } from './expense-draft';
 import {
   QUICK_ADD_DESCRIPTION_MAX,
-  quickAddDraftValues,
   quickAddEntry,
   quickAddSplitMembers,
   readQuickAdd,
@@ -665,7 +664,7 @@ describe('suggestQuickAddTag', () => {
   });
 });
 
-describe('quickAddDraftValues: the full form’s request', () => {
+describe('quickAddEntry: the full form’s request', () => {
   const ctx = context();
   const FOOD = 'd00000000000000000000002';
 
@@ -723,21 +722,22 @@ describe('quickAddDraftValues: the full form’s request', () => {
 
   it('keeps a refused amount as typed, and the viewer as payer when nobody is chosen', () => {
     const line = read('Dinner 2,400.505 paid by Bob');
-    expect(quickAddDraftValues(line, { payerId: null, tagId: '' }, ctx)).toMatchObject({
+    expect(quickAddEntry(line, { payerId: null, tagId: '' }, ctx)).toMatchObject({
       description: 'Dinner',
       amount: '2400.505',
       payers: [{ user: ALEX.id, amount: '' }],
-      selectedMembers: [ALEX.id, SAM.id, PRIYA.id],
-      tag: '',
+      participantIds: [ALEX.id, SAM.id, PRIYA.id],
+      tagId: '',
       date: TODAY,
     });
-    expect(quickAddDraftValues(read('Dinner'), { payerId: null, tagId: '' }, ctx).amount).toBe('');
+    expect(quickAddEntry(read('Dinner'), { payerId: null, tagId: '' }, ctx).amount).toBe('');
   });
 
-  it('leaves the Category to the form’s own default', () => {
-    expect(
-      quickAddDraftValues(read('Dinner 2400'), { payerId: null, tagId: FOOD }, ctx),
-    ).not.toHaveProperty('category');
+  it('uses the form’s Other Category default', () => {
+    expect(quickAddEntry(read('Dinner 2400'), { payerId: null, tagId: FOOD }, ctx)).toHaveProperty(
+      'category',
+      'other',
+    );
   });
 });
 
@@ -761,7 +761,7 @@ describe('Quick add with the Group’s listed currencies (#732)', () => {
         amountMinor: minor,
         problems: [],
       });
-      expect(quickAddDraftValues(line, { payerId: ALEX.id, tagId: 'Food' }, ctx)).toMatchObject({
+      expect(quickAddEntry(line, { payerId: ALEX.id, tagId: 'Food' }, ctx)).toMatchObject({
         currency,
         amount,
       });
@@ -800,9 +800,10 @@ describe('Quick add keeps an unlisted or ambiguous currency explicit (#732)', ()
           message: `${currency} is not one of this Group’s currencies. Add it to the Group or choose a listed currency.`,
         }),
       ]);
-      expect(
-        quickAddDraftValues(line, { payerId: ALEX.id, tagId: 'Food' }, context()),
-      ).toMatchObject({ currency, amount });
+      expect(quickAddEntry(line, { payerId: ALEX.id, tagId: 'Food' }, context())).toMatchObject({
+        currency,
+        amount,
+      });
       expect(read(text, { alternateCurrencies: [currency] }).problems).toEqual([]);
     },
   );

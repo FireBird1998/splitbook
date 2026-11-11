@@ -13,7 +13,7 @@ import {
   type ExpenseDraftValues,
 } from '@splitbook/shared/validators/expense-draft';
 import ExpenseFields from '@/components/expenses/ExpenseFields';
-import type { DraftContext } from '@splitbook/shared/persistent-draft-editor';
+import type { DraftContext } from '@splitbook/shared/expense-entry-draft';
 
 /** Picker defaults are a projection. Only an edited entry field becomes a Draft fact. */
 export default function ReviewExpenseFields({

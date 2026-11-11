@@ -1,7 +1,7 @@
 import { Pressable, TextInput, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
-import { minorAmountText, setPayerAmount } from '@splitbook/shared/payer-remainder';
+import { minorAmountText, setPayerAmount } from '@splitbook/shared/expense-entry';
 import { readExpenseDraft, type ExpenseDraft } from '../data/expense-draft';
 import { acceptsNumericText } from '../data/field-feedback';
 import {

@@ -2,7 +2,26 @@ import { expenseReceipt } from '../test-utils/expense-receipt';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import { describe, expect, it } from 'vitest';
-import { giveRest, payerRemainder } from '@splitbook/shared/payer-remainder';
+import { readExpenseDraft, type ExpenseDraft } from './expense-draft';
+import { minorAmountText, setPayerAmount } from '@splitbook/shared/expense-entry';
+const payerRemainder = (draft: ExpenseDraft) => readExpenseDraft(draft).payers;
+const giveRest = (draft: ExpenseDraft, members: string[]) => {
+  const remainder = payerRemainder(draft);
+  const entered = new Set(remainder.entries.map((row) => row.user));
+  const user = members.find((id) => !entered.has(id));
+  return user &&
+    remainder.remainingMinor !== null &&
+    remainder.remainingMinor > 0 &&
+    !Object.keys(remainder.errors).length
+    ? {
+        payers: setPayerAmount(
+          draft.payers,
+          user,
+          minorAmountText(remainder.remainingMinor, draft.currency),
+        ),
+      }
+    : null;
+};
 
 // #122: the Who paid sheet's arithmetic and "Give the rest" through the controller's draft.
 const memberIds = [

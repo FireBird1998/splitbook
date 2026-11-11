@@ -9,7 +9,10 @@ let eslint: ESLint;
 beforeAll(async () => {
   eslint = new ESLint();
   expect(await eslint.findConfigFile()).toMatch(/apps[\\/]mobile[\\/]eslint\.config\.mjs$/);
-});
+  // Build the typed lint program once in setup, outside each small rule-example's timeout.
+  await eslint.lintText('export {};', { filePath: 'src/lint-sample.ts' });
+  // Building the typed program takes well over the default 10 s on a loaded CI runner.
+}, 120_000);
 
 async function lint(code: string, filePath = 'src/lint-sample.ts') {
   const [result] = await eslint.lintText(code, { filePath });
@@ -205,4 +208,18 @@ export const queries = client.getQueryCache();
 `);
     expect(messages).toEqual([]);
   });
+});
+
+it('is enabled for a production form by each package lint command', async () => {
+  const { ESLint } = await import('eslint');
+  const { fileURLToPath } = await import('node:url');
+  for (const [directory, form] of [
+    ['../', 'src/data/expense-draft.ts'],
+    ['../../web/', 'src/components/expenses/ExpenseFields.tsx'],
+    ['../../../packages/shared/', 'src/expense-draft.ts'],
+  ]) {
+    const eslint = new ESLint({ cwd: fileURLToPath(new URL(directory, import.meta.url)) });
+    const config = await eslint.calculateConfigForFile(form);
+    expect(config.rules['expense-entry/no-local-reading']).toEqual([2]);
+  }
 });
