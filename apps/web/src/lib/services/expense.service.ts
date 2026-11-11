@@ -1,3 +1,4 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import type { LedgerReadGroup } from '@/lib/group-ledger-read';
 import { Refusal, type RefusalCode } from '@splitbook/shared/refusals';
 import { inGroupCurrencyOrder } from '@splitbook/shared/group-currencies';
@@ -91,12 +92,12 @@ export function expenseAmountRange(
 }
 
 export class ExpenseService {
-  private async requireAccessGroup({ actorId, groupId }: ExpenseAccess, writing = false) {
+  private async requireWritableGroup({ actorId, groupId }: ExpenseAccess) {
     await connectDB();
     const group = await Group.findOne({ _id: groupId, 'members.user': actorId });
     if (!group) throw new Refusal('FORBIDDEN');
     // An archived Group can still be read, but takes no more changes (#578).
-    if (writing && group.isArchived) throw new Refusal('GROUP_ARCHIVED');
+    if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
     return group;
   }
 
@@ -440,16 +441,27 @@ export class ExpenseService {
    * Read an expense only through its group and a current group member.
    */
   async getById(access: ExpenseAccess) {
-    const group = await this.requireAccessGroup(access);
-    const expense = await Expense.findOne({ _id: access.expenseId, group: access.groupId })
-      .populate('paidBy.user', PERSON_FIELDS)
-      .populate('splitBetween.user', PERSON_FIELDS)
-      .populate('createdBy', PERSON_FIELDS)
-      .populate('editHistory.editedBy', PERSON_FIELDS)
-      .lean();
-    return expense
-      ? { ...expense, revision: expense.revision ?? 0, ...displayTagReference(group.tags, expense) }
-      : null;
+    return readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      deletionMarker: 'allow-retained-members',
+      recurring: 'recorded-only',
+      read: async (_populatedGroup, group) => {
+        const expense = await Expense.findOne({ _id: access.expenseId, group: access.groupId })
+          .populate('paidBy.user', PERSON_FIELDS)
+          .populate('splitBetween.user', PERSON_FIELDS)
+          .populate('createdBy', PERSON_FIELDS)
+          .populate('editHistory.editedBy', PERSON_FIELDS)
+          .lean();
+        return expense
+          ? {
+              ...expense,
+              revision: expense.revision ?? 0,
+              ...displayTagReference(group.tags ?? [], expense),
+            }
+          : null;
+      },
+    });
   }
 
   /**
@@ -538,7 +550,7 @@ export class ExpenseService {
     actorId: string,
     { tagId, expenses }: ExpenseTagChangeRequest,
   ): Promise<ExpenseTagChangeResult[]> {
-    const group = await this.requireAccessGroup({ actorId, groupId, expenseId: '' }, true);
+    const group = await this.requireWritableGroup({ actorId, groupId, expenseId: '' });
     const tag = group.tags.find((entry) => String(entry._id) === tagId);
     if (!tag || tag.isArchived || tag.isDeleted) throw new Refusal('INVALID_TAG');
     const results: ExpenseTagChangeResult[] = [];

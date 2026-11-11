@@ -1,3 +1,4 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   getAuthUser,
   unauthorized,
@@ -48,11 +49,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await routeIds(params);
 
-    const isMember = await groupService.isMember(id, user.id!);
-    if (!isMember) return forbidden();
-
-    const settlements = await settlementService.getGroupSettlements(id);
-    return success(settlements);
+    return await readGroupLedger({
+      actor: { kind: 'member', id: user.id! },
+      groupId: id,
+      deletionMarker: 'allow-retained-members',
+      recurring: 'recorded-only',
+      read: async () => {
+        const settlements = await settlementService.getGroupSettlements(id);
+        return success(settlements);
+      },
+    });
   } catch (err) {
     return serverError(err);
   }

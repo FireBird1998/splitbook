@@ -1,16 +1,15 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import { API_CACHE_CONTROL } from '@/lib/api-cache-control';
 import { z } from 'zod';
 import { CURRENCY_CODES } from '@splitbook/shared/currency';
 import {
   getAuthUser,
   unauthorized,
-  forbidden,
   success,
   failedRead,
   routeIds,
   validationError,
 } from '@/lib/utils/api-response';
-import { groupService } from '@/lib/services/group.service';
 import { readRateSuggestion } from '@/lib/rates/service';
 
 const currency = z.string().refine((code) => CURRENCY_CODES.includes(code), 'Unsupported currency');
@@ -23,13 +22,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!user) response = unauthorized();
     else {
       const { id } = await routeIds(params);
-      if (!(await groupService.isMember(id, user.id))) response = forbidden();
-      else {
-        const parsed = query.safeParse(Object.fromEntries(new URL(req.url).searchParams));
-        response = parsed.success
-          ? success(await readRateSuggestion(parsed.data.from, parsed.data.to))
-          : validationError(parsed.error);
-      }
+      response = await readGroupLedger({
+        actor: { kind: 'member', id: user.id },
+        groupId: id,
+        recurring: 'recorded-only',
+        deletionMarker: 'allow-retained-members',
+        read: async () => {
+          const parsed = query.safeParse(Object.fromEntries(new URL(req.url).searchParams));
+          return parsed.success
+            ? success(await readRateSuggestion(parsed.data.from, parsed.data.to))
+            : validationError(parsed.error);
+        },
+      });
     }
   } catch (err) {
     response = failedRead(err, req);

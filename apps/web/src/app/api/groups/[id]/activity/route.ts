@@ -1,12 +1,11 @@
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   getAuthUser,
   unauthorized,
-  forbidden,
   success,
   serverError,
   routeIds,
 } from '@/lib/utils/api-response';
-import { groupService } from '@/lib/services/group.service';
 import { activityService } from '@/lib/services/activity.service';
 
 // GET /api/groups/[id]/activity — Get activity feed; `expenseId` narrows it to one Expense
@@ -17,16 +16,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await routeIds(params);
 
-    const isMember = await groupService.isMember(id, user.id!);
-    if (!isMember) return forbidden();
+    return await readGroupLedger({
+      actor: { kind: 'member', id: user.id! },
+      groupId: id,
+      deletionMarker: 'allow-retained-members',
+      recurring: 'recorded-only',
+      read: async () => {
+        const { searchParams } = new URL(req.url);
+        const page = parseInt(searchParams.get('page') || '1');
+        const limit = parseInt(searchParams.get('limit') || '20');
+        const expenseId = searchParams.get('expenseId') ?? undefined;
 
-    const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const expenseId = searchParams.get('expenseId') ?? undefined;
-
-    const result = await activityService.getGroupActivity(id, page, limit, expenseId);
-    return success(result);
+        const result = await activityService.getGroupActivity(id, page, limit, expenseId);
+        return success(result);
+      },
+    });
   } catch (err) {
     return serverError(err);
   }

@@ -271,3 +271,46 @@ for (const state of ['missing', 'outsider'] as const)
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
+
+for (const state of ['member', 'admin', 'archived'] as const)
+  it(`applies the admin requirement to ${state}`, async () => {
+    const access = await fixture.arrange(state);
+    const result = readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      requiredRole: 'admin',
+      recurring: 'recorded-only',
+      read: async (group) => group.name,
+    });
+    if (state === 'admin') await expect(result).resolves.toBe('Reads Household');
+    else await expect(result).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+it('allows an archived admin to read', async () => {
+  await fixture.arrange('archived');
+  await expect(
+    readGroupLedger({
+      actor: { kind: 'member', id: DEMO_PERSONA_IDS.alex },
+      groupId: readIds.group,
+      requiredRole: 'admin',
+      recurring: 'recorded-only',
+      read: async (group) => group.name,
+    }),
+  ).resolves.toBe('Reads Household');
+});
+it('withholds an admin result after demotion during the read', async () => {
+  const access = await fixture.arrange('admin');
+  const result = readGroupLedger({
+    actor: { kind: 'member', id: access.actorId },
+    groupId: access.groupId,
+    requiredRole: 'admin',
+    recurring: 'recorded-only',
+    read: async (group) => {
+      await Group.updateOne(
+        { _id: group._id, 'members.user': access.actorId },
+        { $set: { 'members.$.role': 'member' } },
+      );
+      return group.name;
+    },
+  });
+  await expect(result).rejects.toMatchObject({ code: 'FORBIDDEN' });
+});

@@ -359,9 +359,27 @@ it('records the Connected assistant tools’ own words for every table entry', a
   expect(census).toMatchSnapshot();
 });
 
+// These answering cases admit a fixed Group at the database edge. Access itself is covered
+// by the read record; query validation and NOT_A_TRIP still run in the real route/module.
+async function admitCensusGroup() {
+  const { default: Group } = await import('@/lib/models/Group');
+  const group = new Group({
+    _id: 'a00000000000000000000001',
+    category: 'home',
+    members: [{ user: 'a00000000000000000000001', role: 'admin' }],
+  }).toObject();
+  const find = vi.spyOn(Group, 'findOne').mockReturnValue({ lean: async () => group } as never);
+  const populate = vi.spyOn(Group, 'populate').mockResolvedValue(group as never);
+  const exists = vi.spyOn(Group, 'exists').mockResolvedValue({ _id: group._id });
+  return () => {
+    find.mockRestore();
+    populate.mockRestore();
+    exists.mockRestore();
+  };
+}
+
 it('records query and command refusals before any database read', async () => {
-  const { groupService } = await import('@/lib/services/group.service');
-  const member = vi.spyOn(groupService, 'isMember').mockResolvedValue(true);
+  const restoreGroup = await admitCensusGroup();
   vi.mocked(auth.api.getSession).mockResolvedValue({
     user: { id: 'a00000000000000000000001', name: 'Alex', email: 'alex@example.test' },
   } as never);
@@ -391,7 +409,7 @@ it('records query and command refusals before any database read', async () => {
       ),
     });
   }
-  member.mockRestore();
+  restoreGroup();
   expect(census).toMatchSnapshot();
 });
 
@@ -485,10 +503,7 @@ it('records Group currency fields and an already-listed currency’s separate wo
 });
 
 it('records a non-Trip Group’s direct summary refusal', async () => {
-  const { groupService } = await import('@/lib/services/group.service');
-  const summary = await import('@/lib/services/trip-summary.service');
-  const member = vi.spyOn(groupService, 'isMember').mockResolvedValue(true);
-  const read = vi.spyOn(summary, 'getTripSummary').mockResolvedValue({ kind: 'not-a-trip' });
+  const restoreGroup = await admitCensusGroup();
   vi.mocked(auth.api.getSession).mockResolvedValue({
     user: { id: 'a00000000000000000000001', name: 'Alex', email: 'alex@example.test' },
   } as never);
@@ -498,8 +513,7 @@ it('records a non-Trip Group’s direct summary refusal', async () => {
     { params: Promise.resolve({ id: 'a00000000000000000000001' }) },
   );
   expect(await recorded(answer)).toMatchSnapshot();
-  read.mockRestore();
-  member.mockRestore();
+  restoreGroup();
 });
 
 it('records invitation schema refusals before persistence', async () => {

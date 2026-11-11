@@ -1,6 +1,7 @@
+import { hasTripSummary } from '@splitbook/shared/trip-summary';
+import { readGroupLedger } from '@/lib/group-ledger-read';
 import {
   error,
-  forbidden,
   getAuthUser,
   notFound,
   failedRead,
@@ -8,7 +9,6 @@ import {
   unauthorized,
   routeIds,
 } from '@/lib/utils/api-response';
-import { groupService } from '@/lib/services/group.service';
 import { getTripSummary } from '@/lib/services/trip-summary.service';
 import { TimeZoneError, readTimeZone } from '@splitbook/shared/zoned-calendar';
 import { CURRENCY_CODES } from '@splitbook/shared/currency';
@@ -35,31 +35,41 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!user) return unauthorized();
 
     const { id } = await routeIds(params);
-    const isMember = await groupService.isMember(id, user.id);
-    if (!isMember) return forbidden();
-
-    const { searchParams } = new URL(req.url);
     let timeZone: string;
-    try {
-      timeZone = readTimeZone(searchParams.get('tz'));
-    } catch (err) {
-      if (err instanceof TimeZoneError) return error(err.message, 400, 'INVALID_TIME_ZONE');
-      throw err;
-    }
+    let currency: string | null;
+    return await readGroupLedger({
+      actor: { kind: 'member', id: user.id },
+      groupId: id,
+      deletionMarker: 'allow-retained-members',
+      recurring: 'materialize',
+      validate: (group) => {
+        const { searchParams } = new URL(req.url);
+        try {
+          timeZone = readTimeZone(searchParams.get('tz'));
+        } catch (err) {
+          if (err instanceof TimeZoneError) return error(err.message, 400, 'INVALID_TIME_ZONE');
+          throw err;
+        }
 
-    // Empty is unset. Any supported code is read, a currency nothing was spent in as zeros.
-    const currency = searchParams.get('currency') || null;
-    if (currency !== null && !CURRENCY_CODES.includes(currency))
-      return error('Send a currency code, such as INR.', 400, 'INVALID_CURRENCY');
+        // Empty is unset. Any supported code is read, a currency nothing was spent in as zeros.
+        currency = searchParams.get('currency') || null;
+        if (currency !== null && !CURRENCY_CODES.includes(currency))
+          return error('Send a currency code, such as INR.', 400, 'INVALID_CURRENCY');
 
-    const result = await getTripSummary(id, user.id, {
-      timeZone,
-      currency: currency ?? undefined,
+        if (!hasTripSummary(group.category))
+          return error('Only a Trip has a Trip summary.', 409, 'NOT_A_TRIP');
+      },
+      read: async (group) => {
+        const result = await getTripSummary(group, user.id, {
+          timeZone,
+          currency: currency ?? undefined,
+        });
+        if (result.kind === 'missing') return notFound('Group');
+        if (result.kind === 'not-a-trip')
+          return error('Only a Trip has a Trip summary.', 409, 'NOT_A_TRIP');
+        return success(result.summary);
+      },
     });
-    if (result.kind === 'missing') return notFound('Group');
-    if (result.kind === 'not-a-trip')
-      return error('Only a Trip has a Trip summary.', 409, 'NOT_A_TRIP');
-    return success(result.summary);
   } catch (err) {
     return failedRead(err, req);
   }
