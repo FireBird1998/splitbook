@@ -215,7 +215,8 @@ async function read(row: TypedEntry, edit: boolean): Promise<Reading> {
 it('records recurring Add and Edit through the actual form controls (#1111)', async () => {
   // The template's relative date label is part of the recording; midnight must not change it.
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date(day + 'T12:00:00.000Z'));
+  // Local noon: the template's "since Today" label must not depend on the runner's time zone.
+  vi.setSystemTime(new Date(day + 'T12:00:00'));
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('window', {
     location: { hash: '' },
