@@ -48,7 +48,7 @@ it('reports an unreadable total before an over-precise split amount in a templat
   };
   expect(readExpenseEntry(entry, { kind: 'new' }, recurringEntryPolicy).result).toMatchObject({
     kind: 'refused',
-    problems: [{ field: 'form', message: 'Enter a valid decimal amount' }],
+    problems: [{ field: 'amount', message: 'Use digits and one decimal point, such as 250.50.' }],
   });
 });
 
@@ -61,7 +61,9 @@ it('keeps the recurring whole-currency precision refusal verbatim', () => {
     ).result,
   ).toMatchObject({
     kind: 'refused',
-    problems: [{ field: 'form', message: 'Amount supports at most 0 decimal places' }],
+    problems: [
+      { field: 'amount', message: 'Yen has no smaller unit. Enter a whole amount, like ¥2,500.' },
+    ],
   });
 });
 it('keeps submitted participant order separately from an unchanged historical preview', () => {

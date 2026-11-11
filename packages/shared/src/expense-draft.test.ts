@@ -153,7 +153,7 @@ it('requires a share after the member clears the starting ones', () => {
     .change({ splitValues: { alice: '', bob: '' } });
   const prepared = draft.prepare(['general-id'], 'shares');
   expect(prepared.submission).toBeUndefined();
-  expect(prepared.draft.error).toContain('at least 1 share');
+  expect(prepared.draft.error).toBe('Give at least one person a share.');
 });
 
 it.each(['paidBy', 'splitBetween'])('shows an editing error for malformed stored %s', (field) => {

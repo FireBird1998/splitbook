@@ -360,7 +360,7 @@
   "shares-all-blank": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "splitBetween", "message": "Total split weight must be positive" }]
+      "issues": [{ "field": "splitBetween", "message": "Give at least one person a share." }]
     },
     "shown": {
       "sheets": {
@@ -383,7 +383,7 @@
         "problems": {},
         "errors": {}
       },
-      "corrections": { "split": "Total split weight must be positive" }
+      "corrections": { "split": "Give at least one person a share." }
     }
   },
   "shares-one-zero": {
@@ -432,7 +432,7 @@
   "shares-all-zero": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "splitBetween", "message": "Total split weight must be positive" }]
+      "issues": [{ "field": "splitBetween", "message": "Give at least one person a share." }]
     },
     "shown": {
       "sheets": {
@@ -455,13 +455,13 @@
         "problems": {},
         "errors": {}
       },
-      "corrections": { "split": "Total split weight must be positive" }
+      "corrections": { "split": "Give at least one person a share." }
     }
   },
   "shares-fractional": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Amount supports at most 0 decimal places" }]
+      "issues": [{ "field": "", "message": "Use a whole number of shares." }]
     },
     "shown": {
       "sheets": {
@@ -484,7 +484,7 @@
         "problems": {},
         "errors": {}
       },
-      "corrections": { "split": "Amount supports at most 0 decimal places" }
+      "corrections": { "split": "Use a whole number of shares." }
     }
   },
   "payers-partly-blank": {
@@ -617,10 +617,7 @@
     }
   },
   "lone-listed-payer-blank": {
-    "result": {
-      "kind": "refusal",
-      "issues": [{ "field": "", "message": "At least one payer and participant are required" }]
-    },
+    "result": { "kind": "refusal", "issues": [{ "field": "", "message": "Choose who paid." }] },
     "shown": {
       "sheets": {
         "split": "Split Total ₹100.00  · INR Done Equal Amounts Percentage Shares Everyone included pays the same share. You ₹50.00 Sam Chen ₹50.00 Priya Shah Not included Adds up 2 people · ₹100.00 allocated",
@@ -794,7 +791,7 @@
   "unreadable-amount": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+      "issues": [{ "field": "", "message": "Use digits and one decimal point, such as 250.50." }]
     },
     "shown": {
       "sheets": {
@@ -818,7 +815,12 @@
   "unreadable-payer": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "paidBy.1.amount", "message": "Enter a valid decimal amount" }]
+      "issues": [
+        {
+          "field": "paidBy.1.amount",
+          "message": "Use digits and one decimal point, such as 250.50."
+        }
+      ]
     },
     "shown": {
       "sheets": {
@@ -843,13 +845,18 @@
           "a00000000000000000000002": "Use digits and one decimal point, such as 250.50."
         }
       },
-      "corrections": { "payers": "Enter a valid decimal amount" }
+      "corrections": { "payers": "Use digits and one decimal point, such as 250.50." }
     }
   },
   "unreadable-split-amount": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "splitBetween.1.amount", "message": "Enter a valid decimal amount" }]
+      "issues": [
+        {
+          "field": "splitBetween.1.amount",
+          "message": "Use digits and one decimal point, such as 250.50."
+        }
+      ]
     },
     "shown": {
       "sheets": {
@@ -874,13 +881,13 @@
         "problems": {},
         "errors": {}
       },
-      "corrections": { "split": "Enter a valid decimal amount" }
+      "corrections": { "split": "Use digits and one decimal point, such as 250.50." }
     }
   },
   "unreadable-percentage": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+      "issues": [{ "field": "", "message": "Use digits and one decimal point, such as 33.5." }]
     },
     "shown": {
       "sheets": {
@@ -903,13 +910,13 @@
         "problems": {},
         "errors": {}
       },
-      "corrections": { "split": "Enter a valid decimal amount" }
+      "corrections": { "split": "Use digits and one decimal point, such as 33.5." }
     }
   },
   "unreadable-share": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+      "issues": [{ "field": "", "message": "Use a whole number of shares." }]
     },
     "shown": {
       "sheets": {
@@ -932,7 +939,7 @@
         "problems": {},
         "errors": {}
       },
-      "corrections": { "split": "Enter a valid decimal amount" }
+      "corrections": { "split": "Use a whole number of shares." }
     }
   },
   "unticked-typed-value": {
@@ -978,7 +985,7 @@
   "no-participants": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "At least one payer and participant are required" }]
+      "issues": [{ "field": "", "message": "Choose at least one person to share this Expense." }]
     },
     "shown": {
       "sheets": {

@@ -1450,29 +1450,29 @@ describe('native Expense creation and editing', () => {
   it.each([
     [
       { splitMethod: 'shares', splitValues: { [memberIds[0]]: '1.0000000000000001' } },
-      'Amount supports at most 0 decimal places',
+      'Use a whole number of shares.',
     ],
     [
       {
         splitMethod: 'percentage',
         splitValues: { [memberIds[0]]: '33.33000000000000001', [memberIds[1]]: '66.67' },
       },
-      'Amount supports at most 2 decimal places',
+      'Percentages can have at most 2 decimal places. Nothing is rounded for you.',
     ],
     [
       { splitMethod: 'exact', splitValues: { [memberIds[0]]: '10.001' } },
-      'Amount supports at most 2 decimal places',
+      'INR amounts can have at most 2 decimal places. Nothing is rounded for you.',
     ],
     [
       { splitMethod: 'unequal', splitValues: { [memberIds[0]]: '9' } },
       'Split amounts must add up to the expense amount',
     ],
-    [{ splitMethod: 'shares', splitValues: { [memberIds[0]]: '-1' } }, 'Shares cannot be negative'],
+    [{ splitMethod: 'shares', splitValues: { [memberIds[0]]: '-1' } }, 'Shares can’t be negative.'],
     [
       { splitMethod: 'shares', splitValues: { [memberIds[0]]: '1.5' } },
-      'Amount supports at most 0 decimal places',
+      'Use a whole number of shares.',
     ],
-    [{ splitMethod: 'shares' }, 'Total split weight must be positive'],
+    [{ splitMethod: 'shares' }, 'Give at least one person a share.'],
     [{ participantIds: [memberIds[0], memberIds[0]] }, 'Each person can appear only once'],
     [
       { multiPayer: true, payers: [{ user: memberIds[0], amount: '9' }] },

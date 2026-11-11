@@ -291,8 +291,6 @@ export default function RecurringExpensesSection({
   const validateForm = (): string | null => {
     if (!entry.description.trim()) return 'Description is required';
     if (!entry.tagId) return 'Tag is required';
-    if (!entry.payerId) return 'Choose who pays';
-    if (!currentEntry.participantIds.length) return 'Include at least one person in the split';
     if (reading.result.kind === 'refused') return reading.result.problems[0].message;
     const day = Number(schedule.dayOfMonth);
     if (!Number.isInteger(day) || day < 1 || day > 31) return 'Day of month must be 1–31';

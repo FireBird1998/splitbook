@@ -298,27 +298,27 @@ it('shows fractional shares in the web total while both preview and save refuse 
   expect(cell('web-new', 'shares-fractional')).toMatchObject({
     result: {
       kind: 'refusal',
-      issues: [{ message: 'Amount supports at most 0 decimal places' }],
+      issues: [{ message: 'Use a whole number of shares.' }],
     },
     shown: {
       formContents: expect.stringContaining('Use a whole number of shares.'),
-      preview: { error: 'Amount supports at most 0 decimal places' },
+      preview: { error: 'Use a whole number of shares.' },
     },
   });
 });
 it('shows the three no-share wordings, including both Android correction surfaces (#1111 claim 7)', () => {
   expect(cell('web-new', 'shares-all-blank').result).toMatchObject({
-    issues: [{ message: 'Each member needs at least 1 share' }],
+    issues: [{ message: 'Give at least one person a share.' }],
   });
   expect(cell('web-recurring', 'shares-all-blank').result).toMatchObject({
-    issues: [{ message: 'Total split weight must be positive' }],
+    issues: [{ message: 'Give at least one person a share.' }],
   });
   expect(cell('server-complete', 'shares-all-blank').result).toMatchObject({
     issues: [{ message: 'Total split weight must be positive' }],
   });
   expect(cell('android-new', 'shares-all-blank').shown).toMatchObject({
     split: { status: { message: 'Give at least one person a share.' } },
-    corrections: { split: 'Total split weight must be positive' },
+    corrections: { split: 'Give at least one person a share.' },
   });
 });
 it('shows the separate single-payer field and the zero-payer conflict comparison (#1111)', () => {

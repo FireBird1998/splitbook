@@ -413,10 +413,10 @@
   "shares-all-blank": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Each member needs at least 1 share" }]
+      "issues": [{ "field": "", "message": "Give at least one person a share." }]
     },
     "shown": {
-      "preview": { "money": null, "error": "Each member needs at least 1 share" },
+      "preview": { "money": null, "error": "Give at least one person a share." },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },
@@ -481,10 +481,10 @@
   "shares-all-zero": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Each member needs at least 1 share" }]
+      "issues": [{ "field": "", "message": "Give at least one person a share." }]
     },
     "shown": {
-      "preview": { "money": null, "error": "Each member needs at least 1 share" },
+      "preview": { "money": null, "error": "Give at least one person a share." },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },
@@ -498,10 +498,10 @@
   "shares-fractional": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Amount supports at most 0 decimal places" }]
+      "issues": [{ "field": "", "message": "Use a whole number of shares." }]
     },
     "shown": {
-      "preview": { "money": null, "error": "Amount supports at most 0 decimal places" },
+      "preview": { "money": null, "error": "Use a whole number of shares." },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },
@@ -651,12 +651,9 @@
     }
   },
   "lone-listed-payer-blank": {
-    "result": {
-      "kind": "refusal",
-      "issues": [{ "field": "", "message": "At least one payer and participant are required" }]
-    },
+    "result": { "kind": "refusal", "issues": [{ "field": "", "message": "Choose who paid." }] },
     "shown": {
-      "preview": { "money": null, "error": "At least one payer and participant are required" },
+      "preview": { "money": null, "error": "Choose who paid." },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },
@@ -806,10 +803,10 @@
   "unreadable-amount": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+      "issues": [{ "field": "", "message": "Use digits and one decimal point, such as 250.50." }]
     },
     "shown": {
-      "preview": { "money": null, "error": "Enter a valid decimal amount" },
+      "preview": { "money": null, "error": "Use digits and one decimal point, such as 250.50." },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },
@@ -823,10 +820,10 @@
   "unreadable-payer": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+      "issues": [{ "field": "", "message": "Use digits and one decimal point, such as 250.50." }]
     },
     "shown": {
-      "preview": { "money": null, "error": "Enter a valid decimal amount" },
+      "preview": { "money": null, "error": "Use digits and one decimal point, such as 250.50." },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },
@@ -840,10 +837,10 @@
   "unreadable-split-amount": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+      "issues": [{ "field": "", "message": "Use digits and one decimal point, such as 250.50." }]
     },
     "shown": {
-      "preview": { "money": null, "error": "Enter a valid decimal amount" },
+      "preview": { "money": null, "error": "Use digits and one decimal point, such as 250.50." },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },
@@ -857,10 +854,10 @@
   "unreadable-percentage": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+      "issues": [{ "field": "", "message": "Use digits and one decimal point, such as 33.5." }]
     },
     "shown": {
-      "preview": { "money": null, "error": "Enter a valid decimal amount" },
+      "preview": { "money": null, "error": "Use digits and one decimal point, such as 33.5." },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },
@@ -874,10 +871,10 @@
   "unreadable-share": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "Enter a valid decimal amount" }]
+      "issues": [{ "field": "", "message": "Use a whole number of shares." }]
     },
     "shown": {
-      "preview": { "money": null, "error": "Enter a valid decimal amount" },
+      "preview": { "money": null, "error": "Use a whole number of shares." },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },
@@ -935,10 +932,10 @@
   "no-participants": {
     "result": {
       "kind": "refusal",
-      "issues": [{ "field": "", "message": "At least one payer and participant are required" }]
+      "issues": [{ "field": "", "message": "Choose at least one person to share this Expense." }]
     },
     "shown": {
-      "preview": { "money": null, "error": "At least one payer and participant are required" },
+      "preview": { "money": null, "error": "Choose at least one person to share this Expense." },
       "perPerson": [
         { "user": "a00000000000000000000001", "amount": "—" },
         { "user": "a00000000000000000000002", "amount": "—" },

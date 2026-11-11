@@ -53,24 +53,19 @@ export type ExpenseEntryPurpose = { kind: 'new' } | { kind: 'edit'; saved: Store
 export interface ExpenseEntryPolicy {
   splitPreview: 'whole-expense' | 'independent-split';
   roundingNote: 'show' | 'hide';
-  /** A form summary prioritizes the empty whole-share count; entry corrections mark each box. */
-  feedback: 'form-summary' | 'allocation-summary' | 'entry-corrections';
 }
 export const expenseEntryPolicy: ExpenseEntryPolicy = {
   splitPreview: 'independent-split',
   roundingNote: 'show',
-  feedback: 'entry-corrections',
 };
 export const formSummaryPolicy: ExpenseEntryPolicy = {
   splitPreview: 'whole-expense',
   roundingNote: 'hide',
-  feedback: 'form-summary',
 };
 
 /** The recurring form reports the allocator's refusal without the whole-share guard. */
 export const recurringEntryPolicy: ExpenseEntryPolicy = {
   ...formSummaryPolicy,
-  feedback: 'allocation-summary',
 };
 
 /** One entry supplies both the displayed split and the command; callers cannot supply an allocator. */
@@ -86,28 +81,12 @@ export function readExpenseEntry(
     try {
       const splitMethod = entry.splitMethod;
       if (!splitMethod) throw new Error('Choose how this Expense is split.');
-      // The complete-form guard counts whole share parts before allocating (#1111).
-      if (
-        policy.feedback === 'form-summary' &&
-        entry.splitMethod === 'shares' &&
-        entry.participantIds.reduce(
-          (sum, id) => sum + (parseInt(entry.splitValues[id]) || 0),
-          0,
-        ) === 0
-      )
-        throw new Error('Each member needs at least 1 share');
-      // The allocation summary reads the total before the individual boxes; its refusal
-      // priority is kept even when a split box also contains an unreadable amount (#1114).
-      const total =
-        policy.feedback === 'allocation-summary'
-          ? toMajorAmount(parseAmountMinor(entry.amount, entry.currency), entry.currency)
-          : entry.amount;
       const weight = (user: string, digits: number) => {
         const text = entry.splitValues[user] || '0';
         return parseDecimalUnits(text, digits) / (digits === 2 ? 100 : 1);
       };
       const input = {
-        amount: total,
+        amount: entry.amount,
         currency: entry.currency,
         paidBy: multiPayer ? countedPayers : [{ user: singlePayer, amount: entry.amount }],
         splitMethod,
@@ -129,7 +108,7 @@ export function readExpenseEntry(
       return decideExpenseMoneyEdit(purpose.saved, kept ?? input).money;
     } catch (error) {
       // Part of a yen paid or shared: the amount field's words, as on the web (#755).
-      throw policy.feedback === 'allocation-summary' ? error : inAmountWords(error, entry.currency);
+      throw inAmountWords(error, entry.currency);
     }
   };
   const { problems, status, ...breakdown } = splitBreakdown(
@@ -202,22 +181,25 @@ export function readExpenseEntry(
         }).financialEdit,
     };
   } catch (cause) {
+    const original = inAmountWords(cause, entry.currency);
+    const fallback = allocationProblem(entry, original, payers);
+    const payerError = entry.multiPayer ? Object.values(payerErrors)[0] : undefined;
+    const splitError = Object.values(errors)[0];
+    const problem = amount.error
+      ? { field: 'amount' as const, message: amount.error }
+      : fallback.field === 'payers'
+        ? { ...fallback, message: payerError ?? fallback.message }
+        : splitError
+          ? { field: 'split' as const, message: splitError }
+          : splitStatus.kind === 'problem'
+            ? { field: 'split' as const, message: splitStatus.message }
+            : fallback;
+    // The client correction and the box use one sentence; money codes still identify the rule.
     const error =
-      policy.feedback === 'allocation-summary' ? cause : inAmountWords(cause, entry.currency);
-    result = {
-      kind: 'refused' as const,
-      error,
-      problems: [
-        policy.feedback !== 'entry-corrections'
-          ? {
-              field: 'form' as const,
-              message: error instanceof Error ? error.message : 'Invalid allocation',
-            }
-          : amount.error
-            ? { field: 'amount' as const, message: amount.error }
-            : allocationProblem(entry, error, payers),
-      ],
-    };
+      original instanceof MoneyValidationError
+        ? new MoneyValidationError(original.code, problem.message, original.field)
+        : original;
+    result = { kind: 'refused' as const, error, problems: [problem] };
   }
   if (policy.splitPreview === 'whole-expense') {
     split.shares =

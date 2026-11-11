@@ -347,3 +347,17 @@ it.each(['unreadable-share', 'unreadable-percentage', 'shares-fractional'])(
     });
   },
 );
+
+it('uses the shared no-shares correction for recurring Save (#1117 decision 6)', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  expect((await read(entries.find((row) => row.id === 'shares-all-zero')!, false)).result).toEqual({
+    kind: 'refusal',
+    issues: [{ field: '', message: 'Give at least one person a share.' }],
+  });
+});

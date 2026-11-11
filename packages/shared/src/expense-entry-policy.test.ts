@@ -17,12 +17,12 @@ it('keeps complete-form refusals and numeric weights while withholding partial a
   const fractional = entries.find((entry) => entry.id === 'shares-fractional')!;
   expect(readExpenseEntry(fractional, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
     kind: 'refused',
-    error: { message: 'Amount supports at most 0 decimal places' },
+    error: { message: 'Use a whole number of shares.' },
   });
   const blank = entries.find((entry) => entry.id === 'shares-all-blank')!;
   expect(readExpenseEntry(blank, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
     kind: 'refused',
-    problems: [{ field: 'form', message: 'Each member needs at least 1 share' }],
+    problems: [{ field: 'split', message: 'Give at least one person a share.' }],
   });
   const partial = entries.find((entry) => entry.id === 'amounts-not-total')!;
   expect(readExpenseEntry(partial, { kind: 'new' }, formSummaryPolicy).split.shares).toEqual({});
@@ -101,23 +101,29 @@ it.each([
 });
 
 it.each([
-  ['shares-all-blank', 'Each member needs at least 1 share'],
-  ['shares-all-zero', 'Each member needs at least 1 share'],
-  ['shares-fractional', 'Amount supports at most 0 decimal places'],
-  ['lone-listed-payer-blank', 'At least one payer and participant are required'],
-  ['amounts-not-total', 'Split amounts must add up to the expense amount'],
-  ['percentage-not-total', 'Percentages must add up to 100'],
-  ['unreadable-amount', 'Enter a valid decimal amount'],
-  ['unreadable-payer', 'Enter a valid decimal amount'],
-  ['unreadable-split-amount', 'Enter a valid decimal amount'],
-  ['unreadable-percentage', 'Enter a valid decimal amount'],
-  ['unreadable-share', 'Enter a valid decimal amount'],
-  ['no-participants', 'At least one payer and participant are required'],
-])('keeps the complete-form refusal for %s', (id, message) => {
-  expect(
-    readExpenseEntry(entries.find((entry) => entry.id === id)!, { kind: 'new' }, formSummaryPolicy)
-      .result,
-  ).toMatchObject({ kind: 'refused', problems: [{ field: 'form', message }] });
+  ['shares-all-blank', 'Give at least one person a share.', 'split'],
+  ['shares-all-zero', 'Give at least one person a share.', 'split'],
+  ['shares-fractional', 'Use a whole number of shares.', 'split'],
+  ['lone-listed-payer-blank', 'Choose who paid.', 'payers'],
+  ['amounts-not-total', 'Split amounts must add up to the expense amount', 'split'],
+  ['percentage-not-total', 'Percentages must add up to 100', 'split'],
+  ['unreadable-amount', 'Use digits and one decimal point, such as 250.50.', 'amount'],
+  ['unreadable-payer', 'Use digits and one decimal point, such as 250.50.', 'payers'],
+  ['unreadable-split-amount', 'Use digits and one decimal point, such as 250.50.', 'split'],
+  ['unreadable-percentage', 'Use digits and one decimal point, such as 33.5.', 'split'],
+  ['unreadable-share', 'Use a whole number of shares.', 'split'],
+  ['no-participants', 'Choose at least one person to share this Expense.', 'split'],
+])('explains %s with the shared client correction', (id, message, field) => {
+  const reading = readExpenseEntry(
+    entries.find((row) => row.id === id)!,
+    { kind: 'new' },
+    formSummaryPolicy,
+  );
+  expect(reading.result).toMatchObject({
+    kind: 'refused',
+    error: { message },
+    problems: [{ field, message }],
+  });
 });
 
 it('keeps an empty unknown-currency preview as a refusal instead of throwing', async () => {
@@ -165,4 +171,13 @@ it.each(['payers-zero', 'payers-partly-blank'])(
 it('does not show a whole-share total by truncating a fractional box (#1117 decision 5)', () => {
   const entry = entries.find((row) => row.id === 'shares-fractional')!;
   expect(readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy).fields.sharesTotal).toBeNaN();
+});
+
+it('uses the Split sheet’s no-shares correction for the complete form (#1117 decision 6)', () => {
+  const row = entries.find((row) => row.id === 'shares-all-blank')!;
+  expect(readExpenseEntry(row, { kind: 'new' }, formSummaryPolicy).result).toMatchObject({
+    kind: 'refused',
+    problems: [{ field: 'split', message: 'Give at least one person a share.' }],
+    error: { message: 'Give at least one person a share.' },
+  });
 });
