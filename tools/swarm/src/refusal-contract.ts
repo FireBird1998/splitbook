@@ -1,4 +1,5 @@
 import ts from 'typescript';
+import { bindSources, sourceTokens as tokens } from './source-program.ts';
 
 export interface RefusalSource {
   path: string;
@@ -25,18 +26,6 @@ export function isProductionRefusalSource(path: string): boolean {
     !/\.d\.ts$|\.(test|spec)\.[cm]?[jt]sx?$/.test(path) &&
     !/(^|\/)(test-utils|__tests__|__fixtures__|fixtures|__mocks__)(\/|$)/.test(path)
   );
-}
-function walk(node: ts.Node, visit: (node: ts.Node) => void) {
-  visit(node);
-  node.forEachChild((child) => walk(child, visit));
-}
-function tokens(text: string) {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, text);
-  let result = '';
-  for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
-    result += scanner.getTokenText();
-  }
-  return result;
 }
 function guard(node: ts.Node): string {
   for (let parent = node.parent; parent; parent = parent.parent) {
@@ -82,42 +71,9 @@ export function checkRefusalSources(
   inputs: readonly RefusalSource[],
   allowed: readonly AllowedRefusalSite[] = [],
 ): RefusalFinding[] {
-  const sources = new Map(
-    inputs
-      .filter((file) => isProductionRefusalSource(file.path))
-      .map((file) => {
-        const name = '/' + file.path.replaceAll('\\', '/');
-        return [
-          name,
-          ts.createSourceFile(name, file.source, ts.ScriptTarget.Latest, true),
-        ] as const;
-      }),
+  const { sources, checker, nodes, symbol, options, host } = bindSources(
+    inputs.filter((file) => isProductionRefusalSource(file.path)),
   );
-  const options: ts.CompilerOptions = {
-    noLib: true,
-    allowJs: true,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    baseUrl: '/',
-    paths: { '@/*': ['apps/web/src/*'], '@splitbook/shared/*': ['packages/shared/src/*'] },
-  };
-  const host = ts.createCompilerHost(options);
-  host.getCurrentDirectory = () => '/';
-  host.getSourceFile = (path) => sources.get(path);
-  host.fileExists = (path) => sources.has(path);
-  host.readFile = (path) => sources.get(path)?.text;
-  host.directoryExists = (path) =>
-    [...sources.keys()].some((name) => name.startsWith(path.replace(/\/$/, '') + '/'));
-  const program = ts.createProgram([...sources.keys()], options, host);
-  const checker = program.getTypeChecker();
-  const nodes: ts.Node[] = [];
-  for (const source of sources.values()) walk(source, (node) => nodes.push(node));
-  function symbol(node: ts.Node): ts.Symbol | undefined {
-    const found = checker.getSymbolAtLocation(
-      ts.isPropertyAccessExpression(node) ? node.name : node,
-    );
-    return found && found.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(found) : found;
-  }
   function callable(node: ts.Node, seen = new Set<ts.Symbol>()): Callable | undefined {
     node = expression(node);
     if (isCallable(node)) return node;

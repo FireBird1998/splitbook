@@ -2,7 +2,7 @@
  * The gate: every check a ticket needs, run in this worktree, with one verdict.
  *
  * 1. the install check, so a stale install never shows up as failing tests;
- * 2. lint, typecheck, format and the refusal contract (the root scripts CI runs);
+ * 2. lint, typecheck, format and the source contracts (the root scripts CI runs);
  * 3. unit tests, never the web integration tests, with vitest workers capped;
  * 4. the ceiling comparison with the base commit, through #206's script;
  * 5. every `verify:*` script, one after another, against a backend the gate starts for its run.
@@ -56,6 +56,7 @@ const timeouts = {
   typecheck: '15 minutes',
   format: '5 minutes',
   refusals: '2 minutes',
+  recordings: '2 minutes',
   unit: '20 minutes',
   ceilings: '5 minutes',
   verifier: '10 minutes',
@@ -296,6 +297,7 @@ const gateUnlocked = (
             'typecheck',
             'format check',
             'refusal contract',
+            'ledger recording contract',
             'unit tests',
             'ceilings',
             'backend',
@@ -312,6 +314,11 @@ const gateUnlocked = (
         name: 'refusal contract',
         args: ['check:refusals'],
         timeout: timeouts.refusals,
+      });
+      yield* runCommand({
+        name: 'ledger recording contract',
+        args: ['check:recordings'],
+        timeout: timeouts.recordings,
       });
       // `pnpm test:unit` package by package, so the cap is the gate's total.
       yield* runCommand({

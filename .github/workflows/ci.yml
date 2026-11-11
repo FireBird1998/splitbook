@@ -167,6 +167,10 @@ jobs:
         working-directory: .
         run: pnpm check:refusals
 
+      - name: Ledger recording contract
+        working-directory: .
+        run: pnpm check:recordings
+
       - name: Adopted design-system style policy
         run: pnpm check:design-system
 
@@ -454,6 +458,10 @@ jobs:
       - name: Refusal contract
         if: steps.changes.outputs.docs_only != 'true'
         run: pnpm check:refusals
+
+      - name: Ledger recording contract
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm check:recordings
 
       - name: Adopted design-system style policy
         if: steps.changes.outputs.docs_only != 'true'
