@@ -28,7 +28,7 @@ it('Finish later shows the amount refusal without sending or retaining an uncert
     currency: 'INR',
     defaultTag: 'General',
     date: '2026-10-21',
-  }).edit({ amount: '1,84,250' });
+  }).change({ amount: '1,84,250' });
   let state: ReturnType<typeof useKeepExpenseDraft>;
   const onKept = vi.fn();
   function Form() {

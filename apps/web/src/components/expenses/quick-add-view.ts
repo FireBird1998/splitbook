@@ -3,15 +3,17 @@
  * sentence a screen reader hears. Pure, so the component tests and the field agree.
  */
 import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
-import { calculateSplitAmountsMinor, toMajorAmount } from '@splitbook/shared/exact-money';
+import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { unlistedCurrencyFix, type UnlistedCurrencyFix } from '@splitbook/shared/group-currencies';
 import {
   quickAddSplitMembers,
+  quickAddEntry,
   type QuickAddMember,
   type QuickAddProblem,
   type QuickAddProblemCode,
   type QuickAddRead,
 } from '@splitbook/shared/quick-add';
+import { readExpenseEntry, formSummaryPolicy } from '@splitbook/shared/expense-entry';
 import { SEPARATOR } from '@splitbook/shared/separator';
 
 export type QuickAddChipKey = 'description' | 'amount' | 'payer' | 'split' | 'date' | 'tag';
@@ -245,7 +247,7 @@ export function quickAddModel({
   } else if (!tag) {
     message = { text: TAG_NEEDED, tone: 'needed' };
   } else {
-    const position = positionSentence(read.amountMinor!, selected, payerId!);
+    const position = positionSentence(selected, payerId!);
     const suggestion =
       tag.how === 'suggested'
         ? ` ${tag.name} is a suggestion: adding accepts it, or pick another Tag.`
@@ -261,13 +263,16 @@ export function quickAddModel({
     message = { text: `${lead}${suggestion}`, tone: 'hint' };
   }
 
-  function positionSentence(totalMinor: number, sharing: string[], paidBy: string): string {
+  function positionSentence(sharing: string[], paidBy: string): string {
+    const entry = quickAddEntry(
+      read,
+      { payerId: paidBy, tagId: tag?.id ?? '' },
+      { currency, viewerId, members },
+    );
+    const { result } = readExpenseEntry(entry, { kind: 'new' }, formSummaryPolicy);
+    if (result.kind === 'refused') throw result.error;
     const shares = new Map(
-      calculateSplitAmountsMinor(
-        'equal',
-        totalMinor,
-        sharing.map((user) => ({ user })),
-      ).map((row) => [row.user, row.amountMinor]),
+      result.money.splitBetween.map((row) => [String(row.user), row.amountMinor]),
     );
     if (paidBy === viewerId) {
       const others = sharing.filter((id) => id !== viewerId);

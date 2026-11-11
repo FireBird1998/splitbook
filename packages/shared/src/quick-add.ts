@@ -37,7 +37,7 @@ import {
   toMajorAmount,
 } from './exact-money';
 import { groupCurrencies } from './group-currencies';
-import type { ExpenseDraftValues } from './expense-draft';
+import type { ExpenseEntry } from './expense-entry';
 
 /** The longest description an Expense takes, as the create request counts it. */
 export const QUICK_ADD_DESCRIPTION_MAX = 200;
@@ -1222,11 +1222,11 @@ export interface QuickAddChoices {
  * opens the form with. A refused amount is kept as typed, so the form shows it to correct;
  * the Category stays the form's own default.
  */
-export function quickAddDraftValues(
+export function quickAddEntry(
   read: QuickAddRead,
   choices: QuickAddChoices,
   context: Pick<QuickAddContext, 'currency' | 'viewerId' | 'members'>,
-): Partial<ExpenseDraftValues> {
+): ExpenseEntry {
   const payerId = choices.payerId ?? context.viewerId;
   return {
     description: read.description,
@@ -1236,11 +1236,35 @@ export function quickAddDraftValues(
         ? String(toMajorAmount(read.amountMinor, read.currency ?? context.currency))
         : (read.amountText ?? ''),
     date: read.date,
-    tag: choices.tagId,
+    tagId: choices.tagId,
+    category: 'other',
+    notes: '',
+    payerId,
     splitMethod: 'equal',
-    selectedMembers: quickAddSplitMembers(read, payerId, context.members),
+    participantIds: quickAddSplitMembers(read, payerId, context.members),
     payers: [{ user: payerId, amount: '' }],
-    multiPayerMode: false,
+    multiPayer: false,
+    splitValues: {},
+  };
+}
+
+/** Compatibility for old editor callers; Quick add itself hands the form an ExpenseEntry. */
+export function quickAddDraftValues(
+  read: QuickAddRead,
+  choices: QuickAddChoices,
+  context: Pick<QuickAddContext, 'currency' | 'viewerId' | 'members'>,
+) {
+  const entry = quickAddEntry(read, choices, context);
+  return {
+    description: entry.description,
+    amount: entry.amount,
+    currency: entry.currency,
+    date: entry.date,
+    tag: entry.tagId,
+    splitMethod: entry.splitMethod,
+    payers: entry.payers,
+    multiPayerMode: entry.multiPayer,
+    selectedMembers: entry.participantIds,
     customAmounts: {},
     customPercentages: {},
     customShares: {},

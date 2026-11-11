@@ -11,24 +11,24 @@ const context = {
 };
 
 it('retains editable input and the attempted submission after a lost response', () => {
-  let draft = ExpenseDraft.open(context).edit({ description: 'Lunch', amount: '10' });
+  let draft = ExpenseDraft.open(context).change({ description: 'Lunch', amount: '10' });
   const prepared = draft.prepare(['general-id'], 'first-key');
   expect(prepared.submission).toBeDefined();
   draft = prepared.draft
     .attempt(prepared.submission!)
     .fail(prepared.submission!, 'Connection lost');
-  expect(draft.values.description).toBe('Lunch');
+  expect(draft.entry.description).toBe('Lunch');
   const retry = draft.prepare(['general-id'], 'unused-key');
   expect(retry.submission).toMatchObject({
     key: 'first-key',
     checkDuplicate: false,
     body: prepared.submission!.body,
   });
-  expect(retry.draft.values.amount).toBe('10');
+  expect(retry.draft.entry.amount).toBe('10');
 });
 
 it('keeps invalid fields and cancelled duplicate warnings editable', () => {
-  let draft = ExpenseDraft.open(context).edit({
+  let draft = ExpenseDraft.open(context).change({
     description: 'Lunch',
     amount: '10.001',
     notes: 'Keep this',
@@ -36,20 +36,20 @@ it('keeps invalid fields and cancelled duplicate warnings editable', () => {
   const invalid = draft.prepare(['general-id'], 'invalid');
   expect(invalid.submission).toBeUndefined();
   expect(invalid.draft.error).toMatch(/decimal places/);
-  expect(invalid.draft.values).toMatchObject({ amount: '10.001', notes: 'Keep this' });
-  draft = invalid.draft.edit({ amount: '10' });
+  expect(invalid.draft.entry).toMatchObject({ amount: '10.001', notes: 'Keep this' });
+  draft = invalid.draft.change({ amount: '10' });
   const prepared = draft.prepare(['general-id'], 'cancelled');
   draft = prepared.draft.cancel(prepared.submission!);
   expect(draft.loading).toBe(false);
-  expect(draft.values).toMatchObject({ amount: '10', notes: 'Keep this' });
+  expect(draft.entry).toMatchObject({ amount: '10', notes: 'Keep this' });
   expect(draft.prepare(['general-id'], 'next').submission?.checkDuplicate).toBe(true);
 });
 
 it('uses a new explicit action for changed content and keeps attempted payload separate from fields', () => {
   const first = ExpenseDraft.open(context)
-    .edit({ description: 'Lunch', amount: '10' })
+    .change({ description: 'Lunch', amount: '10' })
     .prepare(['general-id'], 'first');
-  const edited = first.draft.attempt(first.submission!).edit({ description: 'Dinner' });
+  const edited = first.draft.attempt(first.submission!).change({ description: 'Dinner' });
   expect(JSON.parse(first.submission!.body).description).toBe('Lunch');
   const failed = edited.fail(first.submission!, 'Lost');
   const next = failed.prepare(['general-id'], 'second');
@@ -59,7 +59,7 @@ it('uses a new explicit action for changed content and keeps attempted payload s
 
 it('completes once and ignores old request outcomes', () => {
   const prepared = ExpenseDraft.open(context)
-    .edit({ description: 'Lunch', amount: '10' })
+    .change({ description: 'Lunch', amount: '10' })
     .prepare(['general-id'], 'first');
   const complete = prepared.draft.attempt(prepared.submission!).complete(prepared.submission!);
   expect(complete.completed).toBe(true);
@@ -87,7 +87,7 @@ const saved = {
 
 it('retains the saved revision and historical preview until explicit successful reload', () => {
   const source = { ...saved };
-  let draft = ExpenseDraft.open(context, source).edit({ description: 'My correction' });
+  let draft = ExpenseDraft.open(context, source).change({ description: 'My correction' });
   source.revision = 4;
   source.description = 'Background read';
   expect(draft.base?.revision).toBe(3);
@@ -99,17 +99,17 @@ it('retains the saved revision and historical preview until explicit successful 
     .fail(prepared.submission!, 'Newer edit won', 409);
   expect(draft.conflict).toBe(true);
   draft = draft.reloadFailed('Could not reload');
-  expect(draft.values.description).toBe('My correction');
+  expect(draft.entry.description).toBe('My correction');
   expect(draft.base?.revision).toBe(3);
   expect(draft.conflict).toBe(true);
   const reloaded = draft.reload(source);
-  expect(reloaded.values.description).toBe('Background read');
+  expect(reloaded.entry.description).toBe('Background read');
   expect(reloaded.base?.revision).toBe(4);
   expect(reloaded.conflict).toBe(false);
 });
 
 it('keeps a stable Tag identity and initializes independent account, Group and Expense contexts', () => {
-  const entered = ExpenseDraft.open(context, saved).edit({ notes: 'Private draft' });
+  const entered = ExpenseDraft.open(context, saved).change({ notes: 'Private draft' });
   expect(JSON.parse(entered.prepare(['general-id'], 'edit').submission!.body).tagId).toBe(
     'general-id',
   );
@@ -118,17 +118,17 @@ it('keeps a stable Tag identity and initializes independent account, Group and E
     { ...context, accountId: 'bob' },
   ]) {
     const other = ExpenseDraft.open(nextContext);
-    expect(other.values.notes).toBe('');
+    expect(other.entry.notes).toBe('');
     expect(other.base).toBeNull();
-    expect(other.values.payers[0].user).toBe(nextContext.accountId);
+    expect(other.entry.payers[0].user).toBe(nextContext.accountId);
   }
   const otherExpense = ExpenseDraft.open(context, {
     ...saved,
     _id: 'other',
     description: 'Other expense',
   });
-  expect(otherExpense.values.description).toBe('Other expense');
-  expect(otherExpense.values.notes).toBe('');
+  expect(otherExpense.entry.description).toBe('Other expense');
+  expect(otherExpense.entry.notes).toBe('');
   expect(entered.reload({ ...saved, _id: 'other' })).toBe(entered);
 });
 
@@ -138,15 +138,17 @@ it('blocks invalid stored money and preserves the draft on an invalid reload', (
   expect(draft.invalidStoredMoney).toBe(true);
   expect(draft.preview().money).toBeNull();
   expect(draft.prepare(['general-id'], 'invalid').submission).toBeUndefined();
-  const entered = ExpenseDraft.open(context, saved).edit({ notes: 'Keep my work' }).reload(invalid);
-  expect(entered.values.notes).toBe('Keep my work');
+  const entered = ExpenseDraft.open(context, saved)
+    .change({ notes: 'Keep my work' })
+    .reload(invalid);
+  expect(entered.entry.notes).toBe('Keep my work');
   expect(entered.base?.revision).toBe(3);
   expect(entered.error).toMatch(/invalid stored amounts/);
 });
 
 it('requires entered shares before submitting the Shares method', () => {
   const draft = ExpenseDraft.open(context)
-    .edit({ description: 'Lunch', amount: '10' })
+    .change({ description: 'Lunch', amount: '10' })
     .chooseSplitMethod('shares');
   const prepared = draft.prepare(['general-id'], 'shares');
   expect(prepared.submission).toBeUndefined();
@@ -179,7 +181,7 @@ it('says why an Expense in a currency Splitbook no longer supports can’t be ed
 it('keeps invalid stored currency out of editable money controls', () => {
   const draft = ExpenseDraft.open(context, { ...saved, currency: 'invalid' });
   expect(draft.invalidStoredMoney).toBe(true);
-  expect(draft.values.currency).toBe('USD');
+  expect(draft.entry.currency).toBe('USD');
 });
 
 describe('a duplicate of a saved Expense (#311)', () => {
@@ -200,18 +202,18 @@ describe('a duplicate of a saved Expense (#311)', () => {
   it('is a new Expense with the saved one’s entries, dated today', () => {
     const copy = ExpenseDraft.duplicate(today, shares, ['general-id']);
     expect(copy.base).toBeNull();
-    expect(copy.values).toMatchObject({
+    expect(copy.entry).toMatchObject({
       description: 'Historical lunch',
       amount: '30',
       category: 'food',
       notes: 'Same again',
-      tag: 'general-id',
+      tagId: 'general-id',
       date: '2026-10-07',
       splitMethod: 'shares',
-      selectedMembers: ['alice', 'bob'],
+      participantIds: ['alice', 'bob'],
       payers: [{ user: 'bob', amount: '30' }],
-      multiPayerMode: false,
-      customShares: { alice: '1', bob: '2' },
+      multiPayer: false,
+      splitValues: { alice: '1', bob: '2' },
     });
   });
 
@@ -249,14 +251,14 @@ describe('a duplicate of a saved Expense (#311)', () => {
       ],
     };
     const copy = ExpenseDraft.duplicate(today, left, ['general-id']);
-    expect(copy.values.selectedMembers).toEqual(['alice']);
-    expect(copy.values.payers).toEqual([{ user: 'alice', amount: '' }]);
-    expect(copy.values.customShares).toEqual({ alice: '1' });
+    expect(copy.entry.participantIds).toEqual(['alice']);
+    expect(copy.entry.payers).toEqual([{ user: 'alice', amount: '' }]);
+    expect(copy.entry.splitValues).toEqual({ alice: '1' });
   });
 
   it('falls back to the default Tag when the saved one isn’t active', () => {
     const copy = ExpenseDraft.duplicate({ ...today, defaultTag: 'home-id' }, shares, ['home-id']);
-    expect(copy.values.tag).toBe('home-id');
+    expect(copy.entry.tagId).toBe('home-id');
   });
 
   it('keeps an extra currency’s amount and currency when the Group lists it (#719)', () => {
@@ -264,11 +266,11 @@ describe('a duplicate of a saved Expense (#311)', () => {
     const copy = ExpenseDraft.duplicate({ ...today, currencies: ['USD', 'INR'] }, inRupees, [
       'general-id',
     ]);
-    expect(copy.values).toMatchObject({
+    expect(copy.entry).toMatchObject({
       amount: '30',
       currency: 'INR',
       payers: [{ user: 'bob', amount: '30' }],
-      customShares: { alice: '1', bob: '2' },
+      splitValues: { alice: '1', bob: '2' },
     });
   });
 
@@ -280,7 +282,7 @@ describe('a duplicate of a saved Expense (#311)', () => {
       const copy = ExpenseDraft.duplicate(today, unreadable, ['general-id']);
       expect(copy.invalidStoredMoney).toBe(false);
       expect(copy.error).toBe('');
-      expect(copy.values).toMatchObject({
+      expect(copy.entry).toMatchObject({
         description: 'Historical lunch',
         amount: '',
         currency: 'USD',
@@ -294,10 +296,10 @@ describe('a duplicate of a saved Expense (#311)', () => {
 // #755 item 2: the web's form, as Android's, refused a payer's part of a yen with the raw
 // "Amount supports at most 0 decimal places"; the amount field says it in the member's words.
 it('refuses part of a yen paid by a payer in the amount field’s words (#755)', () => {
-  const yen = ExpenseDraft.open({ ...context, currency: 'JPY' }).edit({
+  const yen = ExpenseDraft.open({ ...context, currency: 'JPY' }).change({
     description: 'Ramen',
     amount: '2500',
-    multiPayerMode: true,
+    multiPayer: true,
     payers: [
       { user: 'alice', amount: '1250.5' },
       { user: 'bob', amount: '1249.5' },
@@ -313,10 +315,10 @@ it('refuses part of a yen paid by a payer in the amount field’s words (#755)',
 // The Tester found the rewording unpinned: only part of a unit gets the whole-unit words, so a yen
 // Expense whose payers miss its amount keeps the payer-total refusal (#755).
 it('keeps the payer-total refusal for yen, never the whole-unit words (#755)', () => {
-  const yen = ExpenseDraft.open({ ...context, currency: 'JPY' }).edit({
+  const yen = ExpenseDraft.open({ ...context, currency: 'JPY' }).change({
     description: 'Ramen',
     amount: '2500',
-    multiPayerMode: true,
+    multiPayer: true,
     payers: [
       { user: 'alice', amount: '1250' },
       { user: 'bob', amount: '1249' },

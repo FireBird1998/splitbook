@@ -3,6 +3,8 @@ import {
   normalizeExpenseMoney,
   parseAmountMinor,
   parseDecimalUnits,
+  sumMinorAmounts,
+  toMajorAmount,
 } from './exact-money';
 import {
   enteredPayers,
@@ -19,7 +21,7 @@ import {
   type SplitProblem,
   type SplitLeftover,
 } from './expense-split';
-import { amountExample, amountError, inAmountWords } from './amount-entry';
+import { amountExample, amountError, inAmountWords, readAmountEntry } from './amount-entry';
 import { getCurrencyPrecision } from './currency';
 import {
   decideExpenseMoneyEdit,
@@ -32,7 +34,7 @@ import type { ExpenseSplitMethod } from './split-calculation';
  * What a member has typed for an Expense, before it is read. The device stores these fields
  * unchanged (version 1): one active split-value map and the entries for both payer modes.
  */
-export interface ExpenseEntry {
+export interface ExpenseEntry<Method extends ExpenseSplitMethod | '' = ExpenseSplitMethod> {
   amount: string;
   currency: string;
   description: string;
@@ -40,7 +42,7 @@ export interface ExpenseEntry {
   payerId: string;
   multiPayer: boolean;
   payers: { user: string; amount: string }[];
-  splitMethod: ExpenseSplitMethod;
+  splitMethod: Method;
   splitValues: Record<string, string>;
   participantIds: string[];
   tagId: string;
@@ -48,42 +50,138 @@ export interface ExpenseEntry {
   notes: string;
 }
 
+/** To review can ask for a split method that was not given. */
+export type IncompleteExpenseEntry = ExpenseEntry<ExpenseSplitMethod | ''>;
+
 export type ExpenseEntryPurpose = { kind: 'new' } | { kind: 'edit'; saved: StoredExpenseMoney };
 
+export interface ExpenseEntryPolicy {
+  blankShare: 'one' | 'zero';
+  blankSplitAmount: 'zero' | 'refuse';
+  payerRows: 'all' | 'nonzero';
+  savedZeroPayers: 'keep' | 'unchanged';
+  singlePayer: 'first-row' | 'field';
+  splitPreview: 'whole-expense' | 'independent-split';
+  roundingNote: 'show' | 'hide';
+  weightInput: 'numbers' | 'numbers-or-zero' | 'decimal-units';
+  /** A form summary prioritizes the empty whole-share count; entry corrections mark each box. */
+  feedback: 'form-summary' | 'allocation-summary' | 'entry-corrections';
+}
+export const expenseEntryPolicy: ExpenseEntryPolicy = {
+  blankShare: 'zero',
+  blankSplitAmount: 'zero',
+  payerRows: 'nonzero',
+  savedZeroPayers: 'unchanged',
+  singlePayer: 'field',
+  splitPreview: 'independent-split',
+  roundingNote: 'show',
+  weightInput: 'decimal-units',
+  feedback: 'entry-corrections',
+};
+export const formSummaryPolicy: ExpenseEntryPolicy = {
+  blankShare: 'one',
+  blankSplitAmount: 'zero',
+  payerRows: 'all',
+  savedZeroPayers: 'keep',
+  singlePayer: 'first-row',
+  splitPreview: 'whole-expense',
+  roundingNote: 'hide',
+  weightInput: 'numbers',
+  feedback: 'form-summary',
+};
+
+/** The recurring form reports the allocator's refusal without the whole-share guard. */
+export const recurringEntryPolicy: ExpenseEntryPolicy = {
+  ...formSummaryPolicy,
+  blankShare: 'zero',
+  blankSplitAmount: 'refuse',
+  singlePayer: 'field',
+  feedback: 'allocation-summary',
+  weightInput: 'numbers-or-zero',
+};
+
 /** One entry supplies both the displayed split and the command; callers cannot supply an allocator. */
-export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpose) {
-  const countedPayers = enteredPayers(entry.payers);
-  const payerIds = entry.multiPayer ? countedPayers.map((payer) => payer.user) : [entry.payerId];
+export function readExpenseEntry(
+  entry: IncompleteExpenseEntry,
+  purpose: ExpenseEntryPurpose,
+  policy: ExpenseEntryPolicy = expenseEntryPolicy,
+) {
+  const countedPayers = policy.payerRows === 'all' ? entry.payers : enteredPayers(entry.payers);
+  const singlePayer =
+    policy.singlePayer === 'first-row' ? (entry.payers[0]?.user ?? '') : entry.payerId;
+  const payerIds = entry.multiPayer ? countedPayers.map((payer) => payer.user) : [singlePayer];
   const allocate = (multiPayer: boolean) => {
     try {
+      const splitMethod = entry.splitMethod;
+      if (!splitMethod) throw new Error('Choose how this Expense is split.');
+      // The complete-form guard counts whole share parts before allocating (#1111).
+      if (
+        policy.feedback === 'form-summary' &&
+        entry.splitMethod === 'shares' &&
+        entry.participantIds.reduce(
+          (sum, id) => sum + (parseInt(entry.splitValues[id]) || 0),
+          0,
+        ) === 0
+      )
+        throw new Error('Each member needs at least 1 share');
+      // The allocation summary reads the total before the individual boxes; its refusal
+      // priority is kept even when a split box also contains an unreadable amount (#1114).
+      const total =
+        policy.feedback === 'allocation-summary'
+          ? toMajorAmount(parseAmountMinor(entry.amount, entry.currency), entry.currency)
+          : entry.amount;
+      const weight = (user: string, digits: number) => {
+        const text =
+          entry.splitValues[user] || (digits === 0 && policy.blankShare === 'one' ? '1' : '0');
+        return policy.weightInput === 'numbers-or-zero'
+          ? Number(text) || 0
+          : policy.weightInput === 'numbers'
+            ? Number(text)
+            : parseDecimalUnits(text, digits) / (digits === 2 ? 100 : 1);
+      };
       const input = {
-        amount: entry.amount,
+        amount: total,
         currency: entry.currency,
-        paidBy: multiPayer ? countedPayers : [{ user: entry.payerId, amount: entry.amount }],
-        splitMethod: entry.splitMethod,
+        paidBy: multiPayer ? countedPayers : [{ user: singlePayer, amount: entry.amount }],
+        splitMethod,
         splitBetween: entry.participantIds.map((user) => ({
           user,
           ...(entry.splitMethod === 'unequal' || entry.splitMethod === 'exact'
-            ? { amount: entry.splitValues[user] || '0' }
+            ? {
+                amount:
+                  policy.blankSplitAmount === 'refuse'
+                    ? toMajorAmount(
+                        parseAmountMinor(entry.splitValues[user] ?? '', entry.currency),
+                        entry.currency,
+                      )
+                    : entry.splitValues[user] || '0',
+              }
             : entry.splitMethod === 'percentage'
-              ? { percentage: parseDecimalUnits(entry.splitValues[user] || '0', 2) / 100 }
+              ? { percentage: weight(user, 2) }
               : entry.splitMethod === 'shares'
-                ? { shares: parseDecimalUnits(entry.splitValues[user] || '0', 0) }
+                ? { shares: weight(user, 0) }
                 : {}),
         })),
       };
       if (purpose.kind === 'new') return normalizeExpenseMoney(input);
-      const kept = multiPayer ? keepSavedPayers(purpose.saved, input) : null;
+      const kept =
+        multiPayer && policy.savedZeroPayers === 'unchanged'
+          ? keepSavedPayers(purpose.saved, input)
+          : null;
       return decideExpenseMoneyEdit(purpose.saved, kept ?? input).money;
     } catch (error) {
       // Part of a yen paid or shared: the amount field's words, as on the web (#755).
-      throw inAmountWords(error, entry.currency);
+      throw policy.feedback === 'allocation-summary' ? error : inAmountWords(error, entry.currency);
     }
   };
-  const { problems, status, ...breakdown } = splitBreakdown(entry, allocate);
+  const { problems, status, ...breakdown } = splitBreakdown(
+    { ...entry, splitMethod: entry.splitMethod || 'equal' },
+    allocate,
+  );
   const errors: Partial<Record<string, string>> = {};
   for (const [id, problem] of Object.entries(problems))
-    if (problem) errors[id] = entryError(splitChoiceOf(entry.splitMethod), problem, entry.currency);
+    if (problem)
+      errors[id] = entryError(splitChoiceOf(entry.splitMethod || 'equal'), problem, entry.currency);
   const splitStatus:
     | Exclude<SplitBreakdown['status'], { kind: 'problem' }>
     | { kind: 'problem'; message: string } =
@@ -117,23 +215,67 @@ export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpo
     result = {
       kind: 'ready' as const,
       money,
+      // A recurring template stores the chosen weights, not today's allocated row amounts.
+      // Both projections come from this accepted reading; the caller retains its method name.
+      figures: {
+        amount: money.amount,
+        currency: money.currency,
+        paidBy: money.paidBy.map(({ user, amount }) => ({ user, amount })),
+        splitMethod: entry.splitMethod,
+        splitBetween: entry.participantIds.map((user) => {
+          const row = money.splitBetween.find((row) => row.user === user)!;
+          return {
+            user: row.user,
+            ...(entry.splitMethod === 'exact' || entry.splitMethod === 'unequal'
+              ? { amount: row.amount }
+              : entry.splitMethod === 'percentage'
+                ? { percentage: 'percentage' in row ? row.percentage : undefined }
+                : entry.splitMethod === 'shares'
+                  ? { shares: 'shares' in row ? row.shares : undefined }
+                  : {}),
+          };
+        }),
+      },
       financialEdit:
         purpose.kind === 'new' ||
-        decideExpenseMoneyEdit(purpose.saved, { ...money, splitMethod: entry.splitMethod })
-          .financialEdit,
+        decideExpenseMoneyEdit(purpose.saved, {
+          ...money,
+          splitMethod: entry.splitMethod || 'equal',
+        }).financialEdit,
     };
   } catch (cause) {
-    const error = inAmountWords(cause, entry.currency);
+    const error =
+      policy.feedback === 'allocation-summary' ? cause : inAmountWords(cause, entry.currency);
     result = {
       kind: 'refused' as const,
       error,
       problems: [
-        amount.error
-          ? { field: 'amount' as const, message: amount.error }
-          : allocationProblem(entry, error, payers),
+        policy.feedback !== 'entry-corrections'
+          ? {
+              field: 'form' as const,
+              message: error instanceof Error ? error.message : 'Invalid allocation',
+            }
+          : amount.error
+            ? { field: 'amount' as const, message: amount.error }
+            : allocationProblem(entry, error, payers),
       ],
     };
   }
+  if (policy.splitPreview === 'whole-expense') {
+    split.shares =
+      result.kind === 'ready'
+        ? Object.fromEntries(
+            result.money.splitBetween.map((row) => [String(row.user), row.amountMinor]),
+          )
+        : {};
+    if (result.kind === 'refused')
+      split.status = {
+        kind: 'problem',
+        message: result.error instanceof Error ? result.error.message : 'Invalid allocation',
+      };
+  }
+  if (policy.roundingNote === 'hide' && split.status.kind === 'adds-up')
+    split.status = { kind: 'adds-up', leftover: null };
   const splitSummary = {
     participants: entry.participantIds.length,
     shares:
@@ -149,11 +291,12 @@ export function readExpenseEntry(entry: ExpenseEntry, purpose: ExpenseEntryPurpo
       return [id, Number.isFinite(value) ? value : 0];
     }),
   );
-  return { amount, split, splitSummary, shareSteps, payers, result };
+  const fields = enteredTotals(entry);
+  return { amount, split, splitSummary, shareSteps, payers, result, fields };
 }
 
 function allocationProblem(
-  entry: ExpenseEntry,
+  entry: IncompleteExpenseEntry,
   error: unknown,
   payers: { ids: string[]; entries: PayerEntry[] },
 ) {
@@ -248,4 +391,67 @@ export function roundingNote(
   const people =
     names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
   return `The leftover ${money(leftover.amountMinor)} goes to ${people} so the total is exact.`;
+}
+
+/** Totals shown under the boxes: unreadable totals stay a dash, never a rounded amount. */
+function enteredTotals(entry: IncompleteExpenseEntry) {
+  const { amount, currency, splitMethod, participantIds, splitValues } = entry;
+  const sum = (values: string[], digits: number) => {
+    try {
+      return sumMinorAmounts(values.map((value) => parseDecimalUnits(value || '0', digits)));
+    } catch {
+      return Number.NaN;
+    }
+  };
+  const digits = getCurrencyPrecision(currency);
+  const amountMinor = sum([amount], digits);
+  const unequalMinor =
+    splitMethod === 'exact' || splitMethod === 'unequal'
+      ? sum(
+          participantIds.map((id) => splitValues[id]),
+          digits,
+        )
+      : 0;
+  const percentageUnits =
+    splitMethod === 'percentage'
+      ? sum(
+          participantIds.map((id) => splitValues[id]),
+          2,
+        )
+      : 0;
+  const payerMinor = entry.multiPayer
+    ? sum(
+        entry.payers.map((payer) => payer.amount),
+        digits,
+      )
+    : amountMinor;
+  const sharesTotal =
+    splitMethod === 'shares'
+      ? participantIds.reduce((total, id) => total + (parseInt(splitValues[id]) || 0), 0)
+      : 0;
+  const percentageTotal =
+    splitMethod === 'percentage'
+      ? participantIds.reduce((total, id) => total + (parseFloat(splitValues[id]) || 0), 0)
+      : 0;
+  let parsedAmount = 0;
+  try {
+    parsedAmount = toMajorAmount(amountMinor, currency);
+  } catch {
+    /* An unreadable total shows no per-share amount. */
+  }
+  return {
+    amountReading: readAmountEntry(amount, currency),
+    amountMissing: !amount || Number(amount) <= 0,
+    amountMinor,
+    unequalMinor,
+    percentageUnits,
+    payerMinor,
+    splitsBalanced: amountMinor > 0 && unequalMinor === amountMinor,
+    percentagesBalanced: percentageUnits === 10000,
+    payersBalanced: amountMinor > 0 && payerMinor === amountMinor,
+    percentageTotal,
+    sharesTotal,
+    parsedAmount,
+    perShareAmount: sharesTotal > 0 ? parsedAmount / sharesTotal : 0,
+  };
 }

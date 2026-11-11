@@ -33,7 +33,7 @@ import {
   refetchDraftCollection,
   sharedDraftCollection,
 } from './shared-draft-collection';
-import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
+import { draftForExpenseEntry } from '@splitbook/shared/expense-entry-draft';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import { focusManager, onlineManager, QueryClient, QueryObserver } from '@tanstack/query-core';
 import { savedCopyBudget } from './saved-copy-budget';
@@ -8204,31 +8204,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     try {
       const d = editor.draft;
-      const entries: DraftEntries = {
-        description: d.description,
-        amount: d.amount,
-        currency: d.currency,
-        date: d.date,
-        category: d.category,
-        notes: d.notes,
-        tagId: d.tagId,
-        splitMethod: d.splitMethod,
-      };
-      for (const payer of d.multiPayer ? d.payers : [{ user: d.payerId, amount: d.amount }]) {
-        entries[`paidBy.${payer.user}`] = 'yes';
-        entries[`paidBy.${payer.user}.amount`] = payer.amount;
-      }
-      for (const id of d.participantIds) {
-        entries[`splitBetween.${id}`] = 'yes';
-        const field =
-          d.splitMethod === 'percentage'
-            ? 'percentage'
-            : d.splitMethod === 'shares'
-              ? 'shares'
-              : 'amount';
-        if (d.splitMethod !== 'equal')
-          entries[`splitBetween.${id}.${field}`] = d.splitValues[id] ?? '';
-      }
       const client = sharedDrafts(editor.groupId);
       const pending = await client.pending();
       if (pending) {
@@ -8255,7 +8230,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           await toReviewQueries.refresh();
           return;
         }
-      } else await client.create(draftValues(entries), JSON.stringify(d));
+      } else await client.create(draftForExpenseEntry(d), JSON.stringify(d));
       if (!current(uploadOwner) || route !== view) return;
       // The confirmed upload completed this editor; it must not remain a saving task on Group.
       publish({ ...snapshot, expense: emptyExpenseEditor() });

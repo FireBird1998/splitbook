@@ -1,3 +1,4 @@
+import { draftEntryCases } from '@splitbook/shared/test-support/draft-entry-cases';
 import { ReviewRunOverlay } from '../ui/review-run';
 import { TextInput } from 'react-native';
 import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
@@ -34,6 +35,7 @@ import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import {
   entries,
+  alex,
   day,
   groupId,
   tagId,
@@ -285,7 +287,6 @@ async function reviewFeedback(row: TypedEntry, values: ExpenseDraftValues, rejec
     changedBy: { kind: 'member' },
     values,
     missingFields: parsed.success ? [] : missingDraftFields(values, parsed.error.issues),
-    // Local times: the review header's "today 12:00 AM" must not depend on the time zone.
     createdAt: new Date(day + 'T00:00:00').toISOString(),
     updatedAt: new Date(day + 'T00:00:00').toISOString(),
   };
@@ -398,7 +399,7 @@ it('records Android To review changes through its existing form conversion (#111
     let value: ExpenseDraftValues;
     try {
       // A member edits the typed fields of an initially incomplete stored item.
-      value = reviewFormChange({}, row, row.currency);
+      value = reviewFormChange({}, row);
     } catch (error) {
       // Start from another real entry in the one case list, then try the rejected picker change.
       const control = entries.find(
@@ -414,7 +415,7 @@ it('records Android To review changes through its existing form conversion (#111
                   ? 'amounts'
                   : 'equal'),
       )!;
-      const base = reviewFormChange({}, control, row.currency);
+      const base = reviewFormChange({}, control);
       cells[row.id] = {
         result: refusal(error),
         shown: { reviewScreen: await reviewFeedback(row, base, true) },
@@ -431,5 +432,22 @@ it('records Android To review changes through its existing form conversion (#111
   }
   await expect(await recording(cells)).toMatchFileSnapshot(
     '../../../../test/expense-entry-readings/recordings/android-review.json',
+  );
+});
+
+it('records review edits of extra split facts and repeated people (#1115)', async () => {
+  const cells: Record<string, unknown> = {};
+  for (const row of draftEntryCases) {
+    const form = reviewForm(row.values, 'INR');
+    const result = reviewFormChange(
+      row.values,
+      row.change === 'shares'
+        ? { splitValues: { [alex]: '2', [people[1].id]: '1' } }
+        : { notes: 'Checked' },
+    );
+    cells[row.id] = { payers: form.payers, result };
+  }
+  await expect(await recording(cells)).toMatchFileSnapshot(
+    '../../../../test/expense-entry-readings/supplemental/android-review.json',
   );
 });

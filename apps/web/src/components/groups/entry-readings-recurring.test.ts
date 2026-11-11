@@ -48,7 +48,12 @@ const text = (node: ReactTestInstance): string =>
         .replace(/[\t\r\n ]+/g, ' ')
         .trim();
 
-async function read(row: TypedEntry, edit: boolean): Promise<Reading> {
+async function read(
+  row: TypedEntry,
+  edit: boolean,
+  roundTrip = false,
+  changeGroup = false,
+): Promise<Reading> {
   if (row.multiPayer || row.savedZeroPayer)
     return {
       result: {
@@ -81,46 +86,45 @@ async function read(row: TypedEntry, edit: boolean): Promise<Reading> {
     }
     return Response.json({ status: 200, data: edit ? [template] : [] });
   });
-  await act(async () => {
-    renderer = create(
+  const tree = (currency = 'INR', groupPeople = people) =>
+    createElement(
+      SWRConfig,
+      { value: { provider: () => new Map(), dedupingInterval: 0 } },
       createElement(
-        SWRConfig,
-        { value: { provider: () => new Map(), dedupingInterval: 0 } },
-        createElement(
-          ThemeProvider,
-          { theme: createAppTheme('light') },
-          createElement(RecurringExpensesSection, {
-            groupId,
-            defaultCurrency: 'INR',
-            viewerId: alex,
-            onNotify: () => {},
-            tags: [
-              {
-                _id: tagId,
-                name: 'Shared',
-                isArchived: false,
-                isDeleted: false,
-                createdAt: day + 'T00:00:00.000Z',
-              },
-            ],
-            members: people.map((p) => ({
-              user: { _id: p.id, name: p.name, image: undefined },
-              role: 'member' as const,
-              joinedAt: day + 'T00:00:00.000Z',
-            })),
-          }),
-        ),
-      ),
-      {
-        createNodeMock: () => ({
-          style: {},
-          focus() {},
-          addEventListener() {},
-          removeEventListener() {},
-          scrollIntoView() {},
+        ThemeProvider,
+        { theme: createAppTheme('light') },
+        createElement(RecurringExpensesSection, {
+          groupId,
+          defaultCurrency: currency,
+          viewerId: alex,
+          onNotify: () => {},
+          tags: [
+            {
+              _id: tagId,
+              name: 'Shared',
+              isArchived: false,
+              isDeleted: false,
+              createdAt: day + 'T00:00:00.000Z',
+            },
+          ],
+          members: groupPeople.map((p) => ({
+            user: { _id: p.id, name: p.name, image: undefined },
+            role: 'member' as const,
+            joinedAt: day + 'T00:00:00.000Z',
+          })),
         }),
-      },
+      ),
     );
+  await act(async () => {
+    renderer = create(tree(), {
+      createNodeMock: () => ({
+        style: {},
+        focus() {},
+        addEventListener() {},
+        removeEventListener() {},
+        scrollIntoView() {},
+      }),
+    });
   });
   const root = () => renderer!.root;
   if (edit) {
@@ -188,6 +192,50 @@ async function read(row: TypedEntry, edit: boolean): Promise<Reading> {
           .findAllByType(Checkbox)
           [index].props.onChange({ target: { checked: false } }),
       );
+  if (roundTrip) {
+    await change('Split method', 'shares');
+    const shares = () =>
+      root()
+        .findAllByType(TextField)
+        .filter((n) => n.props.label === 'Shares');
+    expect(shares().map((n) => n.props.value)).toEqual(['1', '1']);
+    await act(async () => shares()[0].props.onChange({ target: { value: '7' } }));
+    await change('Split method', 'exact');
+    expect(
+      root()
+        .findAllByType(MoneyTextField)
+        .slice(1)
+        .map((n) => n.props.value),
+    ).toEqual(['60', '40']);
+    await change('Split method', 'shares');
+    expect(shares().map((n) => n.props.value)).toEqual(['7', '1']);
+  }
+  if (changeGroup) {
+    await act(async () =>
+      renderer!.update(
+        tree('JPY', [people[1], { id: 'a00000000000000000000004', name: 'New Person' }]),
+      ),
+    );
+    await act(async () =>
+      root()
+        .findAllByType(Checkbox)[0]
+        .props.onChange({ target: { checked: false } }),
+    );
+    await act(async () =>
+      root()
+        .findAllByType(Checkbox)[0]
+        .props.onChange({ target: { checked: true } }),
+    );
+    await act(async () => renderer!.update(tree()));
+    expect(root().findAllByType(Checkbox)[0].props.checked).toBe(true);
+    await act(async () =>
+      renderer!.update(
+        tree('JPY', [people[1], { id: 'a00000000000000000000004', name: 'New Person' }]),
+      ),
+    );
+    // Existing boxes follow the latest Group; newly arriving members get boxes on the next open.
+    expect(root().findAllByType(Checkbox)).toHaveLength(1);
+  }
   const before = text(root());
   const fields = root()
     .findAllByType(TextField)
@@ -215,7 +263,6 @@ async function read(row: TypedEntry, edit: boolean): Promise<Reading> {
 it('records recurring Add and Edit through the actual form controls (#1111)', async () => {
   // The template's relative date label is part of the recording; midnight must not change it.
   vi.useFakeTimers({ toFake: ['Date'] });
-  // Local noon: the template's "since Today" label must not depend on the runner's time zone.
   vi.setSystemTime(new Date(day + 'T12:00:00'));
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('window', {
@@ -232,3 +279,36 @@ it('records recurring Add and Edit through the actual form controls (#1111)', as
   );
   // One test drives the real dialog through 62 entries; a CI runner needs more than the default.
 }, 120_000);
+it('preserves separately typed amounts and shares across a split-method round trip', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  await read(
+    {
+      ...entries[0],
+      splitMethod: 'exact',
+      splitValues: { [people[0].id]: '60', [people[1].id]: '40' },
+    },
+    false,
+    true,
+  );
+});
+
+it('uses the current Group currency and members if its read changes while the dialog is open', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('window', {
+    location: { hash: '' },
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  vi.stubGlobal('document', { querySelector: () => null, getElementById: () => null });
+  const cell = await read({ ...entries[0], payerId: people[1].id }, false, false, true);
+  expect(cell.result).toMatchObject({
+    kind: 'command',
+    value: { currency: 'JPY', splitBetween: [{ user: people[1].id }] },
+  });
+});

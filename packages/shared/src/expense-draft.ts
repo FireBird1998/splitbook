@@ -1,12 +1,11 @@
-import { inAmountWords } from './amount-entry';
 import { getCurrency } from './currency';
-import { moneyParticipantId, normalizeExpenseMoney } from './exact-money';
+import { moneyParticipantId } from './exact-money';
 import {
-  decideExpenseMoneyEdit,
   readExpenseMoney,
   unsupportedCurrencyEditRefusal,
   type StoredExpenseMoney,
 } from './expense-money-edit';
+import { readExpenseEntry, formSummaryPolicy, type ExpenseEntry } from './expense-entry';
 import type { ExpenseSplitMethod } from './split-calculation';
 
 export interface ExpenseDraftContext {
@@ -31,23 +30,6 @@ export interface SavedDraftExpense extends StoredExpenseMoney {
   notes?: string;
 }
 
-export interface ExpenseDraftValues {
-  description: string;
-  amount: string;
-  currency: string;
-  category: string;
-  date: string;
-  tag: string;
-  notes: string;
-  splitMethod: ExpenseSplitMethod;
-  selectedMembers: string[];
-  payers: Array<{ user: string; amount: string }>;
-  multiPayerMode: boolean;
-  customAmounts: Record<string, string>;
-  customPercentages: Record<string, string>;
-  customShares: Record<string, string>;
-}
-
 export interface ExpenseSubmission {
   readonly groupId: string;
   readonly expenseId?: string;
@@ -63,7 +45,7 @@ export interface ExpenseSubmission {
 type DraftState = {
   context: ExpenseDraftContext;
   base: SavedDraftExpense | null;
-  values: ExpenseDraftValues;
+  entry: ExpenseEntry;
   error: string;
   invalidStoredMoney: boolean;
   conflict: boolean;
@@ -72,27 +54,26 @@ type DraftState = {
   pending: ExpenseSubmission | null;
 };
 
-/** Immutable, dialog-lifetime Expense entry. Transport and confirmation belong to the adapter. */
+/** Dialog save lifetime: context, retry identity and confirmation. Typed values use ExpenseEntry. */
 export class ExpenseDraft {
   private constructor(private readonly state: DraftState) {}
 
   static open(context: ExpenseDraftContext, saved: SavedDraftExpense | null = null): ExpenseDraft {
     const base = saved ? { ...saved } : null;
-    const values: ExpenseDraftValues = {
+    const entry: ExpenseEntry = {
       description: base?.description ?? '',
       amount: '',
       currency: base?.currency ?? context.currency,
       category: base?.category ?? 'other',
       date: base?.date ? new Date(base.date).toISOString().split('T')[0] : context.date,
-      tag: base ? base.tagId || base.tag || '' : context.defaultTag,
+      tagId: base ? base.tagId || base.tag || '' : context.defaultTag,
       notes: base?.notes ?? '',
       splitMethod: base?.splitMethod ?? 'equal',
-      selectedMembers: [...context.memberIds],
+      participantIds: [...context.memberIds],
+      payerId: context.accountId,
       payers: [{ user: context.accountId, amount: '' }],
-      multiPayerMode: false,
-      customAmounts: {},
-      customPercentages: {},
-      customShares: {},
+      multiPayer: false,
+      splitValues: {},
     };
     let error = '';
     if (base) {
@@ -103,18 +84,23 @@ export class ExpenseDraft {
           ...row,
           user: moneyParticipantId(row.user),
         }));
-        values.amount = String(money.amount);
-        values.payers = money.paidBy.map((row) => ({ user: row.user, amount: String(row.amount) }));
-        values.multiPayerMode = values.payers.length > 1;
-        values.selectedMembers = money.splitBetween.map((row) => row.user);
+        entry.amount = String(money.amount);
+        entry.payers = money.paidBy.map((row) => ({ user: row.user, amount: String(row.amount) }));
+        entry.payerId = entry.payers[0]?.user ?? context.accountId;
+        entry.multiPayer = entry.payers.length > 1;
+        entry.participantIds = money.splitBetween.map((row) => row.user);
+        const amounts = entry.splitMethod === 'exact' || entry.splitMethod === 'unequal';
         for (const row of money.splitBetween) {
-          values.customAmounts[row.user] = String(row.amount);
-          if (row.percentage !== undefined)
-            values.customPercentages[row.user] = String(row.percentage);
-          if (row.shares !== undefined) values.customShares[row.user] = String(row.shares);
+          const value = amounts
+            ? row.amount
+            : entry.splitMethod === 'percentage'
+              ? row.percentage
+              : row.shares;
+          if (value !== undefined && entry.splitMethod !== 'equal')
+            entry.splitValues[row.user] = String(value);
         }
       } catch {
-        values.currency = context.currency;
+        entry.currency = context.currency;
         error = getCurrency(base.currency)
           ? 'This expense contains invalid stored amounts and cannot be edited.'
           : unsupportedCurrencyEditRefusal(base.currency);
@@ -123,7 +109,7 @@ export class ExpenseDraft {
     return new ExpenseDraft({
       context: { ...context, memberIds: [...context.memberIds] },
       base,
-      values,
+      entry,
       error,
       invalidStoredMoney: !!error,
       conflict: false,
@@ -146,52 +132,52 @@ export class ExpenseDraft {
     saved: SavedDraftExpense,
     activeTagIds: readonly string[],
   ): ExpenseDraft {
-    const blank = ExpenseDraft.open(context).values;
+    const blank = ExpenseDraft.open(context).entry;
     const copy = ExpenseDraft.open(context, saved);
     const members = new Set(context.memberIds);
     const inGroup = (id: string) => members.has(id);
-    const keep = (values: Record<string, string>) =>
-      Object.fromEntries(Object.entries(values).filter(([id]) => inGroup(id)));
-    const tag =
+    const tagId =
       saved.tagId && activeTagIds.includes(saved.tagId) ? saved.tagId : context.defaultTag;
     const words = {
-      description: copy.values.description,
-      category: copy.values.category,
-      notes: copy.values.notes,
-      tag,
+      description: copy.entry.description,
+      category: copy.entry.category,
+      notes: copy.entry.notes,
+      tagId,
       date: context.date,
     };
-    let values: ExpenseDraftValues = { ...blank, ...words };
+    let entry = { ...blank, ...words };
     const listed =
-      copy.values.currency === context.currency ||
-      !!context.currencies?.includes(copy.values.currency);
+      copy.entry.currency === context.currency ||
+      !!context.currencies?.includes(copy.entry.currency);
     if (!copy.invalidStoredMoney && listed) {
-      const v = copy.values;
+      const v = copy.entry;
       const payers = v.payers.filter((payer) => inGroup(payer.user));
-      const selectedMembers = v.selectedMembers.filter(inGroup);
-      values = {
+      const participantIds = v.participantIds.filter(inGroup);
+      entry = {
         ...v,
         ...words,
         payers: payers.length ? payers : blank.payers,
-        multiPayerMode: payers.length > 1,
-        selectedMembers: selectedMembers.length ? selectedMembers : blank.selectedMembers,
-        customAmounts: keep(v.customAmounts),
-        customPercentages: keep(v.customPercentages),
-        customShares: keep(v.customShares),
+        payerId: payers[0]?.user ?? blank.payerId,
+        multiPayer: payers.length > 1,
+        participantIds: participantIds.length ? participantIds : blank.participantIds,
+        splitValues: Object.fromEntries(
+          Object.entries(v.splitValues).filter(([id]) => inGroup(id)),
+        ),
       };
     }
     return new ExpenseDraft({
       ...copy.state,
       base: null,
-      values,
+      entry,
       error: '',
       invalidStoredMoney: false,
     });
   }
 
-  get values() {
-    return this.state.values;
+  get entry() {
+    return this.state.entry;
   }
+
   get base() {
     return this.state.base;
   }
@@ -218,62 +204,37 @@ export class ExpenseDraft {
     return new ExpenseDraft({ ...this.state, ...change });
   }
 
-  edit(change: Partial<ExpenseDraftValues>) {
+  change(change: Partial<ExpenseEntry>) {
     if (this.completed) return this;
-    const next = { ...this.values, ...change };
+    const entry = { ...this.entry, ...change };
     return this.with({
-      values: {
-        ...next,
-        payers: next.payers.map((row) => ({ ...row })),
-        selectedMembers: [...next.selectedMembers],
-        customAmounts: { ...next.customAmounts },
-        customPercentages: { ...next.customPercentages },
-        customShares: { ...next.customShares },
+      entry: {
+        ...entry,
+        payers: entry.payers.map((row) => ({ ...row })),
+        participantIds: [...entry.participantIds],
+        splitValues: { ...entry.splitValues },
       },
     });
   }
 
   chooseSplitMethod(splitMethod: ExpenseSplitMethod) {
-    return this.edit({ splitMethod, customAmounts: {}, customPercentages: {}, customShares: {} });
+    return this.change({ splitMethod, splitValues: {} });
   }
 
-  private money() {
-    if (this.invalidStoredMoney) throw new Error(this.error);
-    const v = this.values;
-    if (
-      v.splitMethod === 'shares' &&
-      v.selectedMembers.reduce((sum, id) => sum + (parseInt(v.customShares[id]) || 0), 0) === 0
-    )
-      throw new Error('Each member needs at least 1 share');
-    const input = {
-      amount: v.amount,
-      currency: v.currency,
-      splitMethod: v.splitMethod,
-      paidBy: v.multiPayerMode ? v.payers : [{ user: v.payers[0]?.user ?? '', amount: v.amount }],
-      splitBetween: v.selectedMembers.map((user) => ({
-        user,
-        ...(v.splitMethod === 'exact' || v.splitMethod === 'unequal'
-          ? { amount: v.customAmounts[user] || '0' }
-          : v.splitMethod === 'percentage'
-            ? { percentage: Number(v.customPercentages[user] || '0') }
-            : v.splitMethod === 'shares'
-              ? { shares: Number(v.customShares[user] || '1') }
-              : {}),
-      })),
-    };
-    try {
-      return this.base
-        ? decideExpenseMoneyEdit(this.base, input).money
-        : normalizeExpenseMoney(input);
-    } catch (error) {
-      // Part of a yen paid or shared: the amount field's words, not the money rule's (#755).
-      throw inAmountWords(error, v.currency);
-    }
+  reading() {
+    return readExpenseEntry(
+      this.entry,
+      this.base ? { kind: 'edit', saved: this.base } : { kind: 'new' },
+      formSummaryPolicy,
+    );
   }
 
   preview() {
     try {
-      return { money: this.money(), error: '' };
+      if (this.invalidStoredMoney) throw new Error(this.error);
+      const { result } = this.reading();
+      if (result.kind === 'refused') throw result.error;
+      return { money: result.money, error: '' };
     } catch (error) {
       return { money: null, error: error instanceof Error ? error.message : 'Invalid allocation' };
     }
@@ -284,12 +245,14 @@ export class ExpenseDraft {
     newKey: string,
   ): { draft: ExpenseDraft; submission?: ExpenseSubmission } {
     if (this.loading || this.completed || this.invalidStoredMoney) return { draft: this };
-    const v = this.values;
+    const v = this.entry;
     try {
-      if (!v.description.trim() || !v.amount || Number(v.amount) <= 0)
+      const reading = this.reading();
+      if (!v.description.trim() || reading.fields.amountMissing)
         throw new Error('Please fill in description and a valid amount.');
-      if (!v.tag) throw new Error('Please select a tag.');
-      const money = this.money();
+      if (!v.tagId) throw new Error('Please select a tag.');
+      if (reading.result.kind === 'refused') throw reading.result.error;
+      const money = reading.result.money;
       const body = JSON.stringify({
         description: v.description,
         ...money,
@@ -297,9 +260,9 @@ export class ExpenseDraft {
         category: v.category,
         date: v.date,
         splitMethod: v.splitMethod,
-        ...(tagIds.includes(v.tag) || this.base?.tagId === v.tag
-          ? { tagId: v.tag }
-          : { tag: v.tag }),
+        ...(tagIds.includes(v.tagId) || this.base?.tagId === v.tagId
+          ? { tagId: v.tagId }
+          : { tag: v.tagId }),
         notes: v.notes,
       });
       const retry = !this.base && this.state.attempt?.body === body ? this.state.attempt : null;

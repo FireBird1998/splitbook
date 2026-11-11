@@ -1,4 +1,5 @@
 'use client';
+import type { ExpenseEntry } from '@splitbook/shared/expense-entry';
 import ExpenseFields from './ExpenseFields';
 import KeepExpenseDraft, { useKeepExpenseDraft } from '@/components/drafts/KeepExpenseDraft';
 
@@ -16,7 +17,6 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import { toDateParam } from '@splitbook/shared/date';
-import { formatCurrency } from '@splitbook/shared/currency';
 import {
   MAX_EXTRA_CURRENCIES,
   expenseCurrencyChoices,
@@ -28,12 +28,7 @@ import { useSWRConfig } from 'swr';
 import AddCurrencyDialog from '@/components/groups/AddCurrencyDialog';
 import { addGroupCurrency } from '@/lib/add-group-currency';
 import { isWebGroupsRead } from '@/lib/web-query-keys';
-import { readAmountEntry } from '@splitbook/shared/amount-entry';
-import {
-  ExpenseDraft,
-  type SavedDraftExpense,
-  type ExpenseDraftValues,
-} from '@splitbook/shared/expense-draft';
+import { ExpenseDraft, type SavedDraftExpense } from '@splitbook/shared/expense-draft';
 import { useExpenseDraftSave } from './use-expense-draft-save';
 import { getDefaultExpenseTag } from './expense-form-helpers';
 import type { GroupRead } from '@splitbook/shared/group-read';
@@ -122,9 +117,10 @@ function ExpenseDraftDialog({
           initialExpense as unknown as SavedDraftExpense | null,
         ),
   );
-  const { description, amount, currency, tag } = draft.values;
+  const { description, amount, currency, tagId: tag } = draft.entry;
   // The field says why it can't take the amount; Save waits for one it can (#528).
-  const amountUnreadable = readAmountEntry(amount, currency).status === 'invalid';
+  const reading = draft.reading();
+  const amountUnreadable = reading.fields.amountReading.status === 'invalid';
   const { error, conflict, loading, invalidStoredMoney } = draft;
   const expense = draft.base;
   const isEditMode = !!expense;
@@ -139,7 +135,7 @@ function ExpenseDraftDialog({
         currencies,
         defaultTag: getDefaultExpenseTag(groupTags),
         date: defaultDate ?? toDateParam(new Date()),
-      }).values,
+      }).entry,
     ),
   );
   const [closing, setClosing] = useState(false);
@@ -155,11 +151,11 @@ function ExpenseDraftDialog({
   });
   const requestClose = () => {
     if (finishEnabled && (keep.busy || loading)) return;
-    if (finishEnabled && JSON.stringify(draft.values) !== initialValues) setClosing(true);
+    if (finishEnabled && JSON.stringify(draft.entry) !== initialValues) setClosing(true);
     else onClose();
   };
 
-  const edit = (change: Partial<ExpenseDraftValues>) => setDraft((current) => current.edit(change));
+  const edit = (change: Partial<ExpenseEntry>) => setDraft((current) => current.change(change));
   const { save, transportBusy, mounted } = useExpenseDraftSave(setDraft);
 
   const handleSubmit = async () => {
@@ -225,10 +221,6 @@ function ExpenseDraftDialog({
       ? `Started in ${currency}, the currency of your latest Expense here.`
       : null;
   const preview = draft.preview();
-  const previewAmount = (id: string): string => {
-    const row = preview.money?.splitBetween.find((row) => row.user === id);
-    return row ? formatCurrency(row.amount, currency) : '—';
-  };
   const reloadLatest = async () => {
     if (!expense || transportBusy.current) return;
     transportBusy.current = true;
@@ -325,8 +317,9 @@ function ExpenseDraftDialog({
           )}
 
           <ExpenseFields
-            values={draft.values}
-            edit={edit}
+            entry={draft.entry}
+            reading={reading}
+            editEntry={edit}
             chooseSplitMethod={(method) => setDraft((current) => current.chooseSplitMethod(method))}
             members={members}
             groupTags={groupTags}
@@ -335,7 +328,6 @@ function ExpenseDraftDialog({
             isEditMode={isEditMode}
             currentTag={expense?.tag as string | undefined}
             currentTagId={expense?.tagId as string | undefined}
-            previewAmount={previewAmount}
             currencyChoices={currencyChoices}
             currencyHint={currencyHint}
             addCurrency={

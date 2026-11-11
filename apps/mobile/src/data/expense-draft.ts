@@ -22,7 +22,11 @@ import {
   type ExpenseMoneyField,
 } from '@splitbook/shared/expense-review';
 import { calendarDateError } from './field-feedback';
-import { readExpenseEntry, type ExpenseEntry } from '@splitbook/shared/expense-entry';
+import {
+  readExpenseEntry,
+  expenseEntryPolicy,
+  type ExpenseEntry,
+} from '@splitbook/shared/expense-entry';
 import { parseGroupResponse } from '@splitbook/shared/group-read';
 import { objectId, toMobileGroup } from './dto';
 import { emptyExpenseHistory, type ExpenseHistoryState } from './activity';
@@ -331,6 +335,7 @@ export function readExpenseDraft(draft: ExpenseDraft) {
   return readExpenseEntry(
     draft,
     draft.original ? { kind: 'edit', saved: storedExpenseMoney(draft.original) } : { kind: 'new' },
+    expenseEntryPolicy,
   );
 }
 

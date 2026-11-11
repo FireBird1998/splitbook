@@ -4,6 +4,7 @@ import { ExpenseDraft } from './expense-draft';
 import {
   QUICK_ADD_DESCRIPTION_MAX,
   quickAddDraftValues,
+  quickAddEntry,
   quickAddSplitMembers,
   readQuickAdd,
   suggestQuickAddTag,
@@ -670,7 +671,7 @@ describe('quickAddDraftValues: the full form’s request', () => {
 
   it('builds exactly the body the full form sends', () => {
     const line = read('Dinner 2400 paid by me');
-    const values = quickAddDraftValues(line, { payerId: line.payer.memberId, tagId: FOOD }, ctx);
+    const values = quickAddEntry(line, { payerId: line.payer.memberId, tagId: FOOD }, ctx);
     const draft = ExpenseDraft.open({
       groupId: 'c00000000000000000000001',
       accountId: ALEX.id,
@@ -678,7 +679,7 @@ describe('quickAddDraftValues: the full form’s request', () => {
       currency: 'INR',
       defaultTag: '',
       date: TODAY,
-    }).edit(values);
+    }).change(values);
     const { submission } = draft.prepare([FOOD], 'key-1');
     expect(submission).toBeDefined();
     expect(JSON.parse(submission!.body)).toEqual({
@@ -704,7 +705,7 @@ describe('quickAddDraftValues: the full form’s request', () => {
 
   it('splits an uneven amount by the shared largest-remainder rule', () => {
     const line = read('Cab 100 split between Sam and Priya and me');
-    const values = quickAddDraftValues(line, { payerId: SAM.id, tagId: FOOD }, ctx);
+    const values = quickAddEntry(line, { payerId: SAM.id, tagId: FOOD }, ctx);
     const draft = ExpenseDraft.open({
       groupId: 'c00000000000000000000001',
       accountId: ALEX.id,
@@ -712,7 +713,7 @@ describe('quickAddDraftValues: the full form’s request', () => {
       currency: 'INR',
       defaultTag: '',
       date: TODAY,
-    }).edit(values);
+    }).change(values);
     const body = JSON.parse(draft.prepare([FOOD], 'key-2').submission!.body);
     expect(body.paidBy).toEqual([{ user: SAM.id, amount: 100, amountMinor: 10000 }]);
     expect(body.splitBetween.map((row: { amountMinor: number }) => row.amountMinor).sort()).toEqual(

@@ -33,7 +33,7 @@ import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { ExpenseDraft } from '@splitbook/shared/expense-draft';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import {
-  quickAddDraftValues,
+  quickAddEntry,
   readQuickAdd,
   suggestQuickAddTag,
   type QuickAddContext,
@@ -193,7 +193,7 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
   const announce = (message: string) =>
     setAnnouncement((last) => ({ id: last.id + 1, text: message }));
 
-  const values = () => quickAddDraftValues(read, { payerId, tagId: tag?.id ?? '' }, context);
+  const values = () => quickAddEntry(read, { payerId, tagId: tag?.id ?? '' }, context);
 
   const clear = () => {
     setText('');
@@ -226,7 +226,7 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
     const sent = text;
     const description = read.description;
     const amount = formatCurrency(toMajorAmount(read.amountMinor!, read.currency!), read.currency!);
-    const result = await save(draft.edit(values()), tagIds);
+    const result = await save(draft.change(values()), tagIds);
     if (result.status === 'saved') {
       clear();
       setDraft(openDraft());
@@ -280,7 +280,7 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
         onKeyDown={onKeyDown}
         onAdd={() => void add()}
         onMoreOptions={() => {
-          if (!draft.loading) setFormDraft(draft.edit(values()));
+          if (!draft.loading) setFormDraft(draft.change(values()));
         }}
         model={model}
         saving={draft.loading}
