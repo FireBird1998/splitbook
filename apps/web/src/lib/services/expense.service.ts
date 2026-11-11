@@ -157,7 +157,9 @@ export class ExpenseService {
     requestKey?: string,
     options?: { preparedBy?: AssistantAttribution },
   ) {
-    const [expense] = await recordLedger({
+    const {
+      records: [expense],
+    } = await recordLedger({
       groupId,
       actorId: userId,
       model: Expense,

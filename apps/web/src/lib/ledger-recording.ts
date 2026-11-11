@@ -148,7 +148,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
       );
       await description.prepareResponseRecord?.(row, { outcome, group: admittedGroup });
     }
-    return rows;
+    return { records: rows, created: outcome === 'created' };
   };
   const first = await lookup();
   const command = normalize(first);

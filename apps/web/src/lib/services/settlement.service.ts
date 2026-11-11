@@ -45,7 +45,9 @@ export class SettlementService {
       note: data.note ?? '',
     };
     const settlementId = new Types.ObjectId();
-    const [settlement] = await recordLedger({
+    const {
+      records: [settlement],
+    } = await recordLedger({
       groupId,
       actorId: userId,
       model: Settlement,
