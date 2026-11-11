@@ -18,3 +18,10 @@ it('keeps zero payers and omits a blank share when an entry is set aside', () =>
   });
   expect(draftForExpenseEntry(entry).splitBetween![1]).not.toHaveProperty('shares');
 });
+
+it('leaves a Draft’s missing choices and figures not given in the entry', () => {
+  expect(entryForExpenseDraft({description: 'Lunch', paidBy: [{user: alex}], splitBetween: [{user: sam}]})).toMatchObject({
+    amount: '', currency: '', category: '', splitMethod: '',
+    payers: [{user: alex, amount: ''}], splitValues: {[sam]: ''},
+  });
+});
