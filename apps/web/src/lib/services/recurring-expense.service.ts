@@ -323,8 +323,9 @@ export class RecurringExpenseService {
    * Lazy-on-read generation, owned by group-ledger-read.ts after actor admission.
    * Part one (#1119) materializes for Group details, Expenses, Balances, Insights,
    * Trip summary (a no-op for that Theme), Home balances, spending and export/statement.
-   * Other reads, including assistants, still use the recorded ledger. Creating/editing a
-   * template and leaving/removing a member also call generation as writes.
+   * Other reads select the module's recorded-only mode, including assistant tools.
+   * Across reads may select a bounded page and fields. Creating/editing a template
+   * and leaving/removing a member also call generation as writes.
    * Idempotent under concurrency via
    * the unique (recurringExpense, period) index; `lastGeneratedFor` advances
    * monotonically via $max.

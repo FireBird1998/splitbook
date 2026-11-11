@@ -1436,7 +1436,12 @@ Trip summary (whose Theme adds nothing), Home balances, member spending, and
 export including the statement. The Groups list, Group/Home Activity, search,
 one Expense, duplicate warnings, recurring-template lists, currency settings,
 rate suggestions, Tags, Draft reads, page titles, invite links and assistant reach
-read recorded data only. Connected assistants also still read recorded data only.
+read recorded data only. Connected assistants also still read recorded data only. They use
+`readGroupLedger` and `readGroupLedgers` with an assistant actor. The across
+operation accepts `page: { after, limit }` and `fields`. Assistant `list_groups`
+queries 51 projected Groups to deliver 50 and its existing `next` cursor.
+The module refills a page after access is revoked and recomputes the reply.
+
 These are the preserved part-one choices of #1119, not the part-two rule.
 
 Generation also runs on template creation/edit and before a member's leave or removal is checked. An archived Group materializes

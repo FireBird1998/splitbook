@@ -263,5 +263,6 @@ unadmitted Insights/Trip-summary calls outside `group-ledger-read.ts`. Read proj
 use the Group supplied to the module's callback. Tests/fixtures are outside the scan.
 `src/read-exceptions.ts` pins each permitted write, projection, notification, maintenance
 or demo site by file, owner and tokenized expression. A missing, changed or duplicated
-site fails. Dated assistant exceptions say “moves with #1124”; remove them as that move
-lands. They are not path-wide permissions for new reads.
+site fails. Assistant reads use the module. Its across operation supports bounded
+`page` queries and `fields` projections. The Insights/Trip-summary guard also
+checks preloaded Group objects, whose TypeScript types alone establish no admission.

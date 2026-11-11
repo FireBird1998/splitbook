@@ -304,7 +304,11 @@ in `src/lib/group-ledger-read.ts` own read admission and delivery-time access ch
 They pass the admitted Group to the read; a route or projection must not repeat
 its membership lookup. Writes keep their access checks in their recording or
 Group mutation, not in this read module. `pnpm check:reads` enforces that boundary,
-with exact reviewed sites for writes, projections and the pending assistant move (#1124).
+with exact reviewed sites for writes, projections, notifications and maintenance.
+Connected assistant reads also use these operations with an assistant actor.
+Across reads accept `page` for an exclusive id cursor and query limit, and `fields`
+for projected Group columns. `_id` accompanies projections. Selecting members
+populates them. Page delivery rechecks access and refills after an observed revocation.
 
 **Current materializing reads (#1119, part one):** Group details, Expenses,
 Balances, Insights, Trip summary, Home balances, member spending, and export
@@ -313,9 +317,9 @@ A Trip invokes generation but its Theme admits no recurring template.
 The Groups list, Group and Home Activity, search, one Expense, duplicate warning,
 recurring-template list, currency settings, rate suggestions, Tags, Draft reads,
 page titles, invite-link and assistant-reach reads use the recorded ledger.
-Connected assistants still read only recorded Expenses; their move to the module
-is pending #1124 and does not change that choice. These differences are preserved,
-not the owner's part-two decision that every ledger read will materialize.
+Connected assistants use the module with `recurring: 'recorded-only'`.
+Part two applies the owner's four decisions about generation, missing Groups
+and deletion markers.
 
 The generator remains idempotent under concurrent reads. An archived Group or a
 disabled recurring switch adds nothing and advances no template marker. Reads

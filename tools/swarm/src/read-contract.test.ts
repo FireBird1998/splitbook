@@ -62,7 +62,7 @@ it.each(['generateDueExpenses', 'generateDueExpensesForGroups', 'materializeDueE
 
 const insight = {
   path: 'apps/web/src/lib/services/group-insights.service.ts',
-  source: 'export async function getGroupInsights(groupOrId) {}',
+  source: 'export async function getGroupInsights(group) {}',
 };
 const reader = {
   path: 'apps/web/src/lib/group-ledger-read.ts',
@@ -70,9 +70,10 @@ const reader = {
 };
 it.each([
   'getGroupInsights(id);',
+  'const stored = { _id: id, members: [] }; getGroupInsights(stored);',
   'readGroupLedger({read: async group => getGroupInsights(id)});',
   'const read = async group => getGroupInsights(group); read({});',
-])('refuses the bare-id service trap outside an admitted callback (%s)', (body) => {
+])('refuses a service read outside an admitted callback (%s)', (body) => {
   expect(
     checkReadSources([
       insight,

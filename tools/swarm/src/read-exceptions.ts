@@ -186,38 +186,7 @@ export const readExceptions = [
     reason:
       'Recheck the immutable notification recipient’s current access before sending; no ledger read is delivered.',
   },
-  {
-    path: 'apps/web/src/lib/services/assistant-ledger.service.ts',
-    within: 'requireLedgerMembership',
-    operation: 'membership',
-    site: 'assistantGroupFilter({memberId:draftObjectId.parse(reader.id),excludedGroupIds:reader.excludedGroupIds,})',
-    reason:
-      '2026-11-11: moves with #1124; assistant ledger admission remains on the old gate until that move.',
-  },
-  {
-    path: 'apps/web/src/lib/services/assistant-ledger.service.ts',
-    within: 'requireLedgerMembership',
-    operation: 'membership',
-    site: 'Group.findOne({...reach,_id:{...reach._id,$eq:draftObjectId.parse(groupId)},})',
-    reason:
-      '2026-11-11: moves with #1124; assistant ledger admission remains on the old gate until that move.',
-  },
-  {
-    path: 'apps/web/src/lib/services/assistant-ledger.service.ts',
-    within: 'groups',
-    operation: 'membership',
-    site: 'assistantGroupFilter({memberId:draftObjectId.parse(reader.id),excludedGroupIds:reader.excludedGroupIds,})',
-    reason:
-      '2026-11-11: moves with #1124; assistant ledger admission remains on the old gate until that move.',
-  },
-  {
-    path: 'apps/web/src/lib/services/assistant-ledger.service.ts',
-    within: 'groups',
-    operation: 'membership',
-    site: 'Group.find({...reach,_id:{...reach._id,...(after?{$gt:draftObjectId.parse(after)}:{}),},})',
-    reason:
-      '2026-11-11: moves with #1124; assistant ledger admission remains on the old gate until that move.',
-  },
+
   {
     path: 'apps/web/src/lib/services/assistant-ledger.service.ts',
     within: 'approvalGroups',
@@ -226,37 +195,14 @@ export const readExceptions = [
     reason:
       'Choose the name of the admin who set the Assistant rule; admission already ran through readGroupLedgers.',
   },
-  {
-    path: 'apps/web/src/lib/services/assistant-ledger.service.ts',
-    within: 'context',
-    operation: 'membership',
-    site: 'requireLedgerMembership(reader,groupId)',
-    reason:
-      '2026-11-11: moves with #1124; assistant ledger admission remains on the old gate until that move.',
-  },
-  {
-    path: 'apps/web/src/lib/services/assistant-ledger.service.ts',
-    within: 'balances',
-    operation: 'membership',
-    site: 'requireLedgerMembership(reader,groupId)',
-    reason:
-      '2026-11-11: moves with #1124; assistant ledger admission remains on the old gate until that move.',
-  },
-  {
-    path: 'apps/web/src/lib/services/assistant-ledger.service.ts',
-    within: 'spending',
-    operation: 'membership',
-    site: 'requireLedgerMembership(reader,input.groupId)',
-    reason:
-      '2026-11-11: moves with #1124; assistant ledger admission remains on the old gate until that move.',
-  },
+
   {
     path: 'apps/web/src/lib/services/expense-draft.service.ts',
     within: 'requireMembership',
     operation: 'membership',
     site: 'assistantGroupFilter({memberId:scope.owner,...reach})',
     reason:
-      'Shared Draft mutation admission still needs this helper after #1124. The assistant list read is permitted only at its separately dated call site; new helper callers are checked individually.',
+      'Draft mutations check Group access inside their recording. Read callers use the ledger module.',
   },
   {
     path: 'apps/web/src/lib/services/expense-draft.service.ts',
@@ -264,13 +210,13 @@ export const readExceptions = [
     operation: 'membership',
     site: "mongoose.connection.db!.collection('groups').findOne(filter?{...filter,_id:{...filter._id,$eq:scope.group}}:{_id:scope.group,'members.user':scope.owner,deletionRequestedAt:null},{session,projection:{_id:1,defaultCurrency:1,alternateCurrencies:1,isArchived:1},},)",
     reason:
-      'Shared Draft mutation admission still needs this helper after #1124. The assistant list read is permitted only at its separately dated call site; new helper callers are checked individually.',
+      'Draft mutations check Group access inside their recording. Read callers use the ledger module.',
   },
   {
     path: 'apps/web/src/lib/services/expense-draft.service.ts',
     within: 'mutate',
     operation: 'membership',
-    site: 'requireMembership(scope,undefined,refuseArchived,assistantReach(actor))',
+    site: 'requireMembership(scope,undefined,refuseArchived)',
     reason:
       'Draft recording or review of a save rechecks account/Group membership; the write and its transaction remain outside the read module.',
   },
@@ -298,14 +244,7 @@ export const readExceptions = [
     reason:
       'Draft recording or review of a save rechecks account/Group membership; the write and its transaction remain outside the read module.',
   },
-  {
-    path: 'apps/web/src/lib/services/expense-draft.service.ts',
-    within: 'list',
-    operation: 'membership',
-    site: 'requireMembership(scope,undefined,false,assistantReach(actor))',
-    reason:
-      '2026-11-11: moves with #1124; the shared Draft gate still serves the assistant read branch. Member read paths already use the module.',
-  },
+
   {
     path: 'apps/web/src/lib/services/expense.service.ts',
     within: 'requireWritableGroup',

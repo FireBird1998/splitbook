@@ -56,12 +56,14 @@ and consent endpoints rather than introducing a second authorization flow.
 
 ## Delivery status: 11 November 2026 (#1119, part one)
 
-The first delivery step exists in `apps/web/src/lib/group-ledger-read.ts`:
-member-facing ledger reads use actor admission, the admitted Group, optional
-recurring generation and a delivery-time access check. `pnpm check:reads` guards
-that boundary. The assistant move (#1124) is pending, with dated, site-specific
-check exceptions. Part one retains today's choices of which reads materialize,
-which lists include archived Groups, and missing-Group answers; it does not yet
-apply the owner's three part-two decisions. Writes remain in their recording
-boundary. The current materializing reads are listed in [architecture](../architecture.md#api-request-flow)
-and [the API contract](../api.md#recurring-expenses).
+The first delivery step exists in `apps/web/src/lib/group-ledger-read.ts`.
+Member and Connected assistant reads use actor admission, the admitted Group,
+optional recurring generation and a delivery-time access check. `pnpm check:reads`
+guards that boundary. The across operation supports an exclusive id `page` and
+`fields` projection, including bounded page refill after access revocation.
+Assistant reads currently choose `recurring: 'recorded-only'`. Part two applies
+the owner's four decisions. Archived inclusion, admin-only assistant reach,
+list ordering and selected exports keep their established contracts. Writes
+use their recording boundary. Current generation choices are listed in
+[architecture](../architecture.md#api-request-flow) and
+[the API contract](../api.md#recurring-expenses).
