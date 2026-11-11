@@ -4,6 +4,7 @@ import type { CommandStartedEvent, CommandSucceededEvent } from 'mongodb';
 import Expense from './models/Expense';
 import Group from './models/Group';
 import RecurringExpense from './models/RecurringExpense';
+import ProductSwitch from './models/ProductSwitch';
 import Settlement from './models/Settlement';
 import { DEMO_PERSONA_IDS } from './demo-personas';
 import { groupService } from './services/group.service';
@@ -629,4 +630,132 @@ it('a payment receipt retry does not recalculate Debt or generate another Month'
   );
   expect(String(retry.settlements[0]._id)).toBe(String(first.settlements[0]._id));
   expect(await Expense.countDocuments({ recurringExpense: readIds.template })).toBe(1);
+});
+
+for (const state of ['archived', 'problem', 'before-switch'] as const)
+  it(`uses only the due aggregate for ${state} rent, then records a repaired schedule once`, async () => {
+    const access = await fixture.arrange('member');
+    if (state === 'archived')
+      await Group.updateOne({ _id: access.groupId }, { $set: { isArchived: true } });
+    if (state === 'problem')
+      await Group.updateOne(
+        { _id: access.groupId, 'tags._id': readIds.tag },
+        { $set: { 'tags.$.isArchived': true } },
+      );
+    if (state === 'before-switch') {
+      await RecurringExpense.collection.updateOne(
+        { _id: new Types.ObjectId(readIds.template) },
+        {
+          $set: {
+            startsOn: new Date('2026-10-01T00:00:00Z'),
+            endsOn: new Date('2026-10-31T00:00:00Z'),
+            createdAt: new Date('2026-09-01T00:00:00Z'),
+          },
+        },
+      );
+      await ProductSwitch.create({
+        _id: 'recurringExpenses',
+        enabled: true,
+        since: new Date('2026-11-01T00:00:00Z'),
+      });
+    }
+    const read = () =>
+      readGroupLedger({
+        actor: { kind: 'member', id: access.actorId },
+        groupId: access.groupId,
+        read: async () => Expense.countDocuments({ recurringExpense: readIds.template }),
+      });
+    const commands: CommandStartedEvent[] = [];
+    const client = Group.db.getClient();
+    const observe = (event: CommandStartedEvent) => commands.push(event);
+    client.on('commandStarted', observe);
+    try {
+      expect(await read()).toBe(0);
+      expect(await read()).toBe(0);
+    } finally {
+      client.off('commandStarted', observe);
+    }
+    expect(
+      commands.filter(({ command }) => command.aggregate === 'recurringexpenses'),
+    ).toHaveLength(2);
+    expect(
+      commands.filter(({ command }) =>
+        ['recurringexpenses', 'productswitches'].includes(command.find),
+      ),
+    ).toHaveLength(0);
+    // Each read loads the admitted Group and verifies delivery. A full run adds another lookup.
+    expect(commands.filter(({ command }) => command.find === 'groups')).toHaveLength(4);
+    if (state === 'archived')
+      await Group.updateOne({ _id: access.groupId }, { $set: { isArchived: false } });
+    if (state === 'problem')
+      await Group.updateOne(
+        { _id: access.groupId, 'tags._id': readIds.tag },
+        { $set: { 'tags.$.isArchived': false } },
+      );
+    if (state === 'before-switch')
+      await RecurringExpense.updateOne(
+        { _id: readIds.template },
+        { $set: { endsOn: new Date('2026-11-30T00:00:00Z') } },
+      );
+    expect(await read()).toBe(1);
+    expect(await read()).toBe(1);
+    expect(await RecurringExpense.findById(readIds.template).lean()).toMatchObject({
+      lastGeneratedFor: '2026-11',
+    });
+  });
+
+it('confirms an existing Month after its template enters a problem state', async () => {
+  const access = await fixture.arrange('member');
+  const read = () =>
+    readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      read: async () => Expense.countDocuments({ recurringExpense: readIds.template }),
+    });
+  expect(await read()).toBe(1);
+  await RecurringExpense.updateOne({ _id: readIds.template }, { $set: { lastGeneratedFor: null } });
+  await Group.updateOne(
+    { _id: access.groupId, 'tags._id': readIds.tag },
+    { $set: { 'tags.$.isArchived': true } },
+  );
+  expect(await read()).toBe(1);
+  expect(await RecurringExpense.findById(readIds.template).lean()).toMatchObject({
+    lastGeneratedFor: '2026-11',
+  });
+});
+
+it('skips a problem template whose recorded Month is already confirmed', async () => {
+  const access = await fixture.arrange('member');
+  const read = () =>
+    readGroupLedger({
+      actor: { kind: 'member', id: access.actorId },
+      groupId: access.groupId,
+      read: async () => Expense.countDocuments({ recurringExpense: readIds.template }),
+    });
+  expect(await read()).toBe(1);
+  await Group.updateOne(
+    { _id: access.groupId, 'tags._id': readIds.tag },
+    { $set: { 'tags.$.isArchived': true } },
+  );
+  vi.setSystemTime(new Date(2026, 11, 11, 12));
+  const commands: CommandStartedEvent[] = [];
+  const client = Group.db.getClient();
+  const observe = (event: CommandStartedEvent) => commands.push(event);
+  client.on('commandStarted', observe);
+  try {
+    expect(await read()).toBe(1);
+  } finally {
+    client.off('commandStarted', observe);
+  }
+  expect(commands.filter(({ command }) => command.aggregate === 'recurringexpenses')).toHaveLength(
+    1,
+  );
+  expect(
+    commands.filter(({ command }) =>
+      ['recurringexpenses', 'productswitches'].includes(command.find),
+    ),
+  ).toHaveLength(0);
+  expect(await RecurringExpense.findById(readIds.template).lean()).toMatchObject({
+    lastGeneratedFor: '2026-11',
+  });
 });
