@@ -36,6 +36,7 @@ let renderer: ReactTestRenderer | undefined;
 afterEach(async () => {
   if (renderer) await act(async () => renderer!.unmount());
   renderer = undefined;
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 const text = (node: ReactTestInstance): string =>
@@ -212,6 +213,9 @@ async function read(row: TypedEntry, edit: boolean): Promise<Reading> {
   return result;
 }
 it('records recurring Add and Edit through the actual form controls (#1111)', async () => {
+  // The template's relative date label is part of the recording; midnight must not change it.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(day + 'T12:00:00.000Z'));
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('window', {
     location: { hash: '' },
