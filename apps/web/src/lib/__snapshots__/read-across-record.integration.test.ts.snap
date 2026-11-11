@@ -4475,67 +4475,6 @@ exports[`Groups list / deletion-marker 1`] = `
       "data": [
         {
           "__v": 0,
-          "_id": "<group-1>",
-          "alternateCurrencies": [
-            "EUR",
-          ],
-          "assistantRule": "allowed",
-          "assistantRuleSetBy": null,
-          "category": "home",
-          "createdAt": "<seed-time>",
-          "createdBy": "<member-a>",
-          "currencyLocked": true,
-          "defaultCurrency": "INR",
-          "endDate": null,
-          "inviteCode": "READS1120",
-          "inviteCodeExpiresAt": "<invite-expiry>",
-          "isArchived": false,
-          "latestExpenseCurrency": null,
-          "members": [
-            {
-              "joinedAt": "<seed-time>",
-              "role": "admin",
-              "user": {
-                "_id": "<member-a>",
-                "image": "https://read-fixture.example.test/photo.png",
-                "name": "Alex Rivera",
-              },
-            },
-            {
-              "joinedAt": "<seed-time>",
-              "role": "member",
-              "user": {
-                "_id": "<member-b>",
-                "email": "sam.demo@splitbook.local",
-                "image": "https://read-fixture.example.test/photo.png",
-                "name": "Sam Chen",
-              },
-            },
-          ],
-          "name": "Reads Household",
-          "startDate": null,
-          "tags": [
-            {
-              "_id": "<tag-1>",
-              "createdAt": "<seed-time>",
-              "isArchived": false,
-              "isDeleted": false,
-              "name": "Groceries",
-              "revision": 0,
-            },
-            {
-              "_id": "<otherTag-1>",
-              "createdAt": "<seed-time>",
-              "isArchived": false,
-              "isDeleted": false,
-              "name": "Other",
-              "revision": 0,
-            },
-          ],
-          "updatedAt": "<read-time>",
-        },
-        {
-          "__v": 0,
           "_id": "<control-1>",
           "alternateCurrencies": [],
           "assistantRule": "allowed",
@@ -7693,26 +7632,6 @@ exports[`Home Activity / deletion-marker 1`] = `
             },
             "type": "expense_added",
           },
-          {
-            "_id": "<activity-1>",
-            "actor": {
-              "_id": "<member-a>",
-              "name": "Alex Rivera",
-            },
-            "createdAt": "<seed-time>",
-            "currency": "INR",
-            "group": {
-              "_id": "<group-1>",
-              "name": "Reads Household",
-            },
-            "metadata": {
-              "amount": 120,
-              "currency": "INR",
-              "description": "Earlier rent groceries",
-              "expenseId": "<expense-1>",
-            },
-            "type": "expense_added",
-          },
         ],
         "limit": 10,
       },
@@ -10758,30 +10677,12 @@ exports[`Home balances / deletion-marker 1`] = `
         "buckets": [
           {
             "currency": "INR",
-            "net": -62.5,
+            "net": -22.5,
             "youAreOwed": 0,
-            "youOwe": 62.5,
+            "youOwe": 22.5,
           },
         ],
         "groups": [
-          {
-            "balances": [
-              {
-                "balance": -40,
-                "currency": "INR",
-                "settlement": {
-                  "amount": 40,
-                  "counterpartyId": "<member-a>",
-                  "counterpartyName": "Alex Rivera",
-                },
-              },
-            ],
-            "category": "home",
-            "groupId": "<group-1>",
-            "hasMixedCurrencies": false,
-            "name": "Reads Household",
-            "updatedAt": "<read-time>",
-          },
           {
             "balances": [
               {
@@ -10803,15 +10704,6 @@ exports[`Home balances / deletion-marker 1`] = `
         ],
         "hasMixedCurrencies": false,
         "suggestedPayments": [
-          {
-            "amountMinor": 4000,
-            "counterpartyId": "<member-a>",
-            "counterpartyName": "Alex Rivera",
-            "currency": "INR",
-            "direction": "pay",
-            "groupId": "<group-1>",
-            "groupName": "Reads Household",
-          },
           {
             "amountMinor": 2250,
             "counterpartyId": "<member-c>",
@@ -13848,15 +13740,6 @@ exports[`Search / deletion-marker 1`] = `
     "body": {
       "data": {
         "expenses": [
-          {
-            "amountMinor": 12000,
-            "currency": "INR",
-            "date": "2026-11-05T00:00:00.000Z",
-            "description": "Earlier rent groceries",
-            "groupId": "<group-1>",
-            "groupName": "Reads Household",
-            "id": "<expense-1>",
-          },
           {
             "amountMinor": 4500,
             "currency": "INR",
@@ -17019,7 +16902,7 @@ exports[`Spending / deletion-marker 1`] = `
         "currencies": [
           {
             "currency": "INR",
-            "expenseCount": 2,
+            "expenseCount": 1,
             "months": [
               {
                 "byGroup": [],
@@ -17034,19 +16917,15 @@ exports[`Spending / deletion-marker 1`] = `
               {
                 "byGroup": [
                   {
-                    "groupId": "<group-1>",
-                    "shareMinor": 6000,
-                  },
-                  {
                     "groupId": "<control-1>",
                     "shareMinor": 2250,
                   },
                 ],
                 "month": "2026-11",
-                "shareMinor": 8250,
+                "shareMinor": 2250,
               },
             ],
-            "totalMinor": 8250,
+            "totalMinor": 2250,
           },
         ],
         "groups": [
@@ -17054,19 +16933,11 @@ exports[`Spending / deletion-marker 1`] = `
             "groupId": "<control-1>",
             "name": "Control Trip",
           },
-          {
-            "groupId": "<group-1>",
-            "name": "Reads Household",
-          },
         ],
         "lastChanges": [
           {
             "at": "<seed-time>",
             "groupId": "<control-1>",
-          },
-          {
-            "at": "<seed-time>",
-            "groupId": "<group-1>",
           },
         ],
         "months": [
@@ -17080,13 +16951,13 @@ exports[`Spending / deletion-marker 1`] = `
               "categories": [
                 {
                   "category": "food",
-                  "expenseCount": 2,
-                  "shareMinor": 8250,
+                  "expenseCount": 1,
+                  "shareMinor": 2250,
                 },
               ],
               "currency": "INR",
-              "expenseCount": 2,
-              "totalMinor": 8250,
+              "expenseCount": 1,
+              "totalMinor": 2250,
             },
           ],
           "groups": [
@@ -17097,16 +16968,6 @@ exports[`Spending / deletion-marker 1`] = `
                   "currency": "INR",
                   "expenseCount": 1,
                   "totalMinor": 4500,
-                },
-              ],
-            },
-            {
-              "groupId": "<group-1>",
-              "spent": [
-                {
-                  "currency": "INR",
-                  "expenseCount": 1,
-                  "totalMinor": 12000,
                 },
               ],
             },

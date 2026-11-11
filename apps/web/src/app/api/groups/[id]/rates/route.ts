@@ -25,8 +25,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       response = await readGroupMetadata({
         actor: { kind: 'member', id: user.id },
         groupId: id,
-
-        deletionMarker: 'allow-retained-members',
         read: async () => {
           const parsed = query.safeParse(Object.fromEntries(new URL(req.url).searchParams));
           return parsed.success

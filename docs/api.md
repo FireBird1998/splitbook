@@ -507,6 +507,13 @@ the balances decoder, so a malformed list fails Needs you only.
 
 ## Groups
 
+A Group with any deletion marker is refused on every direct API read (403
+`FORBIDDEN`), even if its members are still stored. Across-Group lists, totals,
+search and Activity omit it. Page titles use their generic denied metadata and
+the statement renders its existing refusal view. Assistant tools retain their
+inaccessible-Group result. Archive inclusion, admin-only assistant reach, list
+ordering and selected export admission keep their established rules (#1126).
+
 Every authenticated Group read answers **403** `FORBIDDEN` when the Group does not exist, exactly as when the member cannot read it (#1126). This includes Group detail, invite-link and admin-only assistant reach. Expense-not-found responses remain 404. Assistant tools retain their protocol-level “Group not found” result.
 
 | Method | Path                                 | Description                               |

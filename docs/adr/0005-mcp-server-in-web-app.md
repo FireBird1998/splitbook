@@ -54,11 +54,11 @@ submission reject it, and the page asks the member to restart from the assistant
 sessions and existing connections are unchanged. This uses Better Auth's signed requests
 and consent endpoints rather than introducing a second authorization flow.
 
-## Delivery status: 11 November 2026 (#1119, part one)
+## Delivery status: 11 November 2026 (#1119, parts one and two)
 
 The first delivery step exists in `apps/web/src/lib/group-ledger-read.ts`.
 Member and Connected assistant reads use actor admission, the admitted Group,
-optional recurring generation and a delivery-time access check. `pnpm check:reads`
+ledger generation and a delivery-time access check. `pnpm check:reads`
 guards that boundary. The across operation supports an exclusive id `page` and
 `fields` projection, including bounded page refill after access revocation.
 The owner's first part-two decision (#1126) now makes every assistant Group
@@ -67,8 +67,8 @@ Draft operations. It supersedes the earlier no-ledger-write rule. Generated
 Expenses and Activity are attributed to the template creator and may notify
 other involved members under the usual no-self-alert rule. Every ledger read now generates first; member metadata operations retain
 admission without generation. Member reads now answer 403 for a missing Group, including detail, invite
-link and admin-only assistant reach. Deletion markers are the remaining
-part-two decision. Archived inclusion, admin-only assistant reach,
+link and admin-only assistant reach. Every deletion marker now denies reads, even with retained members.
+All four part-two decisions are implemented. Archived inclusion, admin-only assistant reach,
 list ordering and selected exports keep their established contracts. Writes
 use their recording boundary. Current generation choices are listed in
 [architecture](../architecture.md#api-request-flow) and

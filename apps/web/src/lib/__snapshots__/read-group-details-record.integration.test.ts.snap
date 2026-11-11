@@ -1628,15 +1628,14 @@ exports[`Duplicate warning / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "data": {
-        "isDuplicate": false,
-      },
-      "status": 200,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
       "content-type": "application/json",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;
@@ -5445,115 +5444,14 @@ exports[`Insights / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "data": {
-        "average": null,
-        "biggestExpense": {
-          "amountMinor": 12000,
-          "date": "2026-11-05T00:00:00.000Z",
-          "description": "Earlier rent groceries",
-          "id": "<expense-1>",
-          "paidBy": [
-            {
-              "id": "<member-a>",
-              "name": "Alex Rivera",
-            },
-          ],
-        },
-        "byTag": {
-          "earlierMonths": [],
-          "tags": [
-            {
-              "averageMinor": null,
-              "changePercent": null,
-              "differenceMinor": null,
-              "direction": null,
-              "expenseCount": 1,
-              "name": "Groceries",
-              "spentMinor": 12000,
-              "tagId": "<tag-1>",
-            },
-          ],
-        },
-        "change": null,
-        "compare": 1,
-        "currencies": [
-          {
-            "currency": "INR",
-            "expenseCount": 1,
-            "spentMinor": 12000,
-          },
-        ],
-        "currency": "INR",
-        "firstMonth": "2026-11",
-        "hasExpenses": true,
-        "month": "2026-11",
-        "months": [
-          {
-            "expenseCount": 1,
-            "month": "2026-11",
-            "recurringCount": 0,
-            "spentMinor": 12000,
-            "youPaidMinor": 0,
-            "yourShareMinor": 6000,
-          },
-        ],
-        "otherCurrencies": [],
-        "recurring": {
-          "addedInMonth": {
-            "count": 0,
-            "spentMinor": 0,
-          },
-          "templates": [
-            {
-              "addedOn": null,
-              "amountMinor": 60000,
-              "dayOfMonth": 1,
-              "description": "Due rent",
-              "id": "<template-1>",
-              "nextDate": "2026-12-01",
-              "paidBy": [
-                {
-                  "id": "<member-a>",
-                  "name": "Alex Rivera",
-                },
-              ],
-              "paused": false,
-            },
-          ],
-        },
-        "recurringExpenses": true,
-        "timeZone": "UTC",
-        "whoPaid": {
-          "members": [
-            {
-              "id": "<member-a>",
-              "isMember": true,
-              "name": "Alex Rivera",
-              "netMinor": 6000,
-              "paidMinor": 12000,
-              "shareMinor": 6000,
-            },
-            {
-              "id": "<member-b>",
-              "isMember": true,
-              "name": "Sam Chen",
-              "netMinor": -6000,
-              "paidMinor": 0,
-              "shareMinor": 6000,
-            },
-          ],
-        },
-        "window": {
-          "from": "2026-11-01",
-          "to": "2026-11-30",
-        },
-      },
-      "status": 200,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
       "content-type": "application/json",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;
@@ -9330,73 +9228,14 @@ exports[`One Expense / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "data": {
-        "_id": "<expense-1>",
-        "amount": 120,
-        "amountMinor": 12000,
-        "category": "food",
-        "createdAt": "<seed-time>",
-        "createdBy": {
-          "_id": "<member-a>",
-          "image": "https://read-fixture.example.test/photo.png",
-          "name": "Alex Rivera",
-        },
-        "currency": "INR",
-        "date": "2026-11-05T00:00:00.000Z",
-        "deletedAt": null,
-        "deletedBy": null,
-        "description": "Earlier rent groceries",
-        "editHistory": [],
-        "group": "<group-1>",
-        "isDeleted": false,
-        "moneyVersion": 1,
-        "paidBy": [
-          {
-            "amount": 120,
-            "amountMinor": 12000,
-            "user": {
-              "_id": "<member-a>",
-              "image": "https://read-fixture.example.test/photo.png",
-              "name": "Alex Rivera",
-            },
-          },
-        ],
-        "period": null,
-        "predefinedItem": null,
-        "receiptUrl": null,
-        "recurringExpense": null,
-        "revision": 0,
-        "splitBetween": [
-          {
-            "amount": 60,
-            "amountMinor": 6000,
-            "user": {
-              "_id": "<member-a>",
-              "image": "https://read-fixture.example.test/photo.png",
-              "name": "Alex Rivera",
-            },
-          },
-          {
-            "amount": 60,
-            "amountMinor": 6000,
-            "user": {
-              "_id": "<member-b>",
-              "image": "https://read-fixture.example.test/photo.png",
-              "name": "Sam Chen",
-            },
-          },
-        ],
-        "splitMethod": "equal",
-        "tag": "Groceries",
-        "tagId": "<tag-1>",
-        "updatedAt": "<seed-time>",
-      },
-      "status": 200,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
       "content-type": "application/json",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;
@@ -13067,41 +12906,14 @@ exports[`Payments / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "data": [
-        {
-          "__v": 0,
-          "_id": "<payment-1>",
-          "amount": 20,
-          "amountMinor": 2000,
-          "createdAt": "2026-11-05T00:00:00.000Z",
-          "createdBy": {
-            "_id": "<member-b>",
-            "image": "https://read-fixture.example.test/photo.png",
-            "name": "Sam Chen",
-          },
-          "currency": "INR",
-          "group": "<group-1>",
-          "moneyVersion": 1,
-          "note": "Earlier payment",
-          "paidBy": {
-            "_id": "<member-b>",
-            "image": "https://read-fixture.example.test/photo.png",
-            "name": "Sam Chen",
-          },
-          "paidTo": {
-            "_id": "<member-a>",
-            "image": "https://read-fixture.example.test/photo.png",
-            "name": "Alex Rivera",
-          },
-          "updatedAt": "2026-11-05T00:00:00.000Z",
-        },
-      ],
-      "status": 200,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
       "content-type": "application/json",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;
@@ -16725,71 +16537,14 @@ exports[`Recurring templates / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "data": [
-        {
-          "_id": "<template-1>",
-          "amount": 600,
-          "amountMinor": 60000,
-          "category": "housing",
-          "createdAt": "<seed-time>",
-          "createdBy": {
-            "_id": "<member-a>",
-            "image": "https://read-fixture.example.test/photo.png",
-            "name": "Alex Rivera",
-          },
-          "currency": "INR",
-          "dayOfMonth": 1,
-          "description": "Due rent",
-          "endsOn": null,
-          "group": "<group-1>",
-          "isPaused": false,
-          "lastGeneratedFor": null,
-          "moneyVersion": 1,
-          "paidBy": [
-            {
-              "amount": 600,
-              "amountMinor": 60000,
-              "user": {
-                "_id": "<member-a>",
-                "image": "https://read-fixture.example.test/photo.png",
-                "name": "Alex Rivera",
-              },
-            },
-          ],
-          "revision": 0,
-          "splitBetween": [
-            {
-              "amount": 300,
-              "amountMinor": 30000,
-              "user": {
-                "_id": "<member-a>",
-                "image": "https://read-fixture.example.test/photo.png",
-                "name": "Alex Rivera",
-              },
-            },
-            {
-              "amount": 300,
-              "amountMinor": 30000,
-              "user": {
-                "_id": "<member-b>",
-                "image": "https://read-fixture.example.test/photo.png",
-                "name": "Sam Chen",
-              },
-            },
-          ],
-          "splitMethod": "equal",
-          "startsOn": "2026-11-01T00:00:00.000Z",
-          "tag": "Groceries",
-          "tagId": "<tag-1>",
-          "updatedAt": "<seed-time>",
-        },
-      ],
-      "status": 200,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
       "content-type": "application/json",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;

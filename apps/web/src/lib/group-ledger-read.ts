@@ -20,7 +20,6 @@ export interface GroupLedgerRead<T> {
   /** Trusted session subject or validated grant subject. */
   actor: LedgerReadActor;
   groupId: string;
-  deletionMarker?: 'refuse' | 'allow-retained-members';
   now?: Date;
   /** Minimum Group role for this read. */
   requiredRole?: 'member' | 'admin';
@@ -40,20 +39,12 @@ export function readGroupMetadata<T>(input: GroupLedgerRead<T>): Promise<T> {
 }
 
 async function readOne<T>(
-  {
-    actor,
-    groupId,
-    deletionMarker = 'refuse',
-    requiredRole = 'member',
-    now = new Date(),
-    validate,
-    read,
-  }: GroupLedgerRead<T>,
+  { actor, groupId, requiredRole = 'member', now = new Date(), validate, read }: GroupLedgerRead<T>,
   ledger: boolean,
 ): Promise<T> {
   if (!Types.ObjectId.isValid(groupId)) throw new Refusal('INVALID_ID');
   groupId = new Types.ObjectId(groupId).toHexString();
-  const access = groupAccess(actor, { groupId, deletionMarker, requiredRole });
+  const access = groupAccess(actor, { groupId, requiredRole });
   await connectDB();
   const storedGroup = await Group.findOne(access).lean();
   if (!storedGroup) throw groupReadRefusal(actor);
@@ -74,14 +65,15 @@ async function readOne<T>(
   return result;
 }
 
+type GroupField = keyof LedgerReadGroup | undefined;
+
 type GroupReadField<Field> = undefined extends Field
   ? keyof LedgerReadGroup
   : Exclude<Field, undefined>;
 
-export type GroupLedgersRead<T, Field extends keyof LedgerReadGroup | undefined = undefined> = {
+export type GroupLedgersRead<T, Field extends GroupField = undefined> = {
   actor: LedgerReadActor;
   archived: 'include' | 'exclude';
-  deletionMarker?: GroupLedgerRead<T>['deletionMarker'];
   now?: Date;
   sort?: Partial<Record<'name' | 'updatedAt' | '_id', 1 | -1>>;
   /**
@@ -101,24 +93,23 @@ export type GroupLedgersRead<T, Field extends keyof LedgerReadGroup | undefined 
   );
 
 /** Read the ledger over the Groups the actor may currently see. */
-export function readGroupLedgers<T, Field extends keyof LedgerReadGroup | undefined = undefined>(
+export function readGroupLedgers<T, Field extends GroupField = undefined>(
   input: GroupLedgersRead<T, Field>,
 ): Promise<T> {
   return readAcross(input, true);
 }
 
 /** Metadata lists use the same admission, order, projection and refill without a member ledger read. */
-export function readGroupsMetadata<T, Field extends keyof LedgerReadGroup | undefined = undefined>(
+export function readGroupsMetadata<T, Field extends GroupField = undefined>(
   input: GroupLedgersRead<T, Field>,
 ): Promise<T> {
   return readAcross(input, false);
 }
 
-async function readAcross<T, Field extends keyof LedgerReadGroup | undefined = undefined>(
+async function readAcross<T, Field extends GroupField = undefined>(
   {
     actor,
     archived,
-    deletionMarker = 'refuse',
     now = new Date(),
     groupIds,
     page,
@@ -130,7 +121,7 @@ async function readAcross<T, Field extends keyof LedgerReadGroup | undefined = u
 ): Promise<T> {
   const access = {
     $and: [
-      groupAccess(actor, { archived, deletionMarker }),
+      groupAccess(actor, { archived }),
       ...(groupIds ? [{ _id: { $in: [...groupIds] } }] : []),
       ...(page?.after ? [{ _id: { $gt: page.after } }] : []),
     ],
@@ -204,18 +195,16 @@ async function readAcross<T, Field extends keyof LedgerReadGroup | undefined = u
   }
 }
 
-/** One access rule for a Group and a list, including the member-only compatibility choices. */
+/** One access rule for a Group and a list. */
 function groupAccess(
   actor: LedgerReadActor,
   {
     groupId,
     archived = 'include',
-    deletionMarker = 'refuse',
     requiredRole = 'member',
   }: {
     groupId?: string;
     archived?: GroupLedgersRead<unknown>['archived'];
-    deletionMarker?: GroupLedgerRead<unknown>['deletionMarker'];
     requiredRole?: GroupLedgerRead<unknown>['requiredRole'];
   },
 ) {
@@ -234,9 +223,7 @@ function groupAccess(
     ...(requiredRole === 'admin'
       ? { members: { $elemMatch: { user: actor.id, role: 'admin' as const } } }
       : { 'members.user': actor.id }),
-    ...(actor.kind === 'member' && deletionMarker === 'allow-retained-members'
-      ? {}
-      : { deletionRequestedAt: null }),
+    deletionRequestedAt: null,
     ...(archived === 'exclude' ? { isArchived: false } : {}),
     ...(actor.kind === 'assistant' ? { assistantRule: { $ne: 'not_allowed' as const } } : {}),
   };

@@ -1595,22 +1595,14 @@ exports[`Export csv download / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "files": {
-        "reads-household-all-time-expenses.csv": "Date,Description,Category,Tag,Paid by,Split,Amount,Currency,Notes,Expense ID,Alex Rivera share,Sam Chen share,Edited at,Edited by,Change
-2026-11-05,Earlier rent groceries,Food & Drink,Groceries,Alex Rivera,Equally,120.00,INR,,<expense-1>,60.00,60.00,,,
-",
-        "reads-household-all-time-payments.csv": "Date,Recorded at,From,To,Amount,Currency,Note,Recorded by,Payment ID,Amount paid,Paid currency,Rate (paid per cleared),Rate attribution
-2026-11-05,2026-11-05T00:00:00+00:00,Sam Chen,Alex Rivera,20.00,INR,Earlier payment,Sam Chen,<payment-1>,,,,
-",
-      },
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
-      "cache-control": "private, no-store",
-      "content-disposition": "attachment; filename="reads-household-all-time.zip"",
-      "content-type": "application/zip",
-      "x-content-type-options": "nosniff",
+      "content-type": "application/json",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;
@@ -5394,109 +5386,14 @@ exports[`Export csv preview / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "empty": false,
-      "fileName": "reads-household-all-time.zip",
-      "files": [
-        {
-          "header": [
-            "Date",
-            "Description",
-            "Category",
-            "Tag",
-            "Paid by",
-            "Split",
-            "Amount",
-            "Currency",
-            "Notes",
-            "Expense ID",
-            "Alex Rivera share",
-            "Sam Chen share",
-            "Edited at",
-            "Edited by",
-            "Change",
-          ],
-          "kind": "expenses",
-          "name": "reads-household-all-time-expenses.csv",
-          "rows": [
-            [
-              "2026-11-05",
-              "Earlier rent groceries",
-              "Food & Drink",
-              "Groceries",
-              "Alex Rivera",
-              "Equally",
-              "120.00",
-              "INR",
-              "",
-              "<expense-1>",
-              "60.00",
-              "60.00",
-              "",
-              "",
-              "",
-            ],
-          ],
-          "text": "﻿Date,Description,Category,Tag,Paid by,Split,Amount,Currency,Notes,Expense ID,Alex Rivera share,Sam Chen share,Edited at,Edited by,Change
-2026-11-05,Earlier rent groceries,Food & Drink,Groceries,Alex Rivera,Equally,120.00,INR,,<expense-1>,60.00,60.00,,,
-",
-          "totalRows": 1,
-        },
-        {
-          "header": [
-            "Date",
-            "Recorded at",
-            "From",
-            "To",
-            "Amount",
-            "Currency",
-            "Note",
-            "Recorded by",
-            "Payment ID",
-            "Amount paid",
-            "Paid currency",
-            "Rate (paid per cleared)",
-            "Rate attribution",
-          ],
-          "kind": "payments",
-          "name": "reads-household-all-time-payments.csv",
-          "rows": [
-            [
-              "2026-11-05",
-              "2026-11-05T00:00:00+00:00",
-              "Sam Chen",
-              "Alex Rivera",
-              "20.00",
-              "INR",
-              "Earlier payment",
-              "Sam Chen",
-              "<payment-1>",
-              "",
-              "",
-              "",
-              "",
-            ],
-          ],
-          "text": "﻿Date,Recorded at,From,To,Amount,Currency,Note,Recorded by,Payment ID,Amount paid,Paid currency,Rate (paid per cleared),Rate attribution
-2026-11-05,2026-11-05T00:00:00+00:00,Sam Chen,Alex Rivera,20.00,INR,Earlier payment,Sam Chen,<payment-1>,,,,
-",
-          "totalRows": 1,
-        },
-      ],
-      "format": "csv",
-      "from": null,
-      "generatedAt": "<read-time>",
-      "groupNames": [
-        "Reads Household",
-      ],
-      "timeZone": "UTC",
-      "to": null,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
-      "cache-control": "private, no-store",
       "content-type": "application/json",
-      "x-content-type-options": "nosniff",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;
@@ -9389,104 +9286,14 @@ exports[`Export json download / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "exportedAt": "<read-time>",
-      "format": "splitbook-backup/1",
-      "groups": [
-        {
-          "alternateCurrencies": [
-            "EUR",
-          ],
-          "currency": "INR",
-          "endDate": null,
-          "expenses": [
-            {
-              "amountMinor": 12000,
-              "category": "food",
-              "createdAt": "<seed-time>",
-              "createdBy": "<member-a>",
-              "currency": "INR",
-              "date": "2026-11-05T00:00:00.000Z",
-              "deleted": null,
-              "description": "Earlier rent groceries",
-              "edits": [],
-              "id": "<expense-1>",
-              "notes": "",
-              "paidBy": [
-                {
-                  "amountMinor": 12000,
-                  "userId": "<member-a>",
-                },
-              ],
-              "splitBetween": [
-                {
-                  "amountMinor": 6000,
-                  "userId": "<member-a>",
-                },
-                {
-                  "amountMinor": 6000,
-                  "userId": "<member-b>",
-                },
-              ],
-              "splitMethod": "equal",
-              "tag": "Groceries",
-              "tagId": "<tag-1>",
-              "updatedAt": "<seed-time>",
-            },
-          ],
-          "id": "<group-1>",
-          "members": [
-            {
-              "former": false,
-              "id": "<member-a>",
-              "name": "Alex Rivera",
-            },
-            {
-              "former": false,
-              "id": "<member-b>",
-              "name": "Sam Chen",
-            },
-          ],
-          "name": "Reads Household",
-          "settlements": [
-            {
-              "amountMinor": 2000,
-              "createdBy": "<member-b>",
-              "currency": "INR",
-              "date": "2026-11-05T00:00:00.000Z",
-              "from": "<member-b>",
-              "id": "<payment-1>",
-              "note": "Earlier payment",
-              "to": "<member-a>",
-            },
-          ],
-          "startDate": null,
-          "tags": [
-            {
-              "createdAt": "<seed-time>",
-              "deleted": false,
-              "id": "<tag-1>",
-              "name": "Groceries",
-              "retired": false,
-            },
-            {
-              "createdAt": "<seed-time>",
-              "deleted": false,
-              "id": "<otherTag-1>",
-              "name": "Other",
-              "retired": false,
-            },
-          ],
-          "theme": "home",
-        },
-      ],
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
-      "cache-control": "private, no-store",
-      "content-disposition": "attachment; filename="splitbook-1-groups-backup.json"",
-      "content-type": "application/json; charset=utf-8",
-      "x-content-type-options": "nosniff",
+      "content-type": "application/json",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;
@@ -13236,44 +13043,14 @@ exports[`Export json preview / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "counts": {
-        "deletedExpenses": 0,
-        "editHistoryEntries": 0,
-        "expenses": 1,
-        "members": 2,
-        "payments": 1,
-      },
-      "currencyGroups": [
-        {
-          "alternateCurrencies": [
-            "EUR",
-          ],
-          "currency": "INR",
-          "name": "Reads Household",
-        },
-      ],
-      "deletedExpensesIncluded": false,
-      "earliestMonth": "2026-11",
-      "empty": false,
-      "fileName": "splitbook-1-groups-backup.json",
-      "format": "json",
-      "from": null,
-      "generatedAt": "<read-time>",
-      "groupNames": [
-        "Reads Household",
-      ],
-      "historyIncluded": true,
-      "paymentsIncluded": true,
-      "sizeBytes": 2446,
-      "timeZone": "UTC",
-      "to": null,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
-      "cache-control": "private, no-store",
       "content-type": "application/json",
-      "x-content-type-options": "nosniff",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;
@@ -17138,136 +16915,14 @@ exports[`Export statement preview / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "empty": false,
-      "format": "statement",
-      "from": null,
-      "generatedAt": "<read-time>",
-      "groupNames": [
-        "Reads Household",
-      ],
-      "statement": {
-        "currencies": [
-          {
-            "currency": "EUR",
-            "expenseCount": 0,
-            "expenses": [],
-            "paymentCount": 0,
-            "paymentTotalMinor": 0,
-            "payments": [],
-            "people": [
-              {
-                "balanceMinor": 0,
-                "id": "<member-a>",
-                "name": "Alex Rivera",
-                "netMinor": 0,
-                "paidMinor": 0,
-                "shareMinor": 0,
-              },
-              {
-                "balanceMinor": 0,
-                "id": "<member-b>",
-                "name": "Sam Chen",
-                "netMinor": 0,
-                "paidMinor": 0,
-                "shareMinor": 0,
-              },
-            ],
-            "spentMinor": 0,
-            "suggestedPayments": [],
-          },
-          {
-            "currency": "INR",
-            "expenseCount": 1,
-            "expenses": [
-              {
-                "amountMinor": 12000,
-                "category": "food",
-                "date": "2026-11-05",
-                "description": "Earlier rent groceries",
-                "id": "<expense-1>",
-                "paidBy": [
-                  {
-                    "amountMinor": 12000,
-                    "userId": "<member-a>",
-                  },
-                ],
-                "splitBetween": [
-                  {
-                    "amountMinor": 6000,
-                    "userId": "<member-a>",
-                  },
-                  {
-                    "amountMinor": 6000,
-                    "userId": "<member-b>",
-                  },
-                ],
-                "tag": "Groceries",
-              },
-            ],
-            "paymentCount": 1,
-            "paymentTotalMinor": 2000,
-            "payments": [
-              {
-                "amountMinor": 2000,
-                "at": "2026-11-05T00:00:00.000Z",
-                "currency": "INR",
-                "description": null,
-                "fromId": "<member-b>",
-                "id": "<payment-1>",
-                "note": "Earlier payment",
-                "recordedById": "<member-b>",
-                "toId": "<member-a>",
-              },
-            ],
-            "people": [
-              {
-                "balanceMinor": 4000,
-                "id": "<member-a>",
-                "name": "Alex Rivera",
-                "netMinor": 6000,
-                "paidMinor": 12000,
-                "shareMinor": 6000,
-              },
-              {
-                "balanceMinor": -4000,
-                "id": "<member-b>",
-                "name": "Sam Chen",
-                "netMinor": -6000,
-                "paidMinor": 0,
-                "shareMinor": 6000,
-              },
-            ],
-            "spentMinor": 12000,
-            "suggestedPayments": [
-              {
-                "amountMinor": 4000,
-                "from": "<member-b>",
-                "to": "<member-a>",
-              },
-            ],
-          },
-        ],
-        "defaultCurrency": "INR",
-        "from": null,
-        "id": "<group-1>",
-        "name": "Reads Household",
-        "names": {
-          "a00000000000000000000001": "Alex Rivera",
-          "a00000000000000000000002": "Sam Chen",
-        },
-        "theme": "home",
-        "timeZone": "UTC",
-        "to": null,
-      },
-      "timeZone": "UTC",
-      "to": null,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
-      "cache-control": "private, no-store",
       "content-type": "application/json",
-      "x-content-type-options": "nosniff",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;

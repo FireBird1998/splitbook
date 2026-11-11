@@ -263,7 +263,6 @@ export class BalanceService {
     return readGroupLedgers({
       actor: { kind: 'member', id: userId },
       archived: 'exclude',
-      deletionMarker: 'allow-retained-members',
 
       now,
       read: async (groups) => {

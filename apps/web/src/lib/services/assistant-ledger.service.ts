@@ -155,7 +155,6 @@ export const assistantLedgerService = {
     return readGroupsMetadata({
       actor: { kind: 'member', id: draftObjectId.parse(memberId) },
       archived: 'include',
-      deletionMarker: 'refuse',
       sort: { name: 1, _id: 1 },
       read: async (_groups, storedGroups) => {
         const groups = await Group.populate<{

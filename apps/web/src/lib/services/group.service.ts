@@ -103,7 +103,6 @@ export class GroupService {
       return await readGroupMetadata({
         actor: { kind: 'member', id: userId },
         groupId,
-        deletionMarker: 'allow-retained-members',
         read: async (group) => ({ name: group.name }),
       });
     } catch (cause) {
@@ -195,7 +194,6 @@ export class GroupService {
     return readGroupsMetadata({
       actor: { kind: 'member', id: userId },
       archived: includeArchived ? 'include' : 'exclude',
-      deletionMarker: 'allow-retained-members',
       sort: { updatedAt: -1 },
       read: async (groups) => {
         const latest = await latestExpenseCurrencies(

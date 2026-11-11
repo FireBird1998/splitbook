@@ -156,30 +156,27 @@ it('refuses a missing Group like an inaccessible Group', async () => {
     readGroupLedger({
       actor: { kind: 'member', id: access.actorId },
       groupId: access.groupId,
-
       read: async (group) => group.name,
     }),
   ).rejects.toMatchObject({ code: 'FORBIDDEN' });
 });
-it('retains a member read of a deletion marker with membership intact', async () => {
+it('refuses a deletion marker even with membership intact', async () => {
   const access = await fixture.arrange('deletion-marker');
   await expect(
     readGroupLedger({
       actor: { kind: 'member', id: access.actorId },
       groupId: access.groupId,
-      deletionMarker: 'allow-retained-members',
       read: async (group) => group,
     }),
-  ).resolves.toMatchObject({ name: 'Reads Household' });
+  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   expect(await Expense.countDocuments({ recurringExpense: readIds.template })).toBe(0);
 });
-it('keeps the marker compatibility setting from widening assistant access', async () => {
+it('refuses a retained-member deletion marker for an assistant', async () => {
   const access = await fixture.arrange('deletion-marker');
   await expect(
     readGroupLedger({
       actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [] },
       groupId: access.groupId,
-      deletionMarker: 'allow-retained-members',
       read: async (group) => group.name,
     }),
   ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -285,7 +282,6 @@ for (const state of ['missing', 'outsider'] as const)
       readGroupLedger({
         actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [] },
         groupId: access.groupId,
-
         read: async (group) => group.name,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
@@ -421,26 +417,21 @@ for (const archived of ['include', 'exclude'] as const)
       archived === 'include' ? ['Reads Household', 'Control Trip'] : ['Control Trip'],
     );
   });
-for (const deletionMarker of ['refuse', 'allow-retained-members'] as const)
-  it(`lists a retained-member deletion marker with ${deletionMarker}`, async () => {
-    const access = await fixture.arrange('deletion-marker');
-    const names = await readGroupLedgers({
-      actor: { kind: 'member', id: access.actorId },
-      archived: 'include',
-      deletionMarker,
-      read: async (groups) => groups.map((group) => group.name),
-    });
-    expect(names).toEqual(
-      deletionMarker === 'refuse' ? ['Control Trip'] : ['Reads Household', 'Control Trip'],
-    );
+it('omits a retained-member deletion marker from lists', async () => {
+  const access = await fixture.arrange('deletion-marker');
+  const names = await readGroupLedgers({
+    actor: { kind: 'member', id: access.actorId },
+    archived: 'include',
+    read: async (groups) => groups.map((group) => group.name),
   });
+  expect(names).toEqual(['Control Trip']);
+});
 it('applies exclusions and the Assistant rule when listing an assistant’s Groups', async () => {
   const access = await fixture.arrange('member');
   await Group.updateOne({ _id: readIds.group }, { $set: { assistantRule: 'not_allowed' } });
   const names = await readGroupLedgers({
     actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [readIds.control] },
     archived: 'include',
-    deletionMarker: 'allow-retained-members',
     read: async (groups) => groups.map((group) => group.name),
   });
   expect(names).toEqual([]);

@@ -42,7 +42,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return await readGroupLedger<Response>({
       actor: { kind: 'member', id: user.id },
       groupId: id,
-      deletionMarker: 'allow-retained-members',
 
       now,
       validate: () => {

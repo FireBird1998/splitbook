@@ -49,7 +49,7 @@ for (const state of ['member', 'archived', 'deleting', 'deletion-marker'] as con
     );
     await RecurringExpense.deleteMany({ group: readIds.group });
     const record = await fixture.capture(() => httpRead(fixture, read('Trip summary'), state));
-    expect(record.answer.status).toBe(state === 'deleting' ? 403 : 200);
+    expect(record.answer.status).toBe(['deleting', 'deletion-marker'].includes(state) ? 403 : 200);
     expect(record.addedDueExpense).toBe(false);
   });
 it('Balances / an insert fails to materialize the due Month', async () => {

@@ -1563,9 +1563,9 @@ exports[`Statement page / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "renderedText": "Group statement · Splitbook Home Export Groups Settings Sam Chen Search Expenses, Groups and people Demo Add expense Reads Household · Statement All time · EUR, INR · UTC Print or save as PDF EUR : nothing in this period; everyone is settled up. INR Amounts stay in their own currencies; never converted. Summary Spent ₹120.00 Expenses 1 Payments ₹20.00 1 payment Paid, Share and Net Expense contributions for this period. Net is Paid minus Share. Member Paid Share Net Alex Rivera ₹120.00 ₹60.00 ₹60.00 Sam Chen ₹0.00 ₹60.00 −⁠₹60.00 Balances and suggested payments Current all-time positions, including every recorded payment. These match Balances; the period changes spending only. Member Balance Alex Rivera ₹40.00 Sam Chen −⁠₹40.00 Sam Chen pays Alex Rivera ₹40.00 Expenses with shares Date Description Paid by Amount Share 5 Nov 2026 Earlier rent groceries Food &amp; Drink · Groceries Alex Rivera ₹120.00 Alex Rivera ₹60.00 Sam Chen ₹60.00 Payments by date Date and time From To Amount Note Recorded by Thu 5 Nov 2026, 12:00 AM Sam Chen Alex Rivera ₹20.00 Earlier payment Sam Chen",
+      "renderedText": "Splitbook - Shared Expenses, Settled Fairly",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;

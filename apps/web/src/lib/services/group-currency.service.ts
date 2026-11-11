@@ -224,7 +224,6 @@ export const groupCurrencyService = {
     return readGroupMetadata({
       actor: { kind: 'member', id: viewerId },
       groupId,
-      deletionMarker: 'allow-retained-members',
       read: async (_group, storedGroup) => read(storedGroup, viewerId),
     });
   },

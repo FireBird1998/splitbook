@@ -223,7 +223,7 @@ src/
 │   │   ├── balance.service.ts
 │   │   ├── invitation.service.ts
 │   │   ├── activity.service.ts
-│   │   └── user-activity.service.ts # Latest Activity across Groups (read-only)
+│   │   └── user-activity.service.ts # Latest Activity across Groups (after recurring generation)
 │   ├── theme/
 │   │   ├── tokens.ts               # Semantic light/dark design tokens
 │   │   └── createAppTheme.ts       # MUI theme + palette augmentation
@@ -333,6 +333,13 @@ one due check per operation, once per newly admitted page Group; nothing due
 costs one schedule aggregate including the product-switch record. A switch
 transition still performs its durable bookkeeping. Empty refill batches do not
 run generation again.
+
+A Group with any deletion marker is refused on every direct API read (403
+`FORBIDDEN`), even if its members are still stored. Across-Group lists, totals,
+search and Activity omit it. Page titles use their generic denied metadata and
+the statement renders its existing refusal view. Assistant tools retain their
+inaccessible-Group result. Archive inclusion, admin-only assistant reach, list
+ordering and selected export admission keep their established rules (#1126).
 
 The generator remains idempotent under concurrent reads. An archived Group or a
 disabled recurring switch adds nothing and advances no template marker. Reads

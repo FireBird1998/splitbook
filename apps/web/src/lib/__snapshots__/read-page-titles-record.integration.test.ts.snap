@@ -1478,7 +1478,7 @@ exports[`Activity title / deletion-marker 1`] = `
     ],
   },
   "answer": {
-    "title": "Reads Household · Activity",
+    "title": "Group · Activity",
   },
 }
 `;
@@ -4821,7 +4821,7 @@ exports[`Balances title / deletion-marker 1`] = `
     ],
   },
   "answer": {
-    "title": "Reads Household · Balances",
+    "title": "Group · Balances",
   },
 }
 `;
@@ -8164,7 +8164,7 @@ exports[`Expenses title / deletion-marker 1`] = `
     ],
   },
   "answer": {
-    "title": "Reads Household",
+    "title": "Group",
   },
 }
 `;
@@ -11507,7 +11507,7 @@ exports[`Insights title / deletion-marker 1`] = `
     ],
   },
   "answer": {
-    "title": "Reads Household · Insights",
+    "title": "Group · Insights",
   },
 }
 `;
@@ -14850,7 +14850,7 @@ exports[`Members title / deletion-marker 1`] = `
     ],
   },
   "answer": {
-    "title": "Reads Household · Members",
+    "title": "Group · Members",
   },
 }
 `;
@@ -18193,7 +18193,7 @@ exports[`Settings title / deletion-marker 1`] = `
     ],
   },
   "answer": {
-    "title": "Reads Household · Settings",
+    "title": "Group · Settings",
   },
 }
 `;
@@ -21536,7 +21536,7 @@ exports[`To review title / deletion-marker 1`] = `
     ],
   },
   "answer": {
-    "title": "Reads Household · To review",
+    "title": "Group · To review",
   },
 }
 `;

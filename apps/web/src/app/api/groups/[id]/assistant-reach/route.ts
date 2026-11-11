@@ -21,8 +21,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return await readGroupMetadata({
       actor: { kind: 'member', id: user.id! },
       groupId: id,
-
-      deletionMarker: 'allow-retained-members',
       requiredRole: 'admin',
       read: async (group) => {
         // Where assistants are off, or the Group doesn't allow them, none reaches it.

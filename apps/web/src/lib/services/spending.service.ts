@@ -46,7 +46,6 @@ export async function getMemberSpending(
   return readGroupLedgers({
     actor: { kind: 'member', id: userId },
     archived: 'exclude',
-    deletionMarker: 'allow-retained-members',
 
     now,
     sort: { name: 1, _id: 1 },

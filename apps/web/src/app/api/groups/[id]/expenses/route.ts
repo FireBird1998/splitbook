@@ -135,7 +135,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       await readGroupLedger({
         actor: { kind: 'member', id: user.id! },
         groupId: id,
-        deletionMarker: 'allow-retained-members',
 
         validate: () => {
           if (!added.success) throw added.error;

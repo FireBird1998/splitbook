@@ -4961,35 +4961,14 @@ exports[`Currencies / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "data": {
-        "extraCurrencies": [
-          {
-            "added": null,
-            "code": "EUR",
-            "use": {
-              "expenses": {
-                "count": 0,
-                "items": [],
-              },
-              "settlements": 0,
-              "toReview": {
-                "others": 0,
-                "yours": 0,
-              },
-            },
-          },
-        ],
-        "mainCurrency": {
-          "code": "INR",
-          "locked": true,
-        },
-      },
-      "status": 200,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
       "content-type": "application/json",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;
@@ -8424,17 +8403,14 @@ exports[`Invite link / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "data": {
-        "expiresAt": "<invite-expiry>",
-        "inviteCode": "READS1120",
-        "inviteUrl": "http://localhost:3000/join/READS1120",
-      },
-      "status": 200,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
       "content-type": "application/json",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;
@@ -11898,40 +11874,15 @@ exports[`Rate suggestion / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "data": {
-        "suggestion": {
-          "ageDays": 0,
-          "asOf": "<quote-day>",
-          "attribution": null,
-          "attributionRequired": false,
-          "components": [
-            {
-              "asOf": "<quote-day>",
-              "currency": "INR",
-              "fetchedAt": "<seed-time>",
-              "source": "frankfurter",
-            },
-            {
-              "asOf": "<quote-day>",
-              "currency": "EUR",
-              "fetchedAt": "<seed-time>",
-              "source": "frankfurter",
-            },
-          ],
-          "fetchedAt": "<seed-time>",
-          "from": "INR",
-          "rate": "0.010714285714",
-          "source": "frankfurter",
-          "to": "EUR",
-        },
-      },
-      "status": 200,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
       "cache-control": "private, no-store",
       "content-type": "application/json",
     },
-    "status": 200,
+    "status": 403,
   },
 }
 `;
@@ -22343,14 +22294,14 @@ exports[`Trip summary / deletion-marker 1`] = `
   },
   "answer": {
     "body": {
-      "code": "NOT_A_TRIP",
-      "error": "Only a Trip has a Trip summary.",
-      "status": 409,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
       "content-type": "application/json",
     },
-    "status": 409,
+    "status": 403,
   },
 }
 `;

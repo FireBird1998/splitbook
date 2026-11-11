@@ -130,7 +130,6 @@ export class UserActivityService {
     return readGroupLedgers({
       actor: { kind: 'member', id: userId },
       archived: 'exclude',
-      deletionMarker: 'allow-retained-members',
       read: async (groups) => {
         if (groups.length === 0) return { activities: [] as UserActivityEvent[], limit: size };
         const groupsById = new Map(groups.map((group) => [String(group._id), group]));

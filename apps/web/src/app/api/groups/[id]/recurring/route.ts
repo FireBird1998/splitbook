@@ -48,7 +48,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return await readGroupMetadata({
       actor: { kind: 'member', id: user.id! },
       groupId: id,
-      deletionMarker: 'allow-retained-members',
       read: async (_group, storedGroup) => success(await recurringExpenseService.list(storedGroup)),
     });
   } catch (err) {

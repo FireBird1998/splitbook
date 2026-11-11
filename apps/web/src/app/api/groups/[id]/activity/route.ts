@@ -19,7 +19,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return await readGroupLedger({
       actor: { kind: 'member', id: user.id! },
       groupId: id,
-      deletionMarker: 'allow-retained-members',
       read: async () => {
         const { searchParams } = new URL(req.url);
         const page = parseInt(searchParams.get('page') || '1');

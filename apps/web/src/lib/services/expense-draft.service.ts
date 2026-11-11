@@ -454,7 +454,6 @@ export const expenseDraftService = {
     return readGroupLedgers<ToReviewRead>({
       actor: { kind: 'member', id: String(owner) },
       archived: 'include',
-      deletionMarker: 'refuse',
       sort: { name: 1, _id: 1 },
       read: async (_groups, groups) => {
         const records = await drafts
