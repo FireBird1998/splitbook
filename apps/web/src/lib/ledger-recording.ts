@@ -1,13 +1,17 @@
 import 'server-only';
 import { Refusal } from '@splitbook/shared/refusals';
 import type { ActivityType } from '@splitbook/shared/types';
-import type { HydratedDocument, Model, Types } from 'mongoose';
+import { Types, type HydratedDocument, type Model } from 'mongoose';
 import connectDB from './db';
 import { afterGroupCommit, supportsGroupTransactions, withGroupMutation } from './group-mutation';
 import { ensureLedgerWriteIndexes } from './ledger-indexes';
-import { lockClearedCurrency, lockLedgerCurrency } from './ledger-currency';
+import { lockClearedCurrency, lockLedgerCurrency, lockRestoredCurrency } from './ledger-currency';
+import { assertExpectedRevision } from './ledger-revision';
+import Expense, { type IExpenseDocument } from './models/Expense';
 import {
   assertCreateReplay,
+  assertPendingActivityCapacity,
+  involvedMembers,
   createRequestMetadata,
   makePendingActivity,
   ledgerNotificationContext,
@@ -279,4 +283,103 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
     throw error;
   }
   return publish(committed.records, committed.outcome);
+}
+
+/** The trusted session actor and the requested Expense's Group always travel together. */
+export interface ExpenseAccess {
+  actorId: string;
+  groupId: string;
+  expenseId: string;
+}
+export interface LedgerExpenseChange {
+  access: ExpenseAccess;
+  expectedRevision?: number;
+  /** Apply the fields/history and describe its event. Null means return without saving. */
+  change: (
+    expense: HydratedDocument<IExpenseDocument>,
+    group: IGroupDocument,
+  ) => {
+    activity?: { type: 'expense_updated' | 'expense_deleted'; metadata: Record<string, unknown> };
+  } | null;
+}
+
+/** Change once under the displayed revision; callers cannot separate loading from committing. */
+export async function changeLedgerExpense({
+  access,
+  expectedRevision,
+  change,
+}: LedgerExpenseChange) {
+  const { actorId, groupId, expenseId } = access;
+  await connectDB();
+  const group = await Group.findOne({ _id: groupId, 'members.user': actorId });
+  if (!group) throw new Refusal('FORBIDDEN');
+  if (group.isArchived) throw new Refusal('GROUP_ARCHIVED');
+  // Old Expenses get their first revision even when the displayed revision is absent.
+  await withGroupMutation(
+    groupId,
+    async (session) =>
+      Expense.collection.updateOne(
+        {
+          _id: new Types.ObjectId(expenseId),
+          group: new Types.ObjectId(groupId),
+          revision: { $exists: false },
+        },
+        { $set: { revision: 0 } },
+        { session },
+      ),
+    { ledger: true },
+  );
+  const expense = await Expense.findOne({ _id: expenseId, group: groupId }).select(
+    '+pendingActivity',
+  );
+  if (!expense) return null;
+  assertExpectedRevision(expense.revision, expectedRevision);
+  const involvedBefore = involvedMembers(expense);
+  const originalCurrency = expense.currency;
+  const wasDeleted = expense.isDeleted;
+  const prepared = change(expense, group);
+  if (!prepared) return expense;
+  let event: IPendingActivity | undefined;
+  if (prepared.activity) {
+    assertPendingActivityCapacity(expense.pendingActivity);
+    event = makePendingActivity(
+      groupId,
+      prepared.activity.type,
+      actorId,
+      prepared.activity.metadata,
+    );
+    expense.pendingActivity.push(event);
+  }
+  const involved = [...involvedBefore, ...involvedMembers(expense)];
+  await withGroupMutation(
+    groupId,
+    async () => {
+      if (wasDeleted && !expense.isDeleted)
+        await lockRestoredCurrency(groupId, expense.currency, expenseId);
+      else if (originalCurrency !== expense.currency)
+        await lockLedgerCurrency(groupId, expense.currency);
+      if (event && expenseChangeAlertsEnabled()) {
+        const committedGroup = await Group.findById(groupId).select('members').lean();
+        const members = new Set(
+          (committedGroup?.members ?? []).map((member) => String(member.user)),
+        );
+        const intent = expense.pendingActivity.find(
+          (pending) => String(pending._id) === String(event._id),
+        );
+        if (intent)
+          intent.notificationContext = ledgerNotificationContext(
+            event,
+            prepared.activity!.type,
+            { groupId, recordId: String(expense._id) },
+            involved,
+            members,
+          );
+      }
+      return expense.save();
+    },
+    { ledger: true },
+  );
+  // Changes historically publish directly after their save, unlike nested creation recordings.
+  await activityService.publishPending('expenses', expense._id, expense.pendingActivity);
+  return expense;
 }

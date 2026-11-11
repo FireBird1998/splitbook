@@ -330,7 +330,7 @@ describe('changing a ledger Expense', () => {
     const changed = await changeLedgerExpense({ ...description, expectedRevision: 0 });
     expect(changed!.description).toBe('Changed through the module');
     expect(changed!.revision).toBe(1);
-    const activity = await Activity.findOne({ type: 'expense_updated' });
+    const activity = await Activity.findOne({ type: 'expense_updated' }).select('+notificationContext');
     expect(activity!.metadata.description).toBe('Changed through the module');
     expect(activity!.notificationContext!.recipientIds).toEqual([bob]);
   });
