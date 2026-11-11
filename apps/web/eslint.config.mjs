@@ -1,3 +1,4 @@
+import { expenseEntryLint } from '../../packages/shared/eslint/expense-entry.mjs';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import nextVitals from 'eslint-config-next/core-web-vitals';
 import nextTs from 'eslint-config-next/typescript';
@@ -5,6 +6,7 @@ import nextTs from 'eslint-config-next/typescript';
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  ...expenseEntryLint(import.meta.dirname),
   {
     // Pages must say which account they were rendered for on every API call (#199).
     files: ['src/components/**/*.{ts,tsx}', 'src/app/**/*.tsx'],
