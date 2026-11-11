@@ -40,7 +40,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return await readGroupMetadata({
       actor: { kind: 'member', id: user.id! },
       groupId: id,
-      missingGroup: 'not-found',
 
       deletionMarker: 'allow-retained-members',
       read: async (group) => {

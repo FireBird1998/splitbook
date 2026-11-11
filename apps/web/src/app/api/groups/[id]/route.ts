@@ -23,7 +23,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       await readGroupLedger({
         actor: { kind: 'member', id: user.id! },
         groupId: id,
-        missingGroup: 'not-found',
+
         deletionMarker: 'allow-retained-members',
         read: (group) => groupService.readForMember(group, { id: user.id!, email: user.email }),
       }),

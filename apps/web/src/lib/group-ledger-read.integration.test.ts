@@ -150,16 +150,16 @@ for (const scenario of [
     await refused;
   });
 
-it('retains the named missing-Group answer', async () => {
+it('refuses a missing Group like an inaccessible Group', async () => {
   const access = await fixture.arrange('missing');
   await expect(
     readGroupLedger({
       actor: { kind: 'member', id: access.actorId },
       groupId: access.groupId,
-      missingGroup: 'not-found',
+
       read: async (group) => group.name,
     }),
-  ).rejects.toMatchObject({ code: 'NOT_FOUND', data: { resource: 'Group' } });
+  ).rejects.toMatchObject({ code: 'FORBIDDEN' });
 });
 it('retains a member read of a deletion marker with membership intact', async () => {
   const access = await fixture.arrange('deletion-marker');
@@ -279,13 +279,13 @@ for (const subject of ['Expenses', 'Balances'] as const)
   });
 
 for (const state of ['missing', 'outsider'] as const)
-  it(`keeps member missing-Group compatibility from distinguishing an assistant's ${state} Group`, async () => {
+  it(`does not distinguish an assistant's ${state} Group`, async () => {
     const access = await fixture.arrange(state);
     await expect(
       readGroupLedger({
         actor: { kind: 'assistant', id: access.actorId, excludedGroupIds: [] },
         groupId: access.groupId,
-        missingGroup: 'not-found',
+
         read: async (group) => group.name,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });

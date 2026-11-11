@@ -20,7 +20,6 @@ export interface GroupLedgerRead<T> {
   /** Trusted session subject or validated grant subject. */
   actor: LedgerReadActor;
   groupId: string;
-  missingGroup?: 'forbidden' | 'not-found';
   deletionMarker?: 'refuse' | 'allow-retained-members';
   now?: Date;
   /** Minimum Group role for this read. */
@@ -44,7 +43,6 @@ async function readOne<T>(
   {
     actor,
     groupId,
-    missingGroup = 'forbidden',
     deletionMarker = 'refuse',
     requiredRole = 'member',
     now = new Date(),
@@ -58,15 +56,7 @@ async function readOne<T>(
   const access = groupAccess(actor, { groupId, deletionMarker, requiredRole });
   await connectDB();
   const storedGroup = await Group.findOne(access).lean();
-  if (!storedGroup) {
-    if (
-      actor.kind === 'member' &&
-      missingGroup === 'not-found' &&
-      !(await Group.exists({ _id: groupId }))
-    )
-      throw new Refusal('NOT_FOUND', { resource: 'Group' });
-    throw groupReadRefusal(actor);
-  }
+  if (!storedGroup) throw groupReadRefusal(actor);
   // Keep stored member identities for review fingerprints and member-id computations.
   const group = await Group.populate<{ members: LedgerReadGroup['members'] }>(
     { ...storedGroup, members: storedGroup.members.map((member) => ({ ...member })) },

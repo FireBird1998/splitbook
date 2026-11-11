@@ -507,6 +507,8 @@ the balances decoder, so a malformed list fails Needs you only.
 
 ## Groups
 
+Every authenticated Group read answers **403** `FORBIDDEN` when the Group does not exist, exactly as when the member cannot read it (#1126). This includes Group detail, invite-link and admin-only assistant reach. Expense-not-found responses remain 404. Assistant tools retain their protocol-level “Group not found” result.
+
 | Method | Path                                 | Description                               |
 | ------ | ------------------------------------ | ----------------------------------------- |
 | POST   | `/api/groups`                        | Create group                              |

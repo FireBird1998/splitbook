@@ -15222,14 +15222,14 @@ exports[`Group / missing 1`] = `
   },
   "answer": {
     "body": {
-      "code": "NOT_FOUND",
-      "error": "Group not found",
-      "status": 404,
+      "code": "FORBIDDEN",
+      "error": "Forbidden",
+      "status": 403,
     },
     "headers": {
       "content-type": "application/json",
     },
-    "status": 404,
+    "status": 403,
   },
 }
 `;
