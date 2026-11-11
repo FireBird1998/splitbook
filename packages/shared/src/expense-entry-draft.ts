@@ -18,28 +18,20 @@ type DraftEntries = Record<string, string>;
 
 export interface ExpenseDraftEntryPolicy {
   singlePayer: ExpenseEntryPolicy['singlePayer'];
-  repeatedPeople?: 'keep' | 'merge';
   tagReference?: 'identity' | 'identity-or-name';
 }
 export const fieldDraftEntryPolicy: ExpenseDraftEntryPolicy = {
   singlePayer: 'first-row',
-  repeatedPeople: 'merge',
   tagReference: 'identity-or-name',
 };
 
 /** An incomplete Draft is kept as typed text; no amount is filled in for the member. */
-export function entryForExpenseDraft(
-  values: ExpenseDraftValues = {},
-  policy: ExpenseDraftEntryPolicy = expenseEntryPolicy,
-): IncompleteExpenseEntry {
-  if (policy.repeatedPeople === 'merge') {
-    const merge = <Row extends { user: string }>(rows: Row[] = []) => {
-      const people = new Map<string, Row>();
-      for (const row of rows) people.set(row.user, { ...people.get(row.user), ...row });
-      return [...people.values()];
-    };
-    values = { ...values, paidBy: merge(values.paidBy), splitBetween: merge(values.splitBetween) };
-  }
+export function entryForExpenseDraft(values: ExpenseDraftValues = {}): IncompleteExpenseEntry {
+  values = {
+    ...values,
+    paidBy: lastPeople(values.paidBy),
+    splitBetween: lastPeople(values.splitBetween),
+  };
   const part =
     values.splitMethod === 'percentage'
       ? 'percentage'
@@ -155,7 +147,7 @@ function draftEntries(values: ExpenseDraftValues = {}): DraftEntries {
     ['paidBy', values.paidBy],
     ['splitBetween', values.splitBetween],
   ] as const)
-    for (const row of rows ?? []) {
+    for (const row of lastPeople(rows)) {
       entries[`${key}.${row.user}`] = 'yes';
       for (const [field, value] of Object.entries(row))
         if (field !== 'user') entries[`${key}.${row.user}.${field}`] = String(value);
@@ -201,4 +193,9 @@ function draftValues(entries: DraftEntries): ExpenseDraftValues {
       parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '),
     );
   return parsed.data;
+}
+
+/** Repeated identities are one box: the later row wins, never a sum or an invented value. */
+function lastPeople<Row extends { user: string }>(rows: Row[] = []): Row[] {
+  return [...new Map(rows.map((row) => [row.user, row])).values()];
 }

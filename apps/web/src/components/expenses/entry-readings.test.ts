@@ -38,7 +38,7 @@ type ReviewInput = {
   changed: Partial<Record<keyof IncompleteExpenseEntry, boolean>>;
 };
 const reviewInput = (from: NumericDraft = {}): ReviewInput => ({
-  entry: entryForExpenseDraft(from, fieldDraftEntryPolicy),
+  entry: entryForExpenseDraft(from),
   from,
   changed: {},
 });

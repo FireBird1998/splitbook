@@ -77,25 +77,19 @@ it('keeps unedited split facts for both field and sheet edits', () => {
     { user: sam, amount: 50, percentage: 50, shares: 1 },
   ]);
 });
-it('merges repeated people for one-box-per-person fields and retains rows for the sheet projection', () => {
+it('uses one later-value box for a repeated person on both clients', () => {
   const from = {
     paidBy: [
       { user: alex, amount: 40 },
       { user: alex, amount: 60 },
     ],
   };
-  const policy = { ...expenseEntryPolicy, repeatedPeople: 'merge' as const };
-  expect(entryForExpenseDraft(from, policy).payers).toEqual([{ user: alex, amount: '60' }]);
-  expect(entryForExpenseDraft(from).payers).toEqual([
-    { user: alex, amount: '40' },
-    { user: alex, amount: '60' },
-  ]);
+  expect(entryForExpenseDraft(from).payers).toEqual([{ user: alex, amount: '60' }]);
+  expect(entryForExpenseDraft(from).payers).toEqual([{ user: alex, amount: '60' }]);
 });
 
 it('keeps an unreadable saved amount visible for correction instead of throwing while opening', () => {
-  expect(
-    entryForExpenseDraft({ amount: 0 }, { ...expenseEntryPolicy, repeatedPeople: 'merge' }).amount,
-  ).toBe('0');
+  expect(entryForExpenseDraft({ amount: 0 }).amount).toBe('0');
 });
 
 it('leaves an omitted split method to the caller’s explicit choice', () => {
@@ -142,4 +136,25 @@ it('retains assistant split facts a sheet did not edit (#1117 decision 10)', () 
     { user: alex, amount: 50, percentage: 50, shares: 2 },
     { user: sam, amount: 50, percentage: 50, shares: 1 },
   ]);
+});
+
+it('shows a repeated person once using the later facts without rewriting the source Draft (#1117 decision 11)', () => {
+  const from = {
+    paidBy: [
+      { user: alex, amount: 40 },
+      { user: alex, amount: 60 },
+    ],
+    splitMethod: 'shares' as const,
+    splitBetween: [
+      { user: alex, shares: 1 },
+      { user: alex, shares: 3 },
+    ],
+  };
+  const before = JSON.stringify(from);
+  expect(entryForExpenseDraft(from)).toMatchObject({
+    payers: [{ user: alex, amount: '60' }],
+    participantIds: [alex],
+    splitValues: { [alex]: '3' },
+  });
+  expect(JSON.stringify(from)).toBe(before);
 });

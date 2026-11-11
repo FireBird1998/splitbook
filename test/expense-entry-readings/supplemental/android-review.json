@@ -14,10 +14,7 @@
     }
   },
   "repeated-payer": {
-    "payers": [
-      { "user": "a00000000000000000000001", "amount": "40" },
-      { "user": "a00000000000000000000001", "amount": "60" }
-    ],
+    "payers": [{ "user": "a00000000000000000000001", "amount": "60" }],
     "result": {
       "description": "Lunch",
       "amount": 100,

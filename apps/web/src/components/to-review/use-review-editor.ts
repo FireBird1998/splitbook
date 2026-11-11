@@ -17,7 +17,7 @@ type EntryEdit = {
   changed: Partial<Record<keyof IncompleteExpenseEntry, boolean>>;
 };
 const editing = (draft: PersistedExpenseDraft): EntryEdit => ({
-  entry: entryForExpenseDraft(draft.values, fieldDraftEntryPolicy),
+  entry: entryForExpenseDraft(draft.values),
   from: draft.values ?? {},
   changed: {},
 });

@@ -2,7 +2,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import Chip from '@mui/material/Chip';
 import Checkbox from '@mui/material/Checkbox';
 import ExpenseFields from '@/components/expenses/ExpenseFields';
-import { entryForExpenseDraft, fieldDraftEntryPolicy } from '@splitbook/shared/expense-entry-draft';
+import { entryForExpenseDraft } from '@splitbook/shared/expense-entry-draft';
 import { createElement, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider } from '@mui/material/styles';
@@ -29,7 +29,7 @@ function render(values: ExpenseDraftValues) {
       ThemeProvider,
       { theme: createAppTheme('light') },
       createElement(ReviewExpenseFields, {
-        entry: entryForExpenseDraft(values, fieldDraftEntryPolicy),
+        entry: entryForExpenseDraft(values),
         original: values,
         context: {
           currency: 'INR',
@@ -111,7 +111,7 @@ it('keeps a cleared named Tag unselected while the changed entry is being kept',
   };
   let renderer: ReactTestRenderer | undefined;
   function Form() {
-    const [entry, setEntry] = useState(() => entryForExpenseDraft(original, fieldDraftEntryPolicy));
+    const [entry, setEntry] = useState(() => entryForExpenseDraft(original));
     const [changed, setChanged] = useState(false);
     return createElement(ReviewExpenseFields, {
       entry,
