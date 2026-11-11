@@ -57,6 +57,7 @@ const timeouts = {
   format: '5 minutes',
   refusals: '2 minutes',
   recordings: '2 minutes',
+  reads: '2 minutes',
   unit: '20 minutes',
   ceilings: '5 minutes',
   verifier: '10 minutes',
@@ -298,6 +299,7 @@ const gateUnlocked = (
             'format check',
             'refusal contract',
             'ledger recording contract',
+            'Group ledger read contract',
             'unit tests',
             'ceilings',
             'backend',
@@ -319,6 +321,11 @@ const gateUnlocked = (
         name: 'ledger recording contract',
         args: ['check:recordings'],
         timeout: timeouts.recordings,
+      });
+      yield* runCommand({
+        name: 'Group ledger read contract',
+        args: ['check:reads'],
+        timeout: timeouts.reads,
       });
       // `pnpm test:unit` package by package, so the cap is the gate's total.
       yield* runCommand({

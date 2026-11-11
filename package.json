@@ -21,7 +21,8 @@
     "mobile": "pnpm -C apps/mobile",
     "swarm": "node tools/swarm/bin/swarm.mjs",
     "check:refusals": "node tools/swarm/bin/check-refusals.mjs",
-    "check:recordings": "node tools/swarm/bin/check-recordings.mjs"
+    "check:recordings": "node tools/swarm/bin/check-recordings.mjs",
+    "check:reads": "node tools/swarm/bin/check-reads.mjs"
   },
   "devDependencies": {
     "prettier": "^3.8.1"
