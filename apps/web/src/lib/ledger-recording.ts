@@ -108,7 +108,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
   let admittedGroup: IGroupDocument | undefined;
   // Admission is separate from commit-time checks: an Expense replay may name a former member.
   if (description.compatibility?.membership) {
-    admittedGroup = (await Group.findById(groupId).lean()) ?? undefined;
+    admittedGroup = (await Group.findById(groupId)) ?? undefined;
     if (!admittedGroup) {
       if (description.compatibility?.missingGroup === 'fault') throw new Error('Group not found');
       throw new Refusal('FORBIDDEN');
@@ -173,7 +173,7 @@ export async function recordLedger<T extends LedgerRecord, Command extends Recor
         if (description.transactions !== 'allow-standalone' && !session)
           throw description.transactions.required;
         await lockCurrencies(description.currencies);
-        const group = await Group.findById(groupId).lean();
+        const group = await Group.findById(groupId);
         if (!group) throw new Refusal('FORBIDDEN');
         if (group.isArchived) {
           // Standalone payments historically rely on the fence's earlier archive check.
