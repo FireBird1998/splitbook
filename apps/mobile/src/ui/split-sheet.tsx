@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { escapeRegex } from '@splitbook/shared/escape-regex';
 import { splitChoiceOf, splitMethodFor, type SplitChoice } from '@splitbook/shared/expense-split';
-import type { ExpenseDraft } from '../data/expense-draft';
-import { previewSplit, roundingNote, type SplitStatus } from '../data/expense-split';
+import { readExpenseDraft, type ExpenseDraft } from '../data/expense-draft';
+import { roundingNote, type SplitStatus } from '../data/expense-split';
 import { acceptsNumericText } from '../data/field-feedback';
 import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
@@ -81,7 +81,8 @@ export function SplitSheet({
   // A drag that starts on a person never includes or leaves them out (#665).
   const personTap = useTap();
   const choice = splitChoiceOf(draft.splitMethod);
-  const preview = previewSplit(draft);
+  const reading = readExpenseDraft(draft);
+  const preview = reading.split;
   const person = (id: string) => (id === currentUserId ? 'You' : name(id));
   const spoken = (id: string) => (id === currentUserId ? 'you' : name(id));
   const member = (id: string) => !members || members.some((item) => item.id === id);
@@ -130,6 +131,7 @@ export function SplitSheet({
           <SplitFooter
             status={preview.status}
             draft={draft}
+            summary={reading.splitSummary}
             total={preview.total}
             spoken={spoken}
             money={money}
@@ -226,7 +228,7 @@ export function SplitSheet({
                 {included && choice === 'shares' ? (
                   <ShareStepper
                     label={`shares for ${spoken(id)}`}
-                    value={draft.splitValues[id] ?? ''}
+                    value={reading.shareSteps[id]}
                     onChange={(value) => setValue(id, value)}
                   />
                 ) : null}
@@ -258,11 +260,10 @@ function ShareStepper({
   onChange,
 }: {
   label: string;
-  value: string;
+  value: number;
   onChange: (value: string) => void;
 }) {
-  const current = Number(value || 0);
-  const shown = Number.isFinite(current) ? current : 0;
+  const shown = value;
   return (
     <Stepper
       label={label}
@@ -341,12 +342,14 @@ function EntryInput({
 function SplitFooter({
   status,
   draft,
+  summary,
   total,
   spoken,
   money,
 }: {
   status: SplitStatus;
   draft: ExpenseDraft;
+  summary: ReturnType<typeof readExpenseDraft>['splitSummary'];
   total: number | null;
   spoken: (id: string) => string;
   money: (minor: number) => string;
@@ -408,14 +411,11 @@ function SplitFooter({
       status.unit === 'amount' ? [Math.abs(left), status.entered, status.target].map(money) : [],
     );
   }
-  const count = draft.participantIds.length;
-  const shares = draft.participantIds.reduce(
-    (sum, id) => sum + Number(draft.splitValues[id] || 0),
-    0,
-  );
+  const count = summary.participants;
+  const shares = summary.shares!;
   const amount = money(total!);
   const allocated = `${amount} allocated`;
-  const summary =
+  const allocationSummary =
     draft.splitMethod === 'equal'
       ? `${counted(count, 'person', 'people')}${SEPARATOR}${allocated}`
       : draft.splitMethod === 'percentage'
@@ -427,11 +427,11 @@ function SplitFooter({
   return (
     <View
       accessible
-      accessibilityLabel={['Adds up', summary, note].filter(Boolean).join('. ')}
+      accessibilityLabel={['Adds up', allocationSummary, note].filter(Boolean).join('. ')}
       accessibilityLiveRegion="polite"
       style={{ gap: 6 }}
     >
-      {row(<Badge label="Adds up" tone="positive" icon="checkmark" />, summary, [amount])}
+      {row(<Badge label="Adds up" tone="positive" icon="checkmark" />, allocationSummary, [amount])}
       {note && status.leftover ? (
         <CompactText>{moneyRuns(note, [money(status.leftover.amountMinor)])}</CompactText>
       ) : null}

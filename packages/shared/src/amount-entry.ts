@@ -4,7 +4,12 @@
  * use it.
  */
 import { formatCurrency, getCurrencyPrecision, wholeUnit } from './currency';
-import { MAX_EXPENSE_AMOUNT, MoneyValidationError, parseAmountMinor } from './exact-money';
+import {
+  MAX_EXPENSE_AMOUNT,
+  MoneyValidationError,
+  parseAmountMinor,
+  parseExpenseAmountMinor,
+} from './exact-money';
 
 export type AmountReading =
   | { status: 'empty' }
@@ -166,5 +171,50 @@ export function formatAmountEntry(text: string, currency: string): string {
     return precision ? `${grouped}.${digits.slice(-precision)}` : grouped;
   } catch {
     return text;
+  }
+}
+
+export function amountExample(currency: string) {
+  const digits = getCurrencyPrecision(currency);
+  return digits ? `250.${'50'.padEnd(digits, '0').slice(0, digits)}` : '250';
+}
+
+/**
+ * The shared money rules for an entered Expense or Settlement amount: positive, at most
+ * 10,000,000 and within the currency's precision. Nothing is ever rounded silently.
+ */
+export function amountError(amount: string, currency: string): string | undefined {
+  const example = amountExample(currency);
+  if (!amount.trim()) return `Enter the amount, such as ${example}.`;
+  try {
+    parseExpenseAmountMinor(amount, currency);
+    return undefined;
+  } catch (error) {
+    const code = error instanceof MoneyValidationError ? error.code : '';
+    const digits = getCurrencyPrecision(currency);
+    if (code === 'INVALID_MONEY_PRECISION') {
+      // Yen and won, in the web's words (#720): "Yen has no smaller unit. Enter a whole amount…"
+      const whole = wholeAmountWords(currency);
+      if (whole) return whole;
+      return `${currency} amounts ${
+        digits
+          ? `can have at most ${digits} decimal ${digits === 1 ? 'place' : 'places'}`
+          : 'can’t include decimal places'
+      }. Nothing is rounded for you.`;
+    }
+    if (code === 'INVALID_MONEY_RANGE' || code === 'UNSAFE_MONEY') {
+      let positive = !amount.trim().startsWith('-');
+      try {
+        positive &&= parseAmountMinor(amount, currency) > 0;
+      } catch {
+        // Too large to represent exactly: still above the limit.
+      }
+      return positive
+        ? `Enter an amount of at most ${String(MAX_EXPENSE_AMOUNT).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.`
+        : 'Enter an amount greater than 0.';
+    }
+    return digits
+      ? `Use digits and one decimal point, such as ${example}.`
+      : `Use digits only, such as ${example}.`;
   }
 }

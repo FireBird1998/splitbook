@@ -34,7 +34,6 @@ import { AccessibilityInfo, ScrollView, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { expenseDifferences } from '@splitbook/shared/expense-review';
-import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import {
   closesToRecord,
   draftFromExpense,
@@ -45,6 +44,7 @@ import {
   expenseCurrencyPending,
   expenseFields,
   expenseMoney,
+  readExpenseDraft,
   refusedRetryNotice,
   resolveDraftReview,
   type ExpenseDraft,
@@ -772,12 +772,9 @@ function ExpenseTask({
   const invalidMembers =
     !checking &&
     context &&
-    [
-      ...(draft.multiPayer
-        ? enteredPayers(draft.payers).map((payer) => payer.user)
-        : [draft.payerId]),
-      ...draft.participantIds,
-    ].some((id) => !members.some((member) => member.id === id));
+    [...readExpenseDraft(draft).payers.ids, ...draft.participantIds].some(
+      (id) => !members.some((member) => member.id === id),
+    );
   // Who owes what sits above Category and notes, so it takes its final height while the Group
   // is checked (#911): it draws the draft's split with the members of the Group this phone
   // already holds (the saved copy, read and never written here), and the check updates it in
