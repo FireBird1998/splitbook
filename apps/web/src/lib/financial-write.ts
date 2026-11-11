@@ -15,14 +15,9 @@ export interface ICreationRequest {
 }
 
 /** The Expense events an Android alert can be about (#840, #841). */
-export const EXPENSE_NOTIFICATION_KINDS = [
-  'expense_added',
-  'expense_updated',
-  'expense_deleted',
-] as const;
-export type ExpenseNotificationKind = (typeof EXPENSE_NOTIFICATION_KINDS)[number];
+const EXPENSE_NOTIFICATION_KINDS = ['expense_added', 'expense_updated', 'expense_deleted'] as const;
 /** Every event an Android alert can be about: the Expense ones and a recorded Settlement (#842). */
-export const NOTIFICATION_KINDS = [...EXPENSE_NOTIFICATION_KINDS, 'settlement_recorded'] as const;
+const NOTIFICATION_KINDS = [...EXPENSE_NOTIFICATION_KINDS, 'settlement_recorded'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 /** The private immutable alert context an Expense or Settlement event captures at its commit. */
