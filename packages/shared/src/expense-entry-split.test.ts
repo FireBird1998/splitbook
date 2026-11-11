@@ -145,3 +145,38 @@ it('keeps every entered Amount visible when the Expense total is unreadable', ()
     previewSplit(draft({ amount: '12.345', splitMethod: 'unequal', splitValues: { [you]: '5' } })),
   ).toMatchObject({ total: null, shares: { [you]: 500 }, status: { kind: 'no-amount' } });
 });
+
+it('keeps an exact displayable sum of three valid maximum-sized boxes', () => {
+  const value = previewSplit(
+    draft({
+      splitMethod: 'unequal',
+      splitValues: {
+        [you]: '10000000',
+        [sam]: '10000000',
+        [priya]: '10000000',
+      },
+    }),
+  );
+  expect(value.errors).toEqual({});
+  expect(value.status).toEqual({
+    kind: 'remaining',
+    unit: 'amount',
+    entered: 3_000_000_000,
+    target: 124950,
+  });
+  const partiallyReadable = previewSplit(
+    draft({
+      splitMethod: 'unequal',
+      splitValues: {
+        [you]: '88888888888888.01',
+        [sam]: '5',
+      },
+    }),
+  );
+  expect(partiallyReadable.errors).toEqual({ [you]: 'That’s more than the Expense total.' });
+  expect(partiallyReadable.shares).toEqual({ [sam]: 500, [priya]: 0 });
+  expect(partiallyReadable.status).toEqual({
+    kind: 'problem',
+    message: 'Correct the entry marked above.',
+  });
+});

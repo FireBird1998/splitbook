@@ -165,3 +165,15 @@ describe('payer entries', () => {
     expect(setPayerAmount(payers, sam, '')).toEqual(payers);
   });
 });
+
+it.each([
+  ['10.005', 'INR', 'INR amounts can have at most 2 decimal places. Nothing is rounded for you.'],
+  ['1.5', 'JPY', 'Yen has no smaller unit. Enter a whole amount, like ¥2,500.'],
+  ['1.2.3', 'INR', 'Use digits and one decimal point, such as 250.50.'],
+  ['-5', 'INR', 'Enter an amount of 0 or more.'],
+  ['10000001', 'INR', 'Enter an amount of at most 10,000,000.'],
+  ['0', 'INR', undefined],
+  ['  ', 'INR', undefined],
+])('explains the payer box %s in %s without rounding', (amount, currency, words) => {
+  expect(readPayers(entries('100', [[alex, amount]], currency)).errors[alex]).toBe(words);
+});
