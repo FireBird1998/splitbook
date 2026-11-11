@@ -4,7 +4,7 @@ import mongoose, { Types } from 'mongoose';
 import { createRequestMetadata } from './financial-write';
 import { withGroupMutation } from './group-mutation';
 import { Refusal } from '@splitbook/shared/refusals';
-import { recordLedger, type LedgerRecording } from './ledger-recording';
+import { recordLedger, changeLedgerExpense, type LedgerRecording } from './ledger-recording';
 import Expense, { type IExpenseDocument } from './models/Expense';
 import Group, { type IGroupDocument } from './models/Group';
 import Activity from './models/Activity';
@@ -35,7 +35,7 @@ afterEach(() => {
 afterAll(db.teardown);
 
 // A minimal Expense description, independent of either production creation service.
-function record(
+function recordResult(
   key = randomUUID(),
   overrides: Partial<LedgerRecording<IExpenseDocument>> = {},
   alertSwitch: 'always' | 'payments' | 'expense-changes' = 'always',
@@ -88,6 +88,10 @@ function record(
       ];
     },
   });
+}
+
+async function record(...args: Parameters<typeof recordResult>) {
+  return (await recordResult(...args)).records;
 }
 
 describe('ledger recording', () => {
@@ -290,5 +294,46 @@ describe('ledger recording', () => {
     });
     const stored = await Expense.findById(saved._id).select('+creationRequest');
     expect(stored!.creationRequest).toBeUndefined();
+  });
+  it('reports whether a recording was created or already present', async () => {
+    const key = randomUUID();
+    const first = await recordResult(key);
+    const retry = await recordResult(key);
+    expect(first.created).toBe(true);
+    expect(retry.created).toBe(false);
+    expect(String(retry.records[0]._id)).toBe(String(first.records[0]._id));
+    expect(await Expense.countDocuments()).toBe(1);
+  });
+});
+
+describe('changing a ledger Expense', () => {
+  it('checks the revision before applying a change, then records its event and audience', async () => {
+    vi.stubEnv('ANDROID_NOTIFICATION_EXPENSE_CHANGES_ENABLED', 'true');
+    const [expense] = await record();
+    const change = vi.fn((stored: mongoose.HydratedDocument<IExpenseDocument>) => {
+      stored.description = 'Changed through the module';
+      return {
+        activity: {
+          type: 'expense_updated' as const,
+          metadata: { expenseId: String(stored._id), description: stored.description },
+        },
+      };
+    });
+    const description = {
+      access: { actorId: alice, groupId, expenseId: String(expense._id) },
+      change,
+    };
+    await expect(
+      changeLedgerExpense({ ...description, expectedRevision: Number.NaN }),
+    ).rejects.toMatchObject({ message: 'REVISION_REQUIRED' });
+    expect(change).not.toHaveBeenCalled();
+    const changed = await changeLedgerExpense({ ...description, expectedRevision: 0 });
+    expect(changed!.description).toBe('Changed through the module');
+    expect(changed!.revision).toBe(1);
+    const activity = await Activity.findOne({ type: 'expense_updated' }).select(
+      '+notificationContext',
+    );
+    expect(activity!.metadata.description).toBe('Changed through the module');
+    expect(activity!.notificationContext!.recipientIds).toEqual([bob]);
   });
 });

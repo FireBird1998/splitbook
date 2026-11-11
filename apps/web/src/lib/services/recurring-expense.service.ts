@@ -2,12 +2,12 @@ import { Refusal } from '@splitbook/shared/refusals';
 import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import mongoose, { type HydratedDocument } from 'mongoose';
-import Expense from '@/lib/models/Expense';
+import Expense, { type IExpenseDocument } from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import ProductSwitch from '@/lib/models/ProductSwitch';
 import RecurringExpense, { type IRecurringExpenseDocument } from '@/lib/models/RecurringExpense';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
-import { activityService } from './activity.service';
+import { recordLedger, type LedgerRecording } from '@/lib/ledger-recording';
 import {
   assertExpenseParticipants,
   assertGroupCurrency,
@@ -27,12 +27,7 @@ import type {
 } from '@splitbook/shared/validators/recurring-expense';
 import type { IGroupDocument } from '@/lib/models/Group';
 import { displayTagReference, resolveTagReference } from '@splitbook/shared/tag-identity';
-import {
-  expenseChangeAlertsEnabled,
-  ledgerNotificationContext,
-  involvedMembers,
-  makePendingActivity,
-} from '@/lib/financial-write';
+import { involvedMembers } from '@/lib/financial-write';
 import { assertExpectedRevision } from '@/lib/ledger-revision';
 import { lockLedgerCurrency } from '@/lib/ledger-currency';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
@@ -110,10 +105,6 @@ function generatableMoney(
   } catch {
     return null;
   }
-}
-
-function isDuplicateKeyError(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 11000;
 }
 
 /** The switch's record in `productswitches` (see `ProductSwitch`). */
@@ -489,72 +480,59 @@ export class RecurringExpenseService {
         let materializedThrough: string | null = null;
         for (const period of duePeriods) {
           try {
-            await lockLedgerCurrency(groupId, template.currency);
-            const expenseId = new mongoose.Types.ObjectId();
-            const event = makePendingActivity(
+            const result = await recordLedger({
               groupId,
-              'expense_added',
-              template.createdBy.toString(),
-              {
-                expenseId: expenseId.toString(),
-                description: template.description,
-                amount: money.amount,
-                currency: template.currency,
-                recurring: true,
-                recurringExpenseId: template._id.toString(),
-                period,
+              actorId: String(template.createdBy),
+              model: Expense,
+              transactions: 'allow-standalone',
+              compatibility: { membership: 'template-validated', archive: 'before-generation' },
+              retry: { template: template._id, period, lookup: 'on-duplicate' },
+              command: () => ({ period }),
+              currencies: [{ currency: template.currency, rule: 'listed' }],
+              currenciesAt: 'before-fence',
+              async prepare(command): ReturnType<LedgerRecording<IExpenseDocument>['prepare']> {
+                const expenseId = new mongoose.Types.ObjectId();
+                const occurredAt = new Date();
+                return [
+                  {
+                    id: expenseId,
+                    async build() {
+                      return {
+                        document: {
+                          description: template.description,
+                          ...money,
+                          category: template.category,
+                          date: expenseDateForPeriod(command.period, template.dayOfMonth),
+                          splitMethod: template.splitMethod,
+                          ...resolveTagReference(group.tags, template),
+                        },
+                        activity: {
+                          type: 'expense_added',
+                          occurredAt,
+                          metadata: {
+                            expenseId: String(expenseId),
+                            description: template.description,
+                            amount: money.amount,
+                            currency: template.currency,
+                            recurring: true,
+                            recurringExpenseId: String(template._id),
+                            period: command.period,
+                          },
+                          alert: {
+                            kind: 'expense_added',
+                            involved: involvedMembers(money),
+                            switch: 'expense-changes',
+                          },
+                        },
+                      };
+                    },
+                  },
+                ];
               },
-            );
-            const expense = await withGroupMutation(groupId, async () => {
-              // The template's creator stays the actor (#841): they get no alert; the
-              // members it involves get "An Expense was added.", from this commit's members.
-              if (expenseChangeAlertsEnabled()) {
-                const committedGroup = await Group.findById(groupId).select('members').lean();
-                event.notificationContext = ledgerNotificationContext(
-                  event,
-                  'expense_added',
-                  { groupId, recordId: expenseId.toString() },
-                  involvedMembers(money),
-                  new Set((committedGroup?.members ?? []).map((member) => String(member.user))),
-                );
-              }
-              return Expense.create({
-                _id: expenseId,
-                group: new mongoose.Types.ObjectId(groupId),
-                description: template.description,
-                ...money,
-                category: template.category,
-                date: expenseDateForPeriod(period, template.dayOfMonth),
-                splitMethod: template.splitMethod,
-                ...resolveTagReference(group.tags, template),
-                recurringExpense: template._id,
-                period,
-                createdBy: template.createdBy,
-                pendingActivity: [event],
-              });
             });
-            generated += 1;
+            if (result.created) generated += 1;
             materializedThrough = period;
-
-            await activityService.publishPending('expenses', expense._id, [event]);
           } catch (err) {
-            if (isDuplicateKeyError(err)) {
-              // Only this exact period proves materialization. A different unique
-              // index violation must never advance the generation marker.
-              const existing = await Expense.findOne({
-                recurringExpense: template._id,
-                period,
-              }).select('+pendingActivity');
-              if (existing) {
-                await activityService.publishPending(
-                  'expenses',
-                  existing._id,
-                  existing.pendingActivity,
-                );
-                materializedThrough = period;
-                continue;
-              }
-            }
             console.error(`Recurring generation failed for template ${template._id}:`, err);
             complete = false;
             break;

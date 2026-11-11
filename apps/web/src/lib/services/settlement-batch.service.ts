@@ -37,7 +37,7 @@ export async function createSettlementBatch(
     rows.map((row) => row.amountPaidMinor ?? parseAmountMinor(row.amount, row.currency)),
   );
   const ids = rows.map(() => new Types.ObjectId());
-  const saved = await recordLedger({
+  const { records: saved } = await recordLedger({
     groupId,
     actorId: userId,
     model: Settlement,
