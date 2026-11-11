@@ -89,7 +89,7 @@ export function assistantReadCases(
         const record = await fixture.capture(() =>
           mcpRead(grant.token, tool.name, tool.args({ groupId: access.groupId, draftId })),
         );
-        expect(record.addedDueExpense).toBe(false);
+        expect(record.addedDueExpense).toBe(state === 'member' || state === 'admin');
         expect(record.answer.status).toBe(200);
         if (state === 'member' || state === 'admin') {
           expect(record.answer).toMatchObject({ result: { content: expect.any(Array) } });

@@ -256,7 +256,6 @@ async function mutate<T>(
     await readGroupLedger({
       actor: { kind: 'assistant', id: actor.id, excludedGroupIds: actor.excludedGroupIds ?? [] },
       groupId,
-      recurring: 'recorded-only',
       validate: (group) => {
         if (refuseArchived && group.isArchived) throw new Refusal('GROUP_ARCHIVED');
       },
@@ -659,7 +658,7 @@ export const expenseDraftService = {
         ? { kind: 'assistant', id: actor.id, excludedGroupIds: actor.excludedGroupIds ?? [] }
         : { kind: 'member', id: actor.id },
       groupId,
-      recurring: 'recorded-only',
+      recurring: actor.assistant ? 'materialize' : 'recorded-only',
       read: (_group, storedGroup) =>
         read({
           defaultCurrency: storedGroup.defaultCurrency,

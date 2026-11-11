@@ -22,7 +22,7 @@ The last four tools require `drafts:write` and enabled persistent Drafts. They o
 
 ## Current data semantics
 
-Money is computed from exact minor units and returned with its currency; current ledger responses use numeric major-unit values, not the old proposal's decimal-string envelope. Never combine currencies. `group_spending` totals cover the full matching window rather than the displayed page. The tools read recorded Expenses and do **not** materialize scheduled recurring Expenses. That differs from the 4 October proposal and avoids ledger writes from assistant reads.
+Money is computed from exact minor units and returned with its currency; current ledger responses use numeric major-unit values, not the old proposal's decimal-string envelope. Never combine currencies. `group_spending` totals cover the full matching window rather than the displayed page. As decided on 11 November 2026 (#1126), assistant Group operations record due recurring Expenses before reading, including context and Draft operations. This replaces the earlier rule that assistant reads avoid ledger writes. Generated Expenses and Activity belong to the template creator; normal notification rules apply, so another involved member may receive a push.
 
 Expense dates are calendar days. The current spending protocol states its inclusive UTC window explicitly and asks for dates; the old `month` plus IANA `timeZone` proposal is not the implemented input. The glossary governs Month and Trip day wording.
 

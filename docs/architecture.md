@@ -317,7 +317,7 @@ A Trip invokes generation but its Theme admits no recurring template.
 The Groups list, Group and Home Activity, search, one Expense, duplicate warning,
 recurring-template list, currency settings, rate suggestions, Tags, Draft reads,
 page titles, invite-link and assistant-reach reads use the recorded ledger.
-Connected assistants use the module with `recurring: 'recorded-only'`.
+Connected assistants use the module and record due recurring Expenses before each Group operation (#1126), including context and Draft operations. This replaces their earlier recorded-only rule.
 Part two applies the owner's four decisions about generation, missing Groups
 and deletion markers.
 

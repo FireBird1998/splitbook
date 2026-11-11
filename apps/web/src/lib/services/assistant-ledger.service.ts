@@ -132,7 +132,6 @@ export const assistantLedgerService = {
     return readGroupLedgers({
       actor: assistantActor(reader),
       archived: 'include',
-      recurring: 'recorded-only',
       sort: { _id: 1 },
       page: { after: cursor, limit: 51 },
       fields: ['name', 'defaultCurrency', 'alternateCurrencies', 'category', 'isArchived'],
@@ -191,7 +190,6 @@ export const assistantLedgerService = {
     return readGroupLedger({
       actor: assistantActor(reader),
       groupId,
-      recurring: 'recorded-only',
       read: async (group) => {
         return {
           id: String(group._id),
@@ -214,7 +212,6 @@ export const assistantLedgerService = {
     return readGroupLedger({
       actor: assistantActor(reader),
       groupId,
-      recurring: 'recorded-only',
       read: async (group) => {
         const read = await balanceService.getGroupBalances(group, {
           includeDebtsBeforeSimplifying: false,
@@ -240,7 +237,7 @@ export const assistantLedgerService = {
             hasMixedCurrencies: read.hasMixedCurrencies,
           },
           context:
-            'All recorded Expenses and Settlements, per currency. Positive means owed to the member; negative means the member owes. Scheduled recurring Expenses not yet recorded are excluded. This read creates nothing.',
+            'All recorded Expenses and Settlements, per currency. Positive means owed to the member; negative means the member owes. Due recurring Expenses are recorded before this read.',
         };
       },
     });
@@ -252,7 +249,6 @@ export const assistantLedgerService = {
     return readGroupLedger({
       actor: assistantActor(reader),
       groupId: input.groupId,
-      recurring: 'recorded-only',
       read: async (group) => {
         const result = await expenseService.getGroupExpenses(
           group,
@@ -284,7 +280,7 @@ export const assistantLedgerService = {
             boundaries: 'Inclusive calendar dates, 00:00:00 through 23:59:59.999 UTC',
           },
           context:
-            'Totals cover all matching recorded Expenses, not just this page; currencies are separate. Does not materialize scheduled recurring Expenses.',
+            'Totals cover all matching recorded Expenses, not just this page; currencies are separate. Due recurring Expenses are recorded before this read.',
         };
       },
     });

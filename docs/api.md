@@ -2829,3 +2829,7 @@ temporary failure still records its next attempt time, so turning recovery on wi
 retries it. Unsetting `ANDROID_NOTIFICATION_SENDS_ENABLED` pauses every send, recovery included,
 and keeps the work for later; neither switch changes any financial save. Scheduling is external
 (`docs/runbooks/android-notifications.md`, "Recovery trigger").
+
+### Connected assistant recurring generation (#1126)
+
+Assistant Group operations add due recurring Expenses before reading, including context and Draft operations. This replaces the earlier recorded-only rule. Generation attributes the Expense and Activity to the template creator and may notify other involved members; the creator receives no self-alert. Grant, reach, archive and retry rules still apply.
