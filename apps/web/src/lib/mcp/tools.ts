@@ -1,4 +1,4 @@
-import type { RefusalCode } from '@splitbook/shared/refusals';
+import { Refusal, type RefusalCode } from '@splitbook/shared/refusals';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 import { calendarDate } from '@splitbook/shared/validators/calendar-date';
@@ -17,7 +17,6 @@ import { MCP_DRAFT_SCOPE } from './config';
 /** What a tool answers for each refusal the services throw; anything else gets a retry hint. */
 const REFUSALS = {
   FORBIDDEN: 'FORBIDDEN',
-  NOT_FOUND: 'Group not found',
   GROUP_ARCHIVED: 'GROUP_ARCHIVED',
   DRAFT_NOT_FOUND: 'DRAFT_NOT_FOUND',
   STALE_REVISION: 'STALE_REVISION',
@@ -44,7 +43,8 @@ export function registerSplitbookTools(
       const message =
         error instanceof z.ZodError
           ? error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')
-          : error instanceof Error && error.message === 'GROUP_NOT_FOUND'
+          : (error instanceof Refusal && error.code === 'NOT_FOUND') ||
+              (error instanceof Error && error.message === 'GROUP_NOT_FOUND')
             ? 'Group not found'
             : error instanceof Error && Object.hasOwn(REFUSALS, error.message)
               ? REFUSALS[error.message as keyof typeof REFUSALS]
