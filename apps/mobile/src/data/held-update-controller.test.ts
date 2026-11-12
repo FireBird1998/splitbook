@@ -67,27 +67,23 @@ describe('held-update rules before extraction (#1158)', () => {
     expect(c.getSnapshot().creation.draft.name).toBe('Keep this unfinished Group');
   });
 
-  // #1158: the refused notification's final await erases a newer accepted tap.
-  // Keep this visible until the owner approves the race fix before the extraction.
-  it.fails(
-    'keeps a newer widget destination offered after an older refused notification finishes navigating',
-    async () => {
-      const c = await refusedNotificationAfterNewTap();
-      expect(c.getSnapshot()).toMatchObject({
-        screen: 'create',
-        notificationOpening: { status: 'held' },
-        heldNotificationSource: 'widget',
-      });
-      c.back();
-      await c.openPendingNotification();
-      expect(c.getSnapshot()).toMatchObject({
-        screen: 'groups',
-        widgetPicker: true,
-        notificationOpening: { status: 'idle' },
-        heldNotification: null,
-      });
-    },
-  );
+  // #1162: the older refused open must not erase a newer accepted tap.
+  it('keeps a newer widget destination offered after an older refused notification finishes navigating', async () => {
+    const c = await refusedNotificationAfterNewTap();
+    expect(c.getSnapshot()).toMatchObject({
+      screen: 'create',
+      notificationOpening: { status: 'held' },
+      heldNotificationSource: 'widget',
+    });
+    c.back();
+    await c.openPendingNotification();
+    expect(c.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      widgetPicker: true,
+      notificationOpening: { status: 'idle' },
+      heldNotification: null,
+    });
+  });
   it.each(['expired', 'category-off'] as const)(
     'drops a notification that becomes %s while held, without opening its Group',
     async (reason) => {
