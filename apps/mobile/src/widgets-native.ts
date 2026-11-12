@@ -143,6 +143,11 @@ export function createWidgetsStore(environment: string) {
   };
 }
 
+/** Android placement reconciliation spans every build's rows, not one API environment. */
+export async function reconcileWidgetSetupsAcrossBuilds(activeIds: number[]) {
+  await createWidgetsStore('').reconcileSetups(activeIds);
+}
+
 export function createWidgetsNative(environment: string): WidgetsNative {
   const store = createWidgetsStore(environment);
   let sessions: Promise<void> = Promise.resolve();

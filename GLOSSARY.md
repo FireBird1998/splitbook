@@ -44,6 +44,14 @@ _Avoid_: alternate currency, secondary currency, foreign currency
 Server data stored on a member's device so a Group can be shown offline. It always shows when it was last verified and is never treated as current.
 _Avoid_: cache (in product copy), offline data, local data
 
+**Widget copy**:
+The Saved copy a home-screen widget draws from. It holds only what the widgets show: a member's balances, their Groups' names, their own Suggested payments, people's first names and initials, and a count of their To review items. It follows the Saved copy rules and is removed when the member signs out or another account signs in.
+_Avoid_: widget cache, widget data
+
+**Widget setup**:
+A member's choices for one placed widget: its Group (or Ask each time, for Add expense) and whether amounts are hidden. It belongs to the device: it is kept through sign-out and removed when the widget is removed. Another account must set the widget up again.
+_Avoid_: widget settings, widget configuration
+
 **Expense entry**:
 What a member has typed for an Expense, before it is read.
 

@@ -12,7 +12,7 @@ import { fetch as nativeFetch } from 'expo/fetch';
 import { httpResponseStore } from './http-response-store';
 import * as SecureStore from 'expo-secure-store';
 import { createMobileController } from './data';
-import { mobileConfig } from './config';
+import { mobileConfig, mobileBuildSettings, widgetKey } from './config';
 import { createGoogleIdentityProvider } from './google-identity';
 import { createAppearanceController } from './data/appearance';
 import { SEPARATOR } from '@splitbook/shared/separator';
@@ -32,16 +32,7 @@ const fetch: typeof nativeFetch = async (...args) => {
 // Android normally uses native reachability; the library's HTTP fallback must not cache either.
 NetInfo.configure({ reachabilityHeaders: { 'Cache-Control': 'no-store' } });
 
-const config = mobileConfig(
-  {
-    mode: process.env.EXPO_PUBLIC_APP_ENV,
-    apiUrl: process.env.EXPO_PUBLIC_API_URL,
-    authOrigin: process.env.EXPO_PUBLIC_AUTH_ORIGIN,
-    inviteOrigin: process.env.EXPO_PUBLIC_INVITE_ORIGIN,
-    googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  },
-  __DEV__,
-);
+const config = mobileConfig(mobileBuildSettings, __DEV__);
 export const configurationReady = config !== null;
 export const googleSignInEnabled = Boolean(config?.googleWebClientId);
 
@@ -108,7 +99,9 @@ const notificationNative = androidNotificationsEnabled()
   : undefined;
 export const controller = createMobileController(controllerConfig, {
   notifications: notificationNative,
-  widgets: androidWidgetsEnabled() ? createWidgetsNative(controllerConfig.apiBaseUrl) : undefined,
+  widgets: androidWidgetsEnabled()
+    ? createWidgetsNative(widgetKey(mobileBuildSettings, __DEV__))
+    : undefined,
   googleSignIn: config?.googleWebClientId
     ? createGoogleIdentityProvider(
         config.googleWebClientId,
@@ -163,7 +156,7 @@ export const controller = createMobileController(controllerConfig, {
       offlineIdentity,
       // A build with widgets off must still purge copies kept by an earlier enabled build.
       ...(!androidWidgetsEnabled()
-        ? [{ clear: () => createWidgetsStore(controllerConfig.apiBaseUrl).clear() }]
+        ? [{ clear: () => createWidgetsStore(widgetKey(mobileBuildSettings, __DEV__)).clear() }]
         : []),
       ...(googleSignInEnabled
         ? [

@@ -4,7 +4,10 @@ import type { WidgetSetupRecord } from '@splitbook/shared/widget-setup';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 
-const store = vi.hoisted(() => ({ read: vi.fn(), setup: vi.fn(), saveSetup: vi.fn() }));
+const store = vi.hoisted(() => {
+  vi.stubGlobal('__DEV__', true);
+  return { read: vi.fn(), setup: vi.fn(), saveSetup: vi.fn() };
+});
 const redraw = vi.hoisted(() => vi.fn());
 const appearance = vi.hoisted(() => ({ mode: 'light' as 'light' | 'dark' }));
 vi.mock('react-native', async () => ({
