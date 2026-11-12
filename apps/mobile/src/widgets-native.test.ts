@@ -470,7 +470,7 @@ async function verifiedReviewPhone() {
   // To review answers separately; refreshing it must not advance Home's saved time.
   phone.clock.now = new Date(2026, 10, 13, 9, 49).getTime();
   await first.refreshToReview();
-  return { server, phone, environment };
+  return { server, phone, environment, controller: first };
 }
 
 it('keeps the To review chip on a cold offline restart without a preceding live NetInfo change', async () => {
@@ -494,28 +494,82 @@ it('keeps the To review chip on a cold offline restart without a preceding live 
   }
 });
 
-it(
-  'keeps the verified To review chip and original Home time when the app restarts offline after a live NetInfo change',
-  async () => {
-    const { phone, environment } = await verifiedReviewPhone();
-    try {
-      phone.connect(false);
-      await new Promise<void>((done) => setImmediate(done));
-      const restarted = phone.open();
-      phone.clock.now = drawTime;
-      await restarted.restore();
-      expect(restarted.getSnapshot().auth.status).toBe('authenticated');
-      await vi.waitFor(async () =>
-        expect((await drawn(createWidgetsStore(environment))).balances).toMatchObject({
-          state: 'normal',
-          owe: ['₹1,480.00'],
-          saved: 'Saved 9:41',
-          review: 'To review\u00a0· 3',
-        }),
-      );
-    } finally {
-      phone.dispose();
-      vi.unstubAllEnvs();
-    }
-  },
-);
+it('keeps the verified To review chip and original Home time when the app restarts offline after a live NetInfo change', async () => {
+  const { phone, environment } = await verifiedReviewPhone();
+  try {
+    phone.connect(false);
+    await new Promise<void>((done) => setImmediate(done));
+    const restarted = phone.open();
+    phone.clock.now = drawTime;
+    await restarted.restore();
+    expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+    await vi.waitFor(async () =>
+      expect((await drawn(createWidgetsStore(environment))).balances).toMatchObject({
+        state: 'normal',
+        owe: ['₹1,480.00'],
+        saved: 'Saved 9:41',
+        review: 'To review\u00a0· 3',
+      }),
+    );
+  } finally {
+    phone.dispose();
+    vi.unstubAllEnvs();
+  }
+});
+
+it('replaces the saved To review count with a verified zero', async () => {
+  const { server, phone, environment, controller } = await verifiedReviewPhone();
+  try {
+    server.world.toReview = { total: 0, groups: [] };
+    phone.clock.now = drawTime;
+    await controller.refreshToReview();
+    await vi.waitFor(async () => {
+      const store = createWidgetsStore(environment);
+      expect((await store.read()).copy?.review).toEqual({ count: 0, verifiedAt: drawTime });
+      expect((await drawn(store)).balances).toMatchObject({ review: null, saved: 'Saved 9:41' });
+    });
+  } finally {
+    phone.dispose();
+  }
+});
+
+it('hides a saved To review count when Drafts are off', async () => {
+  const { phone, environment } = await verifiedReviewPhone();
+  try {
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'false');
+    expect((await drawn(createWidgetsStore(environment))).balances).toMatchObject({
+      state: 'normal',
+      review: null,
+      owe: ['₹1,480.00'],
+      saved: 'Saved 9:41',
+    });
+  } finally {
+    phone.dispose();
+  }
+});
+
+it('keeps the To review verification time separate from Home through a live offline restart', async () => {
+  const { phone, environment } = await verifiedReviewPhone();
+  try {
+    const reviewTime = new Date(2026, 10, 13, 9, 49).getTime();
+    const store = createWidgetsStore(environment);
+    // The chip has no time label of its own; the public store read pins the retained metadata.
+    await vi.waitFor(async () =>
+      expect((await store.read()).copy?.review).toEqual({ count: 3, verifiedAt: reviewTime }),
+    );
+    phone.connect(false);
+    await new Promise<void>((done) => setImmediate(done));
+    const restarted = phone.open();
+    phone.clock.now = drawTime;
+    await restarted.restore();
+    await vi.waitFor(async () => {
+      expect((await store.read()).copy?.review).toEqual({ count: 3, verifiedAt: reviewTime });
+      expect((await drawn(store)).balances).toMatchObject({
+        review: 'To review\u00a0· 3',
+        saved: 'Saved 9:41',
+      });
+    });
+  } finally {
+    phone.dispose();
+  }
+});

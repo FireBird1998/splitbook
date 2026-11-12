@@ -866,7 +866,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     dependencies.widgets,
     accountStorage,
     (next) => {
-      if (!persistentDrafts || !next.auth.user || next.toReview.status !== 'ready')
+      // A live offline observer can still be ready with its earlier query timestamp.
+      // Its on-phone count omits server items; that isn't a newly verified count (#1173).
+      if (
+        !persistentDrafts ||
+        !next.auth.user ||
+        next.toReview.status !== 'ready' ||
+        next.offline.active ||
+        next.toReview.offline
+      )
         return undefined;
       const query = queryClient.getQueryState(
         toReviewKey({ environment: apiBase, accountId: next.auth.user.id }),
