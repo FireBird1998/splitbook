@@ -573,3 +573,26 @@ it('keeps the To review verification time separate from Home through a live offl
     phone.dispose();
   }
 });
+
+
+it('does not verify a zero when a refused Group is removed from the in-memory To review list', async () => {
+  const { server, phone, environment, controller } = await verifiedReviewPhone();
+  const groupId = server.world.groups[0]._id;
+  const held = server.hold('GET', '/api/user/to-review');
+  try {
+    server.reply('GET', `/api/groups/${groupId}`, () =>
+      Response.json({ error: 'Access denied', code: 'FORBIDDEN' }, { status: 403 }),
+    );
+    phone.clock.now = drawTime;
+    await controller.openGroup(groupId);
+    expect(controller.getSnapshot().toReview.read.total).toBe(0);
+    await new Promise<void>((done) => setImmediate(done));
+    expect((await createWidgetsStore(environment).read()).copy?.review).toEqual({
+      count: 3,
+      verifiedAt: new Date(2026, 10, 13, 9, 49).getTime(),
+    });
+  } finally {
+    held.release();
+    phone.dispose();
+  }
+});
