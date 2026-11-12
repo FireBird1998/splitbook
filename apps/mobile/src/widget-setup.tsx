@@ -1,3 +1,4 @@
+import { mobileBuildSettings, widgetKey } from './config';
 import { useEffect, useState } from 'react';
 import {
   View,
@@ -36,7 +37,7 @@ const pendingChoices = new Map<
   number,
   { accountId: string | null; groupId: string | null; hideAmounts: boolean }
 >();
-const store = createWidgetsStore(process.env.EXPO_PUBLIC_API_URL ?? '');
+const store = createWidgetsStore(widgetKey(mobileBuildSettings, __DEV__));
 /** Android configuration is deliberately independent of runtime.ts and its session/network reads. */
 export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreenProps) {
   const kind =

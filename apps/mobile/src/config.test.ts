@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { androidInvitationFilters, developmentConfig, mobileConfig } from './config';
+import { androidInvitationFilters, developmentConfig, mobileConfig, widgetKey } from './config';
 
 const local = {
   mode: 'development',
@@ -257,4 +257,48 @@ it('adds a separate, narrow review app-link filter only for enabled builds', () 
     { scheme: 'http', host: '127.0.0.1', port: '4138', pathPattern: '/groups/.*/review' },
   ]);
   expect(androidInvitationFilters({ ...local, reviewEnabled: false })).toHaveLength(1);
+});
+
+describe('widget row key', () => {
+  const signed = {
+    mode: 'staging',
+    apiUrl: 'https://staging.splitbook.test',
+    authOrigin: 'https://staging.splitbook.test',
+    googleWebClientId: '123-test.apps.googleusercontent.com',
+  };
+  it.each([
+    [local, true, 'http://127.0.0.1:4138'],
+    [signed, false, 'https://staging.splitbook.test'],
+    [
+      {
+        ...signed,
+        mode: 'production',
+        apiUrl: 'https://splitbook.test',
+        authOrigin: 'https://splitbook.test',
+      },
+      false,
+      'https://splitbook.test',
+    ],
+  ] as const)('keeps the installed key for $0.mode', (settings, developmentBuild, expected) => {
+    expect(widgetKey(settings, developmentBuild)).toBe(expected);
+    expect(mobileConfig(settings, developmentBuild)?.apiBaseUrl).toBe(expected);
+  });
+  it.each([
+    'https://staging.splitbook.test/',
+    'https://STAGING.splitbook.test',
+    'https://staging.splitbook.test:443',
+  ])('uses the app origin for %s, which the signed build refuses', (apiUrl) => {
+    expect(widgetKey({ ...signed, apiUrl }, false)).toBe('https://staging.splitbook.test');
+    expect(new URL(apiUrl).origin).not.toBe(apiUrl);
+  });
+  it('keeps the raw development key even when its spelling is not normalized', () => {
+    const apiUrl = 'http://LOCALHOST:80/';
+    expect(widgetKey({ ...local, apiUrl }, true)).toBe(apiUrl);
+  });
+  it.each([undefined, '', 'not an origin', 'https://staging.splitbook.test/'])(
+    'keeps the raw fallback for an invalid configuration: %s',
+    (apiUrl) => {
+      expect(widgetKey({ apiUrl }, false)).toBe(apiUrl ?? '');
+    },
+  );
 });

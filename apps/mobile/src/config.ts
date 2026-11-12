@@ -2,6 +2,23 @@ import type { MobileConfig } from './data/types';
 import type { ExpoConfig } from 'expo/config';
 import { parseWebOrigin } from './web-origin';
 
+/** Expo replaces these named settings in app and headless bundles alike. No runtime starts here. */
+export const mobileBuildSettings = {
+  mode: process.env.EXPO_PUBLIC_APP_ENV,
+  apiUrl: process.env.EXPO_PUBLIC_API_URL,
+  authOrigin: process.env.EXPO_PUBLIC_AUTH_ORIGIN,
+  inviteOrigin: process.env.EXPO_PUBLIC_INVITE_ORIGIN,
+  googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+};
+
+/** Same reading as the app; an invalid build retains the renderer's raw fallback key. */
+export function widgetKey(
+  env: Parameters<typeof mobileConfig>[0],
+  developmentBuild: boolean,
+): string {
+  return mobileConfig(env, developmentBuild)?.apiBaseUrl ?? env.apiUrl ?? '';
+}
+
 type InvitationEnvironment = {
   mode?: string;
   authOrigin?: string;

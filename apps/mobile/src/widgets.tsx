@@ -1,3 +1,4 @@
+import { mobileBuildSettings, widgetKey } from './config';
 import { drawBalances } from './balances-widget-draw';
 import { drawQuick } from './quick-widget-draw';
 import { legacyBalancesSetup } from '@splitbook/shared/widget-setup';
@@ -11,8 +12,7 @@ import { balancesWidget } from '@splitbook/shared/balances-widget';
 import { lightTokens, darkTokens } from '@splitbook/shared/design-tokens';
 import { createWidgetsStore } from './widgets-native';
 
-const widgetEnvironment = () => process.env.EXPO_PUBLIC_API_URL ?? '';
-const widgetStore = createWidgetsStore(widgetEnvironment());
+const widgetStore = createWidgetsStore(widgetKey(mobileBuildSettings, __DEV__));
 
 async function representation(info: WidgetInfo) {
   const record = await widgetStore.read();
