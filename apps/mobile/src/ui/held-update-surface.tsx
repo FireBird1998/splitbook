@@ -171,7 +171,14 @@ export function useHeldUpdateNativeOverlays() {
   return useMemo(
     () => ({
       alert(title: string, message: string) {
-        const finish = cover?.();
+        const release = cover?.();
+        // The launching surface owns this window: recreation/unmount retires its cover even
+        // when Android restores a dialog without the old JavaScript dismissal callback.
+        const finish = () => {
+          pending.current.delete(finish);
+          release?.();
+        };
+        pending.current.add(finish);
         Alert.alert(title, message, [{ text: 'OK', onPress: finish }], { onDismiss: finish });
       },
       share(content: Parameters<typeof Share.share>[0]) {
