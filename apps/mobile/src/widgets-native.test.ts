@@ -494,9 +494,7 @@ it('keeps the To review chip on a cold offline restart without a preceding live 
   }
 });
 
-// #1170: going offline while the app is alive publishes a synthetic zero and overwrites the
-// verified count in SQLite. Keep this failing pin until the owner decides how to fix it.
-it.fails(
+it(
   'keeps the verified To review chip and original Home time when the app restarts offline after a live NetInfo change',
   async () => {
     const { phone, environment } = await verifiedReviewPhone();
