@@ -33,3 +33,9 @@ it.each([
     ]);
   }
 });
+
+it('names cross-build placement reconciliation instead of opening an empty environment', () => {
+  const source = readFileSync(new URL('widget-lifecycle.ts', import.meta.url), 'utf8');
+  expect(source).toContain('reconcileWidgetSetupsAcrossBuilds(');
+  expect(source).not.toContain('createWidgetsStore');
+});
