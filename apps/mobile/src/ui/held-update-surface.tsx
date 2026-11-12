@@ -184,22 +184,36 @@ export function useHeldUpdateNativeOverlays() {
       share(content: Parameters<typeof Share.share>[0]) {
         const release = cover?.();
         let away = false;
+        let finished = false;
+        let frame: number | undefined;
         const subscription = AppState.addEventListener('change', (next) => {
           if (next !== 'active') away = true;
           else if (away) finish();
         });
         const finish = () => {
+          if (finished) return;
+          finished = true;
+          if (frame !== undefined) cancelAnimationFrame(frame);
           subscription.remove();
           pending.current.delete(finish);
           release?.();
         };
         pending.current.add(finish);
-        // Android resolves on launch, before the chooser closes. Its return to the foreground
-        // releases the cover; a failed launch has no window to wait for.
-        return Share.share(content).catch((error: unknown) => {
-          finish();
-          throw error;
-        });
+        // Android can resolve at launch, before its background event. Give that lifecycle
+        // event the next frame; a share that stayed active must not leave a permanent cover.
+        return Share.share(content).then(
+          (result) => {
+            if (!finished)
+              frame = requestAnimationFrame(() => {
+                if (!away) finish();
+              });
+            return result;
+          },
+          (error: unknown) => {
+            finish();
+            throw error;
+          },
+        );
       },
     }),
     [cover],
