@@ -1,6 +1,6 @@
 import type { WidgetTarget } from '@splitbook/shared/balances-widget';
-import { emptyNotificationOpening } from './notification-alerts';
-import type { HeldNotificationOwner, MobileSnapshot } from './types';
+import { emptyNotificationOpening as emptyHeldOpening } from './notification-alerts';
+import type { HeldNotificationOwner as HeldUpdateOwner, MobileSnapshot } from './types';
 
 type HeldFields = Pick<
   MobileSnapshot,
@@ -29,7 +29,7 @@ export type HeldIntent =
   | { source: 'widget'; target: WidgetTarget };
 export type HeldAction =
   | { kind: 'open' }
-  | { kind: 'dismiss' | 'consume-notice'; owner: HeldNotificationOwner };
+  | { kind: 'dismiss' | 'consume-notice'; owner: HeldUpdateOwner };
 export interface HeldUpdate {
   accept(intent: HeldIntent): Promise<void>;
   act(action: HeldAction): Promise<void>;
@@ -48,7 +48,7 @@ export function createHeldUpdate(d: {
     epoch = 0;
   let pending: { source: HeldIntent['source']; destination: HeldAdmission['destination'] } | null =
     null;
-  let signalled: HeldNotificationOwner | null = null;
+  let signalled: HeldUpdateOwner | null = null;
   const fields = (): HeldFields => {
     const state = d.read();
     return {
@@ -75,13 +75,13 @@ export function createHeldUpdate(d: {
   const clear = () => {
     pending = null;
     d.publish({
-      notificationOpening: emptyNotificationOpening(),
+      notificationOpening: emptyHeldOpening(),
       heldNotification: null,
       heldNotificationNotice: null,
       heldNotificationSource: null,
     });
   };
-  const ownsOwner = (owner: HeldNotificationOwner) => {
+  const ownsOwner = (owner: HeldUpdateOwner) => {
     const state = d.read();
     return (
       pending !== null &&
