@@ -256,16 +256,19 @@ export function Snackbar({
   action,
   bottom = 92,
   inline = false,
+  pointerEvents,
 }: {
   message: string;
   action?: { label: string; onPress: () => void };
   bottom?: number;
   inline?: boolean;
+  pointerEvents?: 'none';
 }) {
   const theme = useTheme();
   return (
     <View
       accessibilityLiveRegion="polite"
+      pointerEvents={pointerEvents}
       style={{
         position: inline ? 'relative' : 'absolute',
         left: inline ? undefined : 16,

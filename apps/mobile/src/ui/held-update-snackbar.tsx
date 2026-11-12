@@ -54,13 +54,14 @@ function Footer({
 }) {
   const [height, setHeight] = useState(0);
   return (
-    <View onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>
+    <View pointerEvents="box-none" onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>
       {!inline && children}
       {shown ? (
         <Snackbar
           message={widget ? 'Widget held until you finish' : 'Update held until you finish'}
           bottom={height + 12}
           inline={inline}
+          pointerEvents="none"
         />
       ) : null}
       {inline && children}

@@ -136,7 +136,7 @@ export function HeldUpdateFloatingNotice({
   return (
     <SafeAreaView
       edges={['bottom']}
-      pointerEvents="box-none"
+      pointerEvents="none"
       style={{ position: 'absolute', left: 0, right: 0, bottom: Math.max(bottom, keyboardHeight) }}
     >
       <HeldUpdateFooter controller={controller} inline hostId={hostId} />
