@@ -140,4 +140,57 @@ describe('held-update rules before extraction (#1158)', () => {
       }
     },
   );
+  describe.each(['notification', 'widget'] as const)('%s open in flight', (source) => {
+    it.each(['sign-out', '401', 'account-switch'] as const)(
+      'drops the held destination on %s and ignores the late answer',
+      async (reset) => {
+        const { server, controller: c, groupId, hint } = setup();
+        await c.signIn('alex');
+        c.startCreate();
+        if (source === 'notification') await c.tapNotification(hint);
+        else await c.openWidget({ kind: 'group', groupId });
+        c.back();
+        const held = server.hold('GET', `/api/groups/${groupId}`);
+        const opening = c.openPendingNotification();
+        try {
+          await held.arrived;
+          expect(c.getSnapshot().notificationOpening.status).toBe('opening');
+          if (reset === 'sign-out') await c.signOut();
+          else if (reset === '401') {
+            server.auth.expired = true;
+            await c.refreshHome();
+          } else await c.signIn('sam');
+          const auth = c.getSnapshot().auth;
+          expect(auth).toMatchObject(
+            reset === 'account-switch'
+              ? { status: 'authenticated', user: { id: server.world.people.sam.id } }
+              : { status: 'signed-out', user: null },
+          );
+          expect(c.getSnapshot()).toMatchObject({
+            screen: 'groups',
+            detail: { id: null, data: null },
+            heldNotification: null,
+            heldNotificationNotice: null,
+            heldNotificationSource: null,
+            notificationOpening: { status: 'idle' },
+          });
+          held.release();
+          await opening;
+          await c.openPendingNotification();
+          expect(c.getSnapshot().auth).toEqual(auth);
+          expect(c.getSnapshot()).toMatchObject({
+            screen: 'groups',
+            detail: { id: null, data: null },
+            heldNotification: null,
+            heldNotificationNotice: null,
+            heldNotificationSource: null,
+            notificationOpening: { status: 'idle' },
+          });
+        } finally {
+          held.release();
+          await opening;
+        }
+      },
+    );
+  });
 });
