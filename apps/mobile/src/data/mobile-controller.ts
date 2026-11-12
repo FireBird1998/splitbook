@@ -2800,6 +2800,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       if (error instanceof RequestError && [403, 404].includes(error.status)) {
         await openGroup(event.groupId, false, 'activity'); // existing denied-state and saved-copy cleanup
+        if (!current(owner) || pendingNotification !== event) return;
         pendingNotification = null;
         publish({ ...snapshot, notificationOpening: emptyNotificationOpening() });
       } else
