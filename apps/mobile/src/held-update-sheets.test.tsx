@@ -4,6 +4,7 @@ import { fakeSplitbook } from './test-utils/fake-splitbook';
 import { testPhone, until } from './test-utils/test-phone';
 import { unbroken } from './test-utils/layout';
 import { RecordPaymentSheet } from './ui/record-payment-sheet';
+import { CompactButton } from './ui/compact';
 import { TagManager } from './ui/tag-manager';
 
 const runtime = vi.hoisted(() => ({
@@ -46,6 +47,7 @@ afterEach(() => {
   act(() => screen?.unmount());
   screen = undefined;
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 async function setup() {
@@ -234,4 +236,41 @@ it('shows the held widget notice on an invitation without navigating away', asyn
   await act(async () => c.openWidget('home'));
   expect(c.getSnapshot().screen).toBe('invite');
   expect(text()).toContain('Widget held until you finish');
+});
+
+it('keeps the same four-second notice when Currencies opens Add a currency', async () => {
+  const { controller: c, groupId, text } = await setup();
+  await act(async () => c.openCurrencies(groupId));
+  vi.useFakeTimers();
+  await act(async () => c.openWidget('home'));
+  expect(text()).toContain('Widget held until you finish');
+  await act(async () => vi.advanceTimersByTime(1_000));
+  act(() =>
+    screen!.root
+      .findAllByType(CompactButton)
+      .find((b) => b.props.label === 'Add a currency')!
+      .props.onPress(),
+  );
+  expect(text().match(/Widget held until you finish/g)).toHaveLength(1);
+  await act(async () => vi.advanceTimersByTime(2_999));
+  expect(text()).toContain('Widget held until you finish');
+  await act(async () => vi.advanceTimersByTime(1));
+  expect(text()).not.toContain('Widget held until you finish');
+});
+
+it('shows a notice on the Group when a closed Tags read still protects it', async () => {
+  const { server, controller: c, groupId, text } = await setup();
+  const held = server.hold('GET', `/api/groups/${groupId}/tag-actions`);
+  try {
+    await act(async () => c.openTags(groupId));
+    await act(async () => held.arrived);
+    act(() => c.closeTags());
+    expect(c.getSnapshot().tagsOpenFor).toBeNull();
+    expect(c.getSnapshot().tagManager.busy).toBe(true);
+    await act(async () => c.openWidget('home'));
+    expect(c.getSnapshot().notificationOpening.status).toBe('held');
+    expect(text()).toContain('Widget held until you finish');
+  } finally {
+    await act(async () => held.release());
+  }
 });
