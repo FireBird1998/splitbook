@@ -1,6 +1,6 @@
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, expect, it, vi } from 'vitest';
-import { fakeSplitbook } from './test-utils/fake-splitbook';
+import { fakeSplitbook, expenseFixture } from './test-utils/fake-splitbook';
 import { testPhone, until } from './test-utils/test-phone';
 import { unbroken } from './test-utils/layout';
 import { RecordPaymentSheet } from './ui/record-payment-sheet';
@@ -279,4 +279,25 @@ it('shows a notice on the Group when a closed Tags read still protects it', asyn
   } finally {
     await act(async () => held.release());
   }
+});
+
+it('shows the held widget notice on a saved Expense record without changing it', async () => {
+  const { server, controller: c, groupId, text } = await setup();
+  const expense = {
+    ...expenseFixture(
+      server.world.groups[0],
+      'c00000000000000000000002',
+      'Fictional saved Expense',
+    ),
+    revision: 1,
+    isDeleted: false,
+    editHistory: [],
+  };
+  server.world.expenseRecords[groupId] = { [expense._id]: expense };
+  await act(async () => c.openExpense(groupId, expense._id));
+  expect(c.getSnapshot().expense.status).toBe('detail');
+  const record = c.getSnapshot().expense;
+  await act(async () => c.openWidget('home'));
+  expect(c.getSnapshot().expense).toBe(record);
+  expect(text()).toContain('Widget held until you finish');
 });
