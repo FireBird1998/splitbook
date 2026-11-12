@@ -543,3 +543,30 @@ it('leaves Create reachable through the floating notice and its margins', async 
   await act(async () => until(c, (state) => state.screen === 'group'));
   expect(c.getSnapshot().notificationOpening.status).toBe('held');
 });
+
+it('retires a native alert cover when its launching screen is recreated without a dismissal callback', async () => {
+  const { controller: c, groupId, text } = await setup();
+  await act(async () => c.openCurrencies(groupId));
+  const browser = vi.spyOn(Linking, 'openURL').mockRejectedValue(new Error('No browser'));
+  const alert = vi.spyOn(Alert, 'alert');
+  try {
+    await act(async () => screen!.root.findByType(GroupCurrencies).props.onOpenWeb());
+    expect(alert).toHaveBeenCalled();
+    await act(async () => c.openWidget('home'));
+    expect(c.getSnapshot().heldNotificationNotice).not.toBeNull();
+    act(() => emitAppState('background'));
+    // The native window and its launching surface go away without OK/onDismiss. The App's
+    // hold timeline survives; a late callback from the retired window must also be harmless.
+    act(() => c.startCreate());
+    await act(async () => emitAppState('active'));
+    expect(text()).toContain('Widget held until you finish');
+    expect(c.getSnapshot().heldNotificationNotice).toBeNull();
+    await act(async () => alert.mock.calls.at(-1)![2]![0].onPress!());
+    expect(text()).toContain('Widget held until you finish');
+    await act(async () => c.openWidget('home'));
+    expect(text()).toContain('Widget held until you finish');
+  } finally {
+    browser.mockRestore();
+    alert.mockRestore();
+  }
+});
