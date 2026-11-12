@@ -1,11 +1,12 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
-import { Alert, Linking } from 'react-native';
+import { Alert, Linking, Share } from 'react-native';
 import { afterEach, expect, it, vi } from 'vitest';
 import { fakeSplitbook, expenseFixture } from './test-utils/fake-splitbook';
 import { testPhone, until } from './test-utils/test-phone';
 import { unbroken } from './test-utils/layout';
 import { RecordPaymentSheet } from './ui/record-payment-sheet';
 import { CompactButton } from './ui/compact';
+import { GroupMembers } from './ui/group-members';
 import { GroupCurrencies } from './ui/group-currencies';
 import { TagManager } from './ui/tag-manager';
 
@@ -346,17 +347,63 @@ it('waits to start the held notice until a native alert closes', async () => {
     const owner = c.getSnapshot().heldNotification;
     expect(c.getSnapshot().heldNotificationNotice).toBe(owner);
     expect(text()).not.toContain('Widget held until you finish');
-    await act(async () => vi.advanceTimersByTime(5_000));
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+    });
     expect(c.getSnapshot().heldNotificationNotice).toBe(owner);
     await act(async () => alert.mock.calls.at(-1)![2]![0].onPress!());
     expect(c.getSnapshot().heldNotificationNotice).toBeNull();
     expect(text()).toContain('Widget held until you finish');
-    await act(async () => vi.advanceTimersByTime(3_999));
+    await act(async () => {
+      vi.advanceTimersByTime(3_999);
+    });
     expect(text()).toContain('Widget held until you finish');
-    await act(async () => vi.advanceTimersByTime(1));
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
     expect(text()).not.toContain('Widget held until you finish');
   } finally {
     browser.mockRestore();
     alert.mockRestore();
+  }
+});
+
+it('waits to start the held notice until native sharing closes', async () => {
+  const { server, controller: c, groupId, text } = await setup();
+  server.world.pages[`/api/groups/${groupId}/invite-link`] = {
+    inviteCode: 'deadbeef',
+    inviteUrl: 'http://localhost:4138/join/deadbeef',
+    expiresAt: '2030-01-01T00:00:00.000Z',
+  };
+  const reading = server.hold('GET', `/api/groups/${groupId}/tag-actions`);
+  let dismiss!: (value: Awaited<ReturnType<typeof Share.share>>) => void;
+  const sharing = vi.spyOn(Share, 'share').mockReturnValue(
+    new Promise((resolve) => {
+      dismiss = resolve;
+    }),
+  );
+  try {
+    await act(async () => c.openTags(groupId));
+    await act(async () => reading.arrived);
+    act(() => {
+      c.closeTags();
+      c.openMembers();
+    });
+    await act(async () => screen!.root.findByType(GroupMembers).props.invite.onPress());
+    expect(sharing).toHaveBeenCalled();
+    vi.useFakeTimers();
+    await act(async () => c.openWidget('home'));
+    const owner = c.getSnapshot().heldNotification;
+    expect(c.getSnapshot().heldNotificationNotice).toBe(owner);
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(text()).not.toContain('Widget held until you finish');
+    await act(async () => dismiss({ action: 'dismissedAction', activityType: undefined }));
+    expect(text()).toContain('Widget held until you finish');
+    expect(c.getSnapshot().heldNotificationNotice).toBeNull();
+  } finally {
+    await act(async () => reading.release());
+    sharing.mockRestore();
   }
 });
