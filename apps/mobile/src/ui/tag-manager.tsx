@@ -1,3 +1,4 @@
+import { useHeldUpdateModalNotice } from './held-update-surface';
 import type { TextInputInstance, ScrollViewInstance, ViewInstance } from 'react-native';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import {
@@ -230,6 +231,7 @@ export function TagManager({
   recoveryOnly?: boolean;
   onClose(): void;
 }) {
+  const heldNotice = useHeldUpdateModalNotice();
   const theme = useTheme();
   const manager = useMemo(() => controller.manageTags(groupId), [controller, groupId, accountId]);
   const state = useSyncExternalStoreWithSelector(
@@ -645,6 +647,7 @@ export function TagManager({
             )}
           </View>
         </ScrollView>
+        {heldNotice}
         {done && <DoneNote done={done} onDismiss={manager.dismissDone} />}
 
         <BottomSheet

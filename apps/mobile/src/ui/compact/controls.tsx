@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View, type LayoutChangeEvent } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
 import { useReducedMotion } from './motion';
@@ -504,17 +504,20 @@ export function FloatingAction({
   icon,
   onPress,
   bottom = 96,
+  onLayout,
 }: {
   label: string;
   icon: IconName;
   onPress: () => void;
   bottom?: number;
+  onLayout?: (event: LayoutChangeEvent) => void;
 }) {
   const theme = useTheme();
   // A drag that starts on it never presses it (#693).
   const tap = useTap();
   return (
     <Pressable
+      onLayout={onLayout}
       accessibilityRole="button"
       accessibilityLabel={label}
       {...tap.on(onPress)}

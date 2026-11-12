@@ -23,6 +23,7 @@ import {
   touch,
   useTap,
 } from './compact';
+import { useHeldUpdateModalNotice } from './held-update-surface';
 import { savingNeedsConnection } from './offline-notice';
 import { useStartWhileUnfocused } from './start-while-unfocused';
 import { Copy, Icon } from './primitives';
@@ -183,6 +184,7 @@ export function GroupCreateForm({
   const nameStart = useStartWhileUnfocused(() => onLeaveField('name'));
   // The main currency, or a new Trip's extra currency (#723), chosen from the same list.
   const [choosing, setChoosing] = useState<'main' | 'extra' | null>(null);
+  const heldNotice = useHeldUpdateModalNotice(choosing !== null);
   // A drag that starts on the field or on a currency never presses it (#684): one for the form,
   // one for the list over it.
   const fieldTap = useTap();
@@ -593,6 +595,7 @@ export function GroupCreateForm({
               <CompactText tone="secondary">No currencies match your search.</CompactText>
             )}
           </ScrollView>
+          {heldNotice}
         </SafeAreaView>
       </Modal>
     </View>

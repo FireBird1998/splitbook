@@ -1,3 +1,5 @@
+import { HeldUpdateSurfaceContext, useHeldUpdateSurfaces } from './held-update-surface';
+import { HeldUpdateNoticeContext, HeldUpdateFooter } from './held-update-snackbar';
 import {
   notificationDevice,
   notificationHint,
@@ -2022,13 +2024,16 @@ describe('an unexpected rendering error in the Expense task (#187)', () => {
   function CrashingScreen({
     controller,
     crash,
+    withController = false,
   }: {
     controller: MobileController;
     crash: (editor: Editor) => boolean;
+    withController?: boolean;
   }) {
     const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
     return (
       <ExpenseEditor
+        controller={withController ? controller : undefined}
         state={state.expense}
         currentUserId={memberId}
         notice={<Crash crash={crash(state.expense)} />}
@@ -2099,6 +2104,31 @@ describe('an unexpected rendering error in the Expense task (#187)', () => {
     onTestFinished(() => reported.mockRestore());
     return reported;
   };
+
+  it('acknowledges a held widget on the recoverable form error view', async () => {
+    quiet();
+    const ui = await crashing(typedBoom);
+    function Surface() {
+      const held = useHeldUpdateSurfaces(ui.controller);
+      return (
+        <HeldUpdateSurfaceContext.Provider value={held}>
+          <HeldUpdateNoticeContext.Provider value={held.notice}>
+            <CrashingScreen controller={ui.controller} crash={typedBoom} withController />
+            {held.active && !held.notice.hostId && held.notice.shown ? (
+              <HeldUpdateFooter controller={ui.controller} inline />
+            ) : null}
+          </HeldUpdateNoticeContext.Provider>
+        </HeldUpdateSurfaceContext.Provider>
+      );
+    }
+    await act(async () => screen!.update(<Surface />));
+    await ui.type('Description, required', 'Boom');
+    expect(text(ui.root())).toContain('Something went wrong');
+    const draft = ui.controller.getSnapshot().expense.draft;
+    await act(async () => ui.controller.openWidget('home'));
+    expect(ui.controller.getSnapshot().expense.draft).toBe(draft);
+    expect(text(ui.root())).toContain('Widget held until you finish');
+  });
 
   it('shows a recoverable view instead of the form, without rendering the draft again', async () => {
     const reported = quiet();

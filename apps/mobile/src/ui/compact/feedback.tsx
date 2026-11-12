@@ -255,20 +255,27 @@ export function Snackbar({
   message,
   action,
   bottom = 92,
+  inline = false,
+  pointerEvents,
 }: {
   message: string;
   action?: { label: string; onPress: () => void };
   bottom?: number;
+  inline?: boolean;
+  pointerEvents?: 'none';
 }) {
   const theme = useTheme();
   return (
     <View
       accessibilityLiveRegion="polite"
+      pointerEvents={pointerEvents}
       style={{
-        position: 'absolute',
-        left: 16,
-        right: 16,
-        bottom,
+        position: inline ? 'relative' : 'absolute',
+        left: inline ? undefined : 16,
+        right: inline ? undefined : 16,
+        bottom: inline ? undefined : bottom,
+        marginHorizontal: inline ? 16 : undefined,
+        marginVertical: inline ? 8 : undefined,
         minHeight: 48,
         borderRadius: radius.tile,
         flexDirection: 'row',

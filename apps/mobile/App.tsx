@@ -1,3 +1,11 @@
+import {
+  HeldUpdateSurfaceContext,
+  useHeldUpdateSurfaces,
+  useHeldUpdateNativeOverlays,
+  useHeldUpdateBottomSpace,
+  HeldUpdateFloatingNotice,
+} from './src/ui/held-update-surface';
+import { HeldUpdateNoticeContext } from './src/ui/held-update-snackbar';
 import { WidgetGroupPicker } from './src/widget-picker';
 import { widgetLinkTarget } from './src/widget-links';
 import { androidWidgetsEnabled } from './src/widgets-flag';
@@ -22,11 +30,9 @@ import {
 import {
   AppState,
   Appearance,
-  Alert,
   KeyboardAvoidingView,
   Linking,
   Platform,
-  Share,
   BackHandler,
   Pressable,
   RefreshControl,
@@ -129,6 +135,7 @@ const startups = new WeakMap<
 >();
 
 export default function App() {
+  const heldSurface = useHeldUpdateSurfaces(controller);
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
   const systemMode = useColorScheme() === 'dark' ? 'dark' : 'light';
   const mode = preference.mode === 'system' ? systemMode : preference.mode;
@@ -157,8 +164,20 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeContext.Provider value={getSemanticTokens(mode)}>
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-        <SplitBook />
-        {androidWidgetsEnabled() ? <WidgetGroupPicker /> : null}
+        <HeldUpdateSurfaceContext.Provider value={heldSurface}>
+          <HeldUpdateNoticeContext.Provider value={heldSurface.notice}>
+            <View style={{ flex: 1 }}>
+              <SplitBook />
+              {heldSurface.active && !heldSurface.notice.hostId && heldSurface.notice.shown ? (
+                <HeldUpdateFloatingNotice
+                  controller={controller}
+                  bottom={heldSurface.bottomClearance}
+                />
+              ) : null}
+            </View>
+            {androidWidgetsEnabled() ? <WidgetGroupPicker /> : null}
+          </HeldUpdateNoticeContext.Provider>
+        </HeldUpdateSurfaceContext.Provider>
       </ThemeContext.Provider>
     </SafeAreaProvider>
   );
@@ -477,6 +496,7 @@ function AuthenticationScreen() {
 
 /** Settings, Create Group or an invitation: a compact top bar over the screen's content. */
 function TaskScreen() {
+  const native = useHeldUpdateNativeOverlays();
   const state = useMobileSnapshot(
     controller,
     (snapshot) => ({
@@ -648,7 +668,7 @@ function TaskScreen() {
               }
               onOpenWeb={() => {
                 void Linking.openURL(new URL('/settings', environment.webOrigin).href).catch(() => {
-                  Alert.alert('Couldn’t open web settings', 'Check your browser and try again.');
+                  native.alert('Couldn’t open web settings', 'Check your browser and try again.');
                 });
               }}
               onSignOut={() =>
@@ -931,23 +951,29 @@ function draftDiscard(discard: () => void): Confirmation {
 }
 
 /** Shares the open Group's invitation link through Android's share sheet. */
-function shareInvite() {
-  void (async () => {
-    const url = await controller.loadInviteLink();
-    if (!url) {
-      const message = controller.getSnapshot().share.message;
-      if (message) Alert.alert('Couldn’t get an invitation link', message);
-      return;
-    }
-    try {
-      await Share.share({
-        message: `Join our Group on ${PRODUCT_NAME}: ${url}`,
-        title: `${PRODUCT_NAME} invitation`,
-      });
-    } catch {
-      Alert.alert('Couldn’t open sharing', 'Your invitation link is still available. Try again.');
-    }
-  })();
+function useShareInvite() {
+  const native = useHeldUpdateNativeOverlays();
+  return useCallback(() => {
+    void (async () => {
+      const url = await controller.loadInviteLink();
+      if (!url) {
+        const message = controller.getSnapshot().share.message;
+        if (message) native.alert('Couldn’t get an invitation link', message);
+        return;
+      }
+      try {
+        await native.share({
+          message: `Join our Group on ${PRODUCT_NAME}: ${url}`,
+          title: `${PRODUCT_NAME} invitation`,
+        });
+      } catch {
+        native.alert(
+          'Couldn’t open sharing',
+          'Your invitation link is still available. Try again.',
+        );
+      }
+    })();
+  }, [native]);
 }
 
 /**
@@ -972,6 +998,8 @@ const unlistedGroup = (id: string): MobileGroup => ({
 
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen() {
+  const native = useHeldUpdateNativeOverlays();
+  const shareInvite = useShareInvite();
   const heldUpdate = useHeldUpdateBanner();
   const state = useMobileSnapshot(
     controller,
@@ -1178,17 +1206,19 @@ function GroupScreen() {
     known && (group || state.detail.status === 'loading') && state.destination === 'expenses'
       ? known
       : null;
+  const actionBottom = state.snackbar ? 156 : 96;
+  const actionSpace = useHeldUpdateBottomSpace(floating ? actionBottom : null);
   const discardDraft = useCallback(
     () =>
       confirm(
         draftDiscard(
           () =>
             void controller.discardKeptDraft().then((discarded) => {
-              if (!discarded) Alert.alert('Couldn’t discard this draft', 'Please try again.');
+              if (!discarded) native.alert('Couldn’t discard this draft', 'Please try again.');
             }),
         ),
       ),
-    [confirm],
+    [confirm, native],
   );
   const selectMonth = useCallback((month: string | null) => void controller.selectMonth(month), []);
   const chooseTripCurrency = useCallback(
@@ -1360,7 +1390,8 @@ function GroupScreen() {
               icon={kept ? keptAction.icon : 'add'}
               onPress={kept ? resumeDraft : () => openExpense(floating.id)}
               // Above the snackbar while it shows.
-              bottom={state.snackbar ? 156 : undefined}
+              bottom={actionBottom}
+              onLayout={actionSpace}
             />
           ) : null}
           {state.snackbar && group ? (
@@ -1405,7 +1436,7 @@ function GroupScreen() {
             void Linking.openURL(
               new URL(`/groups/${group.id}/settings`, environment.webOrigin).href,
             ).catch(() => {
-              Alert.alert(
+              native.alert(
                 'Couldn’t open the Group’s settings',
                 'Check your browser and try again.',
               );
@@ -1546,6 +1577,7 @@ function GroupScreen() {
 
 /** Members and Group details: a full screen over the Group, which Back returns to. */
 function MembersScreen() {
+  const shareInvite = useShareInvite();
   const state = useMobileSnapshot(
     controller,
     ({ auth, detail, groups, share, offline, leave, toReview }) => ({

@@ -1,5 +1,6 @@
+import { HeldUpdateDepthContext, useHeldUpdateSheetNotice } from '../held-update-surface';
 import type { TextInstance } from 'react-native';
-import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import {
   AccessibilityInfo,
   Animated,
@@ -80,6 +81,8 @@ export function BottomSheet({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const depth = useContext(HeldUpdateDepthContext);
+  const notice = useHeldUpdateSheetNotice(visible, depth);
   const theme = useTheme();
   // At large text the title keeps room for its widest word, or Done goes under it: at 200% on a
   // 360 dp phone, "Venkataraghavan-" needs 299 dp, and beside the × it had 276 (#921). Never more
@@ -138,124 +141,127 @@ export function BottomSheet({
       onRequestClose={dismiss}
       onShow={onShow}
     >
-      <KeyboardAvoidingView behavior="padding" style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={dismissLabel}
-          accessibilityState={{ disabled: !dismissible }}
-          disabled={!dismissible}
-          onPress={dismiss}
-          style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            bottom: 0,
-            left: 0,
-            backgroundColor: scrim,
-            opacity: theme.mode === 'dark' ? 0.62 : 0.45,
-          }}
-        />
-        <Animated.View
-          accessibilityViewIsModal
-          style={{
-            maxHeight: '90%',
-            backgroundColor: theme.bgElevated,
-            borderTopLeftRadius: radius.sheet,
-            borderTopRightRadius: radius.sheet,
-            transform: [{ translateY: drag }],
-          }}
-        >
-          {/* The sheet draws edge to edge; its content stays above Android's navigation bar. */}
-          <SafeAreaView edges={['bottom']} style={{ flexShrink: 1 }}>
-            <View testID="sheet-drag-area" {...pan.panHandlers}>
-              <View
-                style={{
-                  alignSelf: 'center',
-                  width: 36,
-                  height: 4,
-                  borderRadius: 2,
-                  marginTop: 10,
-                  marginBottom: 2,
-                  backgroundColor: theme.borderStrong,
-                }}
-              />
-              <View
-                style={{
-                  minHeight: 56,
-                  flexDirection: 'row',
-                  alignItems: 'flex-start',
-                  gap: 8,
-                  paddingTop: headerEdge(action),
-                  paddingBottom: headerEdge(action),
-                  paddingLeft: headerPadding.left,
-                  paddingRight: headerPadding.right,
-                  // At 200% on a 360dp phone, "Keep editing" beside "Finish this expense
-                  // later?" broke "expense" in two (#639).
-                  ...(column ? { flexWrap: 'wrap', alignContent: 'flex-start', rowGap: 0 } : {}),
-                }}
-              >
-                {/* Room inside the title's box, not a margin: in the header that wraps, Yoga
+      <HeldUpdateDepthContext.Provider value={depth + 1}>
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={dismissLabel}
+            accessibilityState={{ disabled: !dismissible }}
+            disabled={!dismissible}
+            onPress={dismiss}
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              left: 0,
+              backgroundColor: scrim,
+              opacity: theme.mode === 'dark' ? 0.62 : 0.45,
+            }}
+          />
+          <Animated.View
+            accessibilityViewIsModal
+            style={{
+              maxHeight: '90%',
+              backgroundColor: theme.bgElevated,
+              borderTopLeftRadius: radius.sheet,
+              borderTopRightRadius: radius.sheet,
+              transform: [{ translateY: drag }],
+            }}
+          >
+            {/* The sheet draws edge to edge; its content stays above Android's navigation bar. */}
+            <SafeAreaView edges={['bottom']} style={{ flexShrink: 1 }}>
+              <View testID="sheet-drag-area" {...pan.panHandlers}>
+                <View
+                  style={{
+                    alignSelf: 'center',
+                    width: 36,
+                    height: 4,
+                    borderRadius: 2,
+                    marginTop: 10,
+                    marginBottom: 2,
+                    backgroundColor: theme.borderStrong,
+                  }}
+                />
+                <View
+                  style={{
+                    minHeight: 56,
+                    flexDirection: 'row',
+                    alignItems: 'flex-start',
+                    gap: 8,
+                    paddingTop: headerEdge(action),
+                    paddingBottom: headerEdge(action),
+                    paddingLeft: headerPadding.left,
+                    paddingRight: headerPadding.right,
+                    // At 200% on a 360dp phone, "Keep editing" beside "Finish this expense
+                    // later?" broke "expense" in two (#639).
+                    ...(column ? { flexWrap: 'wrap', alignContent: 'flex-start', rowGap: 0 } : {}),
+                  }}
+                >
+                  {/* Room inside the title's box, not a margin: in the header that wraps, Yoga
                     places a box kept to its line's top by its position and leaves its margin
                     out, so Done sat level with the title's top, 8.6 dp below its first line at
                     130% on a 412 dp phone (#962), as × did in the top bar (#939). */}
-                <View style={{ flex: 1, minWidth: column ?? 0, paddingTop: Math.max(0, -lift) }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <CompactText
-                      ref={titleRef}
-                      variant="title"
-                      accessibilityRole="header"
-                      numberOfLines={column ? 0 : titleLines}
-                      style={{ flexShrink: 1 }}
-                    >
-                      {title}
-                    </CompactText>
-                    {titleAccessory}
+                  <View style={{ flex: 1, minWidth: column ?? 0, paddingTop: Math.max(0, -lift) }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <CompactText
+                        ref={titleRef}
+                        variant="title"
+                        accessibilityRole="header"
+                        numberOfLines={column ? 0 : titleLines}
+                        style={{ flexShrink: 1 }}
+                      >
+                        {title}
+                      </CompactText>
+                      {titleAccessory}
+                    </View>
+                    {subtitle ? (
+                      <CompactText variant="caption" tone="secondary">
+                        {subtitle}
+                      </CompactText>
+                    ) : null}
                   </View>
-                  {subtitle ? (
-                    <CompactText variant="caption" tone="secondary">
-                      {subtitle}
-                    </CompactText>
-                  ) : null}
+                  {/* On a line of its own, Done keeps to the header's end. */}
+                  <View
+                    style={{
+                      paddingTop: Math.max(0, lift),
+                      ...(column ? { marginLeft: 'auto' } : {}),
+                    }}
+                  >
+                    {doneButton}
+                  </View>
                 </View>
-                {/* On a line of its own, Done keeps to the header's end. */}
+              </View>
+              <ScrollView
+                style={{ flexGrow: 0 }}
+                contentContainerStyle={{
+                  paddingHorizontal: 20,
+                  paddingBottom: footer ? 8 : 20,
+                  gap: 12,
+                }}
+                keyboardShouldPersistTaps="handled"
+              >
+                {children}
+              </ScrollView>
+              {visible && notice}
+              {footer ? (
                 <View
                   style={{
-                    paddingTop: Math.max(0, lift),
-                    ...(column ? { marginLeft: 'auto' } : {}),
+                    paddingHorizontal: 20,
+                    paddingTop: 12,
+                    paddingBottom: 16,
+                    gap: 6,
+                    borderTopWidth: 1,
+                    borderTopColor: theme.border,
                   }}
                 >
-                  {doneButton}
+                  {footer}
                 </View>
-              </View>
-            </View>
-            <ScrollView
-              style={{ flexGrow: 0 }}
-              contentContainerStyle={{
-                paddingHorizontal: 20,
-                paddingBottom: footer ? 8 : 20,
-                gap: 12,
-              }}
-              keyboardShouldPersistTaps="handled"
-            >
-              {children}
-            </ScrollView>
-            {footer ? (
-              <View
-                style={{
-                  paddingHorizontal: 20,
-                  paddingTop: 12,
-                  paddingBottom: 16,
-                  gap: 6,
-                  borderTopWidth: 1,
-                  borderTopColor: theme.border,
-                }}
-              >
-                {footer}
-              </View>
-            ) : null}
-          </SafeAreaView>
-        </Animated.View>
-      </KeyboardAvoidingView>
+              ) : null}
+            </SafeAreaView>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </HeldUpdateDepthContext.Provider>
     </Modal>
   );
 }

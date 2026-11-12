@@ -1,4 +1,5 @@
 import type { ScrollViewInstance } from 'react-native';
+import { useHeldUpdateBottomSpace } from './held-update-surface';
 import { useState, type ReactNode, type Ref } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -98,6 +99,7 @@ export function GroupShell({
 }: GroupShellProps) {
   const theme = useTheme();
   const [options, setOptions] = useState(false);
+  const bottomSpace = useHeldUpdateBottomSpace();
   const content = {
     paddingHorizontal: 16,
     paddingTop: 4,
@@ -169,6 +171,7 @@ export function GroupShell({
         ) : null}
       </View>
       <GroupNavBar
+        onLayout={bottomSpace}
         groupName={group?.name ?? 'Group'}
         value={destination}
         onChange={onDestination}
