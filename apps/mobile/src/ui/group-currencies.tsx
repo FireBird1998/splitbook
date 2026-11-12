@@ -225,7 +225,7 @@ export function GroupCurrencies({
             ) : null}
           </View>
         </ScrollView>
-        {!sheet && heldNotice}
+        {heldNotice}
         {sheet && data ? (
           <AddCurrencySheet
             visible

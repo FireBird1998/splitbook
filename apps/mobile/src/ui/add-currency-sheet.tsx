@@ -1,4 +1,3 @@
-import { useHeldUpdateNotice } from './held-update-surface';
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { CURRENCY_CODES } from '@splitbook/shared/currency';
@@ -36,7 +35,6 @@ export function AddCurrencySheet({
   onAdd: (currency: string) => void;
   onCancel: () => void;
 }) {
-  const heldNotice = useHeldUpdateNotice('currencies');
   const theme = useTheme();
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<string | null>(null);
@@ -46,7 +44,6 @@ export function AddCurrencySheet({
   const picked = chosen && found.some(({ code }) => code === chosen) ? chosen : null;
   return (
     <BottomSheet
-      notice={heldNotice}
       visible={visible}
       title="Add a currency"
       subtitle={`${groupName}${SEPARATOR}${extraCount} of ${MAX_EXTRA_CURRENCIES} extra currencies`}

@@ -1,5 +1,5 @@
 import { HeldUpdateSurfaceContext, useHeldUpdateSurfaces } from './src/ui/held-update-surface';
-import { HeldUpdateFooter } from './src/ui/held-update-snackbar';
+import { HeldUpdateNoticeContext, HeldUpdateFooter } from './src/ui/held-update-snackbar';
 import { WidgetGroupPicker } from './src/widget-picker';
 import { widgetLinkTarget } from './src/widget-links';
 import { androidWidgetsEnabled } from './src/widgets-flag';
@@ -161,14 +161,16 @@ export default function App() {
       <ThemeContext.Provider value={getSemanticTokens(mode)}>
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
         <HeldUpdateSurfaceContext.Provider value={heldSurface}>
-          <View style={{ flex: 1 }}>
-            <SplitBook />
-            {heldSurface.surface === 'screen' ? (
-              <SafeAreaView edges={['bottom']}>
-                <HeldUpdateFooter controller={controller} inline />
-              </SafeAreaView>
-            ) : null}
-          </View>
+          <HeldUpdateNoticeContext.Provider value={heldSurface.notice}>
+            <View style={{ flex: 1 }}>
+              <SplitBook />
+              {heldSurface.surface === 'screen' ? (
+                <SafeAreaView edges={['bottom']}>
+                  <HeldUpdateFooter controller={controller} inline />
+                </SafeAreaView>
+              ) : null}
+            </View>
+          </HeldUpdateNoticeContext.Provider>
         </HeldUpdateSurfaceContext.Provider>
         {androidWidgetsEnabled() ? <WidgetGroupPicker /> : null}
       </ThemeContext.Provider>

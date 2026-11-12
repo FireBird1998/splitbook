@@ -647,11 +647,10 @@ export function TagManager({
             )}
           </View>
         </ScrollView>
-        {!selectedTag && !naming && !confirming && heldNotice}
+        {heldNotice}
         {done && <DoneNote done={done} onDismiss={manager.dismissDone} />}
 
         <BottomSheet
-          notice={heldNotice}
           visible={!!selectedTag && !editing && canChange}
           title={selectedTag?.name ?? ''}
           titleLines={3}
@@ -721,7 +720,6 @@ export function TagManager({
         </BottomSheet>
 
         <BottomSheet
-          notice={heldNotice}
           visible={naming}
           title={editing?.action === 'create' ? 'New Tag' : 'Rename Tag'}
           subtitle={editedTag ? `Currently ${editedTag.name}` : undefined}
@@ -784,7 +782,6 @@ export function TagManager({
         </BottomSheet>
 
         <BottomSheet
-          notice={heldNotice}
           visible={confirming}
           title={editing?.action === 'restore' ? 'Restore this Tag?' : 'Archive this Tag?'}
           doneLabel="Cancel"

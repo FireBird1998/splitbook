@@ -1,4 +1,3 @@
-import { useHeldUpdateNotice } from './held-update-surface';
 import { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { currencyPrefix } from '@splitbook/shared/currency';
@@ -287,7 +286,6 @@ export function SettleAllSheet({
   onRestoreBatchRate?: (currency: string) => void;
   onOpenLink?: (url: string) => void;
 }) {
-  const heldNotice = useHeldUpdateNotice('payment');
   const { status, batch, draft, chosen, attempt } = state;
   const paidBy = batch?.paidBy ?? draft?.paidBy ?? chosen?.paidBy ?? '';
   const paidTo = batch?.paidTo ?? draft?.paidTo ?? chosen?.paidTo ?? '';
@@ -392,7 +390,6 @@ export function SettleAllSheet({
 
   return (
     <BottomSheet
-      notice={heldNotice}
       visible={visible}
       title={words.title}
       doneLabel="Close"

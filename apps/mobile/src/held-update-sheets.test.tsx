@@ -244,7 +244,9 @@ it('keeps the same four-second notice when Currencies opens Add a currency', asy
   vi.useFakeTimers();
   await act(async () => c.openWidget('home'));
   expect(text()).toContain('Widget held until you finish');
-  await act(async () => vi.advanceTimersByTime(1_000));
+  await act(async () => {
+    vi.advanceTimersByTime(1_000);
+  });
   act(() =>
     screen!.root
       .findAllByType(CompactButton)
@@ -252,9 +254,13 @@ it('keeps the same four-second notice when Currencies opens Add a currency', asy
       .props.onPress(),
   );
   expect(text().match(/Widget held until you finish/g)).toHaveLength(1);
-  await act(async () => vi.advanceTimersByTime(2_999));
+  await act(async () => {
+    vi.advanceTimersByTime(2_999);
+  });
   expect(text()).toContain('Widget held until you finish');
-  await act(async () => vi.advanceTimersByTime(1));
+  await act(async () => {
+    vi.advanceTimersByTime(1);
+  });
   expect(text()).not.toContain('Widget held until you finish');
 });
 
