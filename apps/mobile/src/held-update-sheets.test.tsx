@@ -3,7 +3,7 @@ import { Alert, Linking, Share } from 'react-native';
 import { afterEach, expect, it, vi } from 'vitest';
 import { fakeSplitbook, expenseFixture } from './test-utils/fake-splitbook';
 import { testPhone, until } from './test-utils/test-phone';
-import { emitAppState } from './test-utils/native';
+import { emitAppState, emitKeyboard } from './test-utils/native';
 import { unbroken } from './test-utils/layout';
 import { RecordPaymentSheet } from './ui/record-payment-sheet';
 import { CompactButton } from './ui/compact';
@@ -485,3 +485,33 @@ it('acknowledges a protected tap inside an already open widget Group picker', as
   expect(text()).toContain('Choose a Group');
   expect(text()).toContain('Widget held until you finish');
 });
+
+it.each(['screen', 'currency chooser'] as const)(
+  'floats the %s notice above an already open keyboard without resizing the form',
+  async (surface) => {
+    const { controller: c, text } = await setup();
+    act(() => c.startCreate());
+    if (surface === 'currency chooser')
+      act(() =>
+        screen!.root
+          .findAll(
+            (node) =>
+              typeof node.props.accessibilityLabel === 'string' &&
+              node.props.accessibilityLabel.startsWith('Main currency,') &&
+              typeof node.props.onPress === 'function',
+          )[0]
+          .props.onPress(),
+      );
+    act(() => emitKeyboard(320));
+    await act(async () => c.openWidget('home'));
+    expect(text()).toContain('Widget held until you finish');
+    let host = screen!.root.findByType(Snackbar).parent;
+    while (host && (host.type as unknown) !== 'SafeAreaView') host = host.parent;
+    expect(host!.props.style).toMatchObject({ position: 'absolute', bottom: 320 });
+    act(() => emitKeyboard(400));
+    expect(host!.props.style.bottom).toBe(400);
+    act(() => emitKeyboard(0));
+    expect(host!.props.style.bottom).toBe(0);
+    expect(c.getSnapshot().screen).toBe('create');
+  },
+);

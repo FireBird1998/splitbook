@@ -13,6 +13,11 @@ const phone: Window = { width: 412, height: 915, scale: 2, fontScale: 1 };
 let fileWindow: Window = { ...phone };
 const currentWindow: Window = { ...phone };
 const appStateListeners: ((state: string) => void)[] = [];
+const keyboardListeners = new Map<
+  string,
+  Set<(event: { endCoordinates: { height: number } }) => void>
+>();
+let keyboardHeight = 0;
 const connectionListeners: ((state: { isConnected: boolean | null }) => void)[] = [];
 const backListeners: (() => boolean)[] = [];
 const reduceMotionListeners: ((enabled: boolean) => void)[] = [];
@@ -41,6 +46,14 @@ export function setWindow(size: Partial<Window>) {
 /** Android reports a new app state, e.g. 'active' when the app returns to the foreground. */
 export function emitAppState(state: string) {
   for (const listener of [...appStateListeners]) listener(state);
+}
+
+/** The system keyboard opens above an edge-to-edge window, without resizing it. */
+export function emitKeyboard(height: number) {
+  keyboardHeight = height;
+  for (const listener of keyboardListeners.get(height ? 'keyboardDidShow' : 'keyboardDidHide') ??
+    [])
+    listener({ endCoordinates: { height } });
 }
 
 /** Android's hardware or gesture Back; returns whether a listener handled it. */
@@ -209,6 +222,8 @@ function listen<Listener>(listeners: Listener[], listener: Listener) {
 export function resetNative() {
   Object.assign(currentWindow, fileWindow);
   appStateListeners.length = 0;
+  keyboardListeners.clear();
+  keyboardHeight = 0;
   connectionListeners.length = 0;
   backListeners.length = 0;
   initialURL = null;
@@ -263,8 +278,19 @@ export const reactNative = {
   BackHandler: {
     addEventListener: (_type: string, listener: () => boolean) => listen(backListeners, listener),
   },
-  // No keyboard shows in a test.
-  Keyboard: { isVisible: () => false },
+  Keyboard: {
+    isVisible: () => keyboardHeight > 0,
+    metrics: () => (keyboardHeight ? { height: keyboardHeight } : undefined),
+    addListener: (
+      event: string,
+      listener: (event: { endCoordinates: { height: number } }) => void,
+    ) => {
+      const listeners = keyboardListeners.get(event) ?? new Set();
+      keyboardListeners.set(event, listeners);
+      listeners.add(listener);
+      return { remove: () => listeners.delete(listener) };
+    },
+  },
   KeyboardAvoidingView: 'KeyboardAvoidingView',
   Linking: {
     addEventListener: (_type: string, listener: (event: { url: string }) => void) => {
