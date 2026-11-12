@@ -301,3 +301,32 @@ it('shows the held widget notice on a saved Expense record without changing it',
   expect(c.getSnapshot().expense).toBe(record);
   expect(text()).toContain('Widget held until you finish');
 });
+
+it('shows the held notice inside the Group form currency chooser', async () => {
+  const { controller: c } = await setup();
+  act(() => c.startCreate());
+  act(() =>
+    screen!.root
+      .findAll(
+        (node) =>
+          typeof node.props.accessibilityLabel === 'string' &&
+          node.props.accessibilityLabel.startsWith('Main currency,') &&
+          typeof node.props.onPress === 'function',
+      )[0]
+      .props.onPress(),
+  );
+  await act(async () => c.openWidget('home'));
+  const chooser = screen!.root
+    .findAll((node) => (node.type as unknown) === 'Modal' && node.props.visible === true)
+    .find((node) => node.findAll((child) => child.props.label === 'Search currencies').length > 0);
+  expect(chooser).toBeDefined();
+  expect(
+    unbroken(
+      chooser!
+        .findAll((node) => (node.type as unknown) === 'Text')
+        .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+        .join(''),
+    ),
+  ).toContain('Widget held until you finish');
+  expect(c.getSnapshot().screen).toBe('create');
+});
