@@ -15,9 +15,10 @@ const currentWindow: Window = { ...phone };
 const appStateListeners: ((state: string) => void)[] = [];
 const keyboardListeners = new Map<
   string,
-  Set<(event: { endCoordinates: { height: number } }) => void>
+  Set<(event: { endCoordinates: { height: number; screenY: number } }) => void>
 >();
 let keyboardHeight = 0;
+let keyboardTop = 0;
 const connectionListeners: ((state: { isConnected: boolean | null }) => void)[] = [];
 const backListeners: (() => boolean)[] = [];
 const reduceMotionListeners: ((enabled: boolean) => void)[] = [];
@@ -49,11 +50,12 @@ export function emitAppState(state: string) {
 }
 
 /** The system keyboard opens above an edge-to-edge window, without resizing it. */
-export function emitKeyboard(height: number) {
+export function emitKeyboard(height: number, screenY = currentWindow.height - height) {
   keyboardHeight = height;
+  keyboardTop = screenY;
   for (const listener of keyboardListeners.get(height ? 'keyboardDidShow' : 'keyboardDidHide') ??
     [])
-    listener({ endCoordinates: { height } });
+    listener({ endCoordinates: { height, screenY } });
 }
 
 /** Android's hardware or gesture Back; returns whether a listener handled it. */
@@ -224,6 +226,7 @@ export function resetNative() {
   appStateListeners.length = 0;
   keyboardListeners.clear();
   keyboardHeight = 0;
+  keyboardTop = 0;
   connectionListeners.length = 0;
   backListeners.length = 0;
   initialURL = null;
@@ -280,10 +283,10 @@ export const reactNative = {
   },
   Keyboard: {
     isVisible: () => keyboardHeight > 0,
-    metrics: () => (keyboardHeight ? { height: keyboardHeight } : undefined),
+    metrics: () => (keyboardHeight ? { height: keyboardHeight, screenY: keyboardTop } : undefined),
     addListener: (
       event: string,
-      listener: (event: { endCoordinates: { height: number } }) => void,
+      listener: (event: { endCoordinates: { height: number; screenY: number } }) => void,
     ) => {
       const listeners = keyboardListeners.get(event) ?? new Set();
       keyboardListeners.set(event, listeners);

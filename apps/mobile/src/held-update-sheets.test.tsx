@@ -510,6 +510,11 @@ it.each(['screen', 'currency chooser'] as const)(
     expect(host!.props.style).toMatchObject({ position: 'absolute', bottom: 320 });
     act(() => emitKeyboard(400));
     expect(host!.props.style.bottom).toBe(400);
+    // Android's reported height can exclude the navigation inset. Its top is the actual
+    // boundary, as KeyboardAvoidingView uses; padding that inset again would also be wrong.
+    act(() => emitKeyboard(296, 595));
+    expect(host!.props.style.bottom).toBe(320);
+    expect(host!.props.edges).toEqual([]);
     act(() => emitKeyboard(0));
     expect(host!.props.style.bottom).toBe(0);
     expect(c.getSnapshot().screen).toBe('create');
