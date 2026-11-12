@@ -44,15 +44,15 @@ export function useHeldUpdateSurfaces(controller: MobileController) {
 }
 
 /** A full native screen sits above a task footer and below its nested sheets. */
-export function useHeldUpdateModalNotice() {
+export function useHeldUpdateModalNotice(visible = true) {
   const context = useContext(HeldUpdateSurfaceContext);
   const id = useId();
   const register = context?.register;
   const active = context?.active;
   useEffect(() => {
-    if (active && register) return register(id, 0);
-  }, [active, register, id]);
-  return active && context ? (
+    if (visible && active && register) return register(id, 0);
+  }, [visible, active, register, id]);
+  return visible && active && context ? (
     <HeldUpdateFooter controller={context.controller} inline hostId={id} />
   ) : null;
 }
