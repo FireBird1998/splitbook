@@ -5,7 +5,7 @@ import {
   useHeldUpdateBottomSpace,
   HeldUpdateFloatingNotice,
 } from './src/ui/held-update-surface';
-import { HeldUpdateNoticeContext, HeldUpdateFooter } from './src/ui/held-update-snackbar';
+import { HeldUpdateNoticeContext } from './src/ui/held-update-snackbar';
 import { WidgetGroupPicker } from './src/widget-picker';
 import { widgetLinkTarget } from './src/widget-links';
 import { androidWidgetsEnabled } from './src/widgets-flag';
