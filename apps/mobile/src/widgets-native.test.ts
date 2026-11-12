@@ -574,11 +574,10 @@ it('keeps the To review verification time separate from Home through a live offl
   }
 });
 
-
 it('does not verify a zero when a refused Group is removed from the in-memory To review list', async () => {
   const { server, phone, environment, controller } = await verifiedReviewPhone();
   const groupId = server.world.groups[0]._id;
-  const held = server.hold('GET', '/api/user/to-review');
+  server.fault('GET', '/api/user/to-review', 'offline');
   try {
     server.reply('GET', `/api/groups/${groupId}`, () =>
       Response.json({ error: 'Access denied', code: 'FORBIDDEN' }, { status: 403 }),
@@ -592,7 +591,6 @@ it('does not verify a zero when a refused Group is removed from the in-memory To
       verifiedAt: new Date(2026, 10, 13, 9, 49).getTime(),
     });
   } finally {
-    held.release();
     phone.dispose();
   }
 });

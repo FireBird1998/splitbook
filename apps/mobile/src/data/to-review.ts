@@ -92,6 +92,7 @@ export function createToReviewQueries(options: {
   online: typeof onlineManager;
   environment: string;
   enabled: boolean;
+  now(): number;
   snapshot(): MobileSnapshot;
   publish(state: ToReviewState): void;
   read(path: string, signal: AbortSignal): Promise<unknown>;
@@ -99,6 +100,7 @@ export function createToReviewQueries(options: {
   /** A Group this member has lost: no read, however late, shows its items again. */
   lost(groupId: string): boolean;
 }) {
+  let verified: { accountId: string; count: number; verifiedAt: number } | undefined;
   let observer: QueryObserver<ToReviewRead> | undefined;
   let observerOptions: QueryObserverOptions<ToReviewRead> | undefined;
   let stop: (() => void) | undefined;
@@ -183,7 +185,12 @@ export function createToReviewQueries(options: {
           throw new Error('The account changed.');
         if (!options.online.isOnline() || options.snapshot().offline.active)
           throw new Error('Connect to load To review.');
-        return parseToReviewResponse(await options.read(toReviewPath(), signal));
+        const read = parseToReviewResponse(await options.read(toReviewPath(), signal));
+        // Only an answered server read verifies the widget count. Local filtering and this
+        // phone's offline projection can change the displayed list without verifying it (#1173).
+        if (!signal.aborted && options.snapshot().auth.user?.id === owner)
+          verified = { accountId: owner, count: read.total, verifiedAt: options.now() };
+        return read;
       },
       enabled: available,
       retry: false,
@@ -241,6 +248,11 @@ export function createToReviewQueries(options: {
   const stopOnline = options.online.subscribe(bindLater);
   return {
     bindLater,
+    verifiedCount() {
+      return verified?.accountId === options.snapshot().auth.user?.id
+        ? verified && { count: verified.count, verifiedAt: verified.verifiedAt }
+        : undefined;
+    },
     /**
      * Home's scope was outdated: its read shares that scope, so its query was replaced. The
      * observer moves to the successor, which reads again, as Home's own reads do (#433).
@@ -272,6 +284,7 @@ export function createToReviewQueries(options: {
     },
     /** The session ended: nothing about its account's Groups is kept. */
     reset() {
+      verified = undefined;
       denied.clear();
     },
     stop() {

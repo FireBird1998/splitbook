@@ -1,6 +1,5 @@
 import { createHeldUpdate, type HeldAdmission } from './held-update';
 import type { WidgetTarget } from '@splitbook/shared/balances-widget';
-import { toReviewKey } from '@splitbook/shared/query-keys';
 import { createWidgetCopy } from './widget-copy';
 import {
   parseNotificationEnvelope,
@@ -866,21 +865,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     dependencies.widgets,
     accountStorage,
     (next) => {
-      // A live offline observer can still be ready with its earlier query timestamp.
-      // Its on-phone count omits server items; that isn't a newly verified count (#1173).
-      if (
-        !persistentDrafts ||
-        !next.auth.user ||
-        next.toReview.status !== 'ready' ||
-        next.offline.active ||
-        next.toReview.offline
-      )
-        return undefined;
-      const query = queryClient.getQueryState(
-        toReviewKey({ environment: apiBase, accountId: next.auth.user.id }),
-      );
-      if (!query?.dataUpdatedAt) return undefined;
-      return { count: mobileToReview(next, now()).counts.total, verifiedAt: query.dataUpdatedAt };
+      if (!persistentDrafts || !next.auth.user) return undefined;
+      return toReviewQueries.verifiedCount();
     },
     () => {
       const data = queryClient.getQueryData<{ refreshedAt: number }>(groupsKey(account()));
@@ -1409,6 +1395,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     online: onlineManager,
     environment: apiBase,
     enabled: persistentDrafts,
+    now,
     snapshot: () => snapshot,
     publish: (toReview) => {
       publish({ ...snapshot, toReview });
