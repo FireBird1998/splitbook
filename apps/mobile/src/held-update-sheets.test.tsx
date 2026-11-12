@@ -472,3 +472,16 @@ it('floats a retained-work notice clear of Group navigation and Add expense', as
     await act(async () => reading.release());
   }
 });
+
+it('acknowledges a protected tap inside an already open widget Group picker', async () => {
+  const { controller: c, text } = await setup();
+  await act(async () => c.openWidget('choose-group'));
+  expect(c.getSnapshot().widgetPicker).toBe(true);
+  // The picker is ordinarily unprotected. If a task becomes protected beneath it, its actual
+  // native window must still acknowledge the next held tap, rather than the hidden app tree.
+  act(() => c.startCreate());
+  await act(async () => c.openWidget('home'));
+  expect(c.getSnapshot().notificationOpening.status).toBe('held');
+  expect(text()).toContain('Choose a Group');
+  expect(text()).toContain('Widget held until you finish');
+});
