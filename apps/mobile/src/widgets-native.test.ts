@@ -10,7 +10,12 @@ import { testPhone } from './test-utils/test-phone';
 const native = vi.hoisted(() => ({
   databases: new Map<string, DatabaseSync>(),
   exists: true,
-  copyWrite: null as null | { arrive(): void; waiting: Promise<void>; complete(): void },
+  copyWrite: null as null | {
+    when(value: string): boolean;
+    arrive(): void;
+    waiting: Promise<void>;
+    complete(): void;
+  },
 }));
 vi.mock('expo-sqlite', async () => {
   const { DatabaseSync } = await import('node:sqlite');
@@ -25,7 +30,12 @@ vi.mock('expo-sqlite', async () => {
       return {
         execAsync: async (sql: string) => db.exec(sql),
         runAsync: async (sql: string, ...values: (string | number | null)[]) => {
-          const held = sql.startsWith('UPDATE widget_state SET copy =') ? native.copyWrite : null;
+          const held =
+            sql.startsWith('UPDATE widget_state SET copy =') &&
+            typeof values[0] === 'string' &&
+            native.copyWrite?.when(values[0])
+              ? native.copyWrite
+              : null;
           if (held) {
             native.copyWrite = null;
             held.arrive();
@@ -296,7 +306,7 @@ it('draws no previous account’s final balance, people or To review count after
   }
 });
 
-function holdCopyWrite() {
+function holdCopyWrite(verifiedAt: number) {
   let arrive!: () => void, release!: () => void, complete!: () => void;
   const arrived = new Promise<void>((done) => {
     arrive = done;
@@ -307,7 +317,14 @@ function holdCopyWrite() {
   const completed = new Promise<void>((done) => {
     complete = done;
   });
-  native.copyWrite = { arrive, waiting, complete };
+  // Initial Group/list projections may still be queued. Hold the new verified Home read,
+  // rather than an older copy whose redraw just became visible.
+  native.copyWrite = {
+    when: (value) => (JSON.parse(value) as WidgetCopy).home?.verifiedAt === verifiedAt,
+    arrive,
+    waiting,
+    complete,
+  };
   return { arrived, release, completed };
 }
 
@@ -337,7 +354,7 @@ it('hides figures on a 401 before a SQLite copy write finishes, and keeps them f
   try {
     await controller.signIn('alex');
     await vi.waitFor(() => expect(shown).toMatchObject({ state: 'normal', owe: ['₹1,480.00'] }));
-    held = holdCopyWrite();
+    held = holdCopyWrite(balanceTime);
     server.world.home = home(1550);
     phone.clock.now = balanceTime;
     await controller.refreshHome();
