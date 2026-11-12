@@ -517,7 +517,7 @@ it.each(['screen', 'currency chooser'] as const)(
 );
 
 it('leaves Create reachable through the floating notice and its margins', async () => {
-  const { controller: c } = await setup();
+  const { server, controller: c, alex } = await setup();
   act(() => {
     c.startCreate();
     c.updateCreation({ name: 'Fictional reachable Group', category: 'home' });
@@ -532,6 +532,13 @@ it('leaves Create reachable through the floating notice and its margins', async 
     .findAllByType(CompactButton)
     .find((node) => node.props.label === 'Create Household')!;
   expect(createGroup.props.disabled).toBeFalsy();
+  // The fake answers writes without applying them; the test supplies the subsequent read.
+  server.world.groups.push({
+    ...server.world.groups[0],
+    _id: 'b00000000000000000000009',
+    name: 'Fictional reachable Group',
+    members: server.world.groups[0].members.filter((member) => member.user._id === alex.id),
+  });
   await act(async () => createGroup.props.onPress());
   await act(async () => until(c, (state) => state.screen === 'group'));
   expect(c.getSnapshot().notificationOpening.status).toBe('held');
