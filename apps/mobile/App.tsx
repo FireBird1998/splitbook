@@ -2,6 +2,7 @@ import {
   HeldUpdateSurfaceContext,
   useHeldUpdateSurfaces,
   useHeldUpdateNativeOverlays,
+  useHeldUpdateBottomSpace,
 } from './src/ui/held-update-surface';
 import { HeldUpdateNoticeContext, HeldUpdateFooter } from './src/ui/held-update-snackbar';
 import { WidgetGroupPicker } from './src/widget-picker';
@@ -170,7 +171,12 @@ export default function App() {
                 <SafeAreaView
                   edges={['bottom']}
                   pointerEvents="box-none"
-                  style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    bottom: heldSurface.bottomClearance,
+                  }}
                 >
                   <HeldUpdateFooter controller={controller} inline />
                 </SafeAreaView>
@@ -1207,6 +1213,8 @@ function GroupScreen() {
     known && (group || state.detail.status === 'loading') && state.destination === 'expenses'
       ? known
       : null;
+  const actionBottom = state.snackbar ? 156 : 96;
+  const actionSpace = useHeldUpdateBottomSpace(floating ? actionBottom : null);
   const discardDraft = useCallback(
     () =>
       confirm(
@@ -1389,7 +1397,8 @@ function GroupScreen() {
               icon={kept ? keptAction.icon : 'add'}
               onPress={kept ? resumeDraft : () => openExpense(floating.id)}
               // Above the snackbar while it shows.
-              bottom={state.snackbar ? 156 : undefined}
+              bottom={actionBottom}
+              onLayout={actionSpace}
             />
           ) : null}
           {state.snackbar && group ? (

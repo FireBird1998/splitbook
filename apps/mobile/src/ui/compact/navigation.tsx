@@ -1,6 +1,6 @@
 import { Children, Fragment, isValidElement, type ReactNode } from 'react';
 import type { GroupDestination } from '../../data/types';
-import { Pressable, View } from 'react-native';
+import { Pressable, View, type LayoutChangeEvent } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
 import { IconButton } from './controls';
@@ -176,10 +176,12 @@ export function GroupNavBar({
   groupName,
   value,
   onChange,
+  onLayout,
 }: {
   groupName: string;
   value: GroupDestination;
   onChange: (value: GroupDestination) => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
 }) {
   const theme = useTheme();
   // A drag that starts on a tab never chooses it, even a short one: no scrolling parent takes the
@@ -187,6 +189,7 @@ export function GroupNavBar({
   const tap = useTap();
   return (
     <View
+      onLayout={onLayout}
       accessibilityRole="tablist"
       accessibilityLabel={`${groupName} sections`}
       style={{

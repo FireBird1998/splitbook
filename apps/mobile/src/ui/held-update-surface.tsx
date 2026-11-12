@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Alert, AppState, Share } from 'react-native';
+import { Alert, AppState, Share, type LayoutChangeEvent } from 'react-native';
 import type { MobileController } from '../data/mobile-controller';
 import { notificationTaskProtected } from '../data/notification-alerts';
 import { HeldUpdateFooter, useHeldUpdateTimeline } from './held-update-snackbar';
@@ -49,6 +49,20 @@ export function useHeldUpdateSurfaces(controller: MobileController) {
       setCovered((n) => n - 1);
     };
   }, []);
+  const bottomSpaces = useRef(new Map<string, number>());
+  const reserveBottom = useCallback(
+    (id: string, space: number | null) => {
+      if (space === null ? !bottomSpaces.current.has(id) : bottomSpaces.current.get(id) === space)
+        return;
+      if (space === null) bottomSpaces.current.delete(id);
+      else bottomSpaces.current.set(id, space);
+      const snapshot = controller.getSnapshot();
+      if (snapshot.heldNotification && notificationTaskProtected(snapshot))
+        refreshVisibility((n) => n + 1);
+    },
+    [controller],
+  );
+  const bottomClearance = Math.max(0, ...bottomSpaces.current.values());
   const timeline = useHeldUpdateTimeline(controller, foreground.current && covered === 0);
   const [hosts, setHosts] = useState<{ id: string; depth: number }[]>([]);
   const register = useCallback((id: string, depth: number) => {
@@ -72,8 +86,8 @@ export function useHeldUpdateSurfaces(controller: MobileController) {
     [timeline.owner, timeline.shown, timeline.widget, top?.id, register, active],
   );
   return useMemo(
-    () => ({ controller, active, register, notice, cover }),
-    [controller, active, register, notice, cover],
+    () => ({ controller, active, register, notice, cover, reserveBottom, bottomClearance }),
+    [controller, active, register, notice, cover, reserveBottom, bottomClearance],
   );
 }
 
@@ -143,5 +157,23 @@ export function useHeldUpdateNativeOverlays() {
       },
     }),
     [cover],
+  );
+}
+
+/** Fixed controls keep their place; the floating fallback clears their actual measured height. */
+export function useHeldUpdateBottomSpace(bottom: number | null = 0) {
+  const reserve = useContext(HeldUpdateSurfaceContext)?.reserveBottom;
+  const id = useId();
+  const height = useRef(0);
+  useEffect(() => {
+    if (bottom !== null) reserve?.(id, bottom + height.current);
+    return () => reserve?.(id, null);
+  }, [reserve, id, bottom]);
+  return useCallback(
+    (event: LayoutChangeEvent) => {
+      height.current = event.nativeEvent.layout.height;
+      if (bottom !== null) reserve?.(id, bottom + height.current);
+    },
+    [reserve, id, bottom],
   );
 }
