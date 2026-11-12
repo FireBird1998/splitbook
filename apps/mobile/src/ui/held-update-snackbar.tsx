@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 import type { MobileController } from '../data/mobile-controller';
 import type { HeldNotificationOwner } from '../data/types';
@@ -28,7 +28,12 @@ export function useHeldUpdateTimeline(controller: MobileController) {
 }
 
 export const HeldUpdateNoticeContext = createContext<
-  (ReturnType<typeof useHeldUpdateTimeline> & { sheetId: string | null }) | null
+  | (ReturnType<typeof useHeldUpdateTimeline> & {
+      hostId: string | null;
+      register(id: string, depth: number): () => void;
+      active: boolean;
+    })
+  | null
 >(null);
 
 /** Feedback floats above the measured task bar; new surfaces reserve a row above controls. */
@@ -68,14 +73,23 @@ export function HeldUpdateFooter(props: {
   controller: MobileController;
   children?: ReactNode;
   inline?: boolean;
-  sheetId?: string;
+  hostId?: string;
 }) {
   const timeline = useContext(HeldUpdateNoticeContext);
+  const id = useId();
+  const register = timeline?.register;
+  const active = timeline?.active;
+  // Existing task bars keep their layout; a native modal always takes precedence.
+  useEffect(() => {
+    if (active && register && !props.inline && !props.hostId) return register(id, -1);
+  }, [active, register, props.inline, props.hostId, id]);
   return timeline ? (
     <Footer
       {...props}
       widget={timeline.widget}
-      shown={timeline.sheetId === (props.sheetId ?? null) ? timeline.shown : null}
+      shown={
+        timeline.hostId === (props.hostId ?? (props.inline ? null : id)) ? timeline.shown : null
+      }
     />
   ) : (
     <LocalFooter {...props} />

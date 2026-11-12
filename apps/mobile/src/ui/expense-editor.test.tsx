@@ -2114,7 +2114,7 @@ describe('an unexpected rendering error in the Expense task (#187)', () => {
         <HeldUpdateSurfaceContext.Provider value={held}>
           <HeldUpdateNoticeContext.Provider value={held.notice}>
             <CrashingScreen controller={ui.controller} crash={typedBoom} withController />
-            {held.surface === 'screen' && !held.notice.sheetId && held.notice.shown ? (
+            {held.active && !held.notice.hostId && held.notice.shown ? (
               <HeldUpdateFooter controller={ui.controller} inline />
             ) : null}
           </HeldUpdateNoticeContext.Provider>

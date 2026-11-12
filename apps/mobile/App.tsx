@@ -164,7 +164,7 @@ export default function App() {
           <HeldUpdateNoticeContext.Provider value={heldSurface.notice}>
             <View style={{ flex: 1 }}>
               <SplitBook />
-              {heldSurface.surface === 'screen' ? (
+              {heldSurface.active && !heldSurface.notice.hostId && heldSurface.notice.shown ? (
                 <SafeAreaView edges={['bottom']}>
                   <HeldUpdateFooter controller={controller} inline />
                 </SafeAreaView>

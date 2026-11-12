@@ -1,4 +1,4 @@
-import { useHeldUpdateNotice } from './held-update-surface';
+import { useHeldUpdateModalNotice } from './held-update-surface';
 import { useState } from 'react';
 import { Modal, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -104,7 +104,7 @@ export function GroupCurrencies({
   onRetry: () => void;
   onClose: () => void;
 }) {
-  const heldNotice = useHeldUpdateNotice('currencies');
+  const heldNotice = useHeldUpdateModalNotice();
   const theme = useTheme();
   const [sheet, setSheet] = useState(false);
   const { data } = state;

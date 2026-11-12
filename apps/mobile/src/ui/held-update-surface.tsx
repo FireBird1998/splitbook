@@ -1,49 +1,28 @@
-import { expenseFormShown } from './expense-form-shown';
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState } from 'react';
 import type { MobileController } from '../data/mobile-controller';
 import { notificationTaskProtected } from '../data/notification-alerts';
-import type { MobileSnapshot } from '../data/types';
 import { HeldUpdateFooter, useHeldUpdateTimeline } from './held-update-snackbar';
-import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
+import { useMobileSnapshot } from './use-mobile-snapshot';
 
-type Surface = 'screen' | 'tags' | 'currencies';
 export const HeldUpdateSurfaceContext = createContext<ReturnType<
   typeof useHeldUpdateSurfaces
 > | null>(null);
 export const HeldUpdateDepthContext = createContext(0);
 
-/** Native sheets need their own slot; the three existing task footers keep their geometry. */
-function surface(snapshot: MobileSnapshot): Surface | null {
-  if (!snapshot.heldNotification || !notificationTaskProtected(snapshot)) return null;
-  if (
-    (snapshot.screen === 'expense' && expenseFormShown(snapshot.expense)) ||
-    snapshot.toReview.groupId !== null ||
-    snapshot.toReview.run
-  )
-    return null;
-  // Retained edit/recovery/busy flags protect the task even after its native screen closed.
-  if (snapshot.tagsOpenFor) return 'tags';
-  if (snapshot.currenciesOpenFor) return 'currencies';
-  return 'screen';
-}
-
+/** The protection rule decides when; actual mounted hosts decide where. */
 export function useHeldUpdateSurfaces(controller: MobileController) {
-  const selected = useMobileSnapshot(
+  const active = useMobileSnapshot(
     controller,
-    (s) => ({
-      surface: surface(s),
-      active: !!s.heldNotification && notificationTaskProtected(s),
-    }),
-    sameSelection,
+    (snapshot) => !!snapshot.heldNotification && notificationTaskProtected(snapshot),
   );
   const timeline = useHeldUpdateTimeline(controller);
-  const [sheets, setSheets] = useState<{ id: string; depth: number }[]>([]);
+  const [hosts, setHosts] = useState<{ id: string; depth: number }[]>([]);
   const register = useCallback((id: string, depth: number) => {
-    setSheets((previous) => [...previous, { id, depth }]);
-    return () => setSheets((previous) => previous.filter((sheet) => sheet.id !== id));
+    setHosts((previous) => [...previous, { id, depth }]);
+    return () => setHosts((previous) => previous.filter((host) => host.id !== id));
   }, []);
   // A nested native Modal sits above its parent, regardless of effect registration order.
-  const top = sheets.reduce<{ id: string; depth: number } | null>(
+  const top = hosts.reduce<{ id: string; depth: number } | null>(
     (a, b) => (!a || b.depth >= a.depth ? b : a),
     null,
   );
@@ -52,21 +31,30 @@ export function useHeldUpdateSurfaces(controller: MobileController) {
       owner: timeline.owner,
       shown: timeline.shown,
       widget: timeline.widget,
-      sheetId: top?.id ?? null,
+      register,
+      active: active,
+      hostId: top?.id ?? null,
     }),
-    [timeline.owner, timeline.shown, timeline.widget, top?.id],
+    [timeline.owner, timeline.shown, timeline.widget, top?.id, register, active],
   );
   return useMemo(
-    () => ({ controller, ...selected, register, notice }),
-    [controller, selected, register, notice],
+    () => ({ controller, active, register, notice }),
+    [controller, active, register, notice],
   );
 }
 
-/** New surfaces reserve space above their controls instead of covering a field or a button. */
-export function useHeldUpdateNotice(name: Surface) {
+/** A full native screen sits above a task footer and below its nested sheets. */
+export function useHeldUpdateModalNotice() {
   const context = useContext(HeldUpdateSurfaceContext);
-  if (context?.surface !== name) return null;
-  return <HeldUpdateFooter controller={context.controller} inline />;
+  const id = useId();
+  const register = context?.register;
+  const active = context?.active;
+  useEffect(() => {
+    if (active && register) return register(id, 0);
+  }, [active, register, id]);
+  return active && context ? (
+    <HeldUpdateFooter controller={context.controller} inline hostId={id} />
+  ) : null;
 }
 
 /** Every visible BottomSheet can host the same live notice, including nested task sheets. */
@@ -76,9 +64,9 @@ export function useHeldUpdateSheetNotice(visible: boolean, depth: number) {
   const register = context?.register;
   const active = context?.active;
   useEffect(() => {
-    if (visible && active && register) return register(id, depth);
+    if (visible && active && register) return register(id, depth + 1);
   }, [visible, active, register, id, depth]);
   return visible && active && context ? (
-    <HeldUpdateFooter controller={context.controller} inline sheetId={id} />
+    <HeldUpdateFooter controller={context.controller} inline hostId={id} />
   ) : null;
 }
