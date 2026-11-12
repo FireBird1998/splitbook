@@ -158,14 +158,14 @@ export function createHeldUpdate(d: {
       const tap = ++nextTap;
       const admitted =
         intent.source === 'notification' ? d.notification(intent.value) : d.widget(intent.target);
-      // Cold widget restore invalidates synchronously inside admission; later resets retire it.
+      // Session reset retires account-bound admissions; setup can survive an expired restore.
       const admittedEpoch = epoch,
         admittedGeneration = d.read().generation;
       const admission = admitted instanceof Promise ? await admitted : admitted;
       if (
         !admission ||
-        epoch !== admittedEpoch ||
-        d.read().generation !== admittedGeneration ||
+        (admission.destination.accountId !== null &&
+          (epoch !== admittedEpoch || d.read().generation !== admittedGeneration)) ||
         tap < acceptedTap
       )
         return;
@@ -199,7 +199,7 @@ export function createHeldUpdate(d: {
       epoch++;
       pending = null;
       signalled = null;
-      // Session cleanup already publishes the clean snapshot; do not add another render here.
+      // The caller publishes the clean snapshot; do not add another render here.
     },
   };
 }
