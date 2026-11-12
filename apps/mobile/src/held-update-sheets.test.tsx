@@ -3,6 +3,7 @@ import { Alert, Linking, Share } from 'react-native';
 import { afterEach, expect, it, vi } from 'vitest';
 import { fakeSplitbook, expenseFixture } from './test-utils/fake-splitbook';
 import { testPhone, until } from './test-utils/test-phone';
+import { emitAppState } from './test-utils/native';
 import { unbroken } from './test-utils/layout';
 import { RecordPaymentSheet } from './ui/record-payment-sheet';
 import { CompactButton } from './ui/compact';
@@ -406,4 +407,21 @@ it('waits to start the held notice until native sharing closes', async () => {
     await act(async () => reading.release());
     sharing.mockRestore();
   }
+});
+
+it('waits for the protected screen to return to the foreground before acknowledging a held tap', async () => {
+  const { controller: c, text } = await setup();
+  act(() => c.startCreate());
+  vi.useFakeTimers();
+  act(() => emitAppState('background'));
+  await act(async () => c.openWidget('home'));
+  const owner = c.getSnapshot().heldNotification;
+  expect(c.getSnapshot().heldNotificationNotice).toBe(owner);
+  await act(async () => {
+    vi.advanceTimersByTime(5_000);
+  });
+  expect(text()).not.toContain('Widget held until you finish');
+  await act(async () => emitAppState('active'));
+  expect(text()).toContain('Widget held until you finish');
+  expect(c.getSnapshot().heldNotificationNotice).toBeNull();
 });
