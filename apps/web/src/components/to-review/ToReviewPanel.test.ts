@@ -263,6 +263,27 @@ describe('what an assistant left to the member, in the web To review panel (#683
     expect(shown).not.toContain('1 people paid');
   });
 
+  it('explains a repeated split at its field and keeps Save blocked (#1152)', () => {
+    const html = markup(
+      ['splitBetween: Each person can appear only once'],
+      {
+        description: 'Station dinner',
+        amount: 30,
+        currency: 'INR',
+        date: '2026-10-16',
+        paidBy: [{ user: alex, amount: 30 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: alex }, { user: sam }, { user: sam }],
+        tag: 'Food',
+      },
+      ['splitBetween'],
+    );
+    const field = html.slice(html.indexOf('Split between'));
+    expect(text(field)).toContain('The same person is listed twice. Choose who shared it.');
+    expect(saveDisabled(html)).toBe(true);
+    expect(text(html)).not.toContain('didn’t know who shared it');
+  });
+
   // #751: a long host with no hyphens can't wrap at its dots, and these two lines name it where
   // the member decides whether to save its Draft; they wrap anywhere, so its domain stays inside.
   it('wraps a long assistant host anywhere, in its source line and in what it didn’t know', () => {

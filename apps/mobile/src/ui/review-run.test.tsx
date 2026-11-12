@@ -19,6 +19,7 @@ import { ToReviewHomeCard, ToReviewOverlay } from './to-review';
 import { GroupMembers } from './group-members';
 import { ReviewRunOverlay } from './review-run';
 import { PayerSheet } from './payer-sheet';
+import { SplitSheet } from './split-sheet';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const user = {
@@ -353,7 +354,7 @@ async function render(element: ReactElement, mode: 'light' | 'dark') {
   trees.push(tree);
   return tree;
 }
-const text = (tree: ReactTestRenderer) =>
+const text = (tree: Pick<ReactTestRenderer, 'root'>) =>
   tree.root
     .findAll((node) => String(node.type) === 'Text')
     .map((node) =>
@@ -764,6 +765,28 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(JSON.stringify(f.items()[0].draft.values)).toBe(before);
     expect(button(tree, 'Save expense').props.disabled).toBe(true);
   });
+  it('explains a repeated split on its tile and sheet while keeping Save blocked (#1152)', async () => {
+    const f = fixture({ one: true });
+    f.items()[0].draft.values!.splitBetween = [{ user: user.id }, { user: user.id }];
+    await signIn(f);
+    await act(async () => f.controller.startReviewRun());
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    const words = 'The same person is listed twice. Choose who shared it.';
+    const tile = tree.root.findAll(
+      (node) =>
+        String(node.type) === 'Pressable' &&
+        String(node.props.accessibilityLabel).startsWith('Split:'),
+    )[0];
+    expect(tile.props.accessibilityLabel).toContain(words);
+    expect(button(tree, 'Save expense').props.disabled).toBe(true);
+    const before = JSON.stringify(f.items()[0].draft.values);
+    await act(async () => tile.props.onPress());
+    expect(text({ root: tree.root.findByType(SplitSheet) })).toContain(words);
+    await tap(tree, 'Done');
+    expect(button(tree, 'Save expense').props.disabled).toBe(true);
+    expect(JSON.stringify(f.items()[0].draft.values)).toBe(before);
+  });
+
   it('names a split that does not add up, not a missing amount (#506)', async () => {
     const f = fixture({ one: true });
     // ₹12.34 split exactly as ₹10, as the server sent it before #506: the reason at the amount.

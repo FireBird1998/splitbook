@@ -93,6 +93,8 @@ export type ExpenseFieldsProps = ExpenseFieldsInput & {
   currentTagId?: string | null;
   /** In review, payers the item names more than once: each shows once, and Paid by says so (#894). */
   listedTwice?: readonly string[];
+  /** Review guidance for a problem retained in the original split rows. */
+  splitProblem?: string;
 };
 /** The Add expense fields, shared with To review. Persistence belongs to the caller. */
 export default function ExpenseFields({
@@ -114,6 +116,7 @@ export default function ExpenseFields({
   currencyHint = null,
   addCurrency,
   listedTwice = [],
+  splitProblem,
 }: ExpenseFieldsProps) {
   const {
     description,
@@ -819,6 +822,11 @@ export default function ExpenseFields({
             >
               Split between
             </Box>
+            {splitProblem && (
+              <Box role="alert" sx={{ fontSize: 12, color: 'status.negative', mb: 1 }}>
+                {splitProblem}
+              </Box>
+            )}
             <Stack spacing={1}>
               {members.map((m) => {
                 const id = m.user._id;
