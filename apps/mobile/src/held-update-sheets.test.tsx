@@ -549,7 +549,7 @@ it('leaves Create reachable through the floating notice and its margins', async 
   expect(c.getSnapshot().notificationOpening.status).toBe('held');
 });
 
-it('retires a native alert cover when its launching screen is recreated without a dismissal callback', async () => {
+it('retires a native alert cover when its launching screen unmounts without a dismissal callback', async () => {
   const { controller: c, groupId, text } = await setup();
   await act(async () => c.openCurrencies(groupId));
   const browser = vi.spyOn(Linking, 'openURL').mockRejectedValue(new Error('No browser'));
