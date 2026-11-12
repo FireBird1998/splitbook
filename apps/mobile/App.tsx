@@ -1,4 +1,8 @@
-import { HeldUpdateSurfaceContext, useHeldUpdateSurfaces } from './src/ui/held-update-surface';
+import {
+  HeldUpdateSurfaceContext,
+  useHeldUpdateSurfaces,
+  useHeldUpdateNativeOverlays,
+} from './src/ui/held-update-surface';
 import { HeldUpdateNoticeContext, HeldUpdateFooter } from './src/ui/held-update-snackbar';
 import { WidgetGroupPicker } from './src/widget-picker';
 import { widgetLinkTarget } from './src/widget-links';
@@ -24,11 +28,9 @@ import {
 import {
   AppState,
   Appearance,
-  Alert,
   KeyboardAvoidingView,
   Linking,
   Platform,
-  Share,
   BackHandler,
   Pressable,
   RefreshControl,
@@ -491,6 +493,7 @@ function AuthenticationScreen() {
 
 /** Settings, Create Group or an invitation: a compact top bar over the screen's content. */
 function TaskScreen() {
+  const native = useHeldUpdateNativeOverlays();
   const state = useMobileSnapshot(
     controller,
     (snapshot) => ({
@@ -662,7 +665,7 @@ function TaskScreen() {
               }
               onOpenWeb={() => {
                 void Linking.openURL(new URL('/settings', environment.webOrigin).href).catch(() => {
-                  Alert.alert('Couldn’t open web settings', 'Check your browser and try again.');
+                  native.alert('Couldn’t open web settings', 'Check your browser and try again.');
                 });
               }}
               onSignOut={() =>
@@ -945,23 +948,29 @@ function draftDiscard(discard: () => void): Confirmation {
 }
 
 /** Shares the open Group's invitation link through Android's share sheet. */
-function shareInvite() {
-  void (async () => {
-    const url = await controller.loadInviteLink();
-    if (!url) {
-      const message = controller.getSnapshot().share.message;
-      if (message) Alert.alert('Couldn’t get an invitation link', message);
-      return;
-    }
-    try {
-      await Share.share({
-        message: `Join our Group on ${PRODUCT_NAME}: ${url}`,
-        title: `${PRODUCT_NAME} invitation`,
-      });
-    } catch {
-      Alert.alert('Couldn’t open sharing', 'Your invitation link is still available. Try again.');
-    }
-  })();
+function useShareInvite() {
+  const native = useHeldUpdateNativeOverlays();
+  return useCallback(() => {
+    void (async () => {
+      const url = await controller.loadInviteLink();
+      if (!url) {
+        const message = controller.getSnapshot().share.message;
+        if (message) native.alert('Couldn’t get an invitation link', message);
+        return;
+      }
+      try {
+        await native.share({
+          message: `Join our Group on ${PRODUCT_NAME}: ${url}`,
+          title: `${PRODUCT_NAME} invitation`,
+        });
+      } catch {
+        native.alert(
+          'Couldn’t open sharing',
+          'Your invitation link is still available. Try again.',
+        );
+      }
+    })();
+  }, [native]);
 }
 
 /**
@@ -986,6 +995,8 @@ const unlistedGroup = (id: string): MobileGroup => ({
 
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen() {
+  const native = useHeldUpdateNativeOverlays();
+  const shareInvite = useShareInvite();
   const heldUpdate = useHeldUpdateBanner();
   const state = useMobileSnapshot(
     controller,
@@ -1198,11 +1209,11 @@ function GroupScreen() {
         draftDiscard(
           () =>
             void controller.discardKeptDraft().then((discarded) => {
-              if (!discarded) Alert.alert('Couldn’t discard this draft', 'Please try again.');
+              if (!discarded) native.alert('Couldn’t discard this draft', 'Please try again.');
             }),
         ),
       ),
-    [confirm],
+    [confirm, native],
   );
   const selectMonth = useCallback((month: string | null) => void controller.selectMonth(month), []);
   const chooseTripCurrency = useCallback(
@@ -1419,7 +1430,7 @@ function GroupScreen() {
             void Linking.openURL(
               new URL(`/groups/${group.id}/settings`, environment.webOrigin).href,
             ).catch(() => {
-              Alert.alert(
+              native.alert(
                 'Couldn’t open the Group’s settings',
                 'Check your browser and try again.',
               );
@@ -1560,6 +1571,7 @@ function GroupScreen() {
 
 /** Members and Group details: a full screen over the Group, which Back returns to. */
 function MembersScreen() {
+  const shareInvite = useShareInvite();
   const state = useMobileSnapshot(
     controller,
     ({ auth, detail, groups, share, offline, leave, toReview }) => ({

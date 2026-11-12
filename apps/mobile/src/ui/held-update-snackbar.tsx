@@ -7,7 +7,7 @@ import { useDismissAfter } from './group-snackbar';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 
 /** Visibility is UI-only; the controller still owns the hold and its acknowledgement token. */
-export function useHeldUpdateTimeline(controller: MobileController) {
+export function useHeldUpdateTimeline(controller: MobileController, visible = true) {
   const state = useMobileSnapshot(
     controller,
     (s) => ({
@@ -19,12 +19,16 @@ export function useHeldUpdateTimeline(controller: MobileController) {
   );
   const [shown, setShown] = useState<HeldNotificationOwner | null>(null);
   useEffect(() => {
-    if (!state.notice) return;
+    if (!visible || !state.notice) return;
     setShown(state.notice);
     controller.consumeHeldNotificationNotice(state.notice);
-  }, [controller, state.notice]);
+  }, [controller, state.notice, visible]);
   useDismissAfter(shown, 4_000, () => setShown(null));
-  return { owner: state.owner, shown: shown === state.owner ? shown : null, widget: state.widget };
+  return {
+    owner: state.owner,
+    shown: visible && shown === state.owner ? shown : null,
+    widget: state.widget,
+  };
 }
 
 export const HeldUpdateNoticeContext = createContext<

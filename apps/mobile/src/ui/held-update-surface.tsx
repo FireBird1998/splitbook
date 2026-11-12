@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState } from 'react';
+import { Alert, Share } from 'react-native';
 import type { MobileController } from '../data/mobile-controller';
 import { notificationTaskProtected } from '../data/notification-alerts';
 import { HeldUpdateFooter, useHeldUpdateTimeline } from './held-update-snackbar';
@@ -15,7 +16,17 @@ export function useHeldUpdateSurfaces(controller: MobileController) {
     controller,
     (snapshot) => !!snapshot.heldNotification && notificationTaskProtected(snapshot),
   );
-  const timeline = useHeldUpdateTimeline(controller);
+  const [covered, setCovered] = useState(0);
+  const cover = useCallback(() => {
+    setCovered((n) => n + 1);
+    let open = true;
+    return () => {
+      if (!open) return;
+      open = false;
+      setCovered((n) => n - 1);
+    };
+  }, []);
+  const timeline = useHeldUpdateTimeline(controller, covered === 0);
   const [hosts, setHosts] = useState<{ id: string; depth: number }[]>([]);
   const register = useCallback((id: string, depth: number) => {
     setHosts((previous) => [...previous, { id, depth }]);
@@ -38,8 +49,8 @@ export function useHeldUpdateSurfaces(controller: MobileController) {
     [timeline.owner, timeline.shown, timeline.widget, top?.id, register, active],
   );
   return useMemo(
-    () => ({ controller, active, register, notice }),
-    [controller, active, register, notice],
+    () => ({ controller, active, register, notice, cover }),
+    [controller, active, register, notice, cover],
   );
 }
 
@@ -69,4 +80,22 @@ export function useHeldUpdateSheetNotice(visible: boolean, depth: number) {
   return visible && active && context ? (
     <HeldUpdateFooter controller={context.controller} inline hostId={id} />
   ) : null;
+}
+
+/** Native windows cannot host React feedback: keep its acknowledgement pending until dismissal. */
+export function useHeldUpdateNativeOverlays() {
+  const cover = useContext(HeldUpdateSurfaceContext)?.cover;
+  return useMemo(
+    () => ({
+      alert(title: string, message: string) {
+        const finish = cover?.();
+        Alert.alert(title, message, [{ text: 'OK', onPress: finish }], { onDismiss: finish });
+      },
+      share(content: Parameters<typeof Share.share>[0]) {
+        const finish = cover?.();
+        return Share.share(content).finally(finish);
+      },
+    }),
+    [cover],
+  );
 }
