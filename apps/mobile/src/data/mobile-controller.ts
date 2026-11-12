@@ -866,7 +866,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     accountStorage,
     (next) => {
       if (!persistentDrafts || !next.auth.user) return undefined;
-      return toReviewQueries.verifiedCount();
+      const verified = toReviewQueries.verifiedCount();
+      if (!verified) return undefined;
+      // The app owns which recoveries count on this phone, including de-duplication. Keep the
+      // server's independently verified part even while the app hides it offline (#1173).
+      return {
+        count: verified.count + mobileToReview(next, now()).counts.onThisPhone,
+        verifiedAt: verified.verifiedAt,
+      };
     },
     () => {
       const data = queryClient.getQueryData<{ refreshedAt: number }>(groupsKey(account()));

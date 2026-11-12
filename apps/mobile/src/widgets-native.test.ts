@@ -6,6 +6,7 @@ import { groupWidget } from '@splitbook/shared/group-widget';
 import { quickWidget } from '@splitbook/shared/quick-widget';
 import { fakeSplitbook } from './test-utils/fake-splitbook';
 import { testPhone } from './test-utils/test-phone';
+import { expenseReceipt } from './test-utils/expense-receipt';
 
 const native = vi.hoisted(() => ({
   databases: new Map<string, DatabaseSync>(),
@@ -595,8 +596,18 @@ it('does not verify a zero when a refused Group is removed from the in-memory To
   }
 });
 
-async function keepPhoneDraft(f: Awaited<ReturnType<typeof verifiedReviewPhone>>) {
+async function keepPhoneDraftOffline(f: Awaited<ReturnType<typeof verifiedReviewPhone>>) {
   const groupId = f.server.world.groups[0]._id;
+  const tags = [
+    {
+      _id: 'c00000000000000000000001',
+      name: 'Shared',
+      isArchived: false,
+      createdAt: new Date(homeTime).toISOString(),
+    },
+  ];
+  Object.assign(f.server.world.groups[0], { tags });
+  f.server.world.tags[groupId] = { canManage: true, tags };
   await f.controller.openExpense(groupId);
   await f.controller.updateExpenseDraft({
     description: 'Lunch kept on this phone',
@@ -606,6 +617,10 @@ async function keepPhoneDraft(f: Awaited<ReturnType<typeof verifiedReviewPhone>>
   f.phone.connect(false);
   await f.controller.keepExpenseAsSharedDraft();
   await vi.waitFor(() => expect(f.controller.toReviewModel().counts.onThisPhone).toBe(1));
+}
+
+async function keepPhoneDraft(f: Awaited<ReturnType<typeof verifiedReviewPhone>>) {
+  await keepPhoneDraftOffline(f);
   f.phone.connect(true);
   await f.controller.refreshToReview();
   await vi.waitFor(() => expect(f.controller.toReviewModel().counts.total).toBe(4));
@@ -616,8 +631,19 @@ it('counts three verified server items and one Finish-later item on this phone i
   try {
     await keepPhoneDraft(f);
     await vi.waitFor(async () =>
-      expect((await drawn(createWidgetsStore(f.environment))).balances.review).toBe('To review\u00a0· 4'),
+      expect((await drawn(createWidgetsStore(f.environment))).balances.review).toBe(
+        'To review\u00a0· 4',
+      ),
     );
+    f.phone.connect(false);
+    f.phone.clock.now = drawTime;
+    await vi.waitFor(async () =>
+      expect((await createWidgetsStore(f.environment).read()).copy?.review).toEqual({
+        count: 4,
+        verifiedAt: new Date(2026, 10, 13, 9, 49).getTime(),
+      }),
+    );
+    f.phone.connect(true);
     await f.controller.openWidget('review');
     expect(f.controller.toReviewModel().items).toHaveLength(4);
     expect(f.controller.toReviewModel().counts.onThisPhone).toBe(1);
@@ -625,3 +651,222 @@ it('counts three verified server items and one Finish-later item on this phone i
     f.phone.dispose();
   }
 });
+
+it('follows the app card after the member saves the on-phone Draft and To review answers again', async () => {
+  const f = await verifiedReviewPhone();
+  try {
+    await keepPhoneDraft(f);
+    await vi.waitFor(async () =>
+      expect((await drawn(createWidgetsStore(f.environment))).balances.review).toBe(
+        'To review\u00a0· 4',
+      ),
+    );
+    const group = f.server.world.groups[0];
+    f.server.reply('POST', `/api/groups/${group._id}/expenses`, ({ body }) =>
+      Response.json(
+        {
+          status: 201,
+          data: expenseReceipt(
+            group,
+            body,
+            'b00000000000000000000099',
+            f.server.world.people.alex.id,
+          ),
+        },
+        { status: 201 },
+      ),
+    );
+    await f.controller.openExpense(group._id);
+    await f.controller.saveExpense();
+    expect(f.controller.getSnapshot().expense.receiptId).not.toBeNull();
+    await f.controller.refreshToReview();
+    await vi.waitFor(() =>
+      expect(f.controller.toReviewModel().counts).toMatchObject({ total: 3, onThisPhone: 0 }),
+    );
+    await vi.waitFor(async () =>
+      expect((await drawn(createWidgetsStore(f.environment))).balances.review).toBe(
+        'To review\u00a0· 3',
+      ),
+    );
+  } finally {
+    f.phone.dispose();
+  }
+});
+
+it('shows one on-phone item beside a verified zero and keeps the server verification time', async () => {
+  const f = await verifiedReviewPhone();
+  try {
+    await keepPhoneDraft(f);
+    f.server.world.toReview = { total: 0, groups: [] };
+    f.phone.clock.now = drawTime;
+    await f.controller.refreshToReview();
+    expect(f.controller.toReviewModel().counts).toMatchObject({ total: 1, onThisPhone: 1 });
+    await vi.waitFor(async () => {
+      const store = createWidgetsStore(f.environment);
+      expect((await drawn(store)).balances.review).toBe('To review\u00a0· 1');
+      expect((await store.read()).copy?.review).toEqual({ count: 1, verifiedAt: drawTime });
+    });
+    f.phone.connect(false);
+    f.phone.clock.now = drawTime + 60_000;
+    await f.controller.openExpense(f.server.world.groups[0]._id);
+    await f.controller.discardExpenseDraft();
+    await f.controller.closeExpense();
+    await f.controller.refreshToReview();
+    expect(f.controller.toReviewModel().counts.onThisPhone).toBe(0);
+    await vi.waitFor(async () =>
+      expect((await createWidgetsStore(f.environment).read()).copy?.review).toEqual({
+        count: 0,
+        verifiedAt: drawTime,
+      }),
+    );
+  } finally {
+    f.phone.dispose();
+  }
+});
+
+it('counts an unconfirmed Expense save exactly as the app counts it on this phone', async () => {
+  const f = await verifiedReviewPhone();
+  try {
+    await keepPhoneDraft(f);
+    const groupId = f.server.world.groups[0]._id;
+    await f.controller.openExpense(groupId);
+    f.server.fault('POST', `/api/groups/${groupId}/expenses`, 'lost-reply');
+    await f.controller.saveExpense();
+    expect(f.controller.getSnapshot().expense.status).toBe('uncertain');
+    await f.controller.refreshToReview();
+    await vi.waitFor(() =>
+      expect(f.controller.toReviewModel().counts).toMatchObject({ total: 4, onThisPhone: 1 }),
+    );
+    await vi.waitFor(async () =>
+      expect((await drawn(createWidgetsStore(f.environment))).balances.review).toBe(
+        'To review\u00a0· 4',
+      ),
+    );
+  } finally {
+    f.phone.dispose();
+  }
+});
+
+it('never carries either part of the count to another account', async () => {
+  const f = await verifiedReviewPhone();
+  try {
+    await keepPhoneDraft(f);
+    await vi.waitFor(async () =>
+      expect((await drawn(createWidgetsStore(f.environment))).balances.review).toBe(
+        'To review\u00a0· 4',
+      ),
+    );
+    await f.controller.signOut();
+    f.server.world.toReview = { total: 0, groups: [] };
+    await f.controller.signIn('sam');
+    await f.controller.refreshToReview();
+    expect(f.controller.toReviewModel().counts).toMatchObject({ total: 0, onThisPhone: 0 });
+    await vi.waitFor(async () => {
+      const store = createWidgetsStore(f.environment);
+      expect((await store.read()).copy?.accountId).toBe(f.server.world.people.sam.id);
+      expect((await drawn(store)).balances.review).toBeNull();
+    });
+  } finally {
+    f.phone.dispose();
+  }
+});
+
+it.each(['gain', 'lose'] as const)(
+  'keeps the previous chip when a cold offline session has no verified server part and the phone will %s a Draft',
+  async (change) => {
+    const f = await verifiedReviewPhone();
+    try {
+      const groupId = f.server.world.groups[0]._id;
+      if (change === 'lose') await keepPhoneDraft(f);
+      else await f.controller.openGroup(groupId);
+      const before = change === 'lose' ? 4 : 3;
+      await vi.waitFor(async () =>
+        expect((await drawn(createWidgetsStore(f.environment))).balances.review).toBe(
+          `To review\u00a0· ${before}`,
+        ),
+      );
+      await vi.waitFor(async () =>
+        expect(
+          await f.phone.stores.savedQueries.load(
+            f.server.world.people.alex.id,
+            `/api/groups/${groupId}`,
+          ),
+        ).not.toBeNull(),
+      );
+      f.phone.connect(false);
+      const restarted = f.phone.open();
+      await restarted.restore();
+      if (change === 'gain') await keepPhoneDraftOffline({ ...f, controller: restarted });
+      else {
+        await restarted.openExpense(groupId);
+        await restarted.discardExpenseDraft();
+        await restarted.closeExpense();
+        await restarted.refreshToReview();
+      }
+      await vi.waitFor(() =>
+        expect(restarted.toReviewModel().counts.onThisPhone).toBe(change === 'gain' ? 1 : 0),
+      );
+      await new Promise<void>((done) => setImmediate(done));
+      expect((await drawn(createWidgetsStore(f.environment))).balances.review).toBe(
+        `To review\u00a0· ${before}`,
+      );
+      f.phone.connect(true);
+      await restarted.refreshHome();
+      await vi.waitFor(() => expect(restarted.getSnapshot().offline.active).toBe(false));
+      await restarted.refreshToReview();
+      const after = change === 'gain' ? 4 : 3;
+      await vi.waitFor(() => expect(restarted.toReviewModel().counts.total).toBe(after));
+      await vi.waitFor(async () =>
+        expect((await drawn(createWidgetsStore(f.environment))).balances.review).toBe(
+          `To review\u00a0· ${after}`,
+        ),
+      );
+    } finally {
+      f.phone.dispose();
+    }
+  },
+);
+
+it.each(['sign-out', '401'] as const)(
+  'does not let a late To review answer after %s verify a count for the next session',
+  async (ending) => {
+    const f = await verifiedReviewPhone();
+    const held = f.server.hold('GET', '/api/user/to-review');
+    let next: ReturnType<typeof f.server.hold> | undefined;
+    try {
+      const pending = f.controller.refreshToReview();
+      await held.arrived;
+      if (ending === 'sign-out') await f.controller.signOut();
+      else {
+        f.server.auth.expired = true;
+        await f.controller.refreshHome();
+        f.server.auth.expired = false;
+      }
+      expect(f.controller.getSnapshot().auth.status).toBe('signed-out');
+      f.server.world.toReview = { total: 0, groups: [] };
+      next = f.server.hold('GET', '/api/user/to-review');
+      await f.controller.signIn(ending === 'sign-out' ? 'alex' : 'sam');
+      await next.arrived;
+      held.release();
+      await pending;
+      await new Promise<void>((done) => setImmediate(done));
+      // No new To review answer yet: the old response cannot seed this session's count.
+      await vi.waitFor(async () =>
+        expect((await createWidgetsStore(f.environment).read()).copy?.accountId).toBe(
+          f.controller.getSnapshot().auth.user?.id,
+        ),
+      );
+      expect((await createWidgetsStore(f.environment).read()).copy?.review).toBeUndefined();
+      expect((await drawn(createWidgetsStore(f.environment))).balances.review).toBeNull();
+      next.release();
+      await f.controller.refreshToReview();
+      await vi.waitFor(async () =>
+        expect((await createWidgetsStore(f.environment).read()).copy?.review?.count).toBe(0),
+      );
+    } finally {
+      held.release();
+      next?.release();
+      f.phone.dispose();
+    }
+  },
+);
