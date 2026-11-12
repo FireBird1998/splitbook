@@ -1,4 +1,4 @@
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, expect, it, vi } from 'vitest';
 import { fakeSplitbook, expenseFixture } from './test-utils/fake-splitbook';
 import { testPhone, until } from './test-utils/test-phone';
@@ -91,13 +91,23 @@ async function setup() {
     await controller.signIn('alex');
     await controller.openGroup(groupId);
   });
-  const text = () =>
-    unbroken(
-      screen!.root
+  // Android paints native Modal windows above the rest of the React tree. Hidden ancestor
+  // Modals hide their children too; only the last visible native window can acknowledge a tap.
+  const text = () => {
+    const modals = screen!.root.findAll((node) => {
+      if ((node.type as unknown) !== 'Modal' || node.props.visible === false) return false;
+      for (let parent: ReactTestInstance | null = node.parent; parent; parent = parent.parent)
+        if ((parent.type as unknown) === 'Modal' && parent.props.visible === false) return false;
+      return true;
+    });
+    const surface = modals.at(-1) ?? screen!.root;
+    return unbroken(
+      surface
         .findAll((node) => (node.type as unknown) === 'Text')
         .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
         .join(''),
     );
+  };
   return { server, controller, groupId, alex, sam, text };
 }
 
@@ -303,7 +313,7 @@ it('shows the held widget notice on a saved Expense record without changing it',
 });
 
 it('shows the held notice inside the Group form currency chooser', async () => {
-  const { controller: c } = await setup();
+  const { controller: c, text } = await setup();
   act(() => c.startCreate());
   act(() =>
     screen!.root
@@ -316,17 +326,7 @@ it('shows the held notice inside the Group form currency chooser', async () => {
       .props.onPress(),
   );
   await act(async () => c.openWidget('home'));
-  const chooser = screen!.root
-    .findAll((node) => (node.type as unknown) === 'Modal' && node.props.visible === true)
-    .find((node) => node.findAll((child) => child.props.label === 'Search currencies').length > 0);
-  expect(chooser).toBeDefined();
-  expect(
-    unbroken(
-      chooser!
-        .findAll((node) => (node.type as unknown) === 'Text')
-        .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
-        .join(''),
-    ),
-  ).toContain('Widget held until you finish');
+  expect(text()).toContain('Choose currency');
+  expect(text()).toContain('Widget held until you finish');
   expect(c.getSnapshot().screen).toBe('create');
 });
