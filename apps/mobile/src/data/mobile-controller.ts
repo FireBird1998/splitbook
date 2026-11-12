@@ -2613,7 +2613,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const notificationSeen = new Map<string, number>();
-  const notificationProtected = () => notificationTaskProtected(snapshot);
+  const heldTaskProtected = () => notificationTaskProtected(snapshot);
   const matchingNotification = (event: NotificationEnvelope) =>
     snapshot.auth.status === 'authenticated' &&
     notificationAuthorized(event, {
@@ -2656,11 +2656,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       visible &&
       route.screen === 'group' &&
       route.groupId === event.groupId &&
-      !notificationProtected();
+      !heldTaskProtected();
     ledgerChanged(event.groupId);
     await removeLedgerCopies(event.groupId, owner);
     if (!current(owner)) return false;
-    const stillQuiet = quiet && route === receiptRoute && !notificationProtected();
+    const stillQuiet = quiet && route === receiptRoute && !heldTaskProtected();
     if (stillQuiet) await openGroup(event.groupId, false);
     return current(owner) && !stillQuiet;
   };
@@ -2678,7 +2678,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     read: () => ({
       generation,
       accountId: snapshot.auth.status === 'authenticated' ? snapshot.auth.user!.id : null,
-      protected: notificationProtected(),
+      protected: heldTaskProtected(),
       notificationOpening: snapshot.notificationOpening,
       heldNotification: snapshot.heldNotification,
       heldNotificationNotice: snapshot.heldNotificationNotice,
@@ -2730,7 +2730,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                     ? snapshot.screen === 'settlement' &&
                       snapshot.settlement.groupId === target.groupId
                     : false;
-            if (notificationProtected() && !intended)
+            if (heldTaskProtected() && !intended)
               return { status: 'completed', task: 'interrupted' };
             const failed =
               access !== 'refused' &&
@@ -2752,10 +2752,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return admitted();
     },
   });
-  const openPendingNotification = () => heldUpdate.act({ kind: 'open' });
-  const consumeHeldNotificationNotice = (owner: NonNullable<MobileSnapshot['heldNotification']>) =>
+  const openHeldUpdate = () => heldUpdate.act({ kind: 'open' });
+  const consumeHeldUpdateNotice = (owner: NonNullable<MobileSnapshot['heldNotification']>) =>
     void heldUpdate.act({ kind: 'consume-notice', owner });
-  const dismissPendingNotification = (owner: NonNullable<MobileSnapshot['heldNotification']>) =>
+  const dismissHeldUpdate = (owner: NonNullable<MobileSnapshot['heldNotification']>) =>
     void heldUpdate.act({ kind: 'dismiss', owner });
   const tapNotification = (value: unknown) => heldUpdate.accept({ source: 'notification', value });
 
@@ -8226,7 +8226,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (target.kind === 'expense') await openExpense(target.groupId);
       else {
         await openGroup(target.groupId, false, 'balances');
-        if (!owns() || notificationProtected()) return;
+        if (!owns() || heldTaskProtected()) return;
         if (
           target.kind === 'settle' &&
           target.payment &&
@@ -8248,7 +8248,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     }
     await showHome();
-    if (!owns() || notificationProtected()) return;
+    if (!owns() || heldTaskProtected()) return;
     publish({
       ...snapshot,
       widgetOpen: {
@@ -8343,9 +8343,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openSettings,
     receiveNotification,
     tapNotification,
-    consumeHeldNotificationNotice,
-    dismissPendingNotification,
-    openPendingNotification,
+    consumeHeldNotificationNotice: consumeHeldUpdateNotice,
+    dismissPendingNotification: dismissHeldUpdate,
+    openPendingNotification: openHeldUpdate,
     refreshNotifications: notifications.read,
     enableNotifications: notifications.enable,
     disableNotifications: notifications.disable,
