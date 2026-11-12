@@ -215,7 +215,8 @@ export interface SettlementState {
   /**
    * The Group's people by id, as this phone knew them when the sheet opened: its members, and
    * anyone its Balances named. They name payer and recipient until the check reads the Group,
-   * which alone names them from then on (#334).
+   * which alone names them from then on (#334). A definite archive refusal keeps only the
+   * payment’s two names for its explanation after the Group purge (#1153).
    */
   known: Record<string, string>;
   suggested: number | null;
