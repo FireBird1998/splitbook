@@ -220,3 +220,96 @@ it('Group setup still requires saved Groups and Quick still requires sign-in', a
   expect(textOf(button())).toBe('Open Splitbook');
   expect(store.saveSetup).not.toHaveBeenCalled();
 });
+
+const setupChanges = [
+  { state: 'signed out', list: ['Sign in to Splitbook first'], maple: false },
+  { state: 'another account signed in', list: ['Sam’s saved Group'], maple: true },
+  { state: 'chosen Group gone', list: ['Cedar House'], maple: false },
+  { state: 'chosen Group archived', list: ['Cedar House'], maple: false },
+] as const;
+
+function changedSetupRead(state: (typeof setupChanges)[number]['state']) {
+  if (state === 'signed out') return { copy: null, session: { status: 'signed-out' as const } };
+  const otherAccount = state === 'another account signed in';
+  const accountId = otherAccount ? 'sam' : 'alex';
+  const row = copy.savedGroups!.rows[0];
+  return {
+    copy: {
+      ...copy,
+      accountId,
+      savedGroups: {
+        verifiedAt: Date.parse('2026-11-09T05:17:00Z'),
+        rows: [
+          ...(otherAccount
+            ? [row]
+            : state === 'chosen Group archived'
+              ? [{ ...row, archived: true }]
+              : []),
+          { ...row, id: 'cedar', name: otherAccount ? 'Sam’s saved Group' : 'Cedar House' },
+        ],
+      },
+    },
+    session: { status: 'authenticated' as const, accountId, loading: false },
+  };
+}
+
+for (const kind of ['Group', 'Quick'] as const)
+  it.each(setupChanges)(
+    `${kind} setup refuses Save and reloads the saved list after $state`,
+    async ({ state, list, maple }) => {
+      const saved: WidgetSetupRecord =
+        kind === 'Group'
+          ? {
+              kind: 'group',
+              widgetId: 989,
+              accountId: 'alex',
+              groupId: 'maple',
+              hideAmounts: false,
+            }
+          : { kind: 'quick', widgetId: 989, accountId: 'alex', groupId: 'maple' };
+      const result = await render(kind, saved);
+      expect(textOf(button())).toBe('Save');
+      expect(
+        host('Pressable').find((node) => node.props.accessibilityLabel === 'Maple House')?.props
+          .accessibilityState.checked,
+      ).toBe(true);
+
+      // The configure activity remains open while the app changes the saved account/Groups.
+      store.read.mockResolvedValue(changedSetupRead(state));
+      await act(async () => button().props.onPress());
+
+      expect(text()).toContain('Choose a saved Group for this account.');
+      for (const label of list) expect(text()).toContain(label);
+      expect(
+        host('Pressable').some((node) => node.props.accessibilityLabel === 'Maple House'),
+      ).toBe(maple);
+      expect(store.saveSetup).not.toHaveBeenCalled();
+      expect(redraw).not.toHaveBeenCalled();
+      expect(result).not.toHaveBeenCalled();
+    },
+  );
+
+it.each(setupChanges)(
+  'Balances setup saves Hide amounts after $state while setup is open',
+  async ({ state }) => {
+    const result = await render('Balances', {
+      kind: 'balances',
+      widgetId: 989,
+      hideAmounts: false,
+    });
+    expect(textOf(button())).toBe('Save');
+    act(() => host('Switch')[0].props.onValueChange(true));
+    store.read.mockResolvedValue(changedSetupRead(state));
+
+    await act(async () => button().props.onPress());
+
+    expect(text()).not.toContain('Choose a saved Group for this account.');
+    expect(store.saveSetup).toHaveBeenCalledExactlyOnceWith({
+      kind: 'balances',
+      widgetId: 989,
+      hideAmounts: true,
+    });
+    expect(redraw).toHaveBeenCalledOnce();
+    expect(result).toHaveBeenCalledExactlyOnceWith('ok');
+  },
+);
