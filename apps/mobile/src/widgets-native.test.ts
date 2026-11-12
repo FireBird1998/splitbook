@@ -4,8 +4,14 @@ import type { WidgetCopy } from '@splitbook/shared/balances-widget';
 import { balancesWidget } from '@splitbook/shared/balances-widget';
 import { groupWidget } from '@splitbook/shared/group-widget';
 import { quickWidget } from '@splitbook/shared/quick-widget';
+import { fakeSplitbook } from './test-utils/fake-splitbook';
+import { testPhone } from './test-utils/test-phone';
 
-const native = vi.hoisted(() => ({ databases: new Map<string, DatabaseSync>(), exists: true }));
+const native = vi.hoisted(() => ({
+  databases: new Map<string, DatabaseSync>(),
+  exists: true,
+  copyWrite: null as null | { arrive(): void; waiting: Promise<void>; complete(): void },
+}));
 vi.mock('expo-sqlite', async () => {
   const { DatabaseSync } = await import('node:sqlite');
   return {
@@ -18,8 +24,17 @@ vi.mock('expo-sqlite', async () => {
       }
       return {
         execAsync: async (sql: string) => db.exec(sql),
-        runAsync: async (sql: string, ...values: (string | number | null)[]) =>
-          db.prepare(sql).run(...values),
+        runAsync: async (sql: string, ...values: (string | number | null)[]) => {
+          const held = sql.startsWith('UPDATE widget_state SET copy =') ? native.copyWrite : null;
+          if (held) {
+            native.copyWrite = null;
+            held.arrive();
+            await held.waiting;
+          }
+          const result = db.prepare(sql).run(...values);
+          held?.complete();
+          return result;
+        },
         getFirstAsync: async (sql: string, ...values: (string | number | null)[]) =>
           db.prepare(sql).get(...values),
       };
@@ -29,6 +44,7 @@ vi.mock('expo-sqlite', async () => {
 afterEach(() => {
   for (const db of native.databases.values()) db.close();
   native.databases.clear();
+  native.copyWrite = null;
 });
 vi.mock('expo-file-system', () => ({
   File: class {
@@ -40,7 +56,7 @@ vi.mock('expo-file-system', () => ({
     }
   },
 }));
-import { createWidgetsStore } from './widgets-native';
+import { createWidgetsNative, createWidgetsStore } from './widgets-native';
 
 it('purges an existing copy after a cold start using an absolute file URI', async () => {
   const store = createWidgetsStore('development');
@@ -276,5 +292,92 @@ it('draws no previous account’s final balance, people or To review count after
     expect(JSON.stringify([view, samView])).not.toMatch(/Maple|You pay Sam|1,480|To review/);
   } finally {
     vi.unstubAllEnvs();
+  }
+});
+
+function holdCopyWrite() {
+  let arrive!: () => void, release!: () => void, complete!: () => void;
+  const arrived = new Promise<void>((done) => {
+    arrive = done;
+  });
+  const waiting = new Promise<void>((done) => {
+    release = done;
+  });
+  const completed = new Promise<void>((done) => {
+    complete = done;
+  });
+  native.copyWrite = { arrive, waiting, complete };
+  return { arrived, release, completed };
+}
+
+it('hides figures on a 401 before a SQLite copy write finishes, and keeps them for the same account', async () => {
+  const server = fakeSplitbook();
+  const accountId = server.world.people.alex.id;
+  const groupId = server.world.groups[0]._id;
+  const home = (amount: number) => ({
+    buckets: [{ currency: 'INR', youOwe: amount, youAreOwed: 0, net: -amount }],
+    groups: [{ groupId, name: 'Maple House', balances: [{ currency: 'INR', balance: -amount }] }],
+  });
+  server.world.home = home(1480);
+  const environment = 'http://localhost:1170';
+  const adapter = createWidgetsNative(environment);
+  const store = createWidgetsStore(environment);
+  const phone = testPhone(server, {
+    origin: environment,
+    now: homeTime,
+    parts: { widgets: { ...adapter, redraw: async () => undefined } },
+  });
+  const controller = phone.open();
+  let held: ReturnType<typeof holdCopyWrite> | undefined;
+  try {
+    await controller.signIn('alex');
+    await vi.waitFor(async () =>
+      expect((await drawn(store)).balances).toMatchObject({ state: 'normal', owe: ['₹1,480.00'] }),
+    );
+    held = holdCopyWrite();
+    server.world.home = home(1550);
+    phone.clock.now = balanceTime;
+    await controller.refreshHome();
+    await held.arrived;
+
+    server.auth.expired = true;
+    await controller.refreshHome();
+    await vi.waitFor(async () =>
+      expect((await drawn(store)).balances).toMatchObject({
+        state: 'expired',
+        title: 'Sign in again',
+        owed: [],
+        owe: [],
+        saved: null,
+        review: null,
+      }),
+    );
+
+    held.release();
+    await held.completed;
+    // Let the suspended native write return through the account lease and saved-copy queue.
+    await new Promise<void>((done) => setImmediate(done));
+    expect((await drawn(createWidgetsStore(environment))).balances).toMatchObject({
+      state: 'expired',
+      title: 'Sign in again',
+      owed: [],
+      owe: [],
+      saved: null,
+      review: null,
+    });
+    // Only session admission changes: no new balance read or copy write can refill this draw.
+    await createWidgetsStore(environment).setSession({
+      status: 'authenticated',
+      accountId,
+      loading: false,
+    });
+    expect((await drawn(createWidgetsStore(environment))).balances).toMatchObject({
+      state: 'normal',
+      owe: ['₹1,550.00'],
+      saved: 'Saved 9:42',
+    });
+  } finally {
+    held?.release();
+    phone.dispose();
   }
 });
