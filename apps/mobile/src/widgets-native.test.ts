@@ -594,3 +594,34 @@ it('does not verify a zero when a refused Group is removed from the in-memory To
     phone.dispose();
   }
 });
+
+async function keepPhoneDraft(f: Awaited<ReturnType<typeof verifiedReviewPhone>>) {
+  const groupId = f.server.world.groups[0]._id;
+  await f.controller.openExpense(groupId);
+  await f.controller.updateExpenseDraft({
+    description: 'Lunch kept on this phone',
+    amount: '10',
+    tagId: 'c00000000000000000000001',
+  });
+  f.phone.connect(false);
+  await f.controller.keepExpenseAsSharedDraft();
+  await vi.waitFor(() => expect(f.controller.toReviewModel().counts.onThisPhone).toBe(1));
+  f.phone.connect(true);
+  await f.controller.refreshToReview();
+  await vi.waitFor(() => expect(f.controller.toReviewModel().counts.total).toBe(4));
+}
+
+it('counts three verified server items and one Finish-later item on this phone in the widget and its destination', async () => {
+  const f = await verifiedReviewPhone();
+  try {
+    await keepPhoneDraft(f);
+    await vi.waitFor(async () =>
+      expect((await drawn(createWidgetsStore(f.environment))).balances.review).toBe('To review\u00a0· 4'),
+    );
+    await f.controller.openWidget('review');
+    expect(f.controller.toReviewModel().items).toHaveLength(4);
+    expect(f.controller.toReviewModel().counts.onThisPhone).toBe(1);
+  } finally {
+    f.phone.dispose();
+  }
+});
