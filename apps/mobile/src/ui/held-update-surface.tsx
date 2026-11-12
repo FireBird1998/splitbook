@@ -8,7 +8,14 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Alert, AppState, Keyboard, Share, type LayoutChangeEvent } from 'react-native';
+import {
+  Alert,
+  AppState,
+  Keyboard,
+  Share,
+  useWindowDimensions,
+  type LayoutChangeEvent,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { MobileController } from '../data/mobile-controller';
 import { notificationTaskProtected } from '../data/notification-alerts';
@@ -121,12 +128,13 @@ export function HeldUpdateFloatingNotice({
   bottom?: number;
 }) {
   const notice = useContext(HeldUpdateNoticeContext);
-  const [keyboardHeight, setKeyboardHeight] = useState(() => Keyboard.metrics()?.height ?? 0);
+  const { height } = useWindowDimensions();
+  const [keyboard, setKeyboard] = useState(() => Keyboard.metrics());
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', (event) =>
-      setKeyboardHeight(event.endCoordinates.height),
+      setKeyboard(event.endCoordinates),
     );
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboard(undefined));
     return () => {
       show.remove();
       hide.remove();
@@ -135,9 +143,14 @@ export function HeldUpdateFloatingNotice({
   if (!notice?.shown || notice.hostId !== (hostId ?? null)) return null;
   return (
     <SafeAreaView
-      edges={['bottom']}
+      edges={keyboard ? [] : ['bottom']}
       pointerEvents="none"
-      style={{ position: 'absolute', left: 0, right: 0, bottom: Math.max(bottom, keyboardHeight) }}
+      style={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        bottom: Math.max(bottom, keyboard ? height - keyboard.screenY : 0),
+      }}
     >
       <HeldUpdateFooter controller={controller} inline hostId={hostId} />
     </SafeAreaView>
