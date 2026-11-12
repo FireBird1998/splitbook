@@ -3,7 +3,7 @@ import { Alert, Linking, Share } from 'react-native';
 import { afterEach, expect, it, vi } from 'vitest';
 import { fakeSplitbook, expenseFixture } from './test-utils/fake-splitbook';
 import { testPhone, until } from './test-utils/test-phone';
-import { emitAppState, emitKeyboard } from './test-utils/native';
+import { emitAppState, emitKeyboard, nextFrame } from './test-utils/native';
 import { unbroken } from './test-utils/layout';
 import { RecordPaymentSheet } from './ui/record-payment-sheet';
 import { CompactButton } from './ui/compact';
@@ -568,5 +568,36 @@ it('retires a native alert cover when its launching screen is recreated without 
   } finally {
     browser.mockRestore();
     alert.mockRestore();
+  }
+});
+
+it('releases native sharing after it resolves without leaving the foreground', async () => {
+  const { server, controller: c, groupId, text } = await setup();
+  server.world.pages[`/api/groups/${groupId}/invite-link`] = {
+    inviteCode: 'deadbeef',
+    inviteUrl: 'http://localhost:4138/join/deadbeef',
+    expiresAt: '2030-01-01T00:00:00.000Z',
+  };
+  const reading = server.hold('GET', `/api/groups/${groupId}/tag-actions`);
+  const sharing = vi
+    .spyOn(Share, 'share')
+    .mockResolvedValue({ action: 'sharedAction', activityType: undefined });
+  try {
+    await act(async () => c.openTags(groupId));
+    await act(async () => reading.arrived);
+    act(() => {
+      c.closeTags();
+      c.openMembers();
+    });
+    await act(async () => screen!.root.findByType(GroupMembers).props.invite.onPress());
+    expect(sharing).toHaveBeenCalled();
+    await act(async () => c.openWidget('home'));
+    expect(c.getSnapshot().heldNotificationNotice).not.toBeNull();
+    await act(async () => nextFrame());
+    expect(text()).toContain('Widget held until you finish');
+    expect(c.getSnapshot().heldNotificationNotice).toBeNull();
+  } finally {
+    await act(async () => reading.release());
+    sharing.mockRestore();
   }
 });
