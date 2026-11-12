@@ -167,7 +167,11 @@ export default function App() {
             <View style={{ flex: 1 }}>
               <SplitBook />
               {heldSurface.active && !heldSurface.notice.hostId && heldSurface.notice.shown ? (
-                <SafeAreaView edges={['bottom']}>
+                <SafeAreaView
+                  edges={['bottom']}
+                  pointerEvents="box-none"
+                  style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
+                >
                   <HeldUpdateFooter controller={controller} inline />
                 </SafeAreaView>
               ) : null}
