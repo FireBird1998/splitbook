@@ -108,6 +108,13 @@ export function useHeldUpdateSheetNotice(visible: boolean, depth: number) {
 /** Native windows cannot host React feedback: keep its acknowledgement pending until dismissal. */
 export function useHeldUpdateNativeOverlays() {
   const cover = useContext(HeldUpdateSurfaceContext)?.cover;
+  const pending = useRef(new Set<() => void>());
+  useEffect(() => {
+    const requests = pending.current;
+    return () => {
+      for (const finish of requests) finish();
+    };
+  }, []);
   return useMemo(
     () => ({
       alert(title: string, message: string) {
@@ -115,8 +122,24 @@ export function useHeldUpdateNativeOverlays() {
         Alert.alert(title, message, [{ text: 'OK', onPress: finish }], { onDismiss: finish });
       },
       share(content: Parameters<typeof Share.share>[0]) {
-        const finish = cover?.();
-        return Share.share(content).finally(finish);
+        const release = cover?.();
+        let away = false;
+        const subscription = AppState.addEventListener('change', (next) => {
+          if (next !== 'active') away = true;
+          else if (away) finish();
+        });
+        const finish = () => {
+          subscription.remove();
+          pending.current.delete(finish);
+          release?.();
+        };
+        pending.current.add(finish);
+        // Android resolves on launch, before the chooser closes. Its return to the foreground
+        // releases the cover; a failed launch has no window to wait for.
+        return Share.share(content).catch((error: unknown) => {
+          finish();
+          throw error;
+        });
       },
     }),
     [cover],
