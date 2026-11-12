@@ -1,3 +1,4 @@
+import { expenseFormShown } from './expense-form-shown';
 import { HeldUpdateFooter } from './held-update-snackbar';
 import type { ViewInstance, ScrollViewInstance, TextInputInstance } from 'react-native';
 import { expenseRecoveryWords } from './expense-recovery-copy';
@@ -111,12 +112,6 @@ const closeLabel = (state: Editor) =>
       : 'Back to Group, keeping your draft',
   );
 
-/** The form for a draft, rather than loading, a notice or a saved record. */
-const showsForm = ({ draft, status }: Editor) =>
-  !!draft &&
-  status !== 'loading' &&
-  !(draft.original && ['detail', 'delete-review'].includes(status));
-
 const contextNotices = {
   checking: {
     tone: 'info',
@@ -229,7 +224,7 @@ function SelectedAddCurrencySheet({
  */
 export function ExpenseEditor(props: Parameters<typeof ExpenseTask>[0]) {
   const { state } = props;
-  const form = showsForm(state);
+  const form = expenseFormShown(state);
   // A save, change or deletion that may already be recorded is never discarded here.
   const unconfirmed = state.attempt ? 'save' : (state.mutation?.kind ?? null);
   return (
@@ -526,7 +521,7 @@ function ExpenseTask({
     [members, draft?.original, state.latest],
   );
   const record = !!draft?.original && ['detail', 'delete-review'].includes(state.status);
-  const form = showsForm(state);
+  const form = expenseFormShown(state);
   // A save that may already be recorded stays locked until it is checked.
   const unconfirmed =
     form &&
@@ -552,7 +547,7 @@ function ExpenseTask({
   // beside it (#966). A check that failed keeps its own words, and online it is as it was.
   const check = state.contextCheck;
   const savedGroupShown =
-    offline && !!check && check.saved && check.status !== 'failed' && showsForm(state);
+    offline && !!check && check.saved && check.status !== 'failed' && expenseFormShown(state);
   const savedGroupHeld = savedGroupShown && expenseContextPending(state, offline);
   const savedGroupAt = check?.refreshedAt ?? null;
   const savedGroup = useMemo(

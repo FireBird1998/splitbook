@@ -1,3 +1,4 @@
+import { expenseFormShown } from './expense-form-shown';
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState } from 'react';
 import type { MobileController } from '../data/mobile-controller';
 import { notificationTaskProtected } from '../data/notification-alerts';
@@ -14,7 +15,11 @@ export const HeldUpdateDepthContext = createContext(0);
 /** Native sheets need their own slot; the three existing task footers keep their geometry. */
 function surface(snapshot: MobileSnapshot): Surface | null {
   if (!snapshot.heldNotification || !notificationTaskProtected(snapshot)) return null;
-  if (snapshot.screen === 'expense' || snapshot.toReview.groupId !== null || snapshot.toReview.run)
+  if (
+    (snapshot.screen === 'expense' && expenseFormShown(snapshot.expense)) ||
+    snapshot.toReview.groupId !== null ||
+    snapshot.toReview.run
+  )
     return null;
   // Retained edit/recovery/busy flags protect the task even after its native screen closed.
   if (snapshot.tagsOpenFor) return 'tags';
