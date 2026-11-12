@@ -378,12 +378,10 @@ it('waits to start the held notice until native sharing closes', async () => {
     expiresAt: '2030-01-01T00:00:00.000Z',
   };
   const reading = server.hold('GET', `/api/groups/${groupId}/tag-actions`);
-  let dismiss!: (value: Awaited<ReturnType<typeof Share.share>>) => void;
-  const sharing = vi.spyOn(Share, 'share').mockReturnValue(
-    new Promise((resolve) => {
-      dismiss = resolve;
-    }),
-  );
+  // Android resolves Share.share immediately after launching the chooser, not on dismissal.
+  const sharing = vi
+    .spyOn(Share, 'share')
+    .mockResolvedValue({ action: 'sharedAction', activityType: undefined });
   try {
     await act(async () => c.openTags(groupId));
     await act(async () => reading.arrived);
@@ -397,11 +395,12 @@ it('waits to start the held notice until native sharing closes', async () => {
     await act(async () => c.openWidget('home'));
     const owner = c.getSnapshot().heldNotification;
     expect(c.getSnapshot().heldNotificationNotice).toBe(owner);
+    act(() => emitAppState('background'));
     await act(async () => {
       vi.advanceTimersByTime(5_000);
     });
     expect(text()).not.toContain('Widget held until you finish');
-    await act(async () => dismiss({ action: 'dismissedAction', activityType: undefined }));
+    await act(async () => emitAppState('active'));
     expect(text()).toContain('Widget held until you finish');
     expect(c.getSnapshot().heldNotificationNotice).toBeNull();
   } finally {
