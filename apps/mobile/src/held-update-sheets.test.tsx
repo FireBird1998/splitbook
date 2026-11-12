@@ -515,3 +515,24 @@ it.each(['screen', 'currency chooser'] as const)(
     expect(c.getSnapshot().screen).toBe('create');
   },
 );
+
+it('leaves Create reachable through the floating notice and its margins', async () => {
+  const { controller: c } = await setup();
+  act(() => {
+    c.startCreate();
+    c.updateCreation({ name: 'Fictional reachable Group', category: 'home' });
+  });
+  await act(async () => c.openWidget('home'));
+  let host = screen!.root.findByType(Snackbar).parent;
+  while (host && (host.type as unknown) !== 'SafeAreaView') host = host.parent;
+  // React Native excludes this whole overlay subtree from hit testing, including its empty
+  // margins. The real primary handler underneath must remain usable during the notice.
+  expect(host!.props.pointerEvents).toBe('none');
+  const createGroup = screen!.root
+    .findAllByType(CompactButton)
+    .find((node) => node.props.label === 'Create Household')!;
+  expect(createGroup.props.disabled).toBeFalsy();
+  await act(async () => createGroup.props.onPress());
+  await act(async () => until(c, (state) => state.screen === 'group'));
+  expect(c.getSnapshot().notificationOpening.status).toBe('held');
+});
