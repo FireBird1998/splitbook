@@ -1,6 +1,5 @@
 import { createHeldUpdate, type HeldAdmission } from './held-update';
 import type { WidgetTarget } from '@splitbook/shared/balances-widget';
-import { toReviewKey } from '@splitbook/shared/query-keys';
 import { createWidgetCopy } from './widget-copy';
 import {
   parseNotificationEnvelope,
@@ -866,13 +865,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     dependencies.widgets,
     accountStorage,
     (next) => {
-      if (!persistentDrafts || !next.auth.user || next.toReview.status !== 'ready')
-        return undefined;
-      const query = queryClient.getQueryState(
-        toReviewKey({ environment: apiBase, accountId: next.auth.user.id }),
-      );
-      if (!query?.dataUpdatedAt) return undefined;
-      return { count: mobileToReview(next, now()).counts.total, verifiedAt: query.dataUpdatedAt };
+      if (!persistentDrafts || !next.auth.user) return undefined;
+      const verified = toReviewQueries.verifiedCount();
+      if (!verified) return undefined;
+      // The app owns which recoveries count on this phone, including de-duplication. Keep the
+      // server's independently verified part even while the app hides it offline (#1173).
+      return {
+        count: verified.count + mobileToReview(next, now()).counts.onThisPhone,
+        verifiedAt: verified.verifiedAt,
+      };
     },
     () => {
       const data = queryClient.getQueryData<{ refreshedAt: number }>(groupsKey(account()));
@@ -1401,6 +1402,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     online: onlineManager,
     environment: apiBase,
     enabled: persistentDrafts,
+    now,
     snapshot: () => snapshot,
     publish: (toReview) => {
       publish({ ...snapshot, toReview });
