@@ -182,9 +182,9 @@ export default function App() {
                 </SafeAreaView>
               ) : null}
             </View>
+            {androidWidgetsEnabled() ? <WidgetGroupPicker /> : null}
           </HeldUpdateNoticeContext.Provider>
         </HeldUpdateSurfaceContext.Provider>
-        {androidWidgetsEnabled() ? <WidgetGroupPicker /> : null}
       </ThemeContext.Provider>
     </SafeAreaProvider>
   );
