@@ -92,7 +92,7 @@ async function setup() {
         .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
         .join(''),
     );
-  return { controller, groupId, alex, sam, text };
+  return { server, controller, groupId, alex, sam, text };
 }
 
 async function paymentHoldingTap() {
@@ -148,15 +148,11 @@ it('keeps the payment unchanged and offers its held widget after Close (#1158)',
   expect(text()).toContain('Ready to open');
 });
 
-// #1158: the real App holds the tap, but the payment sheet has no notice host.
-// Keep this expected failure until a separate notice change is approved.
-it.fails(
-  'shows the held widget notice on the payment sheet without changing the payment (#1158)',
-  async () => {
-    const { text } = await paymentHoldingTap();
-    expect(text()).toContain('Widget held until you finish');
-  },
-);
+// #1163: every protected surface acknowledges a held tap.
+it('shows the held widget notice on the payment sheet without changing the payment (#1158)', async () => {
+  const { text } = await paymentHoldingTap();
+  expect(text()).toContain('Widget held until you finish');
+});
 
 it('keeps Tags open and offers its held widget after Close (#1158)', async () => {
   const { controller: c, text } = await tagsHoldingTap();
@@ -165,9 +161,73 @@ it('keeps Tags open and offers its held widget after Close (#1158)', async () =>
   expect(text()).toContain('Ready to open');
 });
 
-// #1158: the Tags sheet also holds the tap without rendering its acknowledgement.
-// This pins the gap without adding a notice or changing the sheet in this ticket.
-it.fails('shows the held widget notice on the Tags sheet without closing it (#1158)', async () => {
+it('shows the held widget notice on the Tags sheet without closing it (#1158)', async () => {
   const { text } = await tagsHoldingTap();
+  expect(text()).toContain('Widget held until you finish');
+});
+
+it('shows the held widget notice on Currencies without closing it', async () => {
+  const { controller: c, groupId, text } = await setup();
+  await act(async () => c.openCurrencies(groupId));
+  expect(c.getSnapshot().currenciesOpenFor).toBe(groupId);
+  await act(async () => c.openWidget('home'));
+  expect(c.getSnapshot().currenciesOpenFor).toBe(groupId);
+  expect(text()).toContain('Widget held until you finish');
+});
+
+it('shows the held widget notice on the Group form without changing its entries', async () => {
+  const { controller: c, text } = await setup();
+  act(() => {
+    c.startCreate();
+    c.updateCreation({ name: 'Keep this Group name' });
+  });
+  const form = c.getSnapshot().creation;
+  await act(async () => c.openWidget('home'));
+  expect(c.getSnapshot().creation).toBe(form);
+  expect(c.getSnapshot().screen).toBe('create');
+  expect(text()).toContain('Widget held until you finish');
+});
+
+it('shows the held widget notice on Leave Group without closing it', async () => {
+  const { controller: c, text } = await setup();
+  await act(async () => {
+    c.openMembers();
+    await c.reviewLeaveGroup();
+  });
+  expect(c.getSnapshot().leave.status).not.toBe('closed');
+  const leave = c.getSnapshot().leave;
+  await act(async () => c.openWidget('home'));
+  expect(c.getSnapshot().leave).toBe(leave);
+  expect(text()).toContain('Widget held until you finish');
+});
+
+it('shows the held widget notice on Connected assistants', async () => {
+  const { controller: c, text } = await setup();
+  await act(async () => c.openSettings());
+  await act(async () => until(c, (s) => s.assistants.available === true));
+  act(() => c.openAssistants());
+  expect(c.getSnapshot().screen).toBe('assistants');
+  await act(async () => c.openWidget('home'));
+  expect(c.getSnapshot().screen).toBe('assistants');
+  expect(text()).toContain('Widget held until you finish');
+});
+
+it('shows the held widget notice on an invitation without navigating away', async () => {
+  const { server, controller: c, text } = await setup();
+  server.reply('GET', '/api/join/deadbeef', () =>
+    Response.json({
+      status: 200,
+      data: {
+        _id: 'b00000000000000000000002',
+        name: 'Cedar Flat',
+        category: 'home',
+        memberCount: 2,
+      },
+    }),
+  );
+  await act(async () => c.openInvitation('http://localhost:4138/join/deadbeef'));
+  expect(c.getSnapshot().screen).toBe('invite');
+  await act(async () => c.openWidget('home'));
+  expect(c.getSnapshot().screen).toBe('invite');
   expect(text()).toContain('Widget held until you finish');
 });
