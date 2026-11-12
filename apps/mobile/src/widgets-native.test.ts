@@ -323,18 +323,20 @@ it('hides figures on a 401 before a SQLite copy write finishes, and keeps them f
   const environment = 'http://localhost:1170';
   const adapter = createWidgetsNative(environment);
   const store = createWidgetsStore(environment);
+  let shown: Awaited<ReturnType<typeof drawn>>['balances'] | null = null;
+  const redraw = async () => {
+    shown = (await drawn(store)).balances;
+  };
   const phone = testPhone(server, {
     origin: environment,
     now: homeTime,
-    parts: { widgets: { ...adapter, redraw: async () => undefined } },
+    parts: { widgets: { ...adapter, redraw } },
   });
   const controller = phone.open();
   let held: ReturnType<typeof holdCopyWrite> | undefined;
   try {
     await controller.signIn('alex');
-    await vi.waitFor(async () =>
-      expect((await drawn(store)).balances).toMatchObject({ state: 'normal', owe: ['₹1,480.00'] }),
-    );
+    await vi.waitFor(() => expect(shown).toMatchObject({ state: 'normal', owe: ['₹1,480.00'] }));
     held = holdCopyWrite();
     server.world.home = home(1550);
     phone.clock.now = balanceTime;
@@ -343,6 +345,16 @@ it('hides figures on a 401 before a SQLite copy write finishes, and keeps them f
 
     server.auth.expired = true;
     await controller.refreshHome();
+    await vi.waitFor(() =>
+      expect(shown).toMatchObject({
+        state: 'expired',
+        title: 'Sign in again',
+        owed: [],
+        owe: [],
+        saved: null,
+        review: null,
+      }),
+    );
     await vi.waitFor(async () =>
       expect((await drawn(store)).balances).toMatchObject({
         state: 'expired',
@@ -358,6 +370,7 @@ it('hides figures on a 401 before a SQLite copy write finishes, and keeps them f
     await held.completed;
     // Let the suspended native write return through the account lease and saved-copy queue.
     await new Promise<void>((done) => setImmediate(done));
+    expect(shown).toMatchObject({ state: 'expired', owed: [], owe: [] });
     expect((await drawn(createWidgetsStore(environment))).balances).toMatchObject({
       state: 'expired',
       title: 'Sign in again',
