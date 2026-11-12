@@ -15,64 +15,77 @@ function setup() {
   return { server, phone, controller, groupId, hint };
 }
 
+async function refusedNotificationAfterNewTap() {
+  const { server, controller: c, groupId, hint } = setup();
+  await c.signIn('alex');
+  let reads = 0;
+  let arrived!: () => void, release!: () => void;
+  const navigating = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  const reply = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  server.reply('GET', `/api/groups/${groupId}`, async () => {
+    if (++reads === 2) {
+      arrived();
+      await reply;
+    }
+    return Response.json(
+      { code: 'FORBIDDEN', error: 'You no longer have access to this Group.' },
+      { status: 403 },
+    );
+  });
+  const older = c.tapNotification(hint);
+  try {
+    await navigating;
+    c.startCreate();
+    c.updateCreation({ name: 'Keep this unfinished Group' });
+    const form = c.getSnapshot().creation;
+    await c.openWidget('choose-group');
+    expect(c.getSnapshot()).toMatchObject({
+      screen: 'create',
+      notificationOpening: { status: 'held' },
+      heldNotificationSource: 'widget',
+    });
+    release();
+    await older;
+    expect(c.getSnapshot().creation).toBe(form);
+    expect(c.getSnapshot().screen).toBe('create');
+    return c;
+  } finally {
+    release();
+    await older;
+  }
+}
+
 describe('held-update rules before extraction (#1158)', () => {
+  // A normal test exercises the same setup/protection/form invariants: an unrelated
+  // regression must fail normally rather than being swallowed by the expected failure.
+  it('preserves the newer unfinished form through the refused-notification race', async () => {
+    const c = await refusedNotificationAfterNewTap();
+    expect(c.getSnapshot().creation.draft.name).toBe('Keep this unfinished Group');
+  });
+
   // #1158: the refused notification's final await erases a newer accepted tap.
   // Keep this visible until the owner approves the race fix before the extraction.
   it.fails(
     'keeps a newer widget destination offered after an older refused notification finishes navigating',
     async () => {
-      const { server, controller: c, groupId, hint } = setup();
-      await c.signIn('alex');
-      let reads = 0;
-      let arrived!: () => void, release!: () => void;
-      const navigating = new Promise<void>((resolve) => {
-        arrived = resolve;
+      const c = await refusedNotificationAfterNewTap();
+      expect(c.getSnapshot()).toMatchObject({
+        screen: 'create',
+        notificationOpening: { status: 'held' },
+        heldNotificationSource: 'widget',
       });
-      const reply = new Promise<void>((resolve) => {
-        release = resolve;
+      c.back();
+      await c.openPendingNotification();
+      expect(c.getSnapshot()).toMatchObject({
+        screen: 'groups',
+        widgetPicker: true,
+        notificationOpening: { status: 'idle' },
+        heldNotification: null,
       });
-      server.reply('GET', `/api/groups/${groupId}`, async () => {
-        if (++reads === 2) {
-          arrived();
-          await reply;
-        }
-        return Response.json(
-          { code: 'FORBIDDEN', error: 'You no longer have access to this Group.' },
-          { status: 403 },
-        );
-      });
-      const older = c.tapNotification(hint);
-      try {
-        await navigating;
-        c.startCreate();
-        c.updateCreation({ name: 'Keep this unfinished Group' });
-        const form = c.getSnapshot().creation;
-        await c.openWidget('choose-group');
-        expect(c.getSnapshot()).toMatchObject({
-          screen: 'create',
-          notificationOpening: { status: 'held' },
-          heldNotificationSource: 'widget',
-        });
-        release();
-        await older;
-        expect(c.getSnapshot().creation).toBe(form);
-        expect(c.getSnapshot()).toMatchObject({
-          screen: 'create',
-          notificationOpening: { status: 'held' },
-          heldNotificationSource: 'widget',
-        });
-        c.back();
-        await c.openPendingNotification();
-        expect(c.getSnapshot()).toMatchObject({
-          screen: 'groups',
-          widgetPicker: true,
-          notificationOpening: { status: 'idle' },
-          heldNotification: null,
-        });
-      } finally {
-        release();
-        await older;
-      }
     },
   );
   it.each(['expired', 'category-off'] as const)(
@@ -176,7 +189,6 @@ describe('held-update rules before extraction (#1158)', () => {
           });
           held.release();
           await opening;
-          await c.openPendingNotification();
           expect(c.getSnapshot().auth).toEqual(auth);
           expect(c.getSnapshot()).toMatchObject({
             screen: 'groups',
@@ -186,6 +198,9 @@ describe('held-update rules before extraction (#1158)', () => {
             heldNotificationSource: null,
             notificationOpening: { status: 'idle' },
           });
+          const settled = c.getSnapshot();
+          await c.openPendingNotification();
+          expect(c.getSnapshot()).toBe(settled);
         } finally {
           held.release();
           await opening;
