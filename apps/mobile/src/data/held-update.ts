@@ -158,8 +158,17 @@ export function createHeldUpdate(d: {
       const tap = ++nextTap;
       const admitted =
         intent.source === 'notification' ? d.notification(intent.value) : d.widget(intent.target);
+      // Cold widget restore invalidates synchronously inside admission; later resets retire it.
+      const admittedEpoch = epoch,
+        admittedGeneration = d.read().generation;
       const admission = admitted instanceof Promise ? await admitted : admitted;
-      if (!admission || tap < acceptedTap) return;
+      if (
+        !admission ||
+        epoch !== admittedEpoch ||
+        d.read().generation !== admittedGeneration ||
+        tap < acceptedTap
+      )
+        return;
       acceptedTap = tap;
       const state = d.read(),
         destination = admission.destination;
