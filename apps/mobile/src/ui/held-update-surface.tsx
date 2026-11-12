@@ -8,10 +8,15 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Alert, AppState, Share, type LayoutChangeEvent } from 'react-native';
+import { Alert, AppState, Keyboard, Share, type LayoutChangeEvent } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { MobileController } from '../data/mobile-controller';
 import { notificationTaskProtected } from '../data/notification-alerts';
-import { HeldUpdateFooter, useHeldUpdateTimeline } from './held-update-snackbar';
+import {
+  HeldUpdateFooter,
+  HeldUpdateNoticeContext,
+  useHeldUpdateTimeline,
+} from './held-update-snackbar';
 import { useMobileSnapshot } from './use-mobile-snapshot';
 
 export const HeldUpdateSurfaceContext = createContext<ReturnType<
@@ -101,8 +106,42 @@ export function useHeldUpdateModalNotice(visible = true) {
     if (visible && active && register) return register(id, 0);
   }, [visible, active, register, id]);
   return visible && active && context ? (
-    <HeldUpdateFooter controller={context.controller} inline hostId={id} />
+    <HeldUpdateFloatingNotice controller={context.controller} hostId={id} />
   ) : null;
+}
+
+/** Like the form's KeyboardAvoidingView, use native keyboard metrics, but move only feedback. */
+export function HeldUpdateFloatingNotice({
+  controller,
+  hostId,
+  bottom = 0,
+}: {
+  controller: MobileController;
+  hostId?: string;
+  bottom?: number;
+}) {
+  const notice = useContext(HeldUpdateNoticeContext);
+  const [keyboardHeight, setKeyboardHeight] = useState(() => Keyboard.metrics()?.height ?? 0);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (event) =>
+      setKeyboardHeight(event.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  if (!notice?.shown || notice.hostId !== (hostId ?? null)) return null;
+  return (
+    <SafeAreaView
+      edges={['bottom']}
+      pointerEvents="box-none"
+      style={{ position: 'absolute', left: 0, right: 0, bottom: Math.max(bottom, keyboardHeight) }}
+    >
+      <HeldUpdateFooter controller={controller} inline hostId={hostId} />
+    </SafeAreaView>
+  );
 }
 
 /** Every visible BottomSheet can host the same live notice, including nested task sheets. */
