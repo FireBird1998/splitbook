@@ -381,3 +381,81 @@ it('hides figures on a 401 before a SQLite copy write finishes, and keeps them f
     phone.dispose();
   }
 });
+
+it('keeps the verified To review chip and original Home time when the app restarts offline', async () => {
+  vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+  const server = fakeSplitbook();
+  const groupId = server.world.groups[0]._id;
+  const accountId = server.world.people.alex.id;
+  const items = [1, 2, 3].map((index) => ({
+    draft: {
+      id: `d${String(index).padStart(23, '0')}`,
+      groupId,
+      revision: 0,
+      state: 'active',
+      preparedBy: { kind: 'member' },
+      changedBy: { kind: 'member' },
+      createdAt: new Date(homeTime).toISOString(),
+      updatedAt: new Date(homeTime).toISOString(),
+      missingFields: [],
+      values: {
+        description: `Fictional review item ${index}`,
+        amount: 10,
+        currency: 'INR',
+        date: '2026-11-13',
+        tagId: 'c00000000000000000000001',
+        splitMethod: 'equal',
+        paidBy: [{ user: accountId, amount: 10 }],
+        splitBetween: [{ user: accountId }],
+      },
+    },
+    problems: [],
+    duplicates: [],
+  }));
+  server.world.toReview = {
+    total: 3,
+    groups: [{ groupId, groupName: 'Maple House', currency: 'INR', count: 3, items }],
+  };
+  server.world.home = {
+    buckets: [{ currency: 'INR', youOwe: 1480, youAreOwed: 0, net: -1480 }],
+    groups: [{ groupId, name: 'Maple House', balances: [{ currency: 'INR', balance: -1480 }] }],
+  };
+  const environment = 'http://localhost:1170';
+  const adapter = createWidgetsNative(environment);
+  const phone = testPhone(server, {
+    origin: environment,
+    now: homeTime,
+    parts: { widgets: { ...adapter, redraw: async () => undefined } },
+  });
+  try {
+    const first = phone.open();
+    await first.signIn('alex');
+    await vi.waitFor(async () =>
+      expect((await drawn(createWidgetsStore(environment))).balances).toMatchObject({
+        state: 'normal',
+        saved: 'Saved 9:41',
+        review: 'To review\u00a0· 3',
+      }),
+    );
+    // To review answers separately; refreshing it must not advance Home's saved time.
+    phone.clock.now = new Date(2026, 10, 13, 9, 49).getTime();
+    await first.refreshToReview();
+    phone.connect(false);
+    await new Promise<void>((done) => setImmediate(done));
+    const restarted = phone.open();
+    phone.clock.now = drawTime;
+    await restarted.restore();
+    expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+    await vi.waitFor(async () =>
+      expect((await drawn(createWidgetsStore(environment))).balances).toMatchObject({
+        state: 'normal',
+        owe: ['₹1,480.00'],
+        saved: 'Saved 9:41',
+        review: 'To review\u00a0· 3',
+      }),
+    );
+  } finally {
+    phone.dispose();
+    vi.unstubAllEnvs();
+  }
+});
