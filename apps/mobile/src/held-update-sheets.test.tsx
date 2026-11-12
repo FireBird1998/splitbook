@@ -443,3 +443,32 @@ it('floats the screen notice out of layout and removes the whole host at timeout
   expect(screen!.root.findAllByType(Snackbar)).toHaveLength(0);
   expect(screen!.root.findAll((node) => node === host)).toHaveLength(0);
 });
+
+it('floats a retained-work notice clear of Group navigation and Add expense', async () => {
+  const { server, controller: c, groupId } = await setup();
+  const reading = server.hold('GET', `/api/groups/${groupId}/tag-actions`);
+  try {
+    await act(async () => c.openTags(groupId));
+    await act(async () => reading.arrived);
+    act(() => c.closeTags());
+    const nav = screen!.root.find(
+      (node) => (node.type as unknown) === 'View' && node.props.accessibilityRole === 'tablist',
+    );
+    const add = screen!.root.find(
+      (node) =>
+        (node.type as unknown) === 'Pressable' && node.props.accessibilityLabel === 'Add expense',
+    );
+    act(() => {
+      nav.props.onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width: 412, height: 80 } } });
+      add.props.onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width: 120, height: 56 } } });
+    });
+    await act(async () => c.openWidget('home'));
+    let host = screen!.root.findByType(Snackbar).parent;
+    while (host && (host.type as unknown) !== 'SafeAreaView') host = host.parent;
+    expect(host!.props.style.bottom).toBeGreaterThanOrEqual(152);
+    expect(screen!.root.findAll((node) => node === nav)).toHaveLength(1);
+    expect(screen!.root.findAll((node) => node === add)).toHaveLength(1);
+  } finally {
+    await act(async () => reading.release());
+  }
+});
