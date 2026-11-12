@@ -1,6 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
 import type { WidgetCopy } from '@splitbook/shared/balances-widget';
+import { balancesWidget } from '@splitbook/shared/balances-widget';
+import { groupWidget } from '@splitbook/shared/group-widget';
+import { quickWidget } from '@splitbook/shared/quick-widget';
 
 const native = vi.hoisted(() => ({ databases: new Map<string, DatabaseSync>(), exists: true }));
 vi.mock('expo-sqlite', async () => {
@@ -88,4 +91,190 @@ it('treats an unreadable widget copy as absent while keeping the saved session a
     .run('{unreadable', 'development');
   await expect(store.read()).resolves.toEqual({ copy: null, session });
   expect(await store.setup(7)).toEqual(setup);
+});
+
+const homeTime = new Date(2026, 10, 13, 9, 41).getTime();
+const groupTime = new Date(2026, 10, 13, 9, 40).getTime();
+const balanceTime = new Date(2026, 10, 13, 9, 42).getTime();
+const drawTime = new Date(2026, 10, 13, 10, 15).getTime();
+const alexSession = { status: 'authenticated' as const, accountId: 'alex', loading: false };
+const placedGroup = { kind: 'group' as const, widgetId: 7, accountId: 'alex', groupId: 'maple' };
+const placedQuick = { kind: 'quick' as const, widgetId: 8, accountId: 'alex', groupId: 'maple' };
+
+function savedWidgetCopy(): WidgetCopy {
+  return {
+    version: 1,
+    accountId: 'alex',
+    home: {
+      verifiedAt: homeTime,
+      groupCount: 1,
+      currencies: [{ currency: 'INR', owedMinor: 0, oweMinor: 148000 }],
+    },
+    groups: {
+      maple: {
+        id: 'maple',
+        name: 'Maple House',
+        theme: 'home',
+        archived: true,
+        mainCurrency: 'INR',
+        verifiedAt: groupTime,
+        balancesVerifiedAt: balanceTime,
+        currencies: [
+          {
+            currency: 'INR',
+            balanceMinor: -148000,
+            payments: [
+              {
+                from: 'alex',
+                to: 'sam',
+                fromName: 'Alex',
+                toName: 'Sam',
+                fromInitials: 'AR',
+                toInitials: 'SC',
+                amountMinor: 148000,
+              },
+            ],
+          },
+        ],
+      },
+    },
+  };
+}
+
+/** The same input distinction as the headless renderer: explicit refusal versus no saved part. */
+async function drawn(store: ReturnType<typeof createWidgetsStore>) {
+  const { copy, session } = await store.read();
+  const part = copy?.lostGroupIds?.includes('maple') ? null : copy?.groups?.maple;
+  return {
+    balances: balancesWidget(
+      copy,
+      {
+        kind: 'balances',
+        reviewEnabled: process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true',
+      },
+      '2x2',
+      session,
+      drawTime,
+    ),
+    group: groupWidget(part, placedGroup, '4x2', session, drawTime),
+    quick: quickWidget(copy, placedQuick, '2x1', session),
+  };
+}
+
+it('draws the archived final balance and saved time after a partial write and a SQLite restart', async () => {
+  const first = createWidgetsStore('development');
+  await first.setSession(alexSession);
+  await first.write(savedWidgetCopy());
+
+  const restarted = createWidgetsStore('development');
+  await restarted.write({
+    version: 1,
+    accountId: 'alex',
+    home: savedWidgetCopy().home,
+    groups: {},
+  });
+
+  const view = await drawn(createWidgetsStore('development'));
+  expect(view.group).toMatchObject({
+    state: 'archived',
+    name: 'Maple House',
+    balance: 'You owe ₹1,480.00\u00a0· final',
+    saved: 'Saved 9:40',
+    final: true,
+    addExpense: false,
+    description: 'Nothing more can be saved here.',
+  });
+  expect(view.quick).toMatchObject({
+    state: 'archived',
+    title: 'Group archived',
+    subtitle: 'Choose another',
+  });
+});
+
+it('does not resurrect a refused archived Group or its name after a SQLite restart', async () => {
+  const first = createWidgetsStore('development');
+  await first.setSession(alexSession);
+  await first.write(savedWidgetCopy());
+
+  await createWidgetsStore('development').write({
+    version: 1,
+    accountId: 'alex',
+    home: savedWidgetCopy().home,
+    groups: {},
+    lostGroupIds: ['maple'],
+  });
+
+  const view = await drawn(createWidgetsStore('development'));
+  expect(view.group).toMatchObject({
+    state: 'lost-access',
+    title: 'You’re no longer in this Group',
+    name: null,
+    balance: '',
+    saved: null,
+    payments: [],
+    action: 'Choose another Group',
+  });
+  expect(view.quick).toMatchObject({
+    state: 'lost-access',
+    title: 'Not in this Group',
+    subtitle: 'Choose a Group',
+  });
+  expect(JSON.stringify([view.group, view.quick])).not.toMatch(/Maple|Sam|1,480/);
+});
+
+it('draws no previous account’s final balance, people or To review count after the account changes in SQLite', async () => {
+  vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+  try {
+    const first = createWidgetsStore('development');
+    await first.setSession(alexSession);
+    await first.write({
+      ...savedWidgetCopy(),
+      review: { count: 3, verifiedAt: homeTime + 60_000 },
+    });
+
+    const restarted = createWidgetsStore('development');
+    await restarted.write({
+      version: 1,
+      accountId: 'sam',
+      groups: {},
+      home: {
+        verifiedAt: drawTime,
+        groupCount: 1,
+        currencies: [{ currency: 'INR', oweMinor: 0, owedMinor: 72500 }],
+      },
+    });
+    await restarted.setSession({ status: 'authenticated', accountId: 'sam', loading: false });
+
+    const view = await drawn(createWidgetsStore('development'));
+    expect(view.balances).toMatchObject({
+      state: 'normal',
+      owed: ['₹725.00'],
+      owe: [],
+      review: null,
+    });
+    expect(view.group).toMatchObject({
+      state: 'other-account',
+      name: null,
+      balance: '',
+      payments: [],
+    });
+    expect(view.quick).toMatchObject({
+      state: 'other-account',
+      title: 'Set up again',
+      subtitle: 'Another account',
+    });
+    // A new placement for Sam must not reveal a part merely hidden by Alex's old setup.
+    const record = await createWidgetsStore('development').read();
+    const samView = groupWidget(
+      record.copy?.groups?.maple,
+      { ...placedGroup, accountId: 'sam' },
+      '4x2',
+      record.session,
+      drawTime,
+    );
+    expect(samView).toMatchObject({ state: 'no-copy', name: null, balance: '', payments: [] });
+    expect(JSON.stringify([view, samView])).not.toMatch(/Maple|You pay Sam|1,480|To review/);
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
