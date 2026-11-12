@@ -1,10 +1,12 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import { Alert, Linking } from 'react-native';
 import { afterEach, expect, it, vi } from 'vitest';
 import { fakeSplitbook, expenseFixture } from './test-utils/fake-splitbook';
 import { testPhone, until } from './test-utils/test-phone';
 import { unbroken } from './test-utils/layout';
 import { RecordPaymentSheet } from './ui/record-payment-sheet';
 import { CompactButton } from './ui/compact';
+import { GroupCurrencies } from './ui/group-currencies';
 import { TagManager } from './ui/tag-manager';
 
 const runtime = vi.hoisted(() => ({
@@ -329,4 +331,32 @@ it('shows the held notice inside the Group form currency chooser', async () => {
   expect(text()).toContain('Choose currency');
   expect(text()).toContain('Widget held until you finish');
   expect(c.getSnapshot().screen).toBe('create');
+});
+
+it('waits to start the held notice until a native alert closes', async () => {
+  const { controller: c, groupId, text } = await setup();
+  await act(async () => c.openCurrencies(groupId));
+  const alert = vi.spyOn(Alert, 'alert');
+  const browser = vi.spyOn(Linking, 'openURL').mockRejectedValue(new Error('No browser'));
+  vi.useFakeTimers();
+  try {
+    await act(async () => screen!.root.findByType(GroupCurrencies).props.onOpenWeb());
+    expect(alert).toHaveBeenCalled();
+    await act(async () => c.openWidget('home'));
+    const owner = c.getSnapshot().heldNotification;
+    expect(c.getSnapshot().heldNotificationNotice).toBe(owner);
+    expect(text()).not.toContain('Widget held until you finish');
+    await act(async () => vi.advanceTimersByTime(5_000));
+    expect(c.getSnapshot().heldNotificationNotice).toBe(owner);
+    await act(async () => alert.mock.calls.at(-1)![2]![0].onPress!());
+    expect(c.getSnapshot().heldNotificationNotice).toBeNull();
+    expect(text()).toContain('Widget held until you finish');
+    await act(async () => vi.advanceTimersByTime(3_999));
+    expect(text()).toContain('Widget held until you finish');
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(text()).not.toContain('Widget held until you finish');
+  } finally {
+    browser.mockRestore();
+    alert.mockRestore();
+  }
 });
