@@ -11,17 +11,20 @@ function HeldNotice({
   bottom,
   onDismiss,
   widget,
+  inline,
 }: {
   notice: HeldNotificationOwner;
   bottom: number;
   onDismiss(): void;
   widget: boolean;
+  inline?: boolean;
 }) {
   useDismissAfter(notice, 4_000, onDismiss);
   return (
     <Snackbar
       message={widget ? 'Widget held until you finish' : 'Update held until you finish'}
       bottom={bottom}
+      inline={inline}
     />
   );
 }
@@ -30,9 +33,11 @@ function HeldNotice({
 export function HeldUpdateFooter({
   controller,
   children,
+  inline,
 }: {
   controller: MobileController;
   children?: ReactNode;
+  inline?: boolean;
 }) {
   const state = useMobileSnapshot(
     controller,
@@ -52,15 +57,17 @@ export function HeldUpdateFooter({
   }, [controller, state.notice]);
   return (
     <View onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>
-      {children}
+      {!inline && children}
       {shown && shown === state.owner ? (
         <HeldNotice
           notice={shown}
           bottom={height + 12}
           onDismiss={() => setShown(null)}
           widget={state.widget}
+          inline={inline}
         />
       ) : null}
+      {inline && children}
     </View>
   );
 }

@@ -54,6 +54,10 @@ async function setup() {
   const server = fakeSplitbook();
   const groupId = server.world.groups[0]._id;
   const { alex, sam } = server.world.people;
+  server.world.pages[`/api/groups/${groupId}/currencies`] = {
+    mainCurrency: { code: 'INR', locked: true },
+    extraCurrencies: [],
+  };
   server.world.balances[groupId] = {
     byCurrency: [
       {

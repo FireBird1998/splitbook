@@ -1,3 +1,5 @@
+import { HeldUpdateSurfaceContext, useHeldUpdateSurfaces } from './src/ui/held-update-surface';
+import { HeldUpdateFooter } from './src/ui/held-update-snackbar';
 import { WidgetGroupPicker } from './src/widget-picker';
 import { widgetLinkTarget } from './src/widget-links';
 import { androidWidgetsEnabled } from './src/widgets-flag';
@@ -129,6 +131,7 @@ const startups = new WeakMap<
 >();
 
 export default function App() {
+  const heldSurface = useHeldUpdateSurfaces(controller);
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
   const systemMode = useColorScheme() === 'dark' ? 'dark' : 'light';
   const mode = preference.mode === 'system' ? systemMode : preference.mode;
@@ -157,7 +160,16 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeContext.Provider value={getSemanticTokens(mode)}>
         <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-        <SplitBook />
+        <HeldUpdateSurfaceContext.Provider value={heldSurface}>
+          <View style={{ flex: 1 }}>
+            <SplitBook />
+            {heldSurface.surface === 'screen' ? (
+              <SafeAreaView edges={['bottom']}>
+                <HeldUpdateFooter controller={controller} inline />
+              </SafeAreaView>
+            ) : null}
+          </View>
+        </HeldUpdateSurfaceContext.Provider>
         {androidWidgetsEnabled() ? <WidgetGroupPicker /> : null}
       </ThemeContext.Provider>
     </SafeAreaProvider>

@@ -1,3 +1,4 @@
+import { useHeldUpdateNotice } from './held-update-surface';
 import type { ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -139,6 +140,7 @@ function GroupDetails({ group }: { group: MobileGroup }) {
  * for a concurrent change or a failure, to try again.
  */
 function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGroupActions }) {
+  const heldNotice = useHeldUpdateNotice('leave');
   const { state, offline } = leave;
   const leaving = state.status === 'leaving';
   const deleting = state.deleteIfLastMember === true;
@@ -149,6 +151,7 @@ function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGro
   const ready = ['confirm', 'refused', 'error'].includes(state.status);
   return (
     <BottomSheet
+      notice={heldNotice}
       visible={state.status !== 'closed' && state.groupId === group.id}
       title={`Leave ${group.name}?`}
       doneLabel="Cancel"

@@ -1,3 +1,4 @@
+import { useHeldUpdateNotice } from './held-update-surface';
 import type { TextInputInstance, ScrollViewInstance, ViewInstance } from 'react-native';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import {
@@ -230,6 +231,7 @@ export function TagManager({
   recoveryOnly?: boolean;
   onClose(): void;
 }) {
+  const heldNotice = useHeldUpdateNotice('tags');
   const theme = useTheme();
   const manager = useMemo(() => controller.manageTags(groupId), [controller, groupId, accountId]);
   const state = useSyncExternalStoreWithSelector(
@@ -645,9 +647,11 @@ export function TagManager({
             )}
           </View>
         </ScrollView>
+        {!selectedTag && !naming && !confirming && heldNotice}
         {done && <DoneNote done={done} onDismiss={manager.dismissDone} />}
 
         <BottomSheet
+          notice={heldNotice}
           visible={!!selectedTag && !editing && canChange}
           title={selectedTag?.name ?? ''}
           titleLines={3}
@@ -717,6 +721,7 @@ export function TagManager({
         </BottomSheet>
 
         <BottomSheet
+          notice={heldNotice}
           visible={naming}
           title={editing?.action === 'create' ? 'New Tag' : 'Rename Tag'}
           subtitle={editedTag ? `Currently ${editedTag.name}` : undefined}
@@ -779,6 +784,7 @@ export function TagManager({
         </BottomSheet>
 
         <BottomSheet
+          notice={heldNotice}
           visible={confirming}
           title={editing?.action === 'restore' ? 'Restore this Tag?' : 'Archive this Tag?'}
           doneLabel="Cancel"

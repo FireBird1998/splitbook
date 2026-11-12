@@ -255,20 +255,24 @@ export function Snackbar({
   message,
   action,
   bottom = 92,
+  inline = false,
 }: {
   message: string;
   action?: { label: string; onPress: () => void };
   bottom?: number;
+  inline?: boolean;
 }) {
   const theme = useTheme();
   return (
     <View
       accessibilityLiveRegion="polite"
       style={{
-        position: 'absolute',
-        left: 16,
-        right: 16,
-        bottom,
+        position: inline ? 'relative' : 'absolute',
+        left: inline ? undefined : 16,
+        right: inline ? undefined : 16,
+        bottom: inline ? undefined : bottom,
+        marginHorizontal: inline ? 16 : undefined,
+        marginVertical: inline ? 8 : undefined,
         minHeight: 48,
         borderRadius: radius.tile,
         flexDirection: 'row',

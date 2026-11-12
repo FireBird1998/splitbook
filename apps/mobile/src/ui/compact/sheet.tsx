@@ -48,6 +48,7 @@ export function BottomSheet({
   onShow,
   children,
   footer,
+  notice,
 }: {
   visible: boolean;
   title: string;
@@ -79,6 +80,8 @@ export function BottomSheet({
   onShow?: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /** A transient notice reserves space above the pinned controls. */
+  notice?: ReactNode;
 }) {
   const theme = useTheme();
   // At large text the title keeps room for its widest word, or Done goes under it: at 200% on a
@@ -239,6 +242,7 @@ export function BottomSheet({
             >
               {children}
             </ScrollView>
+            {visible && notice}
             {footer ? (
               <View
                 style={{

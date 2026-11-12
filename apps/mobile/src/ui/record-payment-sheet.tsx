@@ -1,3 +1,4 @@
+import { useHeldUpdateNotice } from './held-update-surface';
 import type { TextInputInstance } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
@@ -177,6 +178,7 @@ function SinglePaymentSheet({
   /** Opens a link: the second source's attribution. */
   onOpenLink?: (url: string) => void;
 }) {
+  const heldNotice = useHeldUpdateNotice('payment');
   const theme = useTheme();
   const { draft, status, chosen } = state;
   // Until the check confirms the chosen payment, or when it can't run, the payment as Balances
@@ -370,6 +372,7 @@ function SinglePaymentSheet({
 
   return (
     <BottomSheet
+      notice={heldNotice}
       visible={visible}
       title="Record payment"
       doneLabel="Close"
