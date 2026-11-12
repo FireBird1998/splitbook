@@ -1,5 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState } from 'react';
-import { Alert, Share } from 'react-native';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Alert, AppState, Share } from 'react-native';
 import type { MobileController } from '../data/mobile-controller';
 import { notificationTaskProtected } from '../data/notification-alerts';
 import { HeldUpdateFooter, useHeldUpdateTimeline } from './held-update-snackbar';
@@ -16,6 +25,20 @@ export function useHeldUpdateSurfaces(controller: MobileController) {
     controller,
     (snapshot) => !!snapshot.heldNotification && notificationTaskProtected(snapshot),
   );
+  const foreground = useRef(
+    AppState.currentState !== 'background' && AppState.currentState !== 'inactive',
+  );
+  const [, refreshVisibility] = useState(0);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      foreground.current = next === 'active';
+      const snapshot = controller.getSnapshot();
+      // Ordinary foreground events stay render-free; only a protected hold has feedback to move.
+      if (snapshot.heldNotification && notificationTaskProtected(snapshot))
+        refreshVisibility((n) => n + 1);
+    });
+    return () => subscription.remove();
+  }, [controller]);
   const [covered, setCovered] = useState(0);
   const cover = useCallback(() => {
     setCovered((n) => n + 1);
@@ -26,7 +49,7 @@ export function useHeldUpdateSurfaces(controller: MobileController) {
       setCovered((n) => n - 1);
     };
   }, []);
-  const timeline = useHeldUpdateTimeline(controller, covered === 0);
+  const timeline = useHeldUpdateTimeline(controller, foreground.current && covered === 0);
   const [hosts, setHosts] = useState<{ id: string; depth: number }[]>([]);
   const register = useCallback((id: string, depth: number) => {
     setHosts((previous) => [...previous, { id, depth }]);
