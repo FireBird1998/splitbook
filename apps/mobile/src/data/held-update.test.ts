@@ -142,6 +142,27 @@ describe('one held update through accept, act and reset', () => {
     }
   });
 
+  it('reset retires a deferred admission even when the account and generation stay unchanged', async () => {
+    const h = scenario(),
+      held = barrier();
+    h.source.admission = held.pause;
+    const accepting = h.updates.accept({ source: 'notification', value: h.hint });
+    try {
+      await held.arrived;
+      h.updates.reset();
+      const clean = h.state;
+      held.release();
+      await accepting;
+      expect(h.state).toEqual(clean);
+      h.change({ protected: false });
+      await h.updates.act({ kind: 'open' });
+      expect(h.opened).toEqual([]);
+    } finally {
+      held.release();
+      await accepting;
+    }
+  });
+
   it('holds again when a new task starts during the access check', async () => {
     const h = scenario(),
       held = barrier();
