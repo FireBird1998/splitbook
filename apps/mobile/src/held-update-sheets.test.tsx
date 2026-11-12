@@ -8,6 +8,7 @@ import { unbroken } from './test-utils/layout';
 import { RecordPaymentSheet } from './ui/record-payment-sheet';
 import { CompactButton } from './ui/compact';
 import { GroupMembers } from './ui/group-members';
+import { Snackbar } from './ui/compact/feedback';
 import { GroupCurrencies } from './ui/group-currencies';
 import { TagManager } from './ui/tag-manager';
 
@@ -424,4 +425,22 @@ it('waits for the protected screen to return to the foreground before acknowledg
   await act(async () => emitAppState('active'));
   expect(text()).toContain('Widget held until you finish');
   expect(c.getSnapshot().heldNotificationNotice).toBeNull();
+});
+
+it('floats the screen notice out of layout and removes the whole host at timeout', async () => {
+  const { controller: c } = await setup();
+  act(() => c.startCreate());
+  vi.useFakeTimers();
+  await act(async () => c.openWidget('home'));
+  const snackbar = screen!.root.findByType(Snackbar);
+  let host = snackbar.parent;
+  while (host && (host.type as unknown) !== 'SafeAreaView') host = host.parent;
+  expect(host).not.toBeNull();
+  expect(host!.props.style).toMatchObject({ position: 'absolute', left: 0, right: 0, bottom: 0 });
+  await act(async () => {
+    vi.advanceTimersByTime(4_000);
+  });
+  expect(c.getSnapshot().notificationOpening.status).toBe('held');
+  expect(screen!.root.findAllByType(Snackbar)).toHaveLength(0);
+  expect(screen!.root.findAll((node) => node === host)).toHaveLength(0);
 });
