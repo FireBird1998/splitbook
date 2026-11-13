@@ -201,7 +201,7 @@ export function drawGroup(
       ))}
       {l.showMore && !l.moreInFooter && view.more ? (
         <FlexWidget style={{ height: payments?.moreHeight, justifyContent: 'center' }}>
-          {text(view.more, t.brand.main, l.fontSizes.small, true)}
+          {lines(l.moreLines, t.brand.main, l.fontSizes.small, true)}
         </FlexWidget>
       ) : null}
     </FlexWidget>

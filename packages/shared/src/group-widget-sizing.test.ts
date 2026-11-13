@@ -196,6 +196,27 @@ it.each([1, 1.3, 2])(
     ).toBeLessThanOrEqual(l.width + 0.00001);
   },
 );
+
+it.each([161, 224, 640])(
+  'keeps narrow full amounts when height grows past the minimum to %s dp',
+  (height) => {
+    const view = groupWidget(part, setup, { width: 110, height, pixelRatio: 2.625 }, auth, now, 2);
+    expect(view.layout.fits).toBe(true);
+    expect(
+      widgetText(view.layout.width, 2).width(view.compactAmount!, view.layout.moneyFontSize, true),
+    ).toBeLessThanOrEqual(view.layout.width + 0.00001);
+  },
+);
+
+it('wraps a tall narrow overflow hint into complete words inside its measured height', () => {
+  const view = groupWidget(part, setup, { width: 110, height: 640 }, auth, now, 2);
+  expect(view.more).not.toBeNull();
+  expect(view.layout.moreLines?.length).toBeGreaterThan(1);
+  for (const line of view.layout.moreLines ?? [])
+    expect(
+      widgetText(view.layout.width, 2).width(line, view.layout.fontSizes.small),
+    ).toBeLessThanOrEqual(view.layout.width);
+});
 it('uses a tall real size for more payment rows and shares all leftover height among them', () => {
   const view = groupWidget(part, setup, { width: 372, height: 512 }, auth, now);
   expect(view.payments.length).toBeGreaterThan(4);

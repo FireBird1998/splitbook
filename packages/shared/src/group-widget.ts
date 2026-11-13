@@ -264,7 +264,8 @@ function groupLayout(
 ) {
   scale = Number.isFinite(scale) && scale > 0 ? scale : 1;
   const level = widgetTextLevel(scale);
-  const tiny = size.width <= 140 && size.height <= 160;
+  const narrow = size.width <= 140;
+  const tiny = narrow && size.height <= 160;
   const ratio =
     size.pixelRatio && Number.isFinite(size.pixelRatio) && size.pixelRatio > 0
       ? size.pixelRatio
@@ -272,13 +273,13 @@ function groupLayout(
   const pixels = (dp: number) => Math.ceil(dp * ratio - 1e-9) / ratio;
   // Even the declaration's 110 dp minimum keeps the complete balance at 10 sp.
   const minimumMoneyWidth = widgetText(size.width, scale).width(view.compactAmount ?? '', 10, true);
-  const padding = tiny
+  const padding = narrow
     ? Math.floor(
         Math.min(8, Math.max(0, Math.floor((size.width - minimumMoneyWidth) / 2))) * ratio,
       ) / ratio
     : pixels(14);
-  const paddingVertical = tiny ? pixels(8) : padding;
-  const cornerRadius = tiny ? 12 : 24;
+  const paddingVertical = narrow ? pixels(8) : padding;
+  const cornerRadius = narrow ? 12 : 24;
   const width = Math.max(1, Math.floor(size.width * ratio) / ratio - padding * 2);
   const height = Math.max(0, Math.floor(size.height * ratio) / ratio - paddingVertical * 2);
   const compact = size.width / Math.max(1, scale) < 240;
@@ -335,7 +336,7 @@ function groupLayout(
         (showArchivedTag && !stackHeader ? text.width('Archived', 9) + 12 : 0);
       const name = tiny && text.width(view.name ?? '', 13) > nameRoom ? 'Group' : (view.name ?? '');
       const nameFont = text.fit(
-        name.split(/\s+/).sort((a, b) => b.length - a.length)[0] ?? '',
+        name.split(/\s+/).sort((a, b) => text.width(b, 13) - text.width(a, 13))[0] ?? '',
         13,
         nameRoom,
       );
@@ -431,7 +432,9 @@ function groupLayout(
                 maxRows: paymentFits ? view.payments.length : 0,
                 rowHeight,
                 inset: compact ? 0 : pixels(4) * 2,
-                moreHeight: moreInFooter ? 0 : text.line(10) + 4,
+                moreHeight: moreInFooter
+                  ? 0
+                  : text.words(paymentOverflow(view.payments), 10).length * text.line(10) + 4,
                 grow: true,
               },
             ]
@@ -506,6 +509,13 @@ function groupLayout(
     gap,
   );
   const payments = settings.sections.find((s) => s.id === 'payments');
+  const more = payments?.more ? paymentOverflow(view.payments.slice(payments.rows)) : '';
+  const text = widgetText(width, scale, 1, ratio);
+  const moreLines = more
+    ? text.width(more, settings.fontSizes.small) <= width
+      ? [more]
+      : text.words(more, settings.fontSizes.small)
+    : [];
   return {
     ...settings,
     padding,
@@ -521,6 +531,7 @@ function groupLayout(
       dividerHeight: i ? pixels(1) : 0,
     })),
     paymentLines: payments?.rows ?? 0,
+    moreLines,
     showMore: !!payments?.more,
     showUpdateInFooter:
       settings.updateInFooter && !payments?.more && view.action === 'Open to update',
