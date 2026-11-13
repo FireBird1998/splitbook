@@ -725,7 +725,9 @@ it.each(['sign out', 'account change'] as const)(
     const owner = c.getSnapshot().heldNotification!;
     if (action === 'sign out') await c.signOut();
     else {
-      f.groupTags([{ _id: tagId, name: 'Sam only Tag', createdAt: '2026-11-01T00:00:00Z' }]);
+      f.groupTags([
+        { _id: tagId, name: 'Sam only Tag', isArchived: false, createdAt: '2026-11-01T00:00:00Z' },
+      ]);
       await c.signIn('sam');
     }
     expect(c.getSnapshot().heldNotification).toBeNull();
@@ -1213,7 +1215,7 @@ it('keeps active Tags in the Widget copy after a Group read, without reading bal
   const f = fixture(),
     c = f.make();
   await c.signIn('alex');
-  f.groupTags([{ _id: tagId, name: 'Food', createdAt: '2026-11-01T00:00:00Z' }]);
+  f.groupTags([{ _id: tagId, name: 'Food', isArchived: false, createdAt: '2026-11-01T00:00:00Z' }]);
   vi.spyOn(Date, 'now').mockReturnValue(verified + 1000);
   const before = f.requests.length;
   await c.openExpense(groupId);
@@ -1267,7 +1269,14 @@ it.each(['sign out', 'account change', '401'] as const)(
     } else {
       if (action === 'sign out') await c.signOut();
       else {
-        f.groupTags([{ _id: tagId, name: 'Sam only Tag', createdAt: '2026-11-01T00:00:00Z' }]);
+        f.groupTags([
+          {
+            _id: tagId,
+            name: 'Sam only Tag',
+            isArchived: false,
+            createdAt: '2026-11-01T00:00:00Z',
+          },
+        ]);
         await c.signIn('sam');
       }
       expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));

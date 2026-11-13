@@ -120,7 +120,7 @@ export function createWidgetsStore(environment: string) {
               .map((id) => {
                 const old = previous.tags?.[id],
                   fresh = copy.tags?.[id];
-                return [id, old && (!fresh || old.verifiedAt > fresh.verifiedAt) ? old : fresh];
+                return [id, old && (!fresh || old.verifiedAt > fresh.verifiedAt) ? old : fresh!];
               }),
           ),
         };

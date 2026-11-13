@@ -55,7 +55,7 @@ export function createWidgetCopy(
         .map(({ id, name }) => ({ id, name })),
     };
   };
-  const rememberListTags = (read: Envelope) => {
+  const rememberListTags = (read: Pick<Envelope, 'value' | 'refreshedAt'>) => {
     for (const group of listOf(read.value, 'widget')) {
       if (!lost.has(group._id))
         rememberTags(
