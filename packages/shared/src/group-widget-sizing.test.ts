@@ -187,8 +187,8 @@ it.each([1, 1.3, 2])(
       scale,
     );
     const l = view.layout;
-    const bottom = 'paddingVertical' in l ? Number(l.paddingVertical) : l.padding;
-    const radius = 'cornerRadius' in l ? Number(l.cornerRadius) : 24;
+    const bottom = l.paddingVertical;
+    const radius = l.cornerRadius;
     const inset = radius - Math.sqrt(radius ** 2 - Math.max(0, radius - bottom) ** 2);
     expect(l.padding).toBeGreaterThanOrEqual(inset);
     expect(
