@@ -385,7 +385,9 @@ function groupLayout(
             },
           ]
         : []),
-      ...(view.action === 'Open to update' ? [{ id: 'update', rows: 1, rowHeight: line(11) }] : []),
+      ...(view.action === 'Open to update' && !updateInFooter
+        ? [{ id: 'update', rows: 1, rowHeight: line(11) }]
+        : []),
       ...(actionLabel
         ? [
             {

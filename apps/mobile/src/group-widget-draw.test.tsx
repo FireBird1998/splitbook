@@ -116,7 +116,9 @@ it.each([
       ...((node.props as { text?: string }).text ? [(node.props as { text: string }).text] : []),
       ...(node.children ?? []).flatMap(drawnText),
     ];
-    expect(drawnText(tree).includes('Open to update')).toBe(count === 2);
+    expect(drawnText(tree).filter((text) => text === 'Open to update')).toHaveLength(
+      count === 2 ? 1 : 0,
+    );
     vi.unstubAllGlobals();
   },
 );
