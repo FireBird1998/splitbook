@@ -227,3 +227,31 @@ it('reserves the small currency hint and secondary amount before choosing a mone
   ).toBeLessThanOrEqual(l.width + 0.000001);
   expect(t.width(l.secondary ?? '', l.fonts.secondary)).toBeLessThanOrEqual(l.width + 0.000001);
 });
+
+it.each([
+  ['expired', 'to see balances', 'to see your Overview. It comes back once you do.'],
+  ['signed-out', 'to see your balances here', 'to see your balances, payments and Groups here.'],
+  [
+    'no-copy',
+    'Open Splitbook to load your balances.',
+    'Open Splitbook to load your balances, payments and Groups.',
+  ],
+  ['no-groups', 'Share costs with a Group.', 'Share costs with a Group, and it shows here.'],
+] as const)(
+  'keeps small words and uses the tall board sentence for %s',
+  (state, smallWords, tallWords) => {
+    const c =
+      state === 'no-copy'
+        ? null
+        : state === 'no-groups'
+          ? { ...copy, home: { ...copy.home!, groupCount: 0 } }
+          : copy;
+    const session = state === 'expired' || state === 'signed-out' ? { status: state } : auth;
+    expect(overviewWidget(c, setup, { width: 172, height: 224 }, session, now).description).toBe(
+      smallWords,
+    );
+    expect(overviewWidget(c, setup, { width: 360, height: 344 }, session, now).description).toBe(
+      tallWords,
+    );
+  },
+);

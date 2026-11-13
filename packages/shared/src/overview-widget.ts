@@ -30,15 +30,23 @@ export function overviewWidget(
     session.status === 'authenticated' && !!copy && copy.accountId !== session.accountId;
   const state = otherAccount ? 'other-account' : read.state;
   const title = otherAccount ? 'Set up this widget again' : read.title;
+  const tall = size.height >= 280;
+  const tallDescriptions: Partial<Record<typeof state, string>> = {
+    expired: 'to see your Overview. It comes back once you do.',
+    'signed-out': 'to see your balances, payments and Groups here.',
+    'no-copy': 'Open Splitbook to load your balances, payments and Groups.',
+    'no-groups': 'Share costs with a Group, and it shows here.',
+  };
   const description = otherAccount
     ? 'This phone is signed in to another account.'
-    : read.description;
+    : tall
+      ? (tallDescriptions[state] ?? read.description)
+      : read.description;
   const target: WidgetTarget = otherAccount
     ? { kind: 'setup', widgetId: setup.widgetId }
     : read.target;
   const normal = state === 'normal';
   const small = size.height < 130;
-  const tall = size.height >= 280;
   const wide = size.width >= 280;
   const heading = tall ? 'Overview' : 'Balances';
   const level = widgetTextLevel(scale);
