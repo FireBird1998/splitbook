@@ -79,7 +79,9 @@ export function drawGroup(
       {l.showTile ? mark : null}
       <FlexWidget style={{ flex: 1, flexGap: 3 }}>
         <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
-          <FlexWidget style={{ flex: 1 }}>{text(view.name!, t.text, 13, true)}</FlexWidget>
+          <FlexWidget style={{ flex: 1 }}>
+            {lines(l.nameLines, t.text, l.nameFontSize / l.textFactor, true)}
+          </FlexWidget>
           {view.final ? (
             <FlexWidget
               style={{ backgroundColor: color(t.surfaceMuted), borderRadius: 6, padding: 3 }}

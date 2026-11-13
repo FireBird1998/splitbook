@@ -159,3 +159,16 @@ it('reserves the 32 dp icon when a compact large-text header omits its saved lin
     view.layout.sections.find((section) => section.id === 'header')?.height,
   ).toBeGreaterThanOrEqual(32);
 });
+
+it('keeps the compact Group name on whole-word lines at 200% on the launcher minimum', () => {
+  const view = groupWidget(part, setup, { width: 172, height: 224 }, auth, now, 2);
+  expect(view.layout.nameLines.join(' ')).toBe('Maple House');
+  for (const line of view.layout.nameLines)
+    expect(line.length * view.layout.nameFontSize * 2 * 0.62).toBeLessThanOrEqual(
+      view.layout.width + 0.001,
+    );
+  const header = view.layout.sections.find((section) => section.id === 'header')!;
+  expect(header.height).toBeGreaterThanOrEqual(
+    view.layout.nameLines.length * Math.ceil(view.layout.nameFontSize * 2 * 1.3),
+  );
+});
