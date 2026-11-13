@@ -257,6 +257,7 @@ function groupLayout(
   const width = Math.max(1, size.width - padding * 2),
     height = Math.max(1, size.height - padding * 2);
   const compact = size.width / Math.max(1, scale) < 240;
+  const stackHeader = view.final && level > 0;
   let factor = 1,
     fitName = false;
   const line = (font: number) => Math.ceil(font * factor * scale * 1.3);
@@ -300,13 +301,15 @@ function groupLayout(
       width -
       (showTile ? 40 : 0) -
       (!compact && showSaved && view.saved ? view.saved.length * 9 * scale * 0.62 + 8 : 0) -
-      (view.final ? 8 * 9 * scale * 0.62 + 12 : 0);
+      (view.final && !stackHeader ? 8 * 9 * scale * 0.62 + 12 : 0);
     const nameFont = fitName
       ? Math.min(13, Math.max(1, nameRoom) / Math.max(1, (view.name?.length ?? 1) * scale * 0.62))
       : 13;
     const nameLines = words(view.name ?? '', nameFont, Math.max(1, nameRoom));
     const headerHeight = view.name
-      ? nameLines.length * line(nameFont) + (compact ? (showSaved ? line(9) + 3 : 0) : line(11) + 3)
+      ? nameLines.length * line(nameFont) +
+        (stackHeader ? line(9) + 12 : 0) +
+        (compact ? (showSaved ? line(9) + 3 : 0) : line(11) + 3)
       : 0;
     const balanceLabelLines = words(
       (view.compactLabel ?? '') + (view.final ? SEPARATOR + 'final' : ''),
@@ -499,7 +502,7 @@ function groupLayout(
       view.action === 'Open to update' &&
       paymentLines === view.payments.length,
     stackPayments: level === 1,
-    stackHeader: level > 0,
+    stackHeader,
     actionFontSize: settings.actionFont * factor,
     actionPaddingHorizontal: compact && level === 2 ? 6 : 12,
     showCurrencyOverflow: settings.showCurrencyOverflow,

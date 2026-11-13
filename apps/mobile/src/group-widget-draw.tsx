@@ -78,8 +78,14 @@ export function drawGroup(
     >
       {l.showTile ? mark : null}
       <FlexWidget style={{ flex: 1, flexGap: 3 }}>
-        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 6 }}>
-          <FlexWidget style={{ flex: 1 }}>
+        <FlexWidget
+          style={{
+            flexDirection: l.stackHeader ? 'column' : 'row',
+            alignItems: l.stackHeader ? 'flex-start' : 'center',
+            flexGap: 6,
+          }}
+        >
+          <FlexWidget style={l.stackHeader ? { width: 'match_parent' } : { flex: 1 }}>
             {lines(l.nameLines, t.text, l.nameFontSize / l.textFactor, true)}
           </FlexWidget>
           {view.final ? (

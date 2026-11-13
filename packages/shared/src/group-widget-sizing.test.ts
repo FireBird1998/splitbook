@@ -193,3 +193,32 @@ it('spreads a tall balance row instead of leaving spare height below Add expense
   const balance = view.layout.sections.find((section) => section.id === 'balance')!;
   expect(balance.height).toBeGreaterThan(584 / 2);
 });
+
+it.each([1.3, 2])(
+  'budgets the archived tag below the Group name at %s text on the minimum size',
+  (scale) => {
+    const view = groupWidget(
+      { ...part, archived: true },
+      setup,
+      { width: 172, height: 224 },
+      auth,
+      now,
+      scale,
+    );
+    const l = view.layout;
+    expect(l.stackHeader).toBe(true);
+    expect(l.nameLines.join(' ')).toBe('Maple House');
+    for (const text of l.nameLines)
+      expect(text.length * l.nameFontSize * scale * 0.62).toBeLessThanOrEqual(
+        l.width - (l.showTile ? 40 : 0) + 0.001,
+      );
+    const header = l.sections.find((section) => section.id === 'header')!;
+    expect(header.height).toBeGreaterThanOrEqual(
+      l.nameLines.length * Math.ceil(l.nameFontSize * scale * 1.3) +
+        Math.ceil(9 * l.textFactor * scale * 1.3) +
+        12,
+    );
+    expect(view.addExpense).toBe(false);
+    expect(l.balanceLabelLines.join(' ')).toContain('final');
+  },
+);
