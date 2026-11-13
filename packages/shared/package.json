@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./package.json": "./package.json",
+    "./header-scenes": "./src/header-scenes",
     "./*": "./src/*.ts"
   },
   "scripts": {

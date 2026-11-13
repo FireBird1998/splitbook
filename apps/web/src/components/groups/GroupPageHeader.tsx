@@ -26,6 +26,7 @@ const CONTROL_RADIUS = '12px';
 const MAX_AVATARS = 5;
 
 interface GroupPageHeaderProps {
+  actionsOnly?: boolean;
   name: string;
   category: GroupCategory;
   /** The Theme's display name, e.g. "Household". */
@@ -47,6 +48,7 @@ interface GroupPageHeaderProps {
  * expense (#304) adds to this Group, so the header has none of its own.
  */
 export default function GroupPageHeader({
+  actionsOnly = false,
   name,
   category,
   themeLabel,
@@ -70,48 +72,52 @@ export default function GroupPageHeader({
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'flex-end',
-        justifyContent: 'space-between',
+        justifyContent: actionsOnly ? 'flex-end' : 'space-between',
         gap: '12px 20px',
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
-        <Box
-          aria-hidden
-          data-group-theme={category}
-          sx={{
-            width: TILE_SIZE,
-            height: TILE_SIZE,
-            flex: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: TILE_RADIUS,
-            bgcolor: 'tint.brand',
-            color: 'primary.main',
-          }}
-        >
-          {createElement(groupThemeIcon(category), { sx: { fontSize: 24 } })}
-        </Box>
-        <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          <Typography
-            component="h1"
+      {!actionsOnly && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+          <Box
+            aria-hidden
+            data-group-theme={category}
             sx={{
-              m: 0,
-              fontSize: '1.75rem',
-              lineHeight: 1.15,
-              fontWeight: 600,
-              letterSpacing: '-0.02em',
-              color: 'text.primary',
-              overflowWrap: 'anywhere',
+              width: TILE_SIZE,
+              height: TILE_SIZE,
+              flex: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: TILE_RADIUS,
+              bgcolor: 'tint.brand',
+              color: 'primary.main',
             }}
           >
-            {name}
-          </Typography>
-          <Typography sx={{ m: 0, fontSize: '0.875rem', lineHeight: 1.4, color: 'text.secondary' }}>
-            {groupSummaryLine(themeLabel, members.length, currency)}
-          </Typography>
+            {createElement(groupThemeIcon(category), { sx: { fontSize: 24 } })}
+          </Box>
+          <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Typography
+              component="h1"
+              sx={{
+                m: 0,
+                fontSize: '1.75rem',
+                lineHeight: 1.15,
+                fontWeight: 600,
+                letterSpacing: '-0.02em',
+                color: 'text.primary',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {name}
+            </Typography>
+            <Typography
+              sx={{ m: 0, fontSize: '0.875rem', lineHeight: 1.4, color: 'text.secondary' }}
+            >
+              {groupSummaryLine(themeLabel, members.length, currency)}
+            </Typography>
+          </Box>
         </Box>
-      </Box>
+      )}
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
         {people.length > 0 ? (

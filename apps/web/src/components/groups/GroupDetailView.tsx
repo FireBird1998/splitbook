@@ -1,5 +1,8 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+import { readGroupHeader } from '@splitbook/shared/group-header';
+import { headerScenesEnabled } from '@/lib/header-scenes';
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import {
   expensePageKey,
@@ -43,6 +46,8 @@ import {
 import { groupSettingsHref, groupTabHref } from './group-tabs';
 import { groupExportHref } from '@/components/layout/shell-nav';
 import { tripDateRange } from './group-dates';
+
+const GroupSceneHeader = dynamic(() => import('./header-scene/GroupSceneHeader'), { ssr: false });
 
 interface GroupDetailViewProps {
   groupId: string;
@@ -212,6 +217,8 @@ function GroupDetailContent({
     balances: balancesData?.data,
     chosen: searchParams.get('currency') ?? undefined,
   });
+  const header = readGroupHeader(group.header, headerScenesEnabled());
+  const usesScene = header.style === 'scene';
   const showChecklist = shouldShowTripChecklist(checklist);
 
   // Amendment B: opening the form from a past-month view defaults the expense date to that
@@ -240,6 +247,7 @@ function GroupDetailContent({
 
       <Box sx={{ animation: 'panel-in 280ms ease-out both' }}>
         <GroupPageHeader
+          actionsOnly={usesScene}
           name={group.name}
           category={group.category}
           themeLabel={theme.label}
@@ -252,7 +260,9 @@ function GroupDetailContent({
         />
       </Box>
 
-      {theme.header === 'strip' && (
+      {usesScene && <GroupSceneHeader group={group} header={header} />}
+
+      {!usesScene && theme.header === 'strip' && (
         <Box sx={{ animation: 'panel-in 280ms ease-out both' }}>
           <TripStrip
             name={group.name}
