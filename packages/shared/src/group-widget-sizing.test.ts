@@ -217,6 +217,19 @@ it('wraps a tall narrow overflow hint into complete words inside its measured he
       widgetText(view.layout.width, 2).width(line, view.layout.fontSizes.small),
     ).toBeLessThanOrEqual(view.layout.width);
 });
+
+it('uses Group when an unbroken name cannot fit even without optional content at the readable floor', () => {
+  const view = groupWidget(
+    { ...part, name: 'MountainAdventureClub' },
+    setup,
+    { width: 110, height: 640 },
+    auth,
+    now,
+    2,
+  );
+  expect(view.layout.nameLines).toEqual(['Group']);
+  expect(view.layout.nameFontSize).toBeGreaterThanOrEqual(10);
+});
 it('uses a tall real size for more payment rows and shares all leftover height among them', () => {
   const view = groupWidget(part, setup, { width: 372, height: 512 }, auth, now);
   expect(view.payments.length).toBeGreaterThan(4);
