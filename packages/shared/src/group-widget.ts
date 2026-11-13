@@ -468,6 +468,13 @@ function groupLayout(
       ];
       return {
         sections,
+        fontSizes: {
+          caption: text.font(9),
+          small: text.font(10),
+          secondary: text.font(11),
+          body: text.font(12),
+          paymentAmount: text.font(13),
+        },
         showSaved,
         showTile,
         showStateTile,
@@ -480,14 +487,14 @@ function groupLayout(
         actionPaddingHorizontal: actionPadding,
         actionLines,
         titleLines,
-        titleFontSize: titleFont,
-        balanceFontSize: balanceFont,
+        titleFontSize: text.font(titleFont),
+        balanceFontSize: text.font(balanceFont),
         balanceLabelLines,
         balanceLines,
         descriptionLines,
         showCurrencyOverflow,
         stackPayments,
-        paymentFontSize: paymentFont,
+        paymentFontSize: text.font(paymentFont),
         moreInFooter,
         updateInFooter,
       };

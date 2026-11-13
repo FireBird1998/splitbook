@@ -173,7 +173,7 @@ it.each(dimensions.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scal
     expect(l.sections.find((section) => section.id === 'payments')?.rows ?? 0).toBe(
       view.payments.length,
     );
-    const text = widgetText(l.width, scale, l.textFactor);
+    const text = widgetText(l.width, scale);
     const paymentTextHeight = l.stackPayments
       ? text.line(l.paymentFontSize) + text.line(13) + 2
       : Math.max(text.line(l.paymentFontSize), text.line(13));

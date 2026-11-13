@@ -39,20 +39,26 @@ export function drawGroup(
     : view.balanceTone === 'neutral'
       ? t.textSecondary
       : t.status[view.balanceTone];
-  const text = (value: string, ink = t.text, fontSize = 12, bold = false, mono = false) => (
+  const text = (
+    value: string,
+    ink = t.text,
+    fontSize = l.fontSizes.body,
+    bold = false,
+    mono = false,
+  ) => (
     <TextWidget
       text={value}
       maxLines={1}
       truncate="END"
       style={{
         color: color(ink),
-        fontSize: Math.max(Math.min(fontSize, 10), fontSize * l.textFactor),
+        fontSize,
         fontWeight: bold ? 'bold' : 'normal',
         ...(mono ? { fontFamily: 'monospace' } : {}),
       }}
     />
   );
-  const lines = (values: string[], ink = t.text, size = 12, bold = false) =>
+  const lines = (values: string[], ink = t.text, size = l.fontSizes.body, bold = false) =>
     values.map((v, i) => <FlexWidget key={i}>{text(v, ink, size, bold)}</FlexWidget>);
   const themePath =
     view.theme === 'home'
@@ -87,37 +93,33 @@ export function drawGroup(
           }}
         >
           <FlexWidget style={l.stackHeader ? { width: 'match_parent' } : { flex: 1 }}>
-            {lines(l.nameLines, t.text, l.nameFontSize / l.textFactor, true)}
+            {lines(l.nameLines, t.text, l.nameFontSize, true)}
           </FlexWidget>
           {l.showArchivedTag ? (
             <FlexWidget
               style={{ backgroundColor: color(t.surfaceMuted), borderRadius: 6, padding: 3 }}
             >
-              {text('Archived', t.textSecondary, 9, true)}
+              {text('Archived', t.textSecondary, l.fontSizes.caption, true)}
             </FlexWidget>
           ) : null}
         </FlexWidget>
         {l.compact
           ? l.showSaved && view.saved
-            ? text(view.saved, t.textMuted, 9)
+            ? text(view.saved, t.textMuted, l.fontSizes.caption)
             : null
-          : text(view.balance, tone, 11, true)}
+          : text(view.balance, tone, l.fontSizes.secondary, true)}
       </FlexWidget>
-      {!l.compact && l.showSaved && view.saved ? text(view.saved, t.textMuted, 9) : null}
+      {!l.compact && l.showSaved && view.saved
+        ? text(view.saved, t.textMuted, l.fontSizes.caption)
+        : null}
     </FlexWidget>
   );
   const balance = view.compactAmount ? (
     <FlexWidget style={{ flexGap: 4 }}>
-      <FlexWidget>{lines(l.balanceLabelLines, tone, 11, true)}</FlexWidget>
-      {text(
-        view.compactAmount,
-        view.muted ? t.textMuted : t.text,
-        l.moneyFontSize / l.textFactor,
-        true,
-        true,
-      )}
+      <FlexWidget>{lines(l.balanceLabelLines, tone, l.fontSizes.secondary, true)}</FlexWidget>
+      {text(view.compactAmount, view.muted ? t.textMuted : t.text, l.moneyFontSize, true, true)}
       {l.showCurrencyOverflow && view.currencyOverflow
-        ? text(view.currencyOverflow, t.brand.main, 10, true)
+        ? text(view.currencyOverflow, t.brand.main, l.fontSizes.small, true)
         : null}
     </FlexWidget>
   ) : (
@@ -170,7 +172,7 @@ export function drawGroup(
               <FlexWidget
                 style={{ padding: 5, borderRadius: 8, backgroundColor: color(t.surface) }}
               >
-                {text(payment.initials, t.textSecondary, 10, true)}
+                {text(payment.initials, t.textSecondary, l.fontSizes.small, true)}
               </FlexWidget>
             ) : null}
             <FlexWidget style={{ flex: 1, flexGap: 2 }}>
@@ -179,7 +181,7 @@ export function drawGroup(
                 ? text(
                     payment.amount,
                     view.muted ? t.textMuted : payment.incoming ? t.status.positive : t.text,
-                    13,
+                    l.fontSizes.paymentAmount,
                     true,
                     true,
                   )
@@ -199,7 +201,7 @@ export function drawGroup(
       ))}
       {l.showMore && !l.moreInFooter && view.more ? (
         <FlexWidget style={{ height: payments?.moreHeight, justifyContent: 'center' }}>
-          {text(view.more, t.brand.main, 10, true)}
+          {text(view.more, t.brand.main, l.fontSizes.small, true)}
         </FlexWidget>
       ) : null}
     </FlexWidget>
@@ -258,10 +260,10 @@ export function drawGroup(
           clickAction="OPEN_URI"
           clickActionData={action({ kind: 'settle', groupId: setup.groupId })}
         >
-          {text(view.more, t.brand.main, 10, true)}
+          {text(view.more, t.brand.main, l.fontSizes.small, true)}
         </FlexWidget>
       ) : l.showUpdateInFooter ? (
-        text(view.action!, t.textSecondary, 11)
+        text(view.action!, t.textSecondary, l.fontSizes.secondary)
       ) : !l.compact ? (
         <FlexWidget style={{ flex: 1 }} />
       ) : null}
@@ -278,7 +280,7 @@ export function drawGroup(
           justifyContent: 'center',
         }}
       >
-        {lines(l.actionLines, t.brand.main, l.actionFontSize / l.textFactor, true)}
+        {lines(l.actionLines, t.brand.main, l.actionFontSize, true)}
       </FlexWidget>
     </FlexWidget>
   );
@@ -288,11 +290,17 @@ export function drawGroup(
     payments: paymentRows,
     title: message,
     description: (
-      <FlexWidget>{lines(l.descriptionLines, t.textSecondary, l.compact ? 10 : 12)}</FlexWidget>
+      <FlexWidget>
+        {lines(
+          l.descriptionLines,
+          t.textSecondary,
+          l.compact ? l.fontSizes.small : l.fontSizes.body,
+        )}
+      </FlexWidget>
     ),
-    hidden: text(view.hidden ?? '', t.textMuted, 10),
+    hidden: text(view.hidden ?? '', t.textMuted, l.fontSizes.small),
     action: footer,
-    update: text(view.action ?? '', t.textSecondary, 11),
+    update: text(view.action ?? '', t.textSecondary, l.fontSizes.secondary),
     loading: (
       <FlexWidget style={{ height: 'match_parent' }}>
         {l.loadingRows.map((row, index) => (
