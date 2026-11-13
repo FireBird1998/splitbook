@@ -1,6 +1,15 @@
 import { expect, it } from 'vitest';
 import { fitWidgetLayout, fitWidgetSections, widgetText } from './widget-sizing';
 
+it('admits an optional older-copy prompt only after its list fits completely', () => {
+  const sections = [
+    { id: 'payments', rows: 2, rowHeight: 30, moreHeight: 12 },
+    { id: 'update', rows: 1, rowHeight: 20, whenComplete: 'payments' },
+  ];
+  expect(fitWidgetSections(75, sections, 4).sections.map((s) => s.id)).toEqual(['payments']);
+  expect(fitWidgetSections(90, sections, 4).sections.map((s) => s.id)).toEqual(['payments', 'update']);
+});
+
 it('measures proportional button text, mono amounts and whole words through the same interface', () => {
   const text = widgetText(144, 1.3);
   expect(text.words('＋ Add expense', 12, 120)).toEqual(['＋ Add expense']);
