@@ -1,5 +1,27 @@
 import { expect, it } from 'vitest';
-import { fitWidgetSections } from './widget-sizing';
+import { fitWidgetLayout, fitWidgetSections, widgetText } from './widget-sizing';
+
+it('measures proportional button text, mono amounts and whole words through the same interface', () => {
+  const text = widgetText(144, 1.3);
+  expect(text.words('＋ Add expense', 12, 120)).toEqual(['＋ Add expense']);
+  expect(text.width('₹1,480.00', 13, true)).toBeCloseTo(91.26, 2);
+  expect(widgetText(105, 2).words('You owe · final', 11)).toEqual(['You owe', '· final']);
+});
+
+it('removes optional content before shrinking text, and reports overflow at the readable floor', () => {
+  const make = (text: ReturnType<typeof widgetText>, optional: boolean) => ({
+    optional,
+    sections: [{ id: 'name', rows: 1, rowHeight: text.line(13), required: true },
+      ...(optional ? [{ id: 'action', rows: 1, rowHeight: 30, required: true }] : [])],
+  });
+  const normal = fitWidgetLayout({ width: 120, height: 20 }, 1, make);
+  expect(normal.optional).toBe(false);
+  expect(normal.textFactor).toBe(1);
+  const tiny = fitWidgetLayout({ width: 120, height: 5 }, 1, make);
+  expect(tiny.textFactor).toBe(0.8);
+  expect(tiny.fits).toBe(false);
+  expect(tiny.overflow).toBe(9);
+});
 
 it('normalises invalid counts and dimensions without NaN, negative rows or endless growth', () => {
   const result = fitWidgetSections(NaN, [

@@ -89,3 +89,60 @@ export function fitWidgetSections(
     }] : []),
   };
 }
+
+/** The same conservative glyph estimate is used for wrapping, fitting and row height.
+ * Proportional labels do not have the fixed width of mono money. */
+export function widgetText(width: number, scale = 1, factor = 1, pixelRatio = 1) {
+  width = nonNegative(width);
+  scale = nonNegative(scale) || 1;
+  factor = nonNegative(factor) || 1;
+  pixelRatio = nonNegative(pixelRatio) || 1;
+  const font = (base: number) => Math.max(Math.min(base, 10), base * factor);
+  const measure = (value: string, base: number, mono = false) => [...value].reduce((sum, c) =>
+    sum + (mono ? 0.6 : /\s/.test(c) ? 0.28 : /[ilI.,:;'!|]/.test(c) ? 0.28
+      : /[mwMW@%]/.test(c) ? 0.85 : /[A-Z₹€$£¥]/.test(c) ? 0.65
+        : /[0-9]/.test(c) ? 0.6 : c === '＋' ? 0.8 : 0.54), 0) * font(base) * scale;
+  return {
+    factor,
+    scale,
+    font,
+    line: (base: number) => Math.ceil(font(base) * scale * 1.3 * pixelRatio - 1e-9) / pixelRatio,
+    width: measure,
+    fit: (value: string, base: number, room = width, mono = false) => Math.max(
+      Math.min(base, 10), Math.min(base, base * nonNegative(room) / Math.max(1, measure(value, base, mono))),
+    ),
+    words: (value: string, base: number, room = width) => {
+      const result: string[] = [];
+      // A separator belongs to the following word, never stranded at a line end.
+      const words = value.trim().split(/\s+/).filter(Boolean);
+      for (let i = 0; i < words.length; i++) {
+        const word = words[i] === '·' && words[i + 1] ? words[i] + ' ' + words[++i] : words[i];
+        const previous = result.at(-1);
+        if (previous && measure(previous + ' ' + word, base) <= room)
+          result[result.length - 1] = previous + ' ' + word;
+        else result.push(word);
+      }
+      return result;
+    },
+  };
+}
+export type WidgetText = ReturnType<typeof widgetText>;
+
+/** All widgets remove optional content before fitting indispensable type. The caller
+ * supplies measured sections, not its own shrink loop. Below the floor overflow stays explicit. */
+export function fitWidgetLayout<T extends { sections: readonly WidgetSection[] }>(
+  size: WidgetDimensions, scale: number, make: (text: WidgetText, optional: boolean) => T, gap = 8,
+) {
+  const attempt = (optional: boolean, factor: number) => {
+    const settings = make(widgetText(size.width, scale, factor, size.pixelRatio), optional);
+    return { ...settings, ...fitWidgetSections(size.height, settings.sections, gap, size.pixelRatio),
+      textFactor: factor };
+  };
+  let result = attempt(true, 1);
+  if (!result.fits) result = attempt(false, 1);
+  for (const factor of [0.95, 0.9, 0.85, 0.8]) {
+    if (result.fits) break;
+    result = attempt(false, factor);
+  }
+  return result;
+}
