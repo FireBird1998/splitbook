@@ -1,6 +1,16 @@
 import { expect, it } from 'vitest';
 import { fitWidgetSections } from './widget-sizing';
 
+it('reports the required overflow instead of claiming that a below-minimum layout fits', () => {
+  const result = fitWidgetSections(60, [
+    { id: 'name', rows: 1, rowHeight: 24, required: true },
+    { id: 'balance', rows: 1, rowHeight: 40, required: true },
+  ]);
+  expect(result.fits).toBe(false);
+  expect(result.overflow).toBe(12);
+  expect(result.sections.map((s) => s.id)).toEqual(['name', 'balance']);
+});
+
 it('admits sections in priority order before filling their rows, reserving required content', () => {
   const sections = [
     { id: 'balance', rows: 1, rowHeight: 40, required: true },

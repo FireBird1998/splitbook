@@ -55,6 +55,8 @@ export function fitWidgetSections(height: number, sections: readonly WidgetSecti
   );
   const last = chosen.reduce((last, rows, index) => (rows > 0 ? index : last), -1);
   return {
+    fits: used() <= height,
+    overflow: Math.max(0, used() - height),
     gap,
     sections: sections.flatMap((section, index) =>
       chosen[index]
