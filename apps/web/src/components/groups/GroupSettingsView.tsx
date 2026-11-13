@@ -1,5 +1,7 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+import { headerScenesEnabled } from '@/lib/header-scenes';
 import { useEffect, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import Link from 'next/link';
@@ -48,6 +50,18 @@ import RecurringExpensesSection from '@/components/groups/RecurringExpensesSecti
 import RefusalAlert, { refusalFrom, type Refusal } from '@/components/groups/RefusalAlert';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { SEPARATOR } from '@splitbook/shared/separator';
+
+const HeaderSceneSettings = dynamic(() => import('./header-scene/HeaderSceneSettings'), {
+  ssr: false,
+  loading: () => (
+    <Paper variant="outlined" sx={{ p: 2.5 }}>
+      <Typography component="h2" variant="subtitle1">
+        Header scene
+      </Typography>
+      <Skeleton variant="rounded" height={232} animation={false} />
+    </Paper>
+  ),
+});
 
 interface GroupSettingsViewProps {
   groupId: string;
@@ -171,21 +185,33 @@ function GroupSettingsContent({
     />
   );
 
+  const headerSection = headerScenesEnabled() && (
+    <HeaderSceneSettings
+      group={group}
+      onSaved={() => {
+        void mutate().catch(() => {});
+        void globalMutate(isWebGroupsRead).catch(() => {});
+      }}
+    />
+  );
+  const settingsWidth = headerScenesEnabled() ? 'lg' : 'md';
+
   if (!isAdmin) {
     return (
-      <Container maxWidth="md" disableGutters>
+      <Container maxWidth={settingsWidth} disableGutters>
         <Stack spacing={3} sx={{ py: 3 }}>
           <Box>
             <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
               {group.name}
             </Typography>
             <Typography color="text.secondary" sx={{ mb: 2 }}>
-              Only admins can change this Group’s settings.
+              Only admins can change the Group’s name, Theme, dates and member roles.
             </Typography>
             <Button component={Link} href={`/groups/${groupId}`} variant="outlined">
               Back to Group
             </Button>
           </Box>
+          {headerSection}
           {currenciesSection}
           <TagManager groupId={groupId} accountId={userId} />
           {assistantSection}
@@ -326,7 +352,7 @@ function GroupSettingsContent({
   const selectedMemberData = members.find((m) => m.user._id === selectedMember);
 
   return (
-    <Container maxWidth="md" disableGutters>
+    <Container maxWidth={settingsWidth} disableGutters>
       {error && (
         <ErrorState
           message="Group could not be refreshed. Showing previously loaded group."
@@ -354,6 +380,7 @@ function GroupSettingsContent({
       </Stack>
 
       <Stack spacing={4}>
+        {headerSection}
         {/* ─── General Information ──────────────────── */}
         <Paper variant="outlined" sx={{ p: 3 }}>
           <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 2 }}>

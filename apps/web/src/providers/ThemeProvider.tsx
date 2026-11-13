@@ -30,8 +30,12 @@ export function useThemeMode() {
 
 function getInitialMode(): ThemeMode {
   if (typeof window === 'undefined') return 'light';
-  const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  if (stored === 'light' || stored === 'dark') return stored;
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch {
+    // Browser preferences remain usable for this visit when storage is unavailable.
+  }
   if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
   return 'light';
 }
@@ -58,7 +62,11 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
   const toggleTheme = () => {
     setPreference((prev) => {
       const next = (prev ?? 'light') === 'light' ? 'dark' : 'light';
-      localStorage.setItem(THEME_STORAGE_KEY, next);
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, next);
+      } catch {
+        // Applying the theme does not depend on being able to keep it.
+      }
       return next;
     });
   };
