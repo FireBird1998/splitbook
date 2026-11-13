@@ -1,6 +1,31 @@
 import { expect, it } from 'vitest';
 import { fitWidgetSections } from './widget-sizing';
 
+it('normalises invalid counts and dimensions without NaN, negative rows or endless growth', () => {
+  const result = fitWidgetSections(NaN, [
+    { id: 'ignored', rows: -1, rowHeight: NaN },
+    { id: 'required', rows: 1.9, rowHeight: 12.2, required: true },
+  ], -8);
+  expect(result.fits).toBe(false);
+  expect(result.overflow).toBe(13);
+  expect(result.sections.map((s) => [s.id, s.rows, s.height])).toEqual([['required', 1, 13]]);
+  expect(fitWidgetSections(-1, []).sections).toEqual([]);
+});
+
+it('rounds fractional dp on a physical pixel grid without allocating past the available pixels', () => {
+  const result = fitWidgetSections(100.2, [
+    { id: 'payments', rows: 3, rowHeight: 10.1, grow: true },
+    { id: 'action', rows: 1, rowHeight: 19.1, required: true },
+  ], 3.1, 2.625);
+  const pixels = (dp: number) => Math.round(dp * 2.625);
+  expect(result.sections.map((s) => s.rows)).toEqual([3, 1]);
+  expect(result.sections.reduce((sum, s) => sum + pixels(s.height), pixels(result.gap))).toBe(263);
+  for (const s of result.sections) {
+    expect(s.height * 2.625).toBeCloseTo(pixels(s.height), 8);
+    expect(s.rowHeight * 2.625).toBeCloseTo(pixels(s.rowHeight), 8);
+  }
+});
+
 it('admits all rows when they cost less than one row and the overflow hint', () => {
   const result = fitWidgetSections(40, [
     { id: 'payments', rows: 2, rowHeight: 20, moreHeight: 50 },
