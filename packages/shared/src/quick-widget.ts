@@ -29,6 +29,9 @@ interface QuickShortcuts {
   header: string | null;
   headerSubtitle: string | null;
   headerHeight: number;
+  headerIcon: string;
+  headerIconSize: number;
+  headerTileSize: number;
   headerFontSize: number;
   fontSize: number;
   padding: number;
@@ -43,6 +46,7 @@ function tagShortcuts(
   size: WidgetDimensions,
   fontScale: number,
   group: string,
+  theme: string,
 ): QuickShortcuts | null {
   const tags = (setup.tagIds ?? [])
     .slice(0, 4)
@@ -64,6 +68,8 @@ function tagShortcuts(
         id: 'tags',
         rows: tags.length,
         rowHeight: Math.max(44, text.line(12) + 16) + gap,
+        // The LargeText drawings cap the short row before type shrinks; the fitter
+        // can admit fewer again when the real launcher width is smaller.
         maxRows: [4, 3, 1][widgetTextLevel(fontScale)],
         grow: true,
       },
@@ -141,6 +147,9 @@ function tagShortcuts(
     header: header ? (horizontal ? `Add expense${SEPARATOR}${group}` : group) : null,
     headerSubtitle: header && !horizontal && size.width >= 250 ? 'Add an Expense' : null,
     headerHeight: header?.height ?? 0,
+    headerIcon: !horizontal && size.width >= 250 ? theme : 'brand',
+    headerIconSize: !horizontal && size.width >= 250 ? 20 : 14,
+    headerTileSize: !horizontal && size.width >= 250 ? 32 : 14,
     headerFontSize: fitted.headerFontSize,
     fontSize: fitted.fontSize,
     rows,
@@ -310,7 +319,9 @@ export function quickWidget(
   return {
     state: 'normal',
     shortcuts:
-      !payment && group && copy ? tagShortcuts(copy, setup, size, fontScale, group.name) : null,
+      !payment && group && copy
+        ? tagShortcuts(copy, setup, size, fontScale, group.name, group.theme)
+        : null,
     layout: layout(action, subtitle, true),
     size,
     title: action,

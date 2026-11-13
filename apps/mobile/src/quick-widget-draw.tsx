@@ -31,6 +31,12 @@ export function drawQuick(
     brand: t.mode === 'dark' ? darkMark : lightMark,
   };
   const paths: Record<string, string> = {
+    home: '<path d="M3 11L12 3l9 8M6 10v11h12V10M10 21v-7h4v7"/>',
+    trip: '<path d="M12 2v20M3 13l9-5 9 5v3l-9-3-9 3zM8 21l4-3 4 3"/>',
+    work: '<path d="M3 8h18v13H3zM8 8V3h8v5M3 13h18"/>',
+    couple: '<path d="M12 21L3 12C-2 3 8 0 12 6C16 0 26 3 21 12z"/>',
+    general:
+      '<path d="M3 21v-4a5 5 0 0110 0v4M15 4a4 4 0 010 8M16 16a5 5 0 015 5"/><circle cx="8" cy="7" r="4"/>',
     lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
     archive: '<path d="M4 7h16v13H4zM3 4h18v3H3zM9 11h6"/>',
     account: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
@@ -63,10 +69,27 @@ export function drawQuick(
               flexGap: 6,
             }}
           >
-            <SvgWidget
-              svg={t.mode === 'dark' ? darkMark : lightMark}
-              style={{ width: 14, height: 14 }}
-            />
+            <FlexWidget
+              style={{
+                width: shortcuts.headerTileSize,
+                height: shortcuts.headerTileSize,
+                borderRadius: 10,
+                backgroundColor: color(shortcuts.headerIcon === 'brand' ? t.surface : t.brand.bg),
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <SvgWidget
+                svg={
+                  shortcuts.headerIcon === 'brand'
+                    ? t.mode === 'dark'
+                      ? darkMark
+                      : lightMark
+                    : `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="${t.brand.main}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[shortcuts.headerIcon]}</g></svg>`
+                }
+                style={{ width: shortcuts.headerIconSize, height: shortcuts.headerIconSize }}
+              />
+            </FlexWidget>
             <FlexWidget style={{ flex: 1 }}>
               <TextWidget
                 text={shortcuts.header}
