@@ -1406,7 +1406,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     snapshot: () => snapshot,
     publish: (toReview) => {
       publish({ ...snapshot, toReview });
-      reviewRun?.receive(toReview.read);
+      reviewRun?.receive(toReview.read, toReview.status === 'ready');
     },
     read: (path, signal) => request(path, generation, { signal }),
     recoveries: async () => {
