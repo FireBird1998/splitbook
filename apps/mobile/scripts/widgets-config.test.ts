@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
@@ -5,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const require = createRequire(import.meta.url);
 
 // The build configuration is the seam: Android discovers widgets from this manifest.
-function application(enabled?: string) {
+function configuration(enabled?: string) {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     EXPO_NO_DOTENV: '1',
@@ -25,7 +26,10 @@ function application(enabled?: string) {
       },
     ),
   );
-  return config._internal.modResults.android.manifest.manifest.application[0];
+  return config._internal.modResults.android.manifest.manifest;
+}
+function application(enabled?: string) {
+  return configuration(enabled).application[0];
 }
 function receiver(enabled?: string) {
   return (application(enabled).receiver ?? []).find(
@@ -103,3 +107,36 @@ it('enables the midnight job and clock/zone/boot receiver with the widget switch
     ]);
   }
 }, 30_000);
+
+it('declares boot reception only in widgets-on builds', () => {
+  for (const enabled of ['true', 'false', undefined]) {
+    const manifest = configuration(enabled);
+    const permissions = (manifest['uses-permission'] ?? []).map(
+      (p: { $: Record<string, string> }) => p.$['android:name'],
+    );
+    expect(permissions.includes('android.permission.RECEIVE_BOOT_COMPLETED')).toBe(
+      enabled === 'true',
+    );
+  }
+}, 30_000);
+
+it('keeps broadcast redraws inside a one-shot job and lets placement restore the build-controlled receiver state', () => {
+  const job = readFileSync('plugins/android-widgets/DateChangeJob.java', 'utf8');
+  const receiver = readFileSync('plugins/android-widgets/ClockChangeReceiver.java', 'utf8');
+  const changed = job.slice(
+    job.indexOf('public static void changed'),
+    job.indexOf('@Override public boolean onStartJob'),
+  );
+  expect(receiver).toContain('DateChangeJob.changed(context)');
+  expect(receiver).not.toContain('RNWidgetJsCommunication');
+  expect(changed).toContain('IMMEDIATE_JOB_ID');
+  expect(changed).toContain('.setMinimumLatency(1)');
+  expect(changed).not.toContain('RNWidgetJsCommunication');
+  const running = job.slice(job.indexOf('@Override public boolean onStartJob'));
+  expect(running).toContain('RNWidgetJsCommunication.requestWidgetUpdate');
+  expect(running).not.toContain('changed(this)');
+  expect(job).toContain('jobs.cancel(IMMEDIATE_JOB_ID)');
+  expect(job).toContain('placed ? PackageManager.COMPONENT_ENABLED_STATE_DEFAULT');
+  expect(job).toContain('PackageManager.COMPONENT_ENABLED_STATE_DISABLED');
+  expect(job).not.toContain('COMPONENT_ENABLED_STATE_ENABLED');
+});

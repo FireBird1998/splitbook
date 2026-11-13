@@ -12,7 +12,7 @@ import { counted, SEPARATOR } from './separator';
 import { widgetSavedTime, type WidgetSession } from './balances-widget';
 import type { GroupCategory } from './types';
 import { dayCount } from './trip-summary';
-import { toDateParam } from './date';
+import { dayKeyInZone } from './zoned-calendar';
 export interface GroupWidgetSetup {
   kind: 'group';
   hideAmounts?: boolean;
@@ -47,7 +47,7 @@ export interface WidgetGroupPart {
 function tripDay(part: WidgetGroupPart, now: number): string | null {
   const start = part.tripDates?.start;
   const end = part.tripDates?.end;
-  const today = toDateParam(new Date(now));
+  const today = dayKeyInZone(now, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   if (part.theme !== 'trip' || !start || !end || today < start || today > end) return null;
   try {
     return `Day ${dayCount(start, today)} of ${dayCount(start, end)}`;

@@ -123,6 +123,7 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
     const manifest = mod.modResults.manifest;
     manifest['uses-permission'] ??= [];
     if (
+      enabled &&
       !manifest['uses-permission'].some(
         (item) => item.$['android:name'] === 'android.permission.RECEIVE_BOOT_COMPLETED',
       )

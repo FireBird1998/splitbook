@@ -522,3 +522,21 @@ it('omits Trip day for other Themes, older copies, incomplete and invalid dates'
     expect(view.name).toBe(part.name);
   }
 });
+
+it('uses the newly reported phone zone while Date keeps its former local day', () => {
+  const resolve = Intl.DateTimeFormat.prototype.resolvedOptions;
+  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function () {
+    return { ...resolve.call(this), timeZone: 'Pacific/Honolulu' };
+  });
+  const instant = Date.parse('2026-11-01T00:30:00Z');
+  const copy = {
+    ...part,
+    theme: 'trip' as const,
+    tripDates: { start: '2026-10-31', end: '2026-11-02' },
+  };
+  expect(new Date(instant).getDate()).toBe(1);
+  expect(groupWidget(copy, setup, { width: 360, height: 224 }, auth, instant).tripDay).toBe(
+    'Day 1 of 3',
+  );
+  vi.restoreAllMocks();
+});
