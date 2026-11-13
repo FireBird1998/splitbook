@@ -305,6 +305,40 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@22.20.1)(@vitest/coverage-v8@4.1.10)(vite@8.1.3(@types/node@22.20.1)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.51.2)(tsx@4.23.1)(yaml@2.9.1))
 
+  tools/header-scenes:
+    dependencies:
+      '@splitbook/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.39.2
+        version: 9.39.2
+      '@playwright/test':
+        specifier: ^1.62.1
+        version: 1.62.1
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
+      effect:
+        specifier: ^4.0.0
+        version: 4.0.0
+      eslint:
+        specifier: ^9.39.2
+        version: 9.39.2(jiti@2.6.1)
+      tsx:
+        specifier: ^4.23.1
+        version: 4.23.1
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.55.0
+        version: 8.72.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@types/node@22.20.1)(@vitest/coverage-v8@4.1.10)(vite@8.1.3(@types/node@22.20.1)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.51.2)(tsx@4.23.1)(yaml@2.9.1))
+
   tools/landing-figures:
     dependencies:
       '@splitbook/shared':
