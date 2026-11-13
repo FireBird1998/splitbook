@@ -473,3 +473,23 @@ it('uses a count without a link or padded rows when no full-style payment row fi
     v.layout.sections.find((s) => s.id === 'payments')!.height - v.layout.paymentHeaderHeight,
   ).toBeLessThan(1);
 });
+
+it.each([390, 390.5, 391])(
+  'reserves the drawn divider for stacked payment text at %s dp',
+  (height) => {
+    const c = structuredClone(paymentCopy);
+    c.home!.currencies = [{ currency: 'INR', owedMinor: 240000, oweMinor: 200000 }];
+    c.groups!.maple!.currencies[0].payments = [0, 1].map((i) => ({
+      from: 'alex',
+      to: i ? 'sam' : 'priya',
+      fromName: 'Alex',
+      toName: 'Ananthapadmanabhan',
+      fromInitials: 'AR',
+      toInitials: i ? 'AS' : 'AK',
+      amountMinor: 100000,
+    }));
+    const v = overviewWidget(c, setup, { width: 172, height, pixelRatio: 2.625 }, auth, now, 2);
+    expect(v.payments).toHaveLength(2);
+    for (const row of v.payments) expect(row.textHeight).toBeLessThanOrEqual(row.contentHeight);
+  },
+);

@@ -279,7 +279,7 @@ export function overviewWidget(
       });
       const paymentRowHeight = Math.max(
         (compactPayments ? 28 : 36) * scale * text.factor,
-        ...measuredPayments.map((row) => row.textHeight + 1 / ratio),
+        ...measuredPayments.map((row) => row.textHeight + Math.ceil(ratio) / ratio),
       );
       const paymentLimit =
         level > 0 ? (level === 1 ? 1 : 2) : 2 + Math.floor(Math.max(0, size.height - 464) / 120);
