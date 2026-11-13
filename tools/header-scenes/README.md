@@ -1,8 +1,12 @@
 # Header scene generator
 
-Typed voxel models for Eco city and Mountain village, based on the owner's
-`vx-engine`, `vx-kit`, `vx-eco` and `vx-alp` prototype and the `VoxelEcoCity` and
-`VoxelAFrameVillage` design boards. Beach and Sakura belong to #1203.
+Typed voxel models for all four Header scenes. Eco city and Mountain village port
+the owner's `vx-engine`, `vx-kit`, `vx-eco` and `vx-alp` prototype. Beach and Sakura
+are redraws from the `VoxelHeaders`, `VoxelAndBeach`, `VoxelSakura` and
+`VoxelAndSakura` design boards; no model source was available for those two.
+The editable models are `src/beach.ts` and `src/sakura.ts`; shared water, light
+and surrounding-island helpers live in `src/island-details.ts`. No board SVG paths
+are imported into the generator.
 
 Run from the repository root with Node 22:
 
@@ -20,7 +24,7 @@ check, so the workspace tests and `pnpm swarm gate` cannot accept stale output.
 CI also runs `check` beside the landing figures check in
 `.github/workflows/landing-figures.yml`, with filters for the models and output.
 
-`render` uses the repo's Playwright Chromium and writes four PNGs and standalone
+`render` uses the repo's Playwright Chromium and writes eight PNGs and standalone
 HTML previews of the **generated output**, at day and night, at 1100 × 240 CSS
 pixels and 2× scale. Install its browser with
 `pnpm --filter @splitbook/header-scenes exec playwright install chromium` if
@@ -67,6 +71,9 @@ are emitted. The web can serialize these as inline SVG (`vectors.ts` has the
 serializer); Android can map tags to `react-native-svg` primitives without parsing
 XML or loading a WebView. `classes` retain animation variants; `motion` names
 sway, water, people, turbines, smoke, snow, clouds and floating groups independently.
+Beach also retains boat bobbing, crab movement and gull flight; Sakura retains
+fox movement and falling petals. Their windows, lanterns and halos share the
+existing night-light layers.
 The glow layer retains windows, lanterns and halos independently, so each renderer
 can apply the chosen time of day and its own motion/reduced-motion preferences.
 Native animation and lighting adapters belong to the renderer ticket, not this tool.

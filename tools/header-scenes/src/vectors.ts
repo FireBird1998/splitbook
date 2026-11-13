@@ -14,6 +14,11 @@ const TAGS = new Set([
   'stop',
 ]);
 function motion(classes: string[]): SceneMotion | undefined {
+  if (classes.includes('boat')) return 'boat';
+  if (classes.some((c) => /^(fox|bx-crab)$/.test(c))) return 'animals';
+  if (classes.some((c) => /^(pt|pt2)$/.test(c))) return 'petals';
+  if (classes.some((c) => /^(birds|bx-gull)$/.test(c))) return 'birds';
+  if (classes.some((c) => /^(walker|bx-walk)$/.test(c))) return 'people';
   if (classes.some((c) => /^sway/.test(c))) return 'sway';
   if (classes.some((c) => /^(shim2?|flow|drop|mist|koi2?)$/.test(c))) return 'water';
   if (classes.some((c) => /^(ecw[12]|ecbike|mvhike|wbob)$/.test(c))) return 'people';

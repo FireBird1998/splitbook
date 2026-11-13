@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import type { HeaderSceneArt, SceneLayer } from '@splitbook/shared/header-scene-art';
 import { ecoScene, ecoCss } from './eco-city.ts';
 import { alpScene, alpCss } from './mountain-village.ts';
+import { beachScene, beachCss } from './beach.ts';
+import { sakuraScene, sakuraCss } from './sakura.ts';
 import { vectorTree } from './vectors.ts';
 
 export const OUTPUT = 'packages/shared/src/header-scenes';
@@ -25,6 +27,22 @@ export function buildScenes(): HeaderSceneArt[] {
         'A floating mountain village with snowy pines, A-frame cabins, chimney smoke, a stream and a campfire.',
       raw: alpScene(),
       css: alpCss,
+    },
+    {
+      id: 'beach' as const,
+      name: 'Beach',
+      description:
+        'A floating beach island with a waterfall hill, palms, a thatched hut, a jetty, a sailboat, a lantern, a villager, a crab and a gull.',
+      raw: beachScene(),
+      css: beachCss,
+    },
+    {
+      id: 'sakura' as const,
+      name: 'Sakura',
+      description:
+        'A floating cherry-blossom garden with a two-tier pagoda, a torii, a koi pond and bridge, a waterfall, a villager, a fox and stone lanterns.',
+      raw: sakuraScene(),
+      css: sakuraCss,
     },
   ].map(({ raw, ...scene }) => ({
     ...scene,
