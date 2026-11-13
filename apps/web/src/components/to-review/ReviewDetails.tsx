@@ -1,6 +1,8 @@
 'use client';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
+import { useEffect, useId, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { expenseRecordKey } from '@splitbook/shared/query-keys';
 import { formatDate } from '@splitbook/shared/date';
@@ -64,18 +66,51 @@ function ExpenseMatch({
   id,
   description,
   names,
+  onLoaded,
+  disabled,
+  refreshMatches,
+  onRetryStart,
 }: {
   groupId: string;
   id: string;
   description: string;
   /** Members' names, with the viewer as "You". */
   names: Readonly<Record<string, string>>;
+  onLoaded: (id: string, loaded: boolean) => void;
+  disabled: boolean;
+  refreshMatches: () => Promise<unknown>;
+  onRetryStart: (button: HTMLButtonElement) => void;
 }) {
-  const { data, error } = useSWR(
+  const { data, error, isValidating, mutate } = useSWR(
     expenseRecordKey(WEB_QUERY_ACCOUNT, groupId, id),
     fetchWebExpenseRecord,
+    { shouldRetryOnError: false },
   );
-  const expense = data?.data;
+  const record = data?.data;
+  const deleted = record?.isDeleted === true;
+  const expense = record && !deleted ? record : undefined;
+  const loaded = !!expense;
+  const [retrying, setRetrying] = useState(false);
+  const inFlight = useRef(false);
+  const statusId = useId();
+  const descriptionId = `${statusId}-description`;
+  useEffect(() => {
+    onLoaded(id, loaded);
+    return () => onLoaded(id, false);
+  }, [id, loaded, onLoaded]);
+  async function retry(button: HTMLButtonElement) {
+    if (disabled || isValidating || inFlight.current) return;
+    inFlight.current = true;
+    onRetryStart(button);
+    setRetrying(true);
+    try {
+      // Each read publishes its own result. A failure must not prevent the other read.
+      await Promise.allSettled([mutate(), refreshMatches()]);
+    } finally {
+      inFlight.current = false;
+      setRetrying(false);
+    }
+  }
   const author = expense?.createdBy;
   // A current member as To review names them ("You" for the viewer), else the name on the record.
   const addedBy =
@@ -83,7 +118,9 @@ function ExpenseMatch({
     (typeof author === 'object' && author?.name ? author.name : 'a member');
   return (
     <Box>
-      <Typography fontWeight={600}>{expense?.description ?? description}</Typography>
+      <Typography id={descriptionId} fontWeight={600}>
+        {expense?.description ?? description}
+      </Typography>
       {expense ? (
         <Typography variant="body2">
           {formatCurrency(expense.amount, expense.currency)}
@@ -92,11 +129,25 @@ function ExpenseMatch({
           {SEPARATOR}Added by {addedBy}
         </Typography>
       ) : (
-        <Typography variant="body2">
-          {error
-            ? 'Could not load this Expense. Check it in Expenses before saving.'
-            : 'Loading matching Expense…'}
+        <Typography id={statusId} variant="body2" role="status">
+          {retrying || isValidating
+            ? 'Loading matching Expense…'
+            : deleted
+              ? 'This Expense is deleted.'
+              : error
+                ? 'Could not load this Expense. Check it in Expenses before saving.'
+                : 'Loading matching Expense…'}
         </Typography>
+      )}
+      {((!expense && (error || deleted)) || retrying) && (
+        <Button
+          aria-disabled={disabled || isValidating || retrying}
+          aria-busy={isValidating || retrying}
+          aria-describedby={expense ? descriptionId : `${descriptionId} ${statusId}`}
+          onClick={(event) => void retry(event.currentTarget)}
+        >
+          Try again
+        </Button>
       )}
     </Box>
   );
@@ -106,12 +157,20 @@ export function ReviewMatches({
   items,
   names,
   currency,
+  onExpenseLoaded,
+  disabled,
+  refreshMatches,
+  onRetryStart,
 }: {
   item: ToReviewItem;
   items: ToReviewItem[];
   names: Readonly<Record<string, string>>;
   /** The Group's currency. */
   currency?: string;
+  onExpenseLoaded: (id: string, loaded: boolean) => void;
+  disabled: boolean;
+  refreshMatches: () => Promise<unknown>;
+  onRetryStart: (button: HTMLButtonElement) => void;
 }) {
   return (
     <Box
@@ -124,7 +183,16 @@ export function ReviewMatches({
       </Typography>
       {item.duplicates.map((match) =>
         match.kind === 'expense' ? (
-          <ExpenseMatch key={match.id} groupId={item.draft.groupId} names={names} {...match} />
+          <ExpenseMatch
+            key={match.id}
+            groupId={item.draft.groupId}
+            names={names}
+            onLoaded={onExpenseLoaded}
+            disabled={disabled}
+            refreshMatches={refreshMatches}
+            onRetryStart={onRetryStart}
+            {...match}
+          />
         ) : (
           <Box key={match.id}>
             {items.find((other) => other.draft.id === match.id) ? (

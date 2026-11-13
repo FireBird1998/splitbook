@@ -1,6 +1,6 @@
 'use client';
 import ReviewExpenseFields from './ReviewExpenseFields';
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -30,8 +30,13 @@ import { useReviewEditor } from './use-review-editor';
 import { ReviewMatches, reviewSource } from './ReviewDetails';
 import type { WebReviewClient } from './review-client';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { matchingExpensesLoaded } from './review-matches';
 
-export type ReviewPanelHandle = { flush: () => Promise<boolean>; focus: () => void };
+export type ReviewPanelHandle = {
+  flush: () => Promise<boolean>;
+  focus: () => void;
+  loadedExpenseIds: () => readonly string[];
+};
 
 export default function ToReviewPanel({
   ref,
@@ -43,6 +48,7 @@ export default function ToReviewPanel({
   groupName,
   client,
   refresh,
+  refreshMatches,
   available,
   savingBlocked,
   run,
@@ -61,6 +67,7 @@ export default function ToReviewPanel({
   groupName: string;
   client: WebReviewClient;
   refresh: () => Promise<void>;
+  refreshMatches: () => Promise<unknown>;
   available: boolean;
   savingBlocked: boolean;
   run?: string;
@@ -79,9 +86,28 @@ export default function ToReviewPanel({
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
+  const duplicateTick = useRef<HTMLInputElement>(null);
+  const saveButton = useRef<HTMLButtonElement>(null);
+  const retryOrigin = useRef<HTMLButtonElement | null>(null);
+  const retryStarted = useCallback((button: HTMLButtonElement) => {
+    retryOrigin.current = button;
+  }, []);
+  const [loadedExpenseIds, setLoadedExpenseIds] = useState<readonly string[]>([]);
+  const expenseLoaded = useCallback((id: string, loaded: boolean) => {
+    setLoadedExpenseIds((ids) =>
+      loaded
+        ? ids.includes(id)
+          ? ids
+          : [...ids, id]
+        : ids.includes(id)
+          ? ids.filter((value) => value !== id)
+          : ids,
+    );
+  }, []);
   useImperativeHandle(ref, () => ({
     flush: () => (inFlight.current ? Promise.resolve(false) : editor.flush()),
     focus: () => surface.current?.focus(),
+    loadedExpenseIds: () => loadedExpenseIds,
   }));
   const blocked = busy || savingBlocked;
   const duplicateVersion = JSON.stringify([
@@ -94,6 +120,7 @@ export default function ToReviewPanel({
   const payerIds = (editor.draft.values?.paidBy ?? []).map((row) => row.user);
   const listedTwice = [...new Set(payerIds.filter((id, index) => payerIds.indexOf(id) !== index))];
   const duplicate = item.accountItem!.duplicates.length > 0;
+  const matchesLoaded = matchingExpensesLoaded(item.accountItem!.duplicates, loadedExpenseIds);
   const unsent = editor.status !== 'kept';
   const reason = !available
     ? 'Connect to the internet to change or save this item.'
@@ -103,9 +130,27 @@ export default function ToReviewPanel({
         ? 'Keep your changes before saving.'
         : incomplete
           ? `Still needs ${item.missingFacts.join(', ') || 'the expense details'}.`
-          : duplicate && !acknowledged
+          : duplicate && (!matchesLoaded || !acknowledged)
             ? 'Check the possible duplicate before saving.'
             : '';
+  useEffect(() => {
+    const from = retryOrigin.current;
+    if (!from) return;
+    // Preserve intentional focus moves. Removing the recovered match's button leaves body focused.
+    if (
+      document.activeElement !== from &&
+      (from.isConnected || document.activeElement !== document.body)
+    ) {
+      retryOrigin.current = null;
+      return;
+    }
+    if (!matchesLoaded || blocked || !available || unsent) return;
+    const next = duplicate ? duplicateTick.current : saveButton.current;
+    if (next && !next.disabled) {
+      next.focus();
+      retryOrigin.current = null;
+    }
+  });
   async function action(work: () => Promise<void>) {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -228,12 +273,18 @@ export default function ToReviewPanel({
               items={items}
               names={names}
               currency={context.currency}
+              onExpenseLoaded={expenseLoaded}
+              disabled={blocked || !available}
+              refreshMatches={refreshMatches}
+              onRetryStart={retryStarted}
             />
             <FormControlLabel
               control={
                 <Checkbox
+                  inputRef={duplicateTick}
                   checked={acknowledged}
-                  disabled={blocked || !available || unsent}
+                  disabled={blocked || !available || unsent || !matchesLoaded}
+                  aria-describedby={reason ? 'review-save-reason' : undefined}
                   onChange={(_, checked) =>
                     setAcknowledgedVersion(checked ? duplicateVersion : null)
                   }
@@ -249,6 +300,7 @@ export default function ToReviewPanel({
           </Typography>
         )}
         <Button
+          ref={saveButton}
           variant="contained"
           disabled={blocked || !!reason}
           aria-describedby={reason ? 'review-save-reason' : undefined}

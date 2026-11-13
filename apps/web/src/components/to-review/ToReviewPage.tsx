@@ -43,6 +43,7 @@ import ToReviewPanel, { type ReviewPanelHandle } from './ToReviewPanel';
 import ReviewRow from './ReviewRow';
 import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
 import { closeReviewRun, settleReviewRun, startReviewRun, type WebReviewRun } from './review-run';
+import { matchingExpensesLoaded } from './review-matches';
 
 type Confirmation = {
   reviews: DraftReview[];
@@ -447,7 +448,11 @@ export default function ToReviewPage({
         await refresh();
         throw new Error('The possible matches changed. Check them before saving this expense.');
       }
-      if (review.problems.length || (review.duplicates.length && !acknowledged)) {
+      if (
+        review.problems.length ||
+        (review.duplicates.length && !acknowledged) ||
+        !matchingExpensesLoaded(review.duplicates, panel.current?.loadedExpenseIds() ?? [])
+      ) {
         await refresh();
         throw new Error(
           'This item needs another look before saving. Check the details and any possible duplicate.',
@@ -751,6 +756,7 @@ export default function ToReviewPage({
                 groupName={group?.name || 'this Group'}
                 client={client}
                 refresh={refresh}
+                refreshMatches={() => mutate(TO_REVIEW_KEY)}
                 available={available && items.some((item) => item.id === selected.id) && !pending}
                 savingBlocked={pending || busy}
                 run={run ? `${run.index + 1} of ${run.ids.length}` : undefined}

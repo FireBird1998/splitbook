@@ -82,6 +82,7 @@ function markup(
           groupName: 'Maple House',
           client: {} as WebReviewClient,
           refresh: vi.fn(),
+          refreshMatches: vi.fn(),
           available: true,
           savingBlocked: false,
           onClose: vi.fn(),
