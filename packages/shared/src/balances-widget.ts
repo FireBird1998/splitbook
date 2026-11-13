@@ -15,7 +15,7 @@ export interface WidgetCopy {
   groups?: Record<string, WidgetGroupPart>;
   months?: Record<string, WidgetMonthPart>;
   /** Active Tags from Group reads already made by the app, in their read order. */
-  tags?: Record<string, { id: string; name: string }[]>;
+  tags?: Record<string, { verifiedAt: number; rows: { id: string; name: string }[] }>;
   lostGroupIds?: string[];
   savedGroups?: {
     verifiedAt: number;

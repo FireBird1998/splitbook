@@ -1,3 +1,4 @@
+import { parseGroupListResponse, type GroupReadTag } from '@splitbook/shared/group-read';
 import { parseExpenseContext } from './expense-draft';
 import { cachedRead } from './offline-cache';
 import { parseGroup, parseGroups } from './dto';
@@ -11,7 +12,7 @@ import { widgetGroupCopy } from './widget-group-copy';
 import type { WidgetGroupPart } from '@splitbook/shared/group-widget';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
-import { createSavedCopyQueue, type Envelope } from './saved-read-engine';
+import { createSavedCopyQueue, parseOnce, type Envelope } from './saved-read-engine';
 import type { AccountStorageLease, MobileSnapshot } from './types';
 
 export interface WidgetsNative {
@@ -27,7 +28,7 @@ export function createWidgetCopy(
   native: WidgetsNative | undefined,
   lease: () => AccountStorageLease | null,
   review: (snapshot: MobileSnapshot) => WidgetCopy['review'],
-  groupsTime: () => number | null = () => null,
+  groupsRead: () => Envelope | null = () => null,
   rows?: SavedQueryRecords,
   now: () => number = Date.now,
   groupReads: (id: string) => { group: Envelope; balances?: Envelope } | null = () => null,
@@ -39,6 +40,31 @@ export function createWidgetCopy(
   let groups: Record<string, WidgetGroupPart> = {};
   let months: NonNullable<WidgetCopy['months']> = {};
   let tags: NonNullable<WidgetCopy['tags']> = {};
+  const listOf = parseOnce((value) => parseGroupListResponse(value));
+  const contextOf = parseOnce((value) => parseExpenseContext(value));
+  const rememberTags = (
+    id: string,
+    rows: { id: string; name: string; isArchived: boolean; isDeleted: boolean }[],
+    verifiedAt: number,
+  ) => {
+    if ((tags[id]?.verifiedAt ?? -Infinity) > verifiedAt) return;
+    tags[id] = {
+      verifiedAt,
+      rows: rows
+        .filter((tag) => !tag.isArchived && !tag.isDeleted)
+        .map(({ id, name }) => ({ id, name })),
+    };
+  };
+  const rememberListTags = (read: Envelope) => {
+    for (const group of listOf(read.value, 'widget')) {
+      if (!lost.has(group._id))
+        rememberTags(
+          group._id,
+          group.tags.map((tag: GroupReadTag) => ({ ...tag, id: tag._id })),
+          read.refreshedAt,
+        );
+    }
+  };
   let savedGroups: WidgetCopy['savedGroups'];
   const lost = new Set<string>();
   const retired = new Set<string>();
@@ -66,6 +92,7 @@ export function createWidgetCopy(
             currencies: 1 + g.alternateCurrencies.length,
           })),
       };
+    if (list) rememberListTags(list);
     const keys = (await rows.keys?.(accountId)) ?? [];
     for (const path of keys.filter((path) => /^\/api\/groups\/[^/]+$/.test(path))) {
       const id = path.split('/').at(-1)!;
@@ -74,9 +101,7 @@ export function createWidgetCopy(
       if (!detail || retired.has(id)) continue;
       if (!lost.has(id)) {
         try {
-          tags[id] ??= parseExpenseContext(detail.value)
-            .tags.filter((tag) => !tag.isArchived && !tag.isDeleted)
-            .map(({ id, name }) => ({ id, name }));
+          rememberTags(id, contextOf(detail.value, 'widget').tags, detail.refreshedAt);
         } catch {
           /* An unreadable saved Group supplies no Tags. */
         }
@@ -130,10 +155,10 @@ export function createWidgetCopy(
       const held = lease();
       if (!held) return;
       const data = snapshot.home;
-      const listed = groupsTime();
+      const listed = groupsRead();
       if (snapshot.groups.loaded && listed !== null)
         savedGroups = {
-          verifiedAt: listed,
+          verifiedAt: listed.refreshedAt,
           rows: snapshot.groups.data.map((g) => ({
             id: g.id,
             name: g.name,
@@ -143,6 +168,8 @@ export function createWidgetCopy(
             currencies: 1 + g.alternateCurrencies.length,
           })),
         };
+      if (snapshot.groups.loaded && listed && trusted('/api/groups', listed.refreshedAt))
+        rememberListTags(listed);
       const ids = new Set([
         ...snapshot.groups.data.map((g) => g.id),
         snapshot.detail.id,
@@ -152,10 +179,8 @@ export function createWidgetCopy(
       for (const id of ids) {
         const read = id ? groupReads(id)?.group : null;
         if (!id || !read || !trusted('/api/groups/' + id, read.refreshedAt)) continue;
-        const context = parseExpenseContext(read.value);
-        tags[id] = context.tags
-          .filter((tag) => !tag.isArchived && !tag.isDeleted)
-          .map(({ id, name }) => ({ id, name }));
+        const context = contextOf(read.value, 'widget');
+        rememberTags(id, context.tags, read.refreshedAt);
         lost.delete(id);
       }
       const id = snapshot.detail.data?.id;

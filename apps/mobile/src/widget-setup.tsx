@@ -112,7 +112,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
     record.copy?.accountId === record.session.accountId;
   const groups = signedIn ? (record.copy?.savedGroups?.rows.filter((g) => !g.archived) ?? []) : [];
   const activeTags =
-    selected && selected !== 'ask' && signedIn ? (record?.copy?.tags?.[selected] ?? []) : [];
+    selected && selected !== 'ask' && signedIn ? (record?.copy?.tags?.[selected]?.rows ?? []) : [];
   const chosenTags = (tagIds ?? activeTags.slice(0, 4).map((tag) => tag.id)).filter((id) =>
     activeTags.some((tag) => tag.id === id),
   );
@@ -158,7 +158,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                   : selected !== 'ask' && (tagIds || activeTags.length)
                     ? {
                         tagIds: chosenTags.filter((id) =>
-                          latest.copy?.tags?.[selected!]?.some((tag) => tag.id === id),
+                          latest.copy?.tags?.[selected!]?.rows.some((tag) => tag.id === id),
                         ),
                       }
                     : {}),

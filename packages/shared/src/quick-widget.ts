@@ -29,10 +29,12 @@ interface QuickShortcuts {
   header: string | null;
   headerSubtitle: string | null;
   headerHeight: number;
+  headerDirection: 'row' | 'column';
   headerIcon: string;
   headerIconSize: number;
   headerTileSize: number;
   headerFontSize: number;
+  headerSubtitleFontSize: number;
   fontSize: number;
   padding: number;
   gap: number;
@@ -50,110 +52,140 @@ function tagShortcuts(
 ): QuickShortcuts | null {
   const tags = (setup.tagIds ?? [])
     .slice(0, 4)
-    .flatMap((id) => copy.tags?.[setup.groupId!]?.find((tag) => tag.id === id) ?? []);
+    .flatMap((id) => copy.tags?.[setup.groupId!]?.rows.find((tag) => tag.id === id) ?? []);
   if (!tags.length || (size.width < 250 && size.height < 180)) return null;
   const padding = 12,
     gap = 6,
     width = size.width - padding * 2;
   const horizontal = size.height < 180;
-  const columns = size.width < 250 ? 2 : 4;
+  const bigHeader = !horizontal && size.width >= 250;
   const text = widgetText(width, fontScale, 1, size.pixelRatio);
-  const minHeight = Math.max(36, text.line(12) + 16);
-  const addWidth = Math.max(44, text.line(18) + 16);
+  const minimumWidth = Math.max(44, text.line(12) + 16);
+  const columnsFit = fitWidgetSections(
+    width,
+    Array.from({ length: size.width < 250 ? 2 : 4 }, (_, i) => ({
+      id: `column-${i}`,
+      rows: 1,
+      rowHeight: minimumWidth,
+      grow: true,
+    })),
+    gap,
+    size.pixelRatio,
+  );
+  const columns = columnsFit.sections.length;
+  if (!horizontal && !columns) return null;
+  // The LargeText drawing trades short-row Tags before shrinking type. Real width
+  // can admit fewer again; each button is a section, so its gaps are fitted too.
+  const cap = [4, 3, 1][widgetTextLevel(fontScale)];
   const across = fitWidgetSections(
     width,
     [
-      { id: 'add', rows: 1, rowHeight: addWidth, required: true },
-      {
-        id: 'tags',
-        rows: tags.length,
-        rowHeight: Math.max(44, text.line(12) + 16) + gap,
-        // The LargeText drawings cap the short row before type shrinks; the fitter
-        // can admit fewer again when the real launcher width is smaller.
-        maxRows: [4, 3, 1][widgetTextLevel(fontScale)],
-        grow: true,
-      },
+      { id: 'add', rows: 1, rowHeight: Math.max(44, text.line(18) + 16), required: true },
+      ...tags
+        .slice(0, cap)
+        .map((_, i) => ({ id: `tag-${i}`, rows: 1, rowHeight: minimumWidth, grow: true })),
     ],
     gap,
     size.pixelRatio,
   );
-  const tagWidth = across.sections.find((section) => section.id === 'tags');
-  const visible = horizontal ? tags.slice(0, tagWidth?.rows ?? 0) : tags;
+  const admitted = across.sections.filter((section) => section.id.startsWith('tag-'));
+  const visible = horizontal ? tags.slice(0, admitted.length) : tags;
   if (!visible.length) return null;
   const rowCount = horizontal ? 1 : Math.ceil(visible.length / columns);
+  const addLabel = horizontal || text.width('＋ Add expense', 14) > width ? '＋' : '＋ Add expense';
   const fitted = fitWidgetLayout(
     { ...size, width, height: size.height - padding * 2 },
     fontScale,
     (text, optional) => ({
       sections: [
         ...(!horizontal
-          ? [{ id: 'add', rows: 1, rowHeight: Math.max(40, text.line(14) + 12), required: true }]
+          ? [
+              {
+                id: 'add',
+                rows: 1,
+                rowHeight: Math.max(40, text.line(addLabel === '＋' ? 18 : 14) + 12),
+                required: true,
+              },
+            ]
           : []),
-        {
-          id: 'tags',
-          rows: rowCount,
-          rowHeight: Math.max(minHeight, text.line(12) + 16),
+        ...Array.from({ length: rowCount }, (_, i) => ({
+          id: `tags-${i}`,
+          rows: 1,
+          rowHeight: Math.max(36, text.line(12) + 16),
           grow: true,
           required: horizontal,
-        },
+        })),
         {
           id: 'header',
           rows: optional && !widgetTextLevel(fontScale) ? 1 : 0,
-          rowHeight: text.line(12) + (!horizontal && size.width >= 250 ? text.line(12) : 0),
-          whenComplete: 'tags',
+          rowHeight: Math.max(
+            bigHeader ? 32 : 14,
+            text.line(bigHeader ? 15 : 12) + (bigHeader ? text.line(12) : 0),
+          ),
+          whenComplete: `tags-${rowCount - 1}`,
         },
       ],
       fontSize: text.font(12),
-      headerFontSize: text.font(12),
+      addFontSize: text.font(addLabel === '＋' ? 18 : 14),
+      headerFontSize: text.font(bigHeader ? 15 : 12),
+      headerSubtitleFontSize: text.font(12),
     }),
     gap,
   );
-  if (!fitted.fits) return null;
-  const list = fitted.sections.find((section) => section.id === 'tags');
-  if (!list?.rows) return null;
+  const tagRows = fitted.sections.filter((section) => section.id.startsWith('tags-'));
+  if (!fitted.fits || !tagRows.length) return null;
+  const fullWidth =
+    columnsFit.sections.reduce((sum, section) => sum + section.height, 0) +
+    Math.max(0, columns - 1) * columnsFit.gap;
   const add: QuickButton = {
     id: 'add',
-    label: horizontal ? '＋' : '＋ Add expense',
+    label: addLabel,
     summary: `Add expense in ${group}`,
     target: { kind: 'expense', groupId: setup.groupId! },
-    width: horizontal ? addWidth : width,
+    width: horizontal ? across.sections[0].height : fullWidth,
     primary: true,
-    fontSize: text.font(horizontal ? 18 : 14),
+    fontSize: fitted.addFontSize,
   };
   const buttons = visible
-    .slice(0, horizontal ? visible.length : list.rows * columns)
-    .map((tag) => ({
+    .slice(0, horizontal ? visible.length : tagRows.length * columns)
+    .map((tag, i) => ({
       id: tag.id,
       label: tag.name,
       summary: `Add expense in ${group} with ${tag.name}`,
       target: { kind: 'expense-tag' as const, groupId: setup.groupId!, tagId: tag.id },
-      width: horizontal
-        ? tagWidth!.height / tagWidth!.rows - gap
-        : (width - (columns - 1) * gap) / columns,
+      width: horizontal ? admitted[i].height : columnsFit.sections[i % columns].height,
       primary: false,
       fontSize: fitted.fontSize,
     }));
   const rows = horizontal
-    ? [{ height: list.height, buttons: [add, ...buttons] }]
+    ? [{ height: tagRows[0].height, buttons: [add, ...buttons] }]
     : [
         { height: fitted.sections.find((section) => section.id === 'add')!.height, buttons: [add] },
-        ...Array.from({ length: list.rows }, (_, i) => ({
-          height: list.rowHeight,
+        ...tagRows.map((row, i) => ({
+          height: row.height,
           buttons: buttons.slice(i * columns, (i + 1) * columns),
         })),
       ];
   const header = fitted.sections.find((section) => section.id === 'header');
   return {
-    header: header ? (horizontal ? `Add expense${SEPARATOR}${group}` : group) : null,
-    headerSubtitle: header && !horizontal && size.width >= 250 ? 'Add an Expense' : null,
+    header: header ? (horizontal ? 'Add expense' : group) : null,
+    headerSubtitle: header
+      ? horizontal
+        ? `${SEPARATOR}${group}`
+        : bigHeader
+          ? 'Add an Expense'
+          : null
+      : null,
+    headerDirection: horizontal ? 'row' : 'column',
     headerHeight: header?.height ?? 0,
-    headerIcon: !horizontal && size.width >= 250 ? theme : 'brand',
-    headerIconSize: !horizontal && size.width >= 250 ? 20 : 14,
-    headerTileSize: !horizontal && size.width >= 250 ? 32 : 14,
+    headerIcon: bigHeader ? theme : 'brand',
+    headerIconSize: bigHeader ? 20 : 14,
+    headerTileSize: bigHeader ? 32 : 14,
     headerFontSize: fitted.headerFontSize,
+    headerSubtitleFontSize: fitted.headerSubtitleFontSize,
     fontSize: fitted.fontSize,
     rows,
-    gap,
+    gap: fitted.gap,
     padding,
   };
 }

@@ -456,7 +456,7 @@ for (const status of [403, 404])
     await c.openGroup(groupId);
     await c.refreshBalances();
     await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());
-    expect(f.copies.at(-1)?.tags?.[groupId]).toEqual([{ id: tagId, name: 'Groceries' }]);
+    expect(f.copies.at(-1)?.tags?.[groupId]?.rows).toEqual([{ id: tagId, name: 'Groceries' }]);
     f.refuse(status);
     await c.openGroup(groupId, false);
     await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined());
@@ -724,7 +724,10 @@ it.each(['sign out', 'account change'] as const)(
     await c.openWidget('home');
     const owner = c.getSnapshot().heldNotification!;
     if (action === 'sign out') await c.signOut();
-    else await c.signIn('sam');
+    else {
+      f.groupTags([{ _id: tagId, name: 'Sam only Tag', createdAt: '2026-11-01T00:00:00Z' }]);
+      await c.signIn('sam');
+    }
     expect(c.getSnapshot().heldNotification).toBeNull();
     expect(c.getSnapshot().notificationOpening.status).toBe('idle');
     c.dismissPendingNotification(owner);
@@ -1210,10 +1213,12 @@ it('keeps active Tags in the Widget copy after a Group read, without reading bal
   const f = fixture(),
     c = f.make();
   await c.signIn('alex');
+  f.groupTags([{ _id: tagId, name: 'Food', createdAt: '2026-11-01T00:00:00Z' }]);
+  vi.spyOn(Date, 'now').mockReturnValue(verified + 1000);
   const before = f.requests.length;
   await c.openExpense(groupId);
   await vi.waitFor(() =>
-    expect(f.copies.at(-1)?.tags?.[groupId]).toEqual([{ id: tagId, name: 'Groceries' }]),
+    expect(f.copies.at(-1)?.tags?.[groupId]?.rows).toEqual([{ id: tagId, name: 'Food' }]),
   );
   expect(f.requests.slice(before).filter((r) => r.path === `/api/groups/${groupId}`)).toHaveLength(
     1,
@@ -1243,14 +1248,14 @@ it.each(['sign out', 'account change', '401'] as const)(
     await c.openExpense(groupId);
     await c.closeExpense();
     await vi.waitFor(() =>
-      expect(f.storedCopy()?.tags?.[groupId]).toEqual([{ id: tagId, name: 'Groceries' }]),
+      expect(f.storedCopy()?.tags?.[groupId]?.rows).toEqual([{ id: tagId, name: 'Groceries' }]),
     );
     f.events.length = 0;
     if (action === '401') {
       f.expire();
       await c.refreshHome();
       await vi.waitFor(() => expect(f.events).toContain('expired'));
-      expect(f.storedCopy()?.tags?.[groupId]).toHaveLength(1);
+      expect(f.storedCopy()?.tags?.[groupId]?.rows).toHaveLength(1);
       expect(f.events).not.toContain('clear');
       const view = quickWidget(
         f.storedCopy(),
@@ -1261,9 +1266,19 @@ it.each(['sign out', 'account change', '401'] as const)(
       expect(JSON.stringify(view)).not.toContain('Groceries');
     } else {
       if (action === 'sign out') await c.signOut();
-      else await c.signIn('sam');
+      else {
+        f.groupTags([{ _id: tagId, name: 'Sam only Tag', createdAt: '2026-11-01T00:00:00Z' }]);
+        await c.signIn('sam');
+      }
       expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
-      expect(f.storedCopy()?.tags?.[groupId]).toBeUndefined();
+      if (action === 'sign out') expect(f.storedCopy()).toBeNull();
+      else {
+        await vi.waitFor(() =>
+          expect(f.storedCopy()?.tags?.[groupId]?.rows).toEqual([
+            { id: tagId, name: 'Sam only Tag' },
+          ]),
+        );
+      }
     }
   },
 );
@@ -1273,10 +1288,41 @@ it('a fresh Group read replaces active Tags, removing archived and deleted Tags'
     c = f.make();
   await c.signIn('alex');
   await c.openGroup(groupId, false);
-  await vi.waitFor(() => expect(f.storedCopy()?.tags?.[groupId]).toHaveLength(1));
+  await vi.waitFor(() => expect(f.storedCopy()?.tags?.[groupId]?.rows).toHaveLength(1));
   f.groupTags([
     { _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: true },
   ]);
   await c.openGroup(groupId, false);
-  await vi.waitFor(() => expect(f.storedCopy()?.tags?.[groupId]).toEqual([]));
+  await vi.waitFor(() => expect(f.storedCopy()?.tags?.[groupId]?.rows).toEqual([]));
+});
+
+it('keeps the active Tags supplied by the existing Groups list before any Group is opened', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() =>
+    expect(f.storedCopy()?.tags?.[groupId]).toEqual({
+      verifiedAt: verified,
+      rows: [{ id: tagId, name: 'Groceries' }],
+    }),
+  );
+  expect(f.requests.filter((request) => request.path === `/api/groups/${groupId}`)).toEqual([]);
+});
+
+it('a newer Groups list retires a Tag without an older open Group read restoring it', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openExpense(groupId);
+  await c.closeExpense();
+  clock.mockReturnValue(verified + 1000);
+  f.groupTags([
+    { _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: true },
+  ]);
+  await c.checkCreatedGroups();
+  await vi.waitFor(() =>
+    expect(f.storedCopy()?.tags?.[groupId]).toEqual({ verifiedAt: verified + 1000, rows: [] }),
+  );
 });

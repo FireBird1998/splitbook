@@ -877,10 +877,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         verifiedAt: verified.verifiedAt,
       };
     },
-    () => {
-      const data = queryClient.getQueryData<{ refreshedAt: number }>(groupsKey(account()));
-      return data?.refreshedAt ?? null;
-    },
+    () => queryClient.getQueryData<Envelope>(groupsKey(account())) ?? null,
     dependencies.savedQueries,
     now,
     (id) => {

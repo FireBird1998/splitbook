@@ -35,7 +35,7 @@ export function drawQuick(
     trip: '<path d="M12 2v20M3 13l9-5 9 5v3l-9-3-9 3zM8 21l4-3 4 3"/>',
     work: '<path d="M3 8h18v13H3zM8 8V3h8v5M3 13h18"/>',
     couple: '<path d="M12 21L3 12C-2 3 8 0 12 6C16 0 26 3 21 12z"/>',
-    general:
+    other:
       '<path d="M3 21v-4a5 5 0 0110 0v4M15 4a4 4 0 010 8M16 16a5 5 0 015 5"/><circle cx="8" cy="7" r="4"/>',
     lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
     archive: '<path d="M4 7h16v13H4zM3 4h18v3H3zM9 11h6"/>',
@@ -85,12 +85,19 @@ export function drawQuick(
                     ? t.mode === 'dark'
                       ? darkMark
                       : lightMark
-                    : `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="${t.brand.main}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[shortcuts.headerIcon]}</g></svg>`
+                    : `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="${t.brand.main}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[shortcuts.headerIcon] ?? paths.other}</g></svg>`
                 }
                 style={{ width: shortcuts.headerIconSize, height: shortcuts.headerIconSize }}
               />
             </FlexWidget>
-            <FlexWidget style={{ flex: 1 }}>
+            <FlexWidget
+              style={{
+                flex: 1,
+                height: 'match_parent',
+                flexDirection: shortcuts.headerDirection,
+                justifyContent: 'center',
+              }}
+            >
               <TextWidget
                 text={shortcuts.header}
                 maxLines={1}
@@ -102,12 +109,17 @@ export function drawQuick(
                 }}
               />
               {shortcuts.headerSubtitle ? (
-                <TextWidget
-                  text={shortcuts.headerSubtitle}
-                  maxLines={1}
-                  truncate="END"
-                  style={{ fontSize: shortcuts.headerFontSize, color: color(t.textSecondary) }}
-                />
+                <FlexWidget style={{ flex: 1 }}>
+                  <TextWidget
+                    text={shortcuts.headerSubtitle}
+                    maxLines={1}
+                    truncate="END"
+                    style={{
+                      fontSize: shortcuts.headerSubtitleFontSize,
+                      color: color(t.textSecondary),
+                    }}
+                  />
+                </FlexWidget>
               ) : null}
             </FlexWidget>
           </FlexWidget>

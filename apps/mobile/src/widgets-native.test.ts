@@ -911,18 +911,33 @@ it('retains Tags for every previously read Group across restarts, while fresh re
     version: 1,
     accountId: 'alex',
     home: null,
-    tags: { maple: [{ id: 'rent', name: 'Rent' }], trip: [{ id: 'taxi', name: 'Taxi' }] },
+    tags: {
+      maple: { verifiedAt: 1, rows: [{ id: 'rent', name: 'Rent' }] },
+      trip: { verifiedAt: 1, rows: [{ id: 'taxi', name: 'Taxi' }] },
+    },
   });
   const restarted = createWidgetsStore('development');
-  await restarted.write({ version: 1, accountId: 'alex', home: null, tags: { maple: [] } });
-  expect((await restarted.read()).copy?.tags).toEqual({
-    maple: [],
-    trip: [{ id: 'taxi', name: 'Taxi' }],
+  await restarted.write({
+    version: 1,
+    accountId: 'alex',
+    home: null,
+    tags: { maple: { verifiedAt: 2, rows: [] } },
   });
+  expect((await restarted.read()).copy?.tags).toEqual({
+    maple: { verifiedAt: 2, rows: [] },
+    trip: { verifiedAt: 1, rows: [{ id: 'taxi', name: 'Taxi' }] },
+  });
+  await restarted.write({
+    version: 1,
+    accountId: 'alex',
+    home: null,
+    tags: { maple: { verifiedAt: 1, rows: [{ id: 'rent', name: 'Rent' }] } },
+  });
+  expect((await restarted.read()).copy?.tags?.maple).toEqual({ verifiedAt: 2, rows: [] });
   await restarted.write({ version: 1, accountId: 'alex', home: null, lostGroupIds: ['trip'] });
-  expect((await restarted.read()).copy?.tags).toEqual({ maple: [] });
+  expect((await restarted.read()).copy?.tags).toEqual({ maple: { verifiedAt: 2, rows: [] } });
   await restarted.setSession({ status: 'expired' });
-  expect((await restarted.read()).copy?.tags).toEqual({ maple: [] });
+  expect((await restarted.read()).copy?.tags).toEqual({ maple: { verifiedAt: 2, rows: [] } });
   await restarted.write({ version: 1, accountId: 'sam', home: null });
   expect((await restarted.read()).copy?.tags).toBeUndefined();
   await restarted.clear();

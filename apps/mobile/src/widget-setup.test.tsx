@@ -376,7 +376,10 @@ it('prefills the first four active Tags, lets a member swap one, and keeps their
     id: `tag${i}`,
     name,
   }));
-  store.read.mockResolvedValue({ copy: { ...copy, tags: { maple: tags } }, session });
+  store.read.mockResolvedValue({
+    copy: { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
+    session,
+  });
   await render('Quick', { kind: 'quick', widgetId: 989, accountId: 'alex', groupId: 'maple' });
   const chips = () => host('Pressable').filter((n) => n.props.accessibilityRole === 'checkbox');
   expect(
@@ -418,10 +421,13 @@ it('keeps remaining chosen Tags after an archive, permits none, and offers none 
     copy: {
       ...copy,
       tags: {
-        maple: [
-          { id: 'bills', name: 'Bills' },
-          { id: 'rent', name: 'Rent' },
-        ],
+        maple: {
+          verifiedAt: 1,
+          rows: [
+            { id: 'bills', name: 'Bills' },
+            { id: 'rent', name: 'Rent' },
+          ],
+        },
       },
     },
     session,

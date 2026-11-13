@@ -114,14 +114,15 @@ export function createWidgetsStore(environment: string) {
           ...copy,
           groups: { ...finalGroups, ...copy.groups },
           months: { ...finalMonths, ...copy.months },
-          tags: {
-            ...Object.fromEntries(
-              Object.entries(previous.tags ?? {}).filter(
-                ([id]) => !copy.lostGroupIds?.includes(id),
-              ),
-            ),
-            ...copy.tags,
-          },
+          tags: Object.fromEntries(
+            [...new Set([...Object.keys(previous.tags ?? {}), ...Object.keys(copy.tags ?? {})])]
+              .filter((id) => !copy.lostGroupIds?.includes(id))
+              .map((id) => {
+                const old = previous.tags?.[id],
+                  fresh = copy.tags?.[id];
+                return [id, old && (!fresh || old.verifiedAt > fresh.verifiedAt) ? old : fresh];
+              }),
+          ),
         };
         // To review has its own verification time. Offline Home restoration must not erase it.
         if (
