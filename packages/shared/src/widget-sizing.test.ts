@@ -1,6 +1,13 @@
 import { expect, it } from 'vitest';
 import { fitWidgetLayout, fitWidgetSections, widgetText } from './widget-sizing';
 
+it('honours a readable-row cap, including a hint alone when no full amount fits the width', () => {
+  for (const cap of [0, 2]) {
+    const result = fitWidgetSections(400, [{ id: 'payments', rows: 8, maxRows: cap, rowHeight: 28, moreHeight: 16 }]);
+    expect(result.sections.map((s) => [s.rows, s.more])).toEqual([[cap, 8 - cap]]);
+  }
+});
+
 it('admits an optional older-copy prompt only after its list fits completely', () => {
   const sections = [
     { id: 'payments', rows: 2, rowHeight: 30, moreHeight: 12 },

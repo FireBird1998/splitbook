@@ -7,6 +7,7 @@ export interface WidgetDimensions {
 export interface WidgetSection {
   id: string;
   rows: number;
+  maxRows?: number;
   /** Minimum dp for one row, including scaled text and fixed padding. */
   rowHeight: number;
   inset?: number;
@@ -30,6 +31,7 @@ export function fitWidgetSections(
   gap = up(gap);
   sections = sections.map((s) => ({ ...s,
     rows: Math.min(Number.MAX_SAFE_INTEGER, Math.floor(nonNegative(s.rows))),
+    maxRows: Math.min(Math.floor(nonNegative(s.rows)), s.maxRows === undefined ? Number.MAX_SAFE_INTEGER : Math.floor(nonNegative(s.maxRows))),
     rowHeight: Math.max(1, up(s.rowHeight)),
     inset: up(s.inset ?? 0), moreHeight: up(s.moreHeight ?? 0),
   }));
@@ -52,7 +54,8 @@ export function fitWidgetSections(
     if (section.required || !section.rows || section.whenComplete) continue;
     visible[i] = true;
     // All rows can be cheaper than one row plus a tall hint. Do not reject that fit.
-    if (tryRows(i, 1) || tryRows(i, section.rows) || (section.moreHeight && tryRows(i, 0))) continue;
+    const cap = section.maxRows ?? section.rows;
+    if ((cap > 0 && (tryRows(i, 1) || tryRows(i, cap))) || (section.moreHeight && tryRows(i, 0))) continue;
     visible[i] = false;
     break;
   }
@@ -60,8 +63,8 @@ export function fitWidgetSections(
   while (added) {
     added = false;
     for (const [i, section] of sections.entries()) {
-      if (section.required || section.whenComplete || !visible[i] || chosen[i] >= section.rows) continue;
-      if (tryRows(i, chosen[i] + 1) || tryRows(i, section.rows)) added = true;
+      if (section.required || section.whenComplete || !visible[i] || chosen[i] >= (section.maxRows ?? section.rows)) continue;
+      if (tryRows(i, chosen[i] + 1) || tryRows(i, section.maxRows ?? section.rows)) added = true;
     }
   }
   for (const [i, section] of sections.entries()) {
