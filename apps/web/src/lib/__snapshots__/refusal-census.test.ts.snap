@@ -1046,6 +1046,47 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
 ]
 `;
 
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/header/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Invalid id","status":400,"code":"INVALID_ID"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "INVALID_ID",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Invalid JSON body","status":400,"code":"INVALID_JSON"}",
+      "hasCode": true,
+      "status": 400,
+    },
+    "method": "PATCH",
+    "thrown": {
+      "message": "INVALID_JSON",
+      "name": "Error",
+    },
+  },
+]
+`;
+
 exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/groups/[id]/insights/route.ts through its exported handlers 1`] = `
 [
   {

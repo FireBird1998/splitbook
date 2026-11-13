@@ -287,12 +287,12 @@
     {
       "origin": "group-currencies.ts",
       "code": "INVALID_GROUP_CURRENCIES",
-      "message": "DEM isn’t a supported currency."
+      "message": "DEM isn\u2019t a supported currency."
     },
     {
       "origin": "group-currencies.ts",
       "code": "INVALID_GROUP_CURRENCIES",
-      "message": "INR is the main currency, so it can’t also be an extra currency."
+      "message": "INR is the main currency, so it can\u2019t also be an extra currency."
     },
     {
       "origin": "group-currencies.ts",
@@ -307,12 +307,12 @@
     {
       "origin": "ledger-currency.ts",
       "code": "CURRENCY_MISMATCH",
-      "message": "Add EUR to the Group’s currencies to restore it."
+      "message": "Add EUR to the Group\u2019s currencies to restore it."
     },
     {
       "origin": "expense.service.ts",
       "code": "UNSUPPORTED_CURRENCY",
-      "message": "This Expense is in DEM, which Splitbook no longer supports. It can’t be changed, only deleted."
+      "message": "This Expense is in DEM, which Splitbook no longer supports. It can\u2019t be changed, only deleted."
     }
   ],
   "routeCodes": {
@@ -425,7 +425,8 @@
     "../app/api/user/balances/route.ts": ["FORBIDDEN"],
     "../app/api/user/profile/route.ts": ["FORBIDDEN"],
     "../app/api/user/spending/route.ts": ["FORBIDDEN", "INVALID_MONTHS", "INVALID_TIME_ZONE"],
-    "../app/api/user/to-review/route.ts": ["FORBIDDEN"]
+    "../app/api/user/to-review/route.ts": ["FORBIDDEN"],
+    "../app/api/groups/[id]/header/route.ts": ["FORBIDDEN", "INVALID_ID", "INVALID_JSON"]
   },
   "unreachableDraftCodes": [
     "ACTIVITY_BACKLOG_FULL",
