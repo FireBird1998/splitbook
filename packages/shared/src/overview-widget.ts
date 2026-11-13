@@ -83,7 +83,7 @@ export function overviewWidget(
         oweOverflow = overflow(allOwe);
       const columns =
         (wide &&
-          (hidden ||
+          (!!hidden ||
             [...owed, ...owe].every(
               (amount) => text.width(amount, 10, true) <= (width - 8) / 2 - 20,
             ))) ||
