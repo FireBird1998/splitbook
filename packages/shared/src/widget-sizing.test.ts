@@ -1,6 +1,16 @@
 import { expect, it } from 'vitest';
 import { fitWidgetSections } from './widget-sizing';
 
+it('uses the first content row for spare height when no section asks to grow, not the footer', () => {
+  const result = fitWidgetSections(200, [
+    { id: 'balance', rows: 1, rowHeight: 40, required: true },
+    { id: 'action', rows: 1, rowHeight: 32, required: true },
+  ]);
+  expect(result.sections.map((s) => [s.id, s.height, s.rowHeight])).toEqual([
+    ['balance', 160, 160], ['action', 32, 32],
+  ]);
+});
+
 it('reports the required overflow instead of claiming that a below-minimum layout fits', () => {
   const result = fitWidgetSections(60, [
     { id: 'name', rows: 1, rowHeight: 24, required: true },

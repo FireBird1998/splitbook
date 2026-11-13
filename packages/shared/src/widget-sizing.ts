@@ -49,8 +49,11 @@ export function fitWidgetSections(height: number, sections: readonly WidgetSecti
     }
   }
   const spare = Math.max(0, height - used());
+  const first = chosen.findIndex((rows) => rows > 0);
+  const grows = (index: number) =>
+    sections.some((s, i) => s.grow && chosen[i]) ? !!sections[index].grow : index === first;
   const growing = sections.reduce(
-    (sum, section, index) => sum + (section.grow ? chosen[index] : 0),
+    (sum, section, index) => sum + (grows(index) ? chosen[index] : 0),
     0,
   );
   const last = chosen.reduce((last, rows, index) => (rows > 0 ? index : last), -1);
@@ -68,13 +71,13 @@ export function fitWidgetSections(height: number, sections: readonly WidgetSecti
               height:
                 cost(index) +
                 (growing
-                  ? section.grow
+                  ? grows(index)
                     ? (spare * chosen[index]) / growing
                     : 0
                   : index === last
                     ? spare
                     : 0),
-              rowHeight: section.rowHeight + (section.grow && growing ? spare / growing : 0),
+              rowHeight: section.rowHeight + (grows(index) && growing ? spare / growing : 0),
             },
           ]
         : [],
