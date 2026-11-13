@@ -111,12 +111,17 @@ it('enables the midnight job and clock/zone/boot receiver with the widget switch
 it('declares boot reception only in widgets-on builds', () => {
   for (const enabled of ['true', 'false', undefined]) {
     const manifest = configuration(enabled);
-    const permissions = (manifest['uses-permission'] ?? []).map(
-      (p: { $: Record<string, string> }) => p.$['android:name'],
+    const permission = (manifest['uses-permission'] ?? []).find(
+      (p: { $: Record<string, string> }) =>
+        p.$['android:name'] === 'android.permission.RECEIVE_BOOT_COMPLETED',
     );
-    expect(permissions.includes('android.permission.RECEIVE_BOOT_COMPLETED')).toBe(
-      enabled === 'true',
-    );
+    if (enabled === 'true') {
+      expect(permission?.$['tools:node']).toBeUndefined();
+      expect(permission?.$['android:name']).toBe('android.permission.RECEIVE_BOOT_COMPLETED');
+    } else {
+      expect(permission?.$['tools:node']).toBe('remove');
+      expect(manifest.$['xmlns:tools']).toBe('http://schemas.android.com/tools');
+    }
   }
 }, 30_000);
 

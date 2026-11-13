@@ -121,16 +121,19 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
       ],
     });
     const manifest = mod.modResults.manifest;
-    manifest['uses-permission'] ??= [];
-    if (
-      enabled &&
-      !manifest['uses-permission'].some(
-        (item) => item.$['android:name'] === 'android.permission.RECEIVE_BOOT_COMPLETED',
-      )
-    )
-      manifest['uses-permission'].push({
-        $: { 'android:name': 'android.permission.RECEIVE_BOOT_COMPLETED' },
-      });
+    const bootPermission = 'android.permission.RECEIVE_BOOT_COMPLETED';
+    // Expo Notifications also declares this in its library manifest. The off build
+    // needs a merger removal marker so that permission follows the widget switch.
+    manifest['uses-permission'] = (manifest['uses-permission'] ?? []).filter(
+      (item) => item.$['android:name'] !== bootPermission,
+    );
+    manifest['uses-permission'].push({
+      $: {
+        'android:name': bootPermission,
+        ...(!enabled ? { 'tools:node': 'remove' } : {}),
+      },
+    });
+    if (!enabled) manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
     app.activity = (app.activity ?? []).filter(
       (item) =>
         ![
