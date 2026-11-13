@@ -14,11 +14,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useSWRConfig } from 'swr';
 import { expenseDraftsKey } from '@splitbook/shared/query-keys';
-import {
-  summarizeReviewRun,
-  type ReviewItemModel,
-  type ReviewRunOutcome,
-} from '@splitbook/shared/to-review';
+import type { ReviewItemModel, ReviewRunOutcome } from '@splitbook/shared/to-review';
 import {
   applyQuickFix,
   bulkPayerItems,
@@ -46,12 +42,12 @@ import { ReviewFacts } from './ReviewDetails';
 import ToReviewPanel, { type ReviewPanelHandle } from './ToReviewPanel';
 import ReviewRow from './ReviewRow';
 import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
+import { closeReviewRun, settleReviewRun, startReviewRun, type WebReviewRun } from './review-run';
 
 type Confirmation = {
   reviews: DraftReview[];
   totals: Array<{ currency: string; formatted: string }>;
 };
-type Run = { ids: string[]; index: number; outcomes: ReviewRunOutcome[] };
 export default function ToReviewPage({
   accountId,
   groupId,
@@ -71,7 +67,7 @@ export default function ToReviewPage({
   const [outcomes, setOutcomes] = useState<DraftSaveOutcome[]>([]);
   const [outcomeNames, setOutcomeNames] = useState<Record<string, string>>({});
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
-  const [run, setRun] = useState<Run | null>(null);
+  const [run, setRun] = useState<WebReviewRun | null>(null);
   const [summary, setSummary] = useState('');
   const [online, setOnline] = useState(true);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -137,6 +133,7 @@ export default function ToReviewPage({
   }, []);
   const model = read.status === 'ready' ? read.value : null;
   const items = model?.items ?? [];
+  const presentIds = items.map(({ id }) => id);
   // The Group's currency as the read names it, which the model already applied (#512).
   const currency = model?.groups[0]?.currency;
   useEffect(() => {
@@ -297,18 +294,8 @@ export default function ToReviewPage({
     });
   }
   function closeOpened() {
-    setOpened(null);
-    if (run) {
-      const all = [
-        ...run.outcomes,
-        ...run.ids
-          .slice(run.index)
-          .filter((id) => items.some((item) => item.id === id))
-          .map((id) => ({ id, status: 'skipped' as const })),
-      ];
-      setSummary(`Done for now${SEPARATOR}${summarizeReviewRun(all).label}`);
-      setRun(null);
-    }
+    if (run) showRun(closeReviewRun(run, presentIds));
+    else setOpened(null);
   }
   /** List shortcuts, off while typing, in a menu or dialog, or with a modifier held. */
   function onListKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -365,19 +352,16 @@ export default function ToReviewPage({
       if (status === 'saved' || status === 'deleted') setOpened(null);
       return;
     }
-    const nextOutcomes = [...run.outcomes.filter((outcome) => outcome.id !== id), { id, status }];
-    let next = run.index + 1;
-    // The run keeps its original order, but another device may finish an upcoming item.
-    // Omit unavailable items from our outcomes rather than strand the panel or claim a save.
-    while (next < run.ids.length && !items.some((item) => item.id === run.ids[next])) next++;
-    if (next >= run.ids.length) {
-      setSummary(`Done for now${SEPARATOR}${summarizeReviewRun(nextOutcomes).label}`);
+    showRun(settleReviewRun(run, [{ id, status }], presentIds));
+  }
+  function showRun(next: WebReviewRun) {
+    if (next.currentId === null) {
+      setSummary(`Done for now${SEPARATOR}${next.summary.label}`);
       setRun(null);
       setOpened(null);
     } else {
-      setRun({ ...run, index: next, outcomes: nextOutcomes });
-      const following = items.find((item) => item.id === run.ids[next]);
-      setOpened(following ?? null);
+      setRun(next);
+      setOpened(items.find((item) => item.id === next.currentId) ?? null);
     }
   }
   async function action(work: () => Promise<void>) {
@@ -435,29 +419,12 @@ export default function ToReviewPage({
     finishSaved(results);
   }
   function finishSaved(results: DraftSaveOutcome[]) {
-    const saved = new Set(
-      results.filter((outcome) => outcome.status === 'saved').map(({ id }) => id),
-    );
-    if (run) {
-      const nextOutcomes = [
-        ...run.outcomes.filter((outcome) => !saved.has(outcome.id)),
-        ...run.ids.filter((id) => saved.has(id)).map((id) => ({ id, status: 'saved' as const })),
-      ];
-      let next = run.index;
-      while (
-        next < run.ids.length &&
-        (saved.has(run.ids[next]) || !items.some((item) => item.id === run.ids[next]))
-      )
-        next++;
-      if (next >= run.ids.length) {
-        setSummary(`Done for now${SEPARATOR}${summarizeReviewRun(nextOutcomes).label}`);
-        setRun(null);
-        setOpened(null);
-      } else {
-        setRun({ ...run, index: next, outcomes: nextOutcomes });
-        setOpened(items.find((item) => item.id === run.ids[next]) ?? null);
-      }
-    } else if (selected && saved.has(selected.id)) setOpened(null);
+    if (run) showRun(settleReviewRun(run, results, presentIds));
+    else if (
+      selected &&
+      results.some((outcome) => outcome.id === selected.id && outcome.status === 'saved')
+    )
+      setOpened(null);
   }
   async function saveOne(
     draft: PersistedExpenseDraft,
@@ -633,7 +600,7 @@ export default function ToReviewPage({
                   disabled={busy || pending || !available || !!selected || !!run}
                   onClick={(event) => {
                     openedFrom.current = event.currentTarget;
-                    setRun({ ids: items.map((item) => item.id), index: 0, outcomes: [] });
+                    setRun(startReviewRun(items.map((item) => item.id)));
                     setOpened(items[0]);
                     setSummary('');
                   }}
