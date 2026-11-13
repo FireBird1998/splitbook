@@ -66,3 +66,35 @@ it.each([
       expect(labels(tree)).not.toContain('₹2,400.00');
   },
 );
+function minimumHeight(tree: WidgetTree): number {
+  const p = tree.props as {
+    text?: string;
+    fontSize?: number;
+    orientation?: string;
+    separator?: { size: number };
+    padding?: { top: number; bottom: number };
+  };
+  const heights = (tree.children ?? []).map(minimumHeight);
+  return (
+    (p.text
+      ? Math.ceil((p.fontSize ?? 12) * 1.3)
+      : p.orientation === 'HORIZONTAL'
+        ? Math.max(0, ...heights)
+        : heights.reduce((sum, h) => sum + h, 0) +
+          Math.max(0, heights.length - 1) * (p.separator?.size ?? 0)) +
+    (p.padding?.top ?? 0) +
+    (p.padding?.bottom ?? 0)
+  );
+}
+it('keeps wrapped message lines in the measured small message block', () => {
+  vi.stubGlobal('__DEV__', false);
+  const view = overviewWidget(
+    { ...copy, accountId: 'sam' },
+    { kind: 'balances', widgetId: 7 },
+    { width: 172, height: 104 },
+    auth,
+    now,
+  );
+  const tree = buildWidgetTree(drawOverview(view, lightTokens));
+  expect(minimumHeight(tree.children![0])).toBeLessThanOrEqual(view.layout.sections[0].height);
+});

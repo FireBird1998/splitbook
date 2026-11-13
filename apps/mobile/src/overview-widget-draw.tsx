@@ -135,7 +135,9 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
         ) : null}
         <FlexWidget style={{ flex: 1 }}>{lines(l.titleLines, t.text, f.title, true)}</FlexWidget>
       </FlexWidget>
-      {lines(l.descriptionLines, t.textSecondary, f.body)}
+      {l.descriptionLines.length ? (
+        <FlexWidget>{lines(l.descriptionLines, t.textSecondary, f.body)}</FlexWidget>
+      ) : null}
     </FlexWidget>
   );
   const footer = (
