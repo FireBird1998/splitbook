@@ -90,3 +90,29 @@ it('has no trip days without both dates', () => {
   expect(todayTripDay({ ...trip, endDate: null }, '2026-11-15')).toBeNull();
   expect(headerCard({ ...trip, startDate: null }, '2026-11-15').trip?.days).toEqual([]);
 });
+
+it.each([
+  ['2026-11-13', null],
+  ['2026-11-14', 1],
+  ['2026-11-15', 2],
+  ['2026-11-16', 3],
+  ['2026-11-17', null],
+] as const)('orders reversed stored Trip dates before highlighting %s', (today, expected) => {
+  const reversed = { ...trip, startDate: trip.endDate, endDate: trip.startDate };
+  expect(todayTripDay(reversed, today)).toBe(expected);
+  expect(headerCard(reversed, '2026-11-15').trip).toMatchObject({
+    start: '2026-11-14',
+    end: '2026-11-16',
+    days: ['2026-11-14', '2026-11-15', '2026-11-16'],
+    today: 2,
+  });
+});
+it.each([
+  ['2026-04-30', 120],
+  ['2026-05-01', 0],
+  ['2036-01-01', 0],
+] as const)('caps Trip day squares for a Trip ending %s', (endDate, length) => {
+  const card = headerCard({ ...trip, startDate: '2026-01-01', endDate }, '2026-01-05');
+  expect(card.trip?.days).toHaveLength(length);
+  expect(card.trip?.today).toBe(5);
+});

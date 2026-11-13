@@ -118,6 +118,7 @@ it('uses only answers and codes recorded by the corrected census', () => {
     'INVALID_TIME_ZONE',
     'QUERY_TOO_LONG',
     'NOT_A_TRIP',
+    'HEADER_SCENES_DISABLED',
   ])
     recordedCodes.add(code);
   expect([...recordedCodes].sort()).toEqual(Object.keys(refusalVocabulary).sort());

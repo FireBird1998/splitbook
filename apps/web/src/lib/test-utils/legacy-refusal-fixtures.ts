@@ -203,6 +203,7 @@ export function currentCause(
     // The completed migration raises these original central refusals as typed values.
     const central = [
       'FORBIDDEN',
+      'HEADER_SCENES_DISABLED',
       'INVALID_IDEMPOTENCY_KEY',
       'IDEMPOTENCY_CONFLICT',
       'STALE_REVISION',

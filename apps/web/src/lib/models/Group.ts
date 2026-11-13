@@ -1,4 +1,3 @@
-import { HEADER_SCENE_IDS, HEADER_TIMES, type GroupHeader } from '@splitbook/shared/group-header';
 import mongoose, { Schema, Model } from 'mongoose';
 import { CreationRequestSchema, type ICreationRequest } from '@/lib/financial-write';
 import { MAX_EXTRA_CURRENCIES } from '@splitbook/shared/group-currencies';
@@ -34,7 +33,7 @@ export interface IGroupDocument {
   defaultCurrency: string;
   currencyLocked: boolean;
   alternateCurrencies: string[];
-  header?: GroupHeader;
+  header?: unknown;
   category: 'trip' | 'home' | 'couple' | 'work' | 'other';
   startDate?: Date | null;
   endDate?: Date | null;
@@ -101,17 +100,9 @@ const GroupSchema = new Schema<IGroupDocument>(
       enum: ['trip', 'home', 'couple', 'work', 'other'],
       default: 'other',
     },
-    header: {
-      type: new Schema(
-        {
-          style: { type: String, enum: ['classic', 'scene'], required: true },
-          scene: { type: String, enum: HEADER_SCENE_IDS, required: true },
-          time: { type: String, enum: HEADER_TIMES, required: true },
-        },
-        { _id: false },
-      ),
-      default: undefined,
-    },
+    // The write boundary validates Header scenes. Preserve unfamiliar stored values when
+    // another field is saved; older clients read them through the defensive projection.
+    header: { type: Schema.Types.Mixed, default: undefined },
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
     assistantRule: { type: String, enum: ASSISTANT_RULES, default: 'allowed' },

@@ -8,6 +8,7 @@ import { activityService } from './activity.service';
 import { headerScenesEnabled } from '@/lib/header-scenes';
 
 export async function saveGroupHeader(groupId: string, header: GroupHeader, actorId: string) {
+  if (!headerScenesEnabled()) throw new Refusal('HEADER_SCENES_DISABLED');
   await connectDB();
   await withGroupMutation(groupId, async (session) => {
     const group = await Group.findOne({ _id: groupId, 'members.user': actorId })

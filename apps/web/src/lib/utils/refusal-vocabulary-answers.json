@@ -382,6 +382,13 @@
     "body": "{\"error\":\"Drafts are not enabled\",\"status\":404,\"code\":\"DRAFTS_DISABLED\"}"
   },
   {
+    "code": "HEADER_SCENES_DISABLED",
+    "variant": "default",
+    "data": {},
+    "status": 404,
+    "body": "{\"error\":\"Header scenes are not enabled\",\"status\":404,\"code\":\"HEADER_SCENES_DISABLED\"}"
+  },
+  {
     "code": "REQUEST_TOO_LARGE",
     "variant": "default",
     "data": {},

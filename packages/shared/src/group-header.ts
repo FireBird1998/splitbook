@@ -3,7 +3,13 @@ import { z } from 'zod';
 import { getGroupTheme } from './group-themes';
 import { groupCurrencies, type GroupCurrencyList } from './group-currencies';
 import { deriveTripCodes } from './trip-codes';
-import { dayCount, daysBetween } from './trip-summary';
+import {
+  dayCount,
+  daysBetween,
+  orderedTripDays,
+  tripDayNumber,
+  TRIP_SUMMARY_MAX_DAYS,
+} from './trip-summary';
 import { expenseDay } from './expense-day';
 import type { GroupCategory } from './types';
 
@@ -27,9 +33,15 @@ export const DEFAULT_GROUP_HEADER: Readonly<GroupHeader> = {
   time: 'auto',
 };
 
+/** A newer server or an old malformed row must never make a whole Group unreadable. */
+export function readStoredGroupHeader(value: unknown): GroupHeader | undefined {
+  const parsed = groupHeaderSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
 /** Off changes only the displayed style; the remembered scene and time survive. */
-export function readGroupHeader(header?: GroupHeader | null, enabled = true): GroupHeader {
-  const value = header ?? DEFAULT_GROUP_HEADER;
+export function readGroupHeader(header?: unknown, enabled = true): GroupHeader {
+  const value = readStoredGroupHeader(header) ?? DEFAULT_GROUP_HEADER;
   return { ...value, style: enabled ? value.style : 'classic' };
 }
 
@@ -47,12 +59,18 @@ export function headerTimeOfDay(
 
 type TripDates = { startDate?: Date | string | null; endDate?: Date | string | null };
 
+function headerTripDays(dates: TripDates) {
+  return orderedTripDays(
+    dates.startDate ? expenseDay(dates.startDate) : null,
+    dates.endDate ? expenseDay(dates.endDate) : null,
+  );
+}
+
 /** `today` is the viewer's local calendar day; stored Trip dates remain UTC calendar days. */
 export function todayTripDay(dates: TripDates, today: string): number | null {
-  if (!dates.startDate || !dates.endDate) return null;
-  const start = expenseDay(dates.startDate),
-    end = expenseDay(dates.endDate);
-  return today < start || today > end ? null : dayCount(start, today);
+  const { start, end } = headerTripDays(dates);
+  if (!start || !end || today > end) return null;
+  return tripDayNumber(today, start);
 }
 
 /** Card facts shared by the two renderers. Only a date-bounded Theme gets Trip facts. */
@@ -66,8 +84,7 @@ export function headerCard(
   today: string,
 ) {
   const theme = getGroupTheme(group.category);
-  const start = group.startDate ? expenseDay(group.startDate) : null;
-  const end = group.endDate ? expenseDay(group.endDate) : null;
+  const { start, end } = headerTripDays(group);
   return {
     name: group.name,
     theme: theme.label,
@@ -79,7 +96,10 @@ export function headerCard(
             route: deriveTripCodes(group.name),
             start,
             end,
-            days: start && end ? daysBetween(start, end) : [],
+            days:
+              start && end && dayCount(start, end) <= TRIP_SUMMARY_MAX_DAYS
+                ? daysBetween(start, end)
+                : [],
             today: todayTripDay(group, today),
           }
         : null,

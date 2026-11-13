@@ -43,7 +43,7 @@ import {
  * (#719), so reading or saving it never fails on old data.
  */
 function withReadableCurrencies<
-  T extends { defaultCurrency: string; alternateCurrencies?: unknown; header?: GroupHeader },
+  T extends { defaultCurrency: string; alternateCurrencies?: unknown; header?: unknown },
 >(group: T): T & { alternateCurrencies: string[]; header: GroupHeader } {
   return {
     ...group,
@@ -486,7 +486,7 @@ export class GroupService {
       },
     });
 
-    return group.populate('members.user', PERSON_FIELDS);
+    return this.readAfterUpdate(await group.populate('members.user', PERSON_FIELDS), actorId);
   }
 
   /**

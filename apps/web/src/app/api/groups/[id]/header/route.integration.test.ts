@@ -1,5 +1,7 @@
 /** Real sessions and replica-set Group writes, observed through HTTP and Activity. */
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import Group from '@/lib/models/Group';
+import { Types } from 'mongoose';
 import { DEMO_PERSONA_IDS } from '@/lib/demo-personas';
 import { groupService } from '@/lib/services/group.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
@@ -21,6 +23,8 @@ const db = integrationTestDb('group-header');
 let header: typeof import('./route');
 let group: typeof import('../route');
 let activity: typeof import('../activity/route');
+let groups: typeof import('../../route');
+let member: typeof import('../members/[userId]/route');
 let id: string;
 const scene = { style: 'scene', scene: 'sakura', time: 'sunset' } as const;
 beforeAll(async () => {
@@ -28,6 +32,8 @@ beforeAll(async () => {
   header = await import('./route');
   group = await import('../route');
   activity = await import('../activity/route');
+  groups = await import('../../route');
+  member = await import('../members/[userId]/route');
 });
 beforeEach(async () => {
   vi.stubEnv('NEXT_PUBLIC_HEADER_SCENES_ENABLED', 'true');
@@ -175,4 +181,112 @@ it('requires authentication and refuses malformed ids and JSON', async () => {
 it('refuses a removed member even when their session still works', async () => {
   await groupService.removeMember(id, DEMO_PERSONA_IDS.sam, DEMO_PERSONA_IDS.alex);
   expect((await save()).status).toBe(403);
+});
+
+const list = async () =>
+  callRoute(groups.GET, { method: 'GET', path: '/api/groups', cookie: await signIn('sam') });
+const stored = () => Group.collection.findOne({ _id: new Types.ObjectId(id) });
+it('refuses a header write while the switch is off, without storing a setting or Activity', async () => {
+  vi.stubEnv('NEXT_PUBLIC_HEADER_SCENES_ENABLED', 'false');
+  const answer = await save();
+  expect(answer).toEqual({
+    status: 404,
+    body: { error: 'Header scenes are not enabled', status: 404, code: 'HEADER_SCENES_DISABLED' },
+  });
+  expect((await stored())?.header).toBeUndefined();
+  expect(await events()).toHaveLength(0);
+  vi.stubEnv('NEXT_PUBLIC_HEADER_SCENES_ENABLED', 'true');
+  expect((await read()).body.data.header).toEqual({
+    style: 'classic',
+    scene: 'beach',
+    time: 'auto',
+  });
+});
+it('keeps an earlier setting while off, masks detail/list reads and refuses a replacement', async () => {
+  expect((await save()).body.data.header).toEqual(scene);
+  vi.stubEnv('NEXT_PUBLIC_HEADER_SCENES_ENABLED', 'false');
+  expect((await save({ ...scene, scene: 'beach' })).body.code).toBe('HEADER_SCENES_DISABLED');
+  expect((await read()).body.data.header).toEqual({ ...scene, style: 'classic' });
+  expect((await list()).body.data.find((row: { _id: string }) => row._id === id).header).toEqual({
+    ...scene,
+    style: 'classic',
+  });
+  expect((await stored())?.header).toEqual(scene);
+  expect(await events()).toHaveLength(1);
+  vi.stubEnv('NEXT_PUBLIC_HEADER_SCENES_ENABLED', 'true');
+  expect((await read()).body.data.header).toEqual(scene);
+});
+
+it.each([
+  { style: 'scene', scene: 'forest', time: 'dawn', version: 2 },
+  { style: 'scene' },
+  'future-header-format',
+])(
+  'lets an admin edit a Group without validating or rewriting an untouched legacy header: %j',
+  async (legacyHeader) => {
+    // Seed a row written by a newer server or an older malformed import.
+    await Group.collection.updateOne(
+      { _id: new Types.ObjectId(id) },
+      { $set: { header: legacyHeader } },
+    );
+    const answer = await callRoute(group.PATCH, {
+      method: 'PATCH',
+      path: `/api/groups/${id}`,
+      params: { id },
+      cookie: await signIn('alex'),
+      body: { name: 'Renamed Group' },
+    });
+    expect(answer.status).toBe(200);
+    expect(answer.body.data).toMatchObject({
+      name: 'Renamed Group',
+      header: { style: 'classic', scene: 'beach', time: 'auto' },
+    });
+    expect((await read()).body.data.name).toBe('Renamed Group');
+    expect((await stored())?.header).toEqual(legacyHeader);
+  },
+);
+it('projects the role-change response while Header scenes are off', async () => {
+  await save();
+  vi.stubEnv('NEXT_PUBLIC_HEADER_SCENES_ENABLED', 'false');
+  const answer = await callRoute(member.PATCH, {
+    method: 'PATCH',
+    path: `/api/groups/${id}/members/${DEMO_PERSONA_IDS.sam}`,
+    params: { id, userId: DEMO_PERSONA_IDS.sam },
+    cookie: await signIn('alex'),
+    body: { role: 'admin' },
+  });
+  expect(answer.status).toBe(200);
+  expect(answer.body.data.header).toEqual({ ...scene, style: 'classic' });
+  expect(
+    answer.body.data.members.find(
+      (row: { user: { _id: string } }) => row.user._id === DEMO_PERSONA_IDS.sam,
+    ).role,
+  ).toBe('admin');
+  expect((await stored())?.header).toEqual(scene);
+});
+it('allows a member to change an archived Group’s header', async () => {
+  const archived = await callRoute(group.DELETE, {
+    method: 'DELETE',
+    path: `/api/groups/${id}`,
+    params: { id },
+    cookie: await signIn('alex'),
+  });
+  expect(archived.status).toBe(200);
+  expect((await save()).body.data.header).toEqual(scene);
+  expect((await read()).body.data).toMatchObject({
+    isArchived: true,
+    header: scene,
+    currencyLocked: false,
+  });
+  expect(
+    (await events()).filter(
+      (event) => event.metadata?.changes && 'header' in event.metadata.changes,
+    ),
+  ).toHaveLength(1);
+});
+it('treats saving the default on a Group with no setting as a no-op', async () => {
+  const header = { style: 'classic', scene: 'beach', time: 'auto' };
+  expect(await save(header)).toMatchObject({ status: 200, body: { data: { header } } });
+  expect((await stored())?.header).toBeUndefined();
+  expect(await events()).toHaveLength(0);
 });

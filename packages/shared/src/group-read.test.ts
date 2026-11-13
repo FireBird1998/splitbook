@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { parseGroupListResponse } from './group-read';
+import { readGroupHeader } from './group-header';
+import { parseGroupListResponse, parseGroupResponse } from './group-read';
 
 const person = { _id: 'a00000000000000000000001', name: 'Alex', email: 'alex@example.test' };
 const timestamp = '2026-09-28T10:00:00.000Z';
@@ -163,4 +164,28 @@ it('accepts old Saved copy rows and keeps a new header through wire round trips'
     parseGroupListResponse(JSON.parse(JSON.stringify({ status: 200, data: [data] })))[0];
   expect(read(group).header).toBeUndefined();
   expect(read({ ...group, header }).header).toEqual(header);
+});
+
+it.each([
+  { style: 'scene', scene: 'forest', time: 'day' },
+  { style: 'scene', scene: 'sakura', time: 'dawn' },
+  { style: 'panorama', scene: 'sakura', time: 'day' },
+  { style: 'scene', scene: 'sakura' },
+  {},
+  null,
+  'sakura',
+  [],
+  42,
+])('keeps a Group and its list readable when its header is unfamiliar: %j', (header) => {
+  const data = { ...group, header };
+  const single = parseGroupResponse({ status: 200, data });
+  const list = parseGroupListResponse({ status: 200, data: [data, group] });
+  expect(single.header).toBeUndefined();
+  expect(list[0].header).toBeUndefined();
+  expect(list.map(({ name }) => name)).toEqual(['Household', 'Household']);
+  expect(readGroupHeader(single.header)).toEqual({
+    style: 'classic',
+    scene: 'beach',
+    time: 'auto',
+  });
 });

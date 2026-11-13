@@ -426,7 +426,12 @@
     "../app/api/user/profile/route.ts": ["FORBIDDEN"],
     "../app/api/user/spending/route.ts": ["FORBIDDEN", "INVALID_MONTHS", "INVALID_TIME_ZONE"],
     "../app/api/user/to-review/route.ts": ["FORBIDDEN"],
-    "../app/api/groups/[id]/header/route.ts": ["FORBIDDEN", "INVALID_ID", "INVALID_JSON"]
+    "../app/api/groups/[id]/header/route.ts": [
+      "FORBIDDEN",
+      "INVALID_ID",
+      "INVALID_JSON",
+      "HEADER_SCENES_DISABLED"
+    ]
   },
   "unreachableDraftCodes": [
     "ACTIVITY_BACKLOG_FULL",
