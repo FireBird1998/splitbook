@@ -46,7 +46,7 @@ export function drawGroup(
       truncate="END"
       style={{
         color: color(ink),
-        fontSize: fontSize * l.textFactor,
+        fontSize: Math.max(Math.min(fontSize, 10), fontSize * l.textFactor),
         fontWeight: bold ? 'bold' : 'normal',
         ...(mono ? { fontFamily: 'monospace' } : {}),
       }}
@@ -89,7 +89,7 @@ export function drawGroup(
           <FlexWidget style={l.stackHeader ? { width: 'match_parent' } : { flex: 1 }}>
             {lines(l.nameLines, t.text, l.nameFontSize / l.textFactor, true)}
           </FlexWidget>
-          {view.final ? (
+          {l.showArchivedTag ? (
             <FlexWidget
               style={{ backgroundColor: color(t.surfaceMuted), borderRadius: 6, padding: 3 }}
             >
@@ -121,7 +121,7 @@ export function drawGroup(
         : null}
     </FlexWidget>
   ) : (
-    <FlexWidget>{lines(l.balanceLines, tone, 14, true)}</FlexWidget>
+    <FlexWidget>{lines(l.balanceLines, tone, l.balanceFontSize, true)}</FlexWidget>
   );
   const payments = l.sections.find((s) => s.id === 'payments');
   const paymentRows = (
@@ -129,9 +129,8 @@ export function drawGroup(
       style={{
         width: 'match_parent',
         height: 'match_parent',
-        borderRadius: 14,
-        backgroundColor: color(t.surfaceMuted),
-        paddingVertical: 4,
+        ...(!l.compact ? { borderRadius: 14, backgroundColor: color(t.surfaceMuted) } : {}),
+        paddingVertical: l.paymentPadding,
       }}
     >
       {view.payments.map((payment, index) => (
@@ -145,21 +144,48 @@ export function drawGroup(
           })}
           style={{
             width: 'match_parent',
-            height: payments?.rowHeight,
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: l.compact ? 0 : 7,
-            flexGap: 8,
+            height: l.paymentRows[index]!.height,
           }}
         >
-          {!l.compact ? (
-            <FlexWidget style={{ padding: 5, borderRadius: 8, backgroundColor: color(t.surface) }}>
-              {text(payment.initials, t.textSecondary, 10, true)}
-            </FlexWidget>
+          {l.paymentRows[index]!.dividerHeight ? (
+            <FlexWidget
+              style={{
+                width: 'match_parent',
+                height: l.paymentRows[index]!.dividerHeight,
+                backgroundColor: color(t.border),
+              }}
+            />
           ) : null}
-          <FlexWidget style={{ flex: 1, flexGap: 2 }}>
-            {text(payment.displayLabel, t.text, 12)}
-            {l.stackPayments
+          <FlexWidget
+            style={{
+              width: 'match_parent',
+              height: l.paymentRows[index]!.contentHeight,
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: l.compact ? 0 : 7,
+              flexGap: 8,
+            }}
+          >
+            {!l.compact ? (
+              <FlexWidget
+                style={{ padding: 5, borderRadius: 8, backgroundColor: color(t.surface) }}
+              >
+                {text(payment.initials, t.textSecondary, 10, true)}
+              </FlexWidget>
+            ) : null}
+            <FlexWidget style={{ flex: 1, flexGap: 2 }}>
+              {text(payment.displayLabel, t.text, l.paymentFontSize)}
+              {l.stackPayments
+                ? text(
+                    payment.amount,
+                    view.muted ? t.textMuted : payment.incoming ? t.status.positive : t.text,
+                    13,
+                    true,
+                    true,
+                  )
+                : null}
+            </FlexWidget>
+            {!l.stackPayments
               ? text(
                   payment.amount,
                   view.muted ? t.textMuted : payment.incoming ? t.status.positive : t.text,
@@ -169,17 +195,13 @@ export function drawGroup(
                 )
               : null}
           </FlexWidget>
-          {!l.stackPayments
-            ? text(
-                payment.amount,
-                view.muted ? t.textMuted : payment.incoming ? t.status.positive : t.text,
-                13,
-                true,
-                true,
-              )
-            : null}
         </FlexWidget>
       ))}
+      {l.showMore && !l.moreInFooter && view.more ? (
+        <FlexWidget style={{ height: payments?.moreHeight, justifyContent: 'center' }}>
+          {text(view.more, t.brand.main, 10, true)}
+        </FlexWidget>
+      ) : null}
     </FlexWidget>
   );
   const message = (
@@ -210,7 +232,7 @@ export function drawGroup(
         </FlexWidget>
       ) : null}
       <FlexWidget style={{ flex: 1 }}>
-        {lines(l.titleLines, t.text, l.compact ? 13 : 15, true)}
+        {lines(l.titleLines, t.text, l.titleFontSize, true)}
       </FlexWidget>
     </FlexWidget>
   );
@@ -231,7 +253,7 @@ export function drawGroup(
         flexGap: 4,
       }}
     >
-      {l.showMore && view.more ? (
+      {l.showMore && l.moreInFooter && view.more ? (
         <FlexWidget
           clickAction="OPEN_URI"
           clickActionData={action({ kind: 'settle', groupId: setup.groupId })}
@@ -268,8 +290,6 @@ export function drawGroup(
     description: (
       <FlexWidget>{lines(l.descriptionLines, t.textSecondary, l.compact ? 10 : 12)}</FlexWidget>
     ),
-    people: text(view.people ?? '', t.textSecondary, 11),
-    more: text(view.more ?? '', t.brand.main, 10, true),
     hidden: text(view.hidden ?? '', t.textMuted, 10),
     action: footer,
     update: text(view.action ?? '', t.textSecondary, 11),

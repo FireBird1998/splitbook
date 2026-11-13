@@ -65,6 +65,45 @@ const copy: WidgetCopy = {
   },
 };
 it.each([
+  { width: 172, height: 344, scale: 1, compact: true },
+  { width: 360, height: 344, scale: 1.3, compact: false },
+  { width: 360, height: 344, scale: 2, compact: true },
+])(
+  'draws board payment surfaces and a divider at $width dp and $scale text',
+  ({ width, height, scale, compact }) => {
+    vi.stubGlobal('__DEV__', false);
+    const tree = buildWidgetTree(
+      drawGroup(
+        copy,
+        { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
+        { width, height },
+        { status: 'authenticated', accountId: 'alex', loading: false },
+        now,
+        lightTokens,
+        scale,
+      ),
+    );
+    const panel = allNodes(tree).find(
+      (node) =>
+        node.children?.filter((child) =>
+          drawnText(child).some((text) => /(?:Pay|pay) (Priya|Sam)/.test(text)),
+        ).length === 2,
+    )!;
+    expect(panel).toBeDefined();
+    expect((panel.props as { backgroundColor?: string }).backgroundColor).toBe(
+      compact ? undefined : lightTokens.surfaceMuted,
+    );
+    expect(
+      allNodes(panel).some(
+        (node) =>
+          (node.props as { height?: number; backgroundColor?: string }).height === 1 &&
+          (node.props as { backgroundColor?: string }).backgroundColor === lightTokens.border,
+      ),
+    ).toBe(true);
+    vi.unstubAllGlobals();
+  },
+);
+it.each([
   { width: 172, height: 224 },
   { width: 182, height: 200 },
 ])('fits the entire native action and overflow line inside $width×$height dp', (size) => {
@@ -151,10 +190,11 @@ it('draws the overflow hint when no full payment amount fits an in-between width
     drawGroup(
       large,
       { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
-      { width: 266, height: 344 },
+      { width: 225, height: 344 },
       { status: 'authenticated', accountId: 'alex', loading: false },
       now,
       lightTokens,
+      2,
     ),
   );
   expect(drawnText(tree)).toContain('+2\u00a0more\u00a0· ₹');

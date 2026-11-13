@@ -66,13 +66,12 @@ it.each([
   ['4x2', 1.3, 1],
   ['4x2', 2, 0],
   ['4x3', 1, 4],
-  ['4x3', 1.3, 2],
+  ['4x3', 1.3, 3],
   ['4x3', 2, 1],
 ] as const)('limits Group %s at %s text to %s payment lines', (size, scale, lines) => {
   const v = groupWidget(part, setup, widgetDimensions(size), auth, now, scale);
   expect(v.payments).toHaveLength(lines);
   if (scale > 1 && size !== '2x2') expect(v.more).toContain(String(6 - lines));
-  expect(v.layout.showDescription).toBe(scale < 2 && (size !== '2x2' || scale === 1));
 });
 it.each([1, 1.3, 2])('keeps the entire spoken summary when visual lines drop at %s', (scale) => {
   expect(balancesWidget(copy, { kind: 'balances' }, '2x2', auth, now, scale).summary).toBe(

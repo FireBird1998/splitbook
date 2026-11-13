@@ -53,7 +53,7 @@ async function representation(info: WidgetInfo) {
             groupId: '',
             accountId: '',
           };
-    const size = { width: info.width, height: info.height };
+    const size = { width: info.width, height: info.height, pixelRatio: info.screenInfo.density };
     return {
       light: drawGroup(
         record.copy,
@@ -138,7 +138,8 @@ export function registerAndroidWidgets() {
       // same current dimensions, not the earlier event's. Fixed-size widgets stay unchanged.
       const currentInfo =
         widgetInfo.widgetName === 'Group'
-          ? (await getWidgetInfo('Group')).find((info) => info.widgetId === widgetInfo.widgetId)
+          ? ((await getWidgetInfo('Group')).find((info) => info.widgetId === widgetInfo.widgetId) ??
+            widgetInfo)
           : widgetInfo;
       if (currentInfo) renderWidget(await representation(currentInfo));
     });

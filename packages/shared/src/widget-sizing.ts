@@ -20,28 +20,40 @@ export interface WidgetSection {
 
 /** Input order admits sections; rounds expand admitted lists. Overflow hints belong to
  * their section, including a hint alone when no row fits. Required overflow is explicit. */
-const nonNegative = (value: number) => Number.isFinite(value) ? Math.max(0, value) : 0;
+const nonNegative = (value: number) => (Number.isFinite(value) ? Math.max(0, value) : 0);
 
 export function fitWidgetSections(
-  height: number, sections: readonly WidgetSection[], gap = 8, pixelRatio = 1,
+  height: number,
+  sections: readonly WidgetSection[],
+  gap = 8,
+  pixelRatio = 1,
 ) {
   const ratio = nonNegative(pixelRatio) || 1;
   const up = (dp: number) => Math.ceil(nonNegative(dp) * ratio - 1e-9);
   height = Math.floor(nonNegative(height) * ratio + 1e-9);
   gap = up(gap);
-  sections = sections.map((s) => ({ ...s,
+  sections = sections.map((s) => ({
+    ...s,
     rows: Math.min(Number.MAX_SAFE_INTEGER, Math.floor(nonNegative(s.rows))),
-    maxRows: Math.min(Math.floor(nonNegative(s.rows)), s.maxRows === undefined ? Number.MAX_SAFE_INTEGER : Math.floor(nonNegative(s.maxRows))),
+    maxRows: Math.min(
+      Math.floor(nonNegative(s.rows)),
+      s.maxRows === undefined ? Number.MAX_SAFE_INTEGER : Math.floor(nonNegative(s.maxRows)),
+    ),
     rowHeight: Math.max(1, up(s.rowHeight)),
-    inset: up(s.inset ?? 0), moreHeight: up(s.moreHeight ?? 0),
+    inset: up(s.inset ?? 0),
+    moreHeight: s.moreHeight === undefined ? undefined : up(s.moreHeight),
   }));
   const chosen = sections.map((s) => (s.required ? s.rows : 0));
   const visible = sections.map((s) => !!s.required && s.rows > 0);
-  const hint = (i: number) => chosen[i] < sections[i].rows ? sections[i].moreHeight ?? 0 : 0;
-  const cost = (i: number) => visible[i]
-    ? chosen[i] * sections[i].rowHeight + (chosen[i] ? sections[i].inset ?? 0 : 0) + hint(i)
-    : 0;
-  const used = () => sections.reduce((sum, _, i) => sum + cost(i), 0) +
+  const hasHint = (i: number) =>
+    chosen[i] < sections[i].rows && sections[i].moreHeight !== undefined;
+  const hint = (i: number) => (chosen[i] < sections[i].rows ? (sections[i].moreHeight ?? 0) : 0);
+  const cost = (i: number) =>
+    visible[i]
+      ? chosen[i] * sections[i].rowHeight + (chosen[i] ? (sections[i].inset ?? 0) : 0) + hint(i)
+      : 0;
+  const used = () =>
+    sections.reduce((sum, _, i) => sum + cost(i), 0) +
     Math.max(0, visible.filter(Boolean).length - 1) * gap;
   const tryRows = (i: number, rows: number) => {
     const previous = chosen[i];
@@ -55,7 +67,11 @@ export function fitWidgetSections(
     visible[i] = true;
     // All rows can be cheaper than one row plus a tall hint. Do not reject that fit.
     const cap = section.maxRows ?? section.rows;
-    if ((cap > 0 && (tryRows(i, 1) || tryRows(i, cap))) || (section.moreHeight && tryRows(i, 0))) continue;
+    if (
+      (cap > 0 && (tryRows(i, 1) || tryRows(i, cap))) ||
+      (section.moreHeight !== undefined && tryRows(i, 0))
+    )
+      continue;
     visible[i] = false;
     break;
   }
@@ -63,7 +79,13 @@ export function fitWidgetSections(
   while (added) {
     added = false;
     for (const [i, section] of sections.entries()) {
-      if (section.required || section.whenComplete || !visible[i] || chosen[i] >= (section.maxRows ?? section.rows)) continue;
+      if (
+        section.required ||
+        section.whenComplete ||
+        !visible[i] ||
+        chosen[i] >= (section.maxRows ?? section.rows)
+      )
+        continue;
       if (tryRows(i, chosen[i] + 1) || tryRows(i, section.maxRows ?? section.rows)) added = true;
     }
   }
@@ -74,14 +96,15 @@ export function fitWidgetSections(
     visible[i] = true;
     if (!tryRows(i, section.rows)) visible[i] = false;
   }
-  const overflow = Math.max(0, used() - height), spare = Math.max(0, height - used());
+  const overflow = Math.max(0, used() - height),
+    spare = Math.max(0, height - used());
   const explicit = sections.some((s, i) => s.grow && chosen[i] > 0);
   const first = chosen.findIndex((rows) => rows > 0);
-  const grows = (i: number) => explicit ? !!sections[i].grow : i === first;
+  const grows = (i: number) => (explicit ? !!sections[i].grow : i === first);
   const growing = sections.reduce((sum, _, i) => sum + (grows(i) ? chosen[i] : 0), 0);
   let remainder = spare;
   const extras = sections.map((_, i) => {
-    const extra = grows(i) && growing ? Math.floor(spare * chosen[i] / growing) : 0;
+    const extra = grows(i) && growing ? Math.floor((spare * chosen[i]) / growing) : 0;
     remainder -= extra;
     return extra;
   });
@@ -91,14 +114,21 @@ export function fitWidgetSections(
     fits: overflow === 0,
     overflow: overflow / ratio,
     gap: gap / ratio,
-    sections: sections.flatMap((section, i) => visible[i] ? [{
-      id: section.id,
-      rows: chosen[i],
-      more: hint(i) ? section.rows - chosen[i] : 0,
-      moreHeight: hint(i) / ratio,
-      height: (cost(i) + extras[i]) / ratio,
-      rowHeight: (section.rowHeight + (chosen[i] ? Math.floor(extras[i] / chosen[i]) : 0)) / ratio,
-    }] : []),
+    sections: sections.flatMap((section, i) =>
+      visible[i]
+        ? [
+            {
+              id: section.id,
+              rows: chosen[i],
+              more: hasHint(i) ? section.rows - chosen[i] : 0,
+              moreHeight: hint(i) / ratio,
+              height: (cost(i) + extras[i]) / ratio,
+              rowHeight:
+                (section.rowHeight + (chosen[i] ? Math.floor(extras[i] / chosen[i]) : 0)) / ratio,
+            },
+          ]
+        : [],
+    ),
   };
 }
 
@@ -110,19 +140,40 @@ export function widgetText(width: number, scale = 1, factor = 1, pixelRatio = 1)
   factor = nonNegative(factor) || 1;
   pixelRatio = nonNegative(pixelRatio) || 1;
   const font = (base: number) => Math.max(Math.min(base, 10), base * factor);
-  const measure = (value: string, base: number, mono = false) => [...value].reduce((sum, c) =>
-    sum + (mono ? 0.6 : /\s/.test(c) ? 0.28 : /[ilI.,:;'!|]/.test(c) ? 0.28
-      : /[mwMW@%]/.test(c) ? 0.85 : /[A-Z₹€$£¥]/.test(c) ? 0.65
-        : /[0-9]/.test(c) ? 0.6 : c === '＋' ? 0.8 : 0.54), 0) * font(base) * scale;
+  const measure = (value: string, base: number, mono = false) =>
+    [...value].reduce(
+      (sum, c) =>
+        sum +
+        (mono
+          ? 0.6
+          : /\s/.test(c)
+            ? 0.28
+            : /[ilI.,:;'!|]/.test(c)
+              ? 0.28
+              : /[mwMW@%]/.test(c)
+                ? 0.85
+                : /[A-Z₹€$£¥]/.test(c)
+                  ? 0.65
+                  : /[0-9]/.test(c)
+                    ? 0.6
+                    : c === '＋'
+                      ? 0.8
+                      : 0.54),
+      0,
+    ) *
+    font(base) *
+    scale;
   return {
     factor,
     scale,
     font,
     line: (base: number) => Math.ceil(font(base) * scale * 1.3 * pixelRatio - 1e-9) / pixelRatio,
     width: measure,
-    fit: (value: string, base: number, room = width, mono = false) => Math.max(
-      Math.min(base, 10), Math.min(base, base * nonNegative(room) / Math.max(1, measure(value, base, mono))),
-    ),
+    fit: (value: string, base: number, room = width, mono = false) =>
+      Math.max(
+        Math.min(base, 10),
+        Math.min(base, (base * nonNegative(room)) / Math.max(1, measure(value, base, mono))),
+      ),
     words: (value: string, base: number, room = width) => {
       const result: string[] = [];
       // A separator belongs to the following word, never stranded at a line end.
@@ -143,12 +194,21 @@ export type WidgetText = ReturnType<typeof widgetText>;
 /** All widgets remove optional content before fitting indispensable type. The caller
  * supplies measured sections, not its own shrink loop. Below the floor overflow stays explicit. */
 export function fitWidgetLayout<T extends { sections: readonly WidgetSection[] }>(
-  size: WidgetDimensions, scale: number, make: (text: WidgetText, optional: boolean) => T, gap = 8,
+  size: WidgetDimensions,
+  scale: number,
+  make: (text: WidgetText, optional: boolean) => T,
+  gap = 8,
 ) {
   const attempt = (optional: boolean, factor: number) => {
-    const settings = make(widgetText(size.width, scale, factor, size.pixelRatio), optional);
-    return { ...settings, ...fitWidgetSections(size.height, settings.sections, gap, size.pixelRatio),
-      textFactor: factor };
+    const { sections, ...settings } = make(
+      widgetText(size.width, scale, factor, size.pixelRatio),
+      optional,
+    );
+    return {
+      ...settings,
+      ...fitWidgetSections(size.height, sections, gap, size.pixelRatio),
+      textFactor: factor,
+    };
   };
   let result = attempt(true, 1);
   if (!result.fits) result = attempt(false, 1);

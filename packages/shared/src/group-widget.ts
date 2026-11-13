@@ -1,4 +1,9 @@
-import { fitWidgetSections, type WidgetDimensions, type WidgetSection } from './widget-sizing';
+import {
+  fitWidgetLayout,
+  widgetText,
+  type WidgetDimensions,
+  type WidgetSection,
+} from './widget-sizing';
 import { widgetTextLevel } from './widget-layout';
 import { widgetSummary } from './widget-accessibility';
 import { formatCurrency, getCurrency } from './currency';
@@ -245,276 +250,275 @@ function spokenPayments(payments: ReturnType<typeof groupWidgetView>['payments']
   });
 }
 
-/** Dimensions are dp; text grows with Android while spacing stays fixed. */
+function paymentOverflow(payments: ReturnType<typeof groupWidgetView>['payments']) {
+  return `+${counted(payments.length, 'more', 'more')}${SEPARATOR}${[
+    ...new Set(payments.map((p) => getCurrency(p.currency)?.symbol ?? p.currency)),
+  ].join(', ')}`;
+}
+
+/** Dimensions are dp. Native density keeps every allocated edge on a physical pixel. */
 function groupLayout(
   view: ReturnType<typeof groupWidgetView>,
   size: WidgetDimensions,
   scale: number,
 ) {
-  const level = widgetTextLevel(scale),
-    padding = 14,
-    gap = 8;
-  const width = Math.max(1, size.width - padding * 2),
-    height = Math.max(1, size.height - padding * 2);
-  const compact = size.width / Math.max(1, scale) < 240;
-  const stackHeader = view.final && level > 0;
-  let factor = 1,
-    fitName = false;
-  const line = (font: number) => Math.ceil(font * factor * scale * 1.3);
-  const words = (value: string, font: number, room = width) => {
-    const result: string[] = [];
-    for (const word of value.split(/\s+/)) {
-      const previous = result.at(-1);
-      if (previous && (previous.length + word.length + 1) * font * factor * scale * 0.62 <= room)
-        result[result.length - 1] = previous + ' ' + word;
-      else result.push(word);
-    }
-    return result;
-  };
-  const make = (optional: boolean) => {
-    const showSaved = optional && level === 0,
-      showTile = optional && level < 2;
-    const money = Math.min(
-      18,
-      width / Math.max(1, (view.compactAmount?.length ?? 1) * scale * 0.64),
-    );
-    const actionFont = compact && level === 2 ? 10 : 12;
-    const actionLabel =
-      view.target === 'setup'
-        ? view.action
-        : view.target === 'sign-in'
-          ? 'Sign in'
-          : view.addExpense
-            ? compact && level === 2
-              ? 'Add expense'
-              : '＋ Add expense'
-            : null;
-    const actionLines = actionLabel
-      ? words(actionLabel, actionFont, width - (compact && level === 2 ? 12 : 24))
-      : [];
-    const showStateTile = showTile && ['lost-access', 'expired', 'signed-out'].includes(view.state);
-    const titleLines = view.title
-      ? words(view.title, compact ? 13 : 15, width - (showStateTile ? 60 : 0))
-      : [];
-    const descriptionLines = words(view.description, compact ? 10 : 12);
-    const nameRoom =
-      width -
-      (showTile ? 40 : 0) -
-      (!compact && showSaved && view.saved ? view.saved.length * 9 * scale * 0.62 + 8 : 0) -
-      (view.final && !stackHeader ? 8 * 9 * scale * 0.62 + 12 : 0);
-    const nameFont = fitName
-      ? Math.min(13, Math.max(1, nameRoom) / Math.max(1, (view.name?.length ?? 1) * scale * 0.62))
-      : 13;
-    const nameLines = words(view.name ?? '', nameFont, Math.max(1, nameRoom));
-    const headerHeight = view.name
-      ? nameLines.length * line(nameFont) +
-        (stackHeader ? line(9) + 12 : 0) +
-        (compact ? (showSaved ? line(9) + 3 : 0) : line(11) + 3)
-      : 0;
-    const balanceLabelLines = words(
-      (view.compactLabel ?? '') + (view.final ? SEPARATOR + 'final' : ''),
-      11,
-    );
-    const balanceLines = words(view.balance, 14);
-    const showCurrencyOverflow = optional && level === 0 && !!view.currencyOverflow;
-    const balanceHeight =
-      view.name && compact
-        ? view.compactAmount
-          ? balanceLabelLines.length * line(11) +
-            line(money) +
-            4 +
-            (showCurrencyOverflow ? line(10) + 4 : 0)
-          : balanceLines.length * line(14)
-        : 0;
-    const rowHeight = level === 1 ? line(12) + line(13) + 16 : Math.max(38, line(13) + 14);
-    const updateInFooter =
-      !compact &&
-      !!actionLabel &&
-      'Open to update'.length * 11 * scale * 0.62 +
-        actionLabel.length * actionFont * scale * 0.62 +
-        32 <=
-        width;
-    const sections: WidgetSection[] = [
-      ...(view.name
-        ? [
-            {
-              id: 'header',
-              rows: 1,
-              rowHeight: Math.max(headerHeight, showTile ? 32 : 0),
-              required: true,
-            },
-          ]
-        : []),
-      ...(balanceHeight
-        ? [
-            {
-              id: 'balance',
-              rows: 1,
-              rowHeight: balanceHeight,
-              required: true,
-              grow: !view.payments.length,
-            },
-          ]
-        : []),
-      ...(view.title
-        ? [
-            {
-              id: 'title',
-              rows: 1,
-              rowHeight: Math.max(
-                titleLines.length * line(compact ? 13 : 15),
-                showStateTile ? 48 : 0,
-              ),
-              required: true,
-              grow: true,
-            },
-          ]
-        : []),
-      ...(view.state === 'loading' ? [{ id: 'loading', rows: 3, rowHeight: 24, grow: true }] : []),
-      ...(view.payments.length &&
-      view.payments.every((p) => p.amount.length * 13 * scale * 0.64 < width - (compact ? 40 : 100))
-        ? [{ id: 'payments', rows: view.payments.length, rowHeight, inset: 8, grow: true }]
-        : []),
-      ...(view.hidden && level < 2
-        ? [{ id: 'hidden', rows: 1, rowHeight: line(10) + 6, grow: true }]
-        : []),
-      ...(view.description && optional && level < 2
-        ? [
-            {
-              id: 'description',
-              rows: 1,
-              rowHeight: descriptionLines.length * line(compact ? 10 : 12),
-              grow: true,
-            },
-          ]
-        : []),
-      ...(view.action === 'Open to update' && !updateInFooter
-        ? [{ id: 'update', rows: 1, rowHeight: line(11) }]
-        : []),
-      ...(actionLabel
-        ? [
-            {
-              id: 'action',
-              rows: 1,
-              rowHeight: actionLines.length * line(actionFont) + 18,
-              required: true,
-            },
-          ]
-        : []),
-    ];
-    return {
-      showSaved,
-      showTile,
-      showStateTile,
-      nameLines,
-      nameFont,
-      updateInFooter,
-      money,
-      actionFont,
-      actionLines,
-      titleLines,
-      descriptionLines,
-      balanceLabelLines,
-      balanceLines,
-      showCurrencyOverflow,
-      sections,
-    };
-  };
-  let settings = make(true);
-  const required = () => {
-    const rows = settings.sections.filter((s) => s.required);
-    return rows.reduce((sum, s) => sum + s.rowHeight, 0) + Math.max(0, rows.length - 1) * gap;
-  };
-  // Optional content is removed before the last resort of fitting indispensable text.
-  if (required() > height) settings = make(false);
-  if (required() > height) {
-    fitName = true;
-    settings = make(false);
-  }
-  while (required() > height && factor > 0.25) {
-    factor *= 0.9;
-    settings = make(false);
-  }
-  let plan = fitWidgetSections(height, settings.sections, gap);
-  let paymentLines = plan.sections.find((s) => s.id === 'payments')?.rows ?? 0;
-  // The existing overflow hint takes precedence over the older-copy prompt.
-  if (paymentLines < view.payments.length && (paymentLines > 0 || !compact || size.width >= 280)) {
-    settings.sections = settings.sections.filter((s) => s.id !== 'update');
-    plan = fitWidgetSections(height, settings.sections, gap);
-    paymentLines = plan.sections.find((s) => s.id === 'payments')?.rows ?? 0;
-  }
-  if ((paymentLines > 0 || !compact) && paymentLines < view.payments.length) {
-    const action = settings.sections.find((s) => s.id === 'action');
-    const extra = compact ? line(10) + 4 : 0;
-    if (action) action.rowHeight += extra;
-    if (!action)
-      settings.sections.push({ id: 'more', rows: 1, rowHeight: line(10), required: true });
-    plan = fitWidgetSections(height, settings.sections, gap);
-    paymentLines = plan.sections.find((s) => s.id === 'payments')?.rows ?? 0;
-    if (!paymentLines && action) action.rowHeight -= extra;
-  }
-  if (compact && !paymentLines && view.people && level < 2) {
-    settings.sections.splice(settings.sections.length - 1, 0, {
-      id: 'people',
-      rows: 1,
-      rowHeight: line(11),
-      grow: true,
-    });
-    settings.sections = settings.sections.filter((s) => s.id !== 'payments');
-    plan = fitWidgetSections(height, settings.sections, gap);
-  }
-  // If no payment can be drawn, the balance takes the spare height; the action stays at
-  // the bottom rather than growing an empty area beneath its button.
-  if (!paymentLines) {
-    settings.sections = settings.sections.filter((s) => s.id !== 'payments');
-    const balance =
-      settings.sections.find((s) => s.id === 'balance') ??
-      settings.sections.find((s) => s.id === 'header');
-    if (balance) {
-      balance.grow = true;
-      plan = fitWidgetSections(height, settings.sections, gap);
-    }
-  }
-  const present = (id: string) => plan.sections.some((s) => s.id === id);
+  scale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const level = widgetTextLevel(scale);
+  const tiny = size.width <= 140 && size.height <= 160;
+  const ratio =
+    size.pixelRatio && Number.isFinite(size.pixelRatio) && size.pixelRatio > 0
+      ? size.pixelRatio
+      : 1;
+  const pixels = (dp: number) => Math.ceil(dp * ratio - 1e-9) / ratio;
+  // Even the declaration's 110 dp minimum keeps the complete balance at 10 sp.
+  const minimumMoneyWidth = widgetText(size.width, scale).width(view.compactAmount ?? '', 10, true);
+  const padding = pixels(
+    tiny ? Math.min(8, Math.max(0, Math.floor((size.width - minimumMoneyWidth) / 2))) : 14,
+  );
+  const width = Math.max(1, Math.floor(size.width * ratio) / ratio - padding * 2);
+  const height = Math.max(0, Math.floor(size.height * ratio) / ratio - padding * 2);
+  const compact = level === 2 ? size.width / scale < 240 : size.width < 240;
+  const gap = tiny ? 4 : 8;
+  const settings = fitWidgetLayout(
+    { width, height, pixelRatio: ratio },
+    scale,
+    (text, optional) => {
+      const showSaved = optional && level === 0 && !tiny;
+      const showTile = optional && level < 2 && !tiny;
+      const showArchivedTag = view.final && !tiny;
+      const stackHeader = showArchivedTag && level > 0;
+      const money = text.fit(view.compactAmount ?? '', 18, width, true);
+      const actionFont = compact && level === 2 ? 10 : 12;
+      const actionLabel =
+        !optional || tiny
+          ? null
+          : view.target === 'setup'
+            ? view.action
+            : view.target === 'sign-in'
+              ? 'Sign in'
+              : view.addExpense
+                ? compact && level === 2
+                  ? 'Add expense'
+                  : '＋ Add expense'
+                : null;
+      const actionPadding = compact && level === 2 ? 6 : 12;
+      const actionLines = actionLabel
+        ? text.words(actionLabel, actionFont, width - actionPadding * 2)
+        : [];
+      const showStateTile =
+        showTile && ['lost-access', 'expired', 'signed-out'].includes(view.state);
+      const titleFont = tiny ? 10 : compact ? 13 : 15;
+      const smallTitles: Record<string, string> = {
+        'signed-out': 'Sign in to Splitbook',
+        expired: 'Sign in again',
+        'other-account': 'Set up again',
+        'lost-access': 'Group unavailable',
+        'no-copy': 'Nothing saved yet',
+      };
+      const titleLines = view.title
+        ? text.words(
+            tiny ? (smallTitles[view.state] ?? view.title) : view.title,
+            titleFont,
+            width - (showStateTile ? 60 : 0),
+          )
+        : [];
+      const descriptionFont = compact ? 10 : 12;
+      const descriptionLines = text.words(view.description, descriptionFont);
+      const nameRoom =
+        width -
+        (showTile ? 40 : 0) -
+        (!compact && showSaved && view.saved ? text.width(view.saved, 9) + 8 : 0) -
+        (showArchivedTag && !stackHeader ? text.width('Archived', 9) + 12 : 0);
+      const name = tiny && scale >= 2 ? 'Group' : (view.name ?? '');
+      const nameFont = text.fit(
+        name.split(/\s+/).sort((a, b) => b.length - a.length)[0] ?? '',
+        13,
+        nameRoom,
+      );
+      const nameLines = text.words(name, nameFont, nameRoom);
+      const balanceFont = tiny ? 10 : 14;
+      const balanceLabelLines = text.words(
+        tiny && view.final
+          ? 'Final'
+          : (view.compactLabel ?? '') + (view.final ? SEPARATOR + 'final' : ''),
+        11,
+      );
+      const balanceLines = text.words(
+        tiny
+          ? view.hidden
+            ? 'Balances hidden'
+            : view.state === 'all-square'
+              ? 'All square'
+              : view.balance
+          : view.balance,
+        balanceFont,
+      );
+      const showCurrencyOverflow = optional && level === 0 && !tiny && !!view.currencyOverflow;
+      const headerHeight =
+        nameLines.length * text.line(nameFont) +
+        (stackHeader ? text.line(9) + 12 : 0) +
+        (compact ? (showSaved ? text.line(9) + 3 : 0) : text.line(11) + 3);
+      const balanceHeight =
+        view.name && compact
+          ? view.compactAmount
+            ? balanceLabelLines.length * text.line(11) +
+              text.line(money) +
+              4 +
+              (showCurrencyOverflow ? text.line(10) + 4 : 0)
+            : balanceLines.length * text.line(balanceFont)
+          : 0;
+      const paymentFont = compact ? 13 : 12;
+      const label = (p: (typeof view.payments)[number]) =>
+        compact ? (p.incoming ? `${p.firstName} pays you` : `Pay ${p.firstName}`) : p.label;
+      const rowWidth = width - (compact ? 0 : 14 + 2 * 8 + 10 + text.width('WW', 10));
+      const stackPayments = view.payments.some(
+        (p) => text.width(label(p), paymentFont) + text.width(p.amount, 13, true) + 8 > rowWidth,
+      );
+      const rowHeight = Math.max(
+        (compact ? 28 : 38) * scale * text.factor,
+        (stackPayments ? text.line(paymentFont) + text.line(13) + 2 : text.line(13)) + pixels(1),
+      );
+      const paymentFits = view.payments.every((p) => text.width(p.amount, 13, true) <= rowWidth);
+      const updateInFooter =
+        !compact &&
+        !!actionLabel &&
+        text.width('Open to update', 11) + text.width(actionLabel, actionFont) + 32 <= width;
+      const moreInFooter =
+        !compact &&
+        !!actionLabel &&
+        text.width(paymentOverflow(view.payments), 10) + text.width(actionLabel, actionFont) + 32 <=
+          width;
+      const sections: WidgetSection[] = [
+        ...(view.name
+          ? [
+              {
+                id: 'header',
+                rows: 1,
+                rowHeight: Math.max(headerHeight, showTile ? 32 : 0),
+                required: true,
+              },
+            ]
+          : []),
+        ...(balanceHeight
+          ? [{ id: 'balance', rows: 1, rowHeight: balanceHeight, required: true }]
+          : []),
+        ...(view.title
+          ? [
+              {
+                id: 'title',
+                rows: 1,
+                rowHeight: Math.max(
+                  titleLines.length * text.line(titleFont),
+                  showStateTile ? 48 : 0,
+                ),
+                required: true,
+                grow: true,
+              },
+            ]
+          : []),
+        ...(view.state === 'loading'
+          ? [{ id: 'loading', rows: 3, rowHeight: 24, grow: true }]
+          : []),
+        ...(!tiny && view.payments.length
+          ? [
+              {
+                id: 'payments',
+                rows: view.payments.length,
+                maxRows: paymentFits ? view.payments.length : 0,
+                rowHeight,
+                inset: compact ? 0 : pixels(4) * 2,
+                moreHeight: moreInFooter ? 0 : text.line(10) + 4,
+                grow: true,
+              },
+            ]
+          : []),
+        ...(view.hidden && level < 2 && !tiny
+          ? [{ id: 'hidden', rows: 1, rowHeight: text.line(10) + 6, grow: true }]
+          : []),
+        ...(view.description && optional && level < 2 && !tiny
+          ? [
+              {
+                id: 'description',
+                rows: 1,
+                rowHeight: descriptionLines.length * text.line(descriptionFont),
+                grow: true,
+              },
+            ]
+          : []),
+        ...(view.action === 'Open to update' && !updateInFooter && !tiny
+          ? [
+              {
+                id: 'update',
+                rows: 1,
+                rowHeight: text.line(11),
+                ...(view.payments.length ? { whenComplete: 'payments' } : {}),
+              },
+            ]
+          : []),
+        ...(actionLabel
+          ? [
+              {
+                id: 'action',
+                rows: 1,
+                rowHeight: actionLines.length * text.line(actionFont) + 18,
+                required: true,
+              },
+            ]
+          : []),
+      ];
+      return {
+        sections,
+        showSaved,
+        showTile,
+        showStateTile,
+        showArchivedTag,
+        stackHeader,
+        nameLines,
+        nameFontSize: text.font(nameFont),
+        moneyFontSize: text.font(money),
+        actionFontSize: text.font(actionFont),
+        actionPaddingHorizontal: actionPadding,
+        actionLines,
+        titleLines,
+        titleFontSize: titleFont,
+        balanceFontSize: balanceFont,
+        balanceLabelLines,
+        balanceLines,
+        descriptionLines,
+        showCurrencyOverflow,
+        stackPayments,
+        paymentFontSize: paymentFont,
+        moreInFooter,
+        updateInFooter,
+      };
+    },
+    gap,
+  );
+  const payments = settings.sections.find((s) => s.id === 'payments');
   return {
-    ...plan,
+    ...settings,
+    padding,
+    width,
+    compact,
+    scale,
+    paymentPadding: compact ? 0 : pixels(4),
+    paymentRows: Array.from({ length: payments?.rows ?? 0 }, (_, i) => ({
+      height: payments!.rowHeight,
+      contentHeight: payments!.rowHeight - (i ? pixels(1) : 0),
+      dividerHeight: i ? pixels(1) : 0,
+    })),
+    paymentLines: payments?.rows ?? 0,
+    showMore: !!payments?.more,
+    showUpdateInFooter:
+      settings.updateInFooter && !payments?.more && view.action === 'Open to update',
+    showPrivacyLabel: settings.sections.some((s) => s.id === 'hidden'),
     loadingRows: Array.from(
-      { length: plan.sections.find((s) => s.id === 'loading')?.rows ?? 0 },
+      { length: settings.sections.find((s) => s.id === 'loading')?.rows ?? 0 },
       (_, index) => ({
         width: Math.min(width, [100, 130, 110][index]!),
-        height: plan.sections.find((s) => s.id === 'loading')!.rowHeight,
+        height: settings.sections.find((s) => s.id === 'loading')!.rowHeight,
       }),
     ),
-    padding,
-    compact,
-    width,
-    scale,
-    paymentLines,
-    showTile: settings.showTile,
-    showStateTile: settings.showStateTile,
-    showSaved: settings.showSaved,
-    showDescription: level < 2 && (!compact || level === 0),
-    showPeople: present('people'),
-    showPrivacyLabel: present('hidden'),
-    showMore: (paymentLines > 0 || !compact) && paymentLines < view.payments.length,
-    showUpdateInFooter:
-      settings.updateInFooter &&
-      view.action === 'Open to update' &&
-      paymentLines === view.payments.length,
-    stackPayments: level === 1,
-    stackHeader,
-    actionFontSize: settings.actionFont * factor,
-    actionPaddingHorizontal: compact && level === 2 ? 6 : 12,
-    showCurrencyOverflow: settings.showCurrencyOverflow,
-    balanceLabelLines: settings.balanceLabelLines,
-    balanceLines: settings.balanceLines,
-    moneyFontSize: settings.money * factor,
-    nameLines: settings.nameLines,
-    nameFontSize: settings.nameFont * factor,
-    textFactor: factor,
-    actionLines: settings.actionLines,
-    titleLines: settings.titleLines,
-    descriptionLines: settings.descriptionLines,
   };
 }
 
@@ -536,17 +540,7 @@ function projectGroupWidget(
   const layout = groupLayout(full, size, fontScale);
   const limit = layout.paymentLines;
   const omitted = full.payments.slice(limit);
-  const more =
-    omitted.length && (size.width >= 280 || !layout.compact || limit > 0)
-      ? `+${counted(omitted.length, 'more', 'more')}${SEPARATOR}${[
-          ...new Set(
-            omitted
-              .map((p) => p.currency)
-              .filter(Boolean)
-              .map((code) => getCurrency(code!)?.symbol ?? code),
-          ),
-        ].join(', ')}`
-      : null;
+  const more = layout.showMore && omitted.length ? paymentOverflow(omitted) : null;
   return {
     ...full,
     layout,

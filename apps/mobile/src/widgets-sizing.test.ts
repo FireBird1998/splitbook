@@ -57,14 +57,14 @@ it('draws a queued Group resize at the current native dimensions rather than its
     renderWidget,
   });
   expect(native.drawGroup.mock.calls.map((args) => args[2])).toEqual([
-    { width: 360, height: 584 },
-    { width: 360, height: 584 },
+    { width: 360, height: 584, pixelRatio: 2.625 },
+    { width: 360, height: 584, pixelRatio: 2.625 },
   ]);
   expect(renderWidget).toHaveBeenCalledOnce();
   vi.unstubAllGlobals();
 });
 
-it('does not draw a queued resize after that Group widget was removed', async () => {
+it('uses the event size when a just-added Group widget is not listed by native yet', async () => {
   vi.stubGlobal('__DEV__', false);
   const { registerAndroidWidgets } = await import('./widgets');
   native.getWidgetInfo.mockResolvedValue([]);
@@ -87,5 +87,9 @@ it('does not draw a queued resize after that Group widget was removed', async ()
     widgetAction: 'WIDGET_RESIZED',
     renderWidget,
   });
-  expect(renderWidget).not.toHaveBeenCalled();
+  expect(renderWidget).toHaveBeenCalledOnce();
+  expect(native.drawGroup.mock.calls.map((args) => args[2])).toEqual([
+    { width: 360, height: 224, pixelRatio: 2.625 },
+    { width: 360, height: 224, pixelRatio: 2.625 },
+  ]);
 });
