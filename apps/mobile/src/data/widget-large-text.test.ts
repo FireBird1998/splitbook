@@ -65,7 +65,7 @@ it.each([
   ['4x2', 1, 2],
   ['4x2', 1.3, 1],
   ['4x2', 2, 0],
-  ['4x3', 1, 4],
+  ['4x3', 1, 2],
   ['4x3', 1.3, 3],
   ['4x3', 2, 1],
 ] as const)('limits Group %s at %s text to %s payment lines', (size, scale, lines) => {

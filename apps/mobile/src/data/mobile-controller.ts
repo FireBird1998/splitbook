@@ -42,6 +42,7 @@ import { inScope, queryOwner, replaceScopedQueries } from './query-owner';
 import { readProvenance } from './read-provenance';
 import {
   connectedAssistantsKey,
+  expensePageKey,
   groupKey,
   groupBalancesKey,
   groupsKey,
@@ -891,11 +892,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const key =
         path === '/api/groups'
           ? groupsKey(account())
-          : path.endsWith('/balances')
-            ? groupBalancesKey(account(), id)
-            : groupKey(account(), id);
+          : path.includes('/expenses?')
+            ? expensePageKey(account(), id)
+            : path.endsWith('/balances')
+              ? groupBalancesKey(account(), id)
+              : groupKey(account(), id);
       return verifiedAt > (scoped(untrusted, key) ?? -Infinity);
     },
+    (id) => groupQueries.monthRead(id, currentMonthKey(new Date(now()))),
   );
 
   const savedCopies = savedCopyBudget({

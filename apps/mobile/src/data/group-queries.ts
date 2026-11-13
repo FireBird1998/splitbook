@@ -1535,6 +1535,12 @@ export function createGroupQueries(session: GroupSession) {
      * what another destination reads beside the Group shows from now on (#222).
      */
     checked: (groupId: string) => !!view && view.groupId === groupId && view.checked && !view.lost,
+    /** A Month summary already read by the app, carrying the time of that page's own read. */
+    monthRead(groupId: string, month: string) {
+      const pages = stateOf<Pages>(listKey(groupId, true, month))?.data?.pages;
+      const read = pages?.find((page) => page.source !== 'failed');
+      return read ? { month, read } : null;
+    },
     /** The first page of the Month's window shown for this Group: past 1 once it has slid. */
     firstPage(groupId: string) {
       const key = view?.groupId === groupId ? shownList() : null;

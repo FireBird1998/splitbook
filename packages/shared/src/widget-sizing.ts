@@ -11,6 +11,8 @@ export interface WidgetSection {
   /** Minimum dp for one row, including scaled text and fixed padding. */
   rowHeight: number;
   inset?: number;
+  /** Minimum height of the whole section, e.g. a fixed column beside a variable list. */
+  minHeight?: number;
   moreHeight?: number;
   required?: boolean;
   grow?: boolean;
@@ -41,6 +43,7 @@ export function fitWidgetSections(
     ),
     rowHeight: Math.max(1, up(s.rowHeight)),
     inset: up(s.inset ?? 0),
+    minHeight: up(s.minHeight ?? 0),
     moreHeight: s.moreHeight === undefined ? undefined : up(s.moreHeight),
   }));
   const chosen = sections.map((s) => (s.required ? s.rows : 0));
@@ -50,7 +53,10 @@ export function fitWidgetSections(
   const hint = (i: number) => (chosen[i] < sections[i].rows ? (sections[i].moreHeight ?? 0) : 0);
   const cost = (i: number) =>
     visible[i]
-      ? chosen[i] * sections[i].rowHeight + (chosen[i] ? (sections[i].inset ?? 0) : 0) + hint(i)
+      ? Math.max(
+          chosen[i] * sections[i].rowHeight + (chosen[i] ? (sections[i].inset ?? 0) : 0) + hint(i),
+          sections[i].minHeight ?? 0,
+        )
       : 0;
   const used = () =>
     sections.reduce((sum, _, i) => sum + cost(i), 0) +

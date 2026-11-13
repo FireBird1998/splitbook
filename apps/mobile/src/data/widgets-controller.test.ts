@@ -179,6 +179,22 @@ function fixture(extraMembers: (typeof alex)[] = []) {
   };
   return {
     make,
+    month: (count = 12) => {
+      backend.world.expenses[groupId] = {
+        expenses: [],
+        pagination: { page: 1, limit: 20, total: count, totalPages: 1 },
+        summary: {
+          count,
+          totalsByCurrency: [
+            { currency: 'INR', totalAmount: 23540 },
+            { currency: 'JPY', totalAmount: 42000 },
+          ],
+          userOwes: 0,
+          userGetsBack: 0,
+          byMember: [{ user: { _id: alex.id, name: alex.name }, paid: 0, share: 7850, net: -7850 }],
+        },
+      };
+    },
     trip: () => {
       trip = true;
     },
@@ -822,3 +838,153 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
     }
   },
 );
+
+it('saves a Month summary from the existing page read with its own time and exact currency amounts', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  f.month();
+  const c = f.make();
+  await c.signIn('alex');
+  const groupTime = verified + 60_000;
+  clock.mockReturnValue(groupTime);
+  await c.openGroup(groupId);
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.months?.[groupId]).toEqual({
+      month: '2026-11',
+      verifiedAt: groupTime,
+      count: 12,
+      mainCurrency: 'INR',
+      mainCurrencyOnly: true,
+      totals: [
+        { currency: 'INR', totalMinor: 2354000 },
+        { currency: 'JPY', totalMinor: 42000 },
+      ],
+      shareMinor: 785000,
+    }),
+  );
+  expect(f.requests.filter((r) => r.path.endsWith('/expenses'))).toHaveLength(1);
+  expect(f.requests.filter((r) => r.path === `/api/groups/${groupId}`)).toHaveLength(1);
+  clock.mockReturnValue(groupTime + 60_000);
+  await c.refreshBalances();
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.groups?.[groupId]?.balancesVerifiedAt).toBe(groupTime + 60_000),
+  );
+  expect(f.copies.at(-1)?.months?.[groupId]?.verifiedAt).toBe(groupTime);
+});
+
+it('restores the current Month summary with the time of its saved read after restarting offline', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  f.month();
+  const first = f.make();
+  await first.signIn('alex');
+  await first.openGroup(groupId);
+  await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]?.shareMinor).toBe(785000));
+  first.dispose();
+  f.offline();
+  vi.spyOn(Date, 'now').mockReturnValue(verified + 3_600_000);
+  const restarted = f.make();
+  await restarted.restore();
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.months?.[groupId]).toMatchObject({
+      month: '2026-11',
+      shareMinor: 785000,
+      verifiedAt: verified,
+    }),
+  );
+});
+
+it('keeps the current Month copy when another Month is read, without relabelling its figures', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  f.month();
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeDefined());
+  const original = structuredClone(f.copies.at(-1)?.months?.[groupId]);
+  f.month(7);
+  await c.selectMonth('2026-10');
+  expect(c.getSnapshot().financial.month).toBe('2026-10');
+  expect(f.copies.at(-1)?.months?.[groupId]).toEqual(original);
+});
+
+it.each(['sign out', 'account change', '403', '404', '401'] as const)(
+  'applies the Widget copy purge rules to the Month on %s',
+  async (action) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture();
+    f.month();
+    const c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeDefined());
+    f.events.length = 0;
+    if (action === 'sign out' || action === 'account change') {
+      if (action === 'sign out') await c.signOut();
+      else await c.signIn('sam');
+      expect(f.events.indexOf('clear')).toBeGreaterThanOrEqual(0);
+      expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+      if (action === 'account change') {
+        await vi.waitFor(() => expect(f.copies.at(-1)?.accountId).toBe(sam.id));
+        expect(f.copies.at(-1)?.months?.[groupId]).toBeUndefined();
+      }
+    } else if (action === '401') {
+      const saved = structuredClone(f.copies.at(-1));
+      f.expire();
+      await c.openGroup(groupId, false);
+      await vi.waitFor(() => expect(f.events).toContain('expired'));
+      expect(f.events).not.toContain('clear');
+      expect(f.copies.at(-1)).toEqual(saved);
+    } else {
+      f.refuse(Number(action));
+      await c.openGroup(groupId, false);
+      await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeUndefined());
+      expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined();
+      expect(f.copies.at(-1)?.lostGroupIds).toContain(groupId);
+    }
+  },
+);
+
+it('keeps the Month section even if the separate Balances read fails', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  f.month();
+  f.groupBalances({ byCurrency: null });
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]?.shareMinor).toBe(785000));
+  expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined();
+});
+
+it('retires the saved Month after a save until the existing Month read succeeds again', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  f.month();
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeDefined());
+  await c.openExpense(groupId);
+  await c.updateExpenseDraft({ description: 'Groceries', amount: '100', tagId });
+  f.offlineAfterSave();
+  await c.saveExpense();
+  await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeUndefined());
+});
+
+it('saves an empty Month as zero spending and keeps a missing member share absent', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.months?.[groupId]).toMatchObject({
+      count: 0,
+      totals: [{ currency: 'INR', totalMinor: 0 }],
+      verifiedAt: verified,
+    }),
+  );
+  expect(f.copies.at(-1)?.months?.[groupId]).not.toHaveProperty('shareMinor');
+});

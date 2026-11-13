@@ -1,5 +1,6 @@
 import {
   fitWidgetLayout,
+  fitWidgetSections,
   widgetText,
   type WidgetDimensions,
   type WidgetSection,
@@ -7,12 +8,13 @@ import {
 import { widgetTextLevel } from './widget-layout';
 import { widgetSummary } from './widget-accessibility';
 import { formatCurrency, getCurrency } from './currency';
-import { toMajorAmount } from './exact-money';
+import { displayMajorAmount, toMajorAmount } from './exact-money';
 import { counted, SEPARATOR } from './separator';
 import { widgetSavedTime, type WidgetSession } from './balances-widget';
 import type { GroupCategory } from './types';
 import { dayCount } from './trip-summary';
 import { dayKeyInZone } from './zoned-calendar';
+import { currentMonthKey } from './date';
 export interface GroupWidgetSetup {
   kind: 'group';
   hideAmounts?: boolean;
@@ -20,6 +22,16 @@ export interface GroupWidgetSetup {
   accountId: string;
   groupId: string;
 }
+export interface WidgetMonthPart {
+  month: string;
+  verifiedAt: number;
+  count: number;
+  mainCurrency: string;
+  mainCurrencyOnly: boolean;
+  totals: { currency: string; totalMinor: number }[];
+  shareMinor?: number;
+}
+
 export interface WidgetGroupPart {
   id: string;
   name: string;
@@ -56,14 +68,70 @@ function tripDay(part: WidgetGroupPart, now: number): string | null {
   }
 }
 
+function monthWidgetView(month: WidgetMonthPart | undefined, setup: GroupWidgetSetup, now: number) {
+  const empty = {
+    totals: [] as string[],
+    share: null as string | null,
+    mainCurrencyOnly: null as string | null,
+    count: null as string | null,
+    saved: null as string | null,
+    prompt: 'Open the Group to update' as string | null,
+    more: null as string | null,
+  };
+  const savedMonth = month?.month === currentMonthKey(new Date(now)) ? month : undefined;
+  if (!savedMonth) return empty;
+  try {
+    return {
+      totals: setup.hideAmounts
+        ? []
+        : [...savedMonth.totals]
+            .sort(
+              (a, b) =>
+                Number(b.currency === savedMonth.mainCurrency) -
+                Number(a.currency === savedMonth.mainCurrency),
+            )
+            .map((row) =>
+              formatCurrency(displayMajorAmount(row.totalMinor, row.currency), row.currency),
+            ),
+      share:
+        !setup.hideAmounts && savedMonth.shareMinor !== undefined
+          ? formatCurrency(
+              toMajorAmount(savedMonth.shareMinor, savedMonth.mainCurrency),
+              savedMonth.mainCurrency,
+            )
+          : null,
+      mainCurrencyOnly:
+        !setup.hideAmounts && savedMonth.shareMinor !== undefined && savedMonth.mainCurrencyOnly
+          ? 'Main currency only'
+          : null,
+      count: setup.hideAmounts ? `${counted(savedMonth.count, 'Expense')} this Month` : null,
+      saved: widgetSavedTime(savedMonth.verifiedAt, now),
+      prompt: null,
+      more: null as string | null,
+    };
+  } catch {
+    return empty;
+  }
+}
+
 function groupWidgetView(
   part: WidgetGroupPart | null | undefined,
   setup: GroupWidgetSetup,
   session: WidgetSession,
   now: number,
+  month?: WidgetMonthPart,
 ) {
   const empty = {
     state: 'no-copy',
+    month: null as null | {
+      totals: string[];
+      share: string | null;
+      mainCurrencyOnly: string | null;
+      count: string | null;
+      saved: string | null;
+      prompt: string | null;
+      more: string | null;
+    },
     hidden: null as string | null,
     name: null as string | null,
     tripDay: null as string | null,
@@ -129,6 +197,7 @@ function groupWidgetView(
       state: session.loading ? 'loading' : 'no-copy',
       title: session.loading ? null : empty.title,
     };
+  const monthView = monthWidgetView(month, setup, now);
   const currencies = [...part.currencies].sort(
     (a, b) => Number(b.currency === part.mainCurrency) - Number(a.currency === part.mainCurrency),
   );
@@ -195,6 +264,7 @@ function groupWidgetView(
     ...empty,
     state: part.archived ? 'archived' : allSquare ? 'all-square' : 'normal',
     name: part.name,
+    month: monthView,
     tripDay: tripDay(part, now),
     hidden: setup.hideAmounts ? 'Amounts and names hidden' : null,
     theme: part.theme,
@@ -435,7 +505,62 @@ function groupLayout(
         !!actionLabel &&
         text.width(paymentOverflow(view.payments), 10) + text.width(actionLabel, actionFont) + 32 <=
           width;
-      const sections: WidgetSection[] = [
+      const monthEligible = !!view.month && optional && level === 0 && !tiny;
+      const sectionLabelHeight = text.line(11) + 4;
+      const monthColumnWidth = compact ? width : (width - 8) / 2;
+      const monthAmountFont = monthEligible
+        ? text.fit(
+            [...(view.month?.totals ?? []), view.month?.share ?? ''].sort(
+              (a, b) => text.width(b, 15, true) - text.width(a, 15, true),
+            )[0] ?? '',
+            15,
+            monthColumnWidth,
+            true,
+          )
+        : 15;
+      const monthNoteLines = text.words(view.month?.mainCurrencyOnly ?? '', 10, monthColumnWidth);
+      const monthPromptLines = text.words(view.month?.prompt ?? view.month?.count ?? '', 11);
+      const spentHeight = view.month?.totals.length
+        ? text.line(11) + 4 + view.month.totals.length * text.line(monthAmountFont)
+        : 0;
+      const shareHeight = view.month?.share
+        ? text.line(11) +
+          4 +
+          text.line(monthAmountFont) +
+          (monthNoteLines.length ? 4 + monthNoteLines.length * text.line(10) : 0)
+        : 0;
+      const monthTextHeight = monthPromptLines.length * text.line(11);
+      const monthHeading = view.hidden ? 0 : sectionLabelHeight;
+      const monthSpendingLabel = view.month?.totals.length ? text.line(11) + 4 : 0;
+      const monthInset =
+        monthHeading +
+        monthSpendingLabel +
+        (compact ? shareHeight + (spentHeight && shareHeight ? 8 : 0) : 0);
+      const monthRows = view.month?.totals.length || 1;
+      const monthMoreHeight =
+        Math.max(
+          text.words(`+${counted(monthRows, 'more', 'more')}`, 10, monthColumnWidth).length,
+          text.words(`In ${counted(monthRows, 'currency', 'currencies')}`, 10, monthColumnWidth)
+            .length,
+        ) *
+          text.line(10) +
+        4;
+      const monthSection: WidgetSection = {
+        id: 'month',
+        rows: monthRows,
+        rowHeight: view.month?.totals.length ? text.line(monthAmountFont) : monthTextHeight,
+        inset: monthInset,
+        minHeight: view.month?.totals.length
+          ? compact
+            ? monthInset + monthMoreHeight
+            : monthHeading + Math.max(shareHeight, monthSpendingLabel + monthMoreHeight)
+          : view.hidden
+            ? 0
+            : monthHeading + text.line(11) + 4 + text.line(monthAmountFont),
+        ...(view.month?.totals.length ? { moreHeight: monthMoreHeight } : {}),
+      };
+      let showSectionLabels = monthEligible && !view.hidden;
+      let sections: WidgetSection[] = [
         ...(view.name
           ? [
               {
@@ -472,7 +597,7 @@ function groupLayout(
                 rows: view.payments.length,
                 maxRows: paymentFits ? view.payments.length : 0,
                 rowHeight,
-                inset: compact ? 0 : pixels(4) * 2,
+                inset: (compact ? 0 : pixels(4) * 2) + (showSectionLabels ? sectionLabelHeight : 0),
                 moreHeight: moreInFooter
                   ? 0
                   : Math.max(
@@ -485,6 +610,8 @@ function groupLayout(
               },
             ]
           : []),
+        // #1187 inserts opt-in Recent between Payments and This Month.
+        ...(monthEligible ? [monthSection] : []),
         ...(view.hidden && level < 2 && !tiny
           ? [{ id: 'hidden', rows: 1, rowHeight: text.line(10) + 6 }]
           : []),
@@ -522,8 +649,32 @@ function groupLayout(
             ]
           : []),
       ];
+      // Labels exist only when a second information section is admitted. A probe with the
+      // shared rule reserves both labels together, then removes that reservation if Month loses.
+      if (
+        showSectionLabels &&
+        !fitWidgetSections(height, sections, gap, ratio).sections.some(
+          (section) => section.id === 'month',
+        )
+      ) {
+        showSectionLabels = false;
+        sections = sections
+          .filter((section) => section.id !== 'month')
+          .map((section) =>
+            section.id === 'payments'
+              ? { ...section, inset: (section.inset ?? 0) - sectionLabelHeight }
+              : section,
+          );
+      }
       return {
         sections,
+        showSectionLabels,
+        sectionLabelHeight,
+        monthAmountFontSize: text.font(monthAmountFont),
+        monthColumnWidth,
+        monthNoteLines,
+        monthPromptLines,
+        monthColumnGap: compact ? (spentHeight && shareHeight ? 8 : 0) : 8,
         fontSizes: {
           caption: text.font(9),
           small: text.font(10),
@@ -559,6 +710,12 @@ function groupLayout(
     gap,
   );
   const payments = settings.sections.find((s) => s.id === 'payments');
+  const monthSection = settings.sections.find((s) => s.id === 'month');
+  const monthMore = monthSection?.more
+    ? monthSection.rows
+      ? `+${counted(monthSection.more, 'more', 'more')}`
+      : `In ${counted(view.month?.totals.length ?? 0, 'currency', 'currencies')}`
+    : null;
   const more = payments?.more
     ? payments.rows
       ? paymentOverflow(view.payments.slice(payments.rows))
@@ -579,6 +736,18 @@ function groupLayout(
     compact,
     scale,
     paymentPadding: compact ? 0 : pixels(4),
+    monthRows: monthSection?.rows ?? 0,
+    monthMore,
+    monthMoreLines: monthMore
+      ? text.words(monthMore, settings.fontSizes.small, settings.monthColumnWidth)
+      : [],
+    paymentLabel: settings.showSectionLabels && payments?.rows ? 'PAYMENTS' : null,
+    paymentPanelHeight: payments
+      ? payments.height -
+        (settings.showSectionLabels && payments.rows ? settings.sectionLabelHeight : 0)
+      : 0,
+    monthLabel: view.hidden ? null : 'THIS MONTH',
+    monthSaved: view.hidden ? null : view.month?.saved,
     paymentRows: Array.from({ length: payments?.rows ?? 0 }, (_, i) => ({
       height: payments!.rowHeight,
       contentHeight: payments!.rowHeight - (i ? pixels(1) : 0),
@@ -607,10 +776,11 @@ function projectGroupWidget(
   session: WidgetSession,
   now: number,
   fontScale = 1,
+  month?: WidgetMonthPart,
 ) {
   let full: ReturnType<typeof groupWidgetView>;
   try {
-    full = groupWidgetView(part, setup, session, now);
+    full = groupWidgetView(part, setup, session, now, month);
   } catch {
     // Damaged saved data must not prevent Android drawing the widget or erase its setup.
     full = groupWidgetView(undefined, setup, session, now);
@@ -624,6 +794,13 @@ function projectGroupWidget(
     ...full,
     layout,
     more,
+    month: full.month
+      ? {
+          ...full.month,
+          totals: full.month.totals.slice(0, layout.monthRows),
+          more: layout.monthMore,
+        }
+      : null,
     payments: full.payments.slice(0, limit).map((p) => ({
       ...p,
       displayLabel: layout.compact
@@ -646,6 +823,13 @@ function projectGroupWidget(
       // Speech keeps every saved payment, including rows omitted at this size (Large text board).
       ...spokenPayments(full.payments),
       full.hidden ? null : full.description,
+      full.month ? 'This Month' : null,
+      ...(full.month?.totals.length ? ['Group spent', ...full.month.totals] : []),
+      full.month?.share ? `Your share ${full.month.share}` : null,
+      full.month?.mainCurrencyOnly,
+      full.month?.count,
+      full.month?.prompt,
+      full.month?.saved,
       full.saved,
       full.hidden,
       full.target === 'setup' || full.muted ? full.action : null,

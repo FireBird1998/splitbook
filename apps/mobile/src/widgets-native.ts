@@ -107,7 +107,14 @@ export function createWidgetsStore(environment: string) {
             ([id, group]) => group.archived && !copy.lostGroupIds?.includes(id),
           ),
         );
-        copy = { ...copy, groups: { ...finalGroups, ...copy.groups } };
+        const finalMonths = Object.fromEntries(
+          Object.entries(previous.months ?? {}).filter(([id]) => finalGroups[id]),
+        );
+        copy = {
+          ...copy,
+          groups: { ...finalGroups, ...copy.groups },
+          months: { ...finalMonths, ...copy.months },
+        };
         // To review has its own verification time. Offline Home restoration must not erase it.
         if (
           process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' &&

@@ -58,7 +58,7 @@ it('summarizes Balances with complete amounts and their verification time', () =
 });
 it('summarizes a Group with first names only', () => {
   expect(groupWidget(part, setup, widgetDimensions('4x2'), auth, now).summary).toBe(
-    'Group. Maple House. You owe ₹1,480.00. You pay Priya ₹1,480.00. Saved 9:41.',
+    'Group. Maple House. You owe ₹1,480.00. You pay Priya ₹1,480.00. This Month. Open the Group to update. Saved 9:41.',
   );
 });
 it('speaks the visible Group name but not amounts or member names when hidden', () => {

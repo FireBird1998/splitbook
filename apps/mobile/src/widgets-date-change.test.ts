@@ -52,6 +52,17 @@ it('redraws both themes from the same saved copy on a midnight update without op
     version: 1,
     accountId: 'alex',
     home: null,
+    months: {
+      goa: {
+        month: '2026-11',
+        verifiedAt: 1,
+        count: 12,
+        mainCurrency: 'INR',
+        mainCurrencyOnly: false,
+        totals: [{ currency: 'INR', totalMinor: 1840000 }],
+        shareMinor: 460000,
+      },
+    },
     groups: {
       goa: {
         id: 'goa',
@@ -97,6 +108,20 @@ it('redraws both themes from the same saved copy on a midnight update without op
     const result = renderWidget.mock.calls[0]![0];
     expect(texts(buildWidgetTree(result.light))).toContain(expected);
     expect(texts(buildWidgetTree(result.dark))).toContain(expected);
+  }
+  native.info.mockResolvedValue([{ ...info, height: 344 }]);
+  for (const [instant, expected, absent] of [
+    ['2026-11-30T18:29:59Z', '₹18,400.00', 'Open the Group to update'],
+    ['2026-11-30T18:30:00Z', 'Open the Group to update', '₹18,400.00'],
+  ]) {
+    vi.setSystemTime(new Date(instant));
+    const renderWidget = vi.fn();
+    await native.handler!({ widgetInfo: info, widgetAction: 'WIDGET_UPDATE', renderWidget });
+    const result = renderWidget.mock.calls[0]![0];
+    for (const theme of [result.light, result.dark]) {
+      expect(texts(buildWidgetTree(theme))).toContain(expected);
+      expect(texts(buildWidgetTree(theme))).not.toContain(absent);
+    }
   }
   expect(copy).toEqual(original);
   expect(fetch).not.toHaveBeenCalled();

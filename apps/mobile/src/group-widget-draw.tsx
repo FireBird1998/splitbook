@@ -25,7 +25,15 @@ export function drawGroup(
         ? null
         : copy.groups?.[setup.groupId]
       : undefined;
-  const view = groupWidget(part, setup, size, session, now, fontScale),
+  const view = groupWidget(
+      part,
+      setup,
+      size,
+      session,
+      now,
+      fontScale,
+      copy?.accountId === setup.accountId ? copy.months?.[setup.groupId] : undefined,
+    ),
     l = view.layout;
   const color = (value: string) => value as `#${string}`;
   const action = (target: WidgetTarget) => ({
@@ -151,11 +159,11 @@ export function drawGroup(
     <FlexWidget>{lines(l.balanceLines, tone, l.balanceFontSize, true)}</FlexWidget>
   );
   const payments = l.sections.find((s) => s.id === 'payments');
-  const paymentRows = (
+  const paymentPanel = (
     <FlexWidget
       style={{
         width: 'match_parent',
-        height: 'match_parent',
+        height: l.paymentPanelHeight,
         ...(!l.compact ? { borderRadius: 14, backgroundColor: color(t.surfaceMuted) } : {}),
         paddingVertical: l.paymentPadding,
       }}
@@ -229,6 +237,81 @@ export function drawGroup(
           {lines(l.moreLines, t.textSecondary, l.fontSizes.small, true)}
         </FlexWidget>
       ) : null}
+    </FlexWidget>
+  );
+  const paymentRows = (
+    <FlexWidget style={{ width: 'match_parent', height: 'match_parent' }}>
+      {l.paymentLabel ? (
+        <FlexWidget style={{ height: l.sectionLabelHeight }}>
+          {text(l.paymentLabel, t.textSecondary, l.fontSizes.secondary, true)}
+        </FlexWidget>
+      ) : null}
+      {paymentPanel}
+    </FlexWidget>
+  );
+  const month = (
+    <FlexWidget style={{ width: 'match_parent' }}>
+      {l.monthLabel ? (
+        <FlexWidget
+          style={{
+            width: 'match_parent',
+            height: l.sectionLabelHeight,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}
+        >
+          <FlexWidget style={{ flex: 1 }}>
+            {text(l.monthLabel, t.textSecondary, l.fontSizes.secondary, true)}
+          </FlexWidget>
+          {l.monthSaved ? text(l.monthSaved, t.textMuted, l.fontSizes.caption) : null}
+        </FlexWidget>
+      ) : null}
+      {view.month?.prompt || view.month?.count ? (
+        <FlexWidget>
+          {lines(
+            l.monthPromptLines,
+            view.month?.prompt ? t.brand.main : t.textSecondary,
+            l.fontSizes.secondary,
+          )}
+        </FlexWidget>
+      ) : (
+        <FlexWidget
+          style={{
+            width: 'match_parent',
+            flexDirection: l.compact ? 'column' : 'row',
+            flexGap: l.monthColumnGap,
+          }}
+        >
+          {view.month?.totals.length || view.month?.more ? (
+            <FlexWidget style={l.compact ? { width: 'match_parent' } : { flex: 1 }}>
+              {text('Group spent', t.textSecondary, l.fontSizes.secondary)}
+              <FlexWidget style={{ height: 4 }} />
+              {view.month.totals.map((amount, index) => (
+                <FlexWidget key={index}>
+                  {text(amount, t.text, l.monthAmountFontSize, true, true)}
+                </FlexWidget>
+              ))}
+              {view.month?.more ? (
+                <FlexWidget style={{ paddingTop: 4 }}>
+                  {lines(l.monthMoreLines, t.textSecondary, l.fontSizes.small)}
+                </FlexWidget>
+              ) : null}
+            </FlexWidget>
+          ) : null}
+          {view.month?.share ? (
+            <FlexWidget style={l.compact ? { width: 'match_parent' } : { flex: 1 }}>
+              {text('Your share', t.textSecondary, l.fontSizes.secondary)}
+              <FlexWidget style={{ height: 4 }} />
+              {text(view.month.share, t.text, l.monthAmountFontSize, true, true)}
+              {l.monthNoteLines.length ? (
+                <FlexWidget style={{ paddingTop: 4 }}>
+                  {lines(l.monthNoteLines, t.textMuted, l.fontSizes.small)}
+                </FlexWidget>
+              ) : null}
+            </FlexWidget>
+          ) : null}
+        </FlexWidget>
+      )}
     </FlexWidget>
   );
   const message = (
@@ -318,6 +401,7 @@ export function drawGroup(
     header,
     balance,
     payments: paymentRows,
+    month,
     title: message,
     description: (
       <FlexWidget>

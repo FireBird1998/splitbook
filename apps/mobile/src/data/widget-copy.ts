@@ -1,5 +1,9 @@
 import { cachedRead } from './offline-cache';
 import { parseGroup, parseGroups } from './dto';
+import { widgetMonthCopy } from './widget-month-copy';
+import { expensePagePath } from '@splitbook/shared/api-paths';
+import { currentMonthKey } from '@splitbook/shared/date';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { parseGroupBalances } from './financial-dto';
 import type { SavedQueryRecords } from './saved-copy-budget';
 import { widgetGroupCopy } from './widget-group-copy';
@@ -27,10 +31,12 @@ export function createWidgetCopy(
   now: () => number = Date.now,
   groupReads: (id: string) => { group: Envelope; balances: Envelope } | null = () => null,
   trusted: (path: string, verifiedAt: number) => boolean = () => true,
+  monthRead: (id: string) => { month: string; read: Envelope } | null = () => null,
 ) {
   const queue = createSavedCopyQueue();
   let signature = '';
   let groups: Record<string, WidgetGroupPart> = {};
+  let months: NonNullable<WidgetCopy['months']> = {};
   let savedGroups: WidgetCopy['savedGroups'];
   const lost = new Set<string>();
   const retired = new Set<string>();
@@ -61,20 +67,46 @@ export function createWidgetCopy(
     const keys = (await rows.keys?.(accountId)) ?? [];
     for (const path of keys.filter((path) => /^\/api\/groups\/[^/]+$/.test(path))) {
       const id = path.split('/').at(-1)!;
-      if (groups[id] || retired.has(id)) continue;
-      const [detail, balances] = await Promise.all([read(path), read(path + '/balances')]);
-      if (detail && balances && !retired.has(id)) {
-        try {
-          groups[id] = widgetGroupCopy(
-            parseGroup(detail.value),
-            parseGroupBalances(balances.value),
-            accountId,
-            detail.refreshedAt,
-            balances.refreshedAt,
-          );
-        } catch {
-          /* A malformed saved read is never shown. */
+      if (retired.has(id)) continue;
+      const detail = await read(path);
+      if (!detail || retired.has(id)) continue;
+      try {
+        const group = parseGroup(detail.value);
+        if (!groups[id]) {
+          const balances = await read(path + '/balances');
+          try {
+            if (balances && !retired.has(id))
+              groups[id] = widgetGroupCopy(
+                group,
+                parseGroupBalances(balances.value),
+                accountId,
+                detail.refreshedAt,
+                balances.refreshedAt,
+              );
+          } catch {
+            /* An unreadable Balances part does not discard a saved Month summary. */
+          }
         }
+        if (!months[id]) {
+          const month = currentMonthKey(new Date(now()));
+          const expected = expensePagePath(id, {
+            limit: 20,
+            includeMemberBreakdown: true,
+            ...expenseMonthRange(month),
+          });
+          // Every Month page carries the same aggregate summary. Keep the newest saved read.
+          for (const candidate of keys.filter((key) => key.replace(/page=\d+&/, '') === expected)) {
+            const saved = await read(candidate);
+            if (
+              saved &&
+              !retired.has(id) &&
+              (!months[id] || saved.refreshedAt > months[id].verifiedAt)
+            )
+              months[id] = widgetMonthCopy(group, saved.value, accountId, month, saved.refreshedAt);
+          }
+        }
+      } catch {
+        /* A malformed saved read is never shown. */
       }
     }
   };
@@ -111,10 +143,21 @@ export function createWidgetCopy(
         retired.delete(id);
         archived.delete(id);
       }
+      const month = id ? monthRead(id) : null;
+      if (month && snapshot.detail.data) {
+        months[id!] = widgetMonthCopy(
+          snapshot.detail.data,
+          month.read.value,
+          held.accountId,
+          month.month,
+          month.read.refreshedAt,
+        );
+      }
       const copy: WidgetCopy = {
         version: 1,
         accountId: held.accountId,
         groups: { ...groups },
+        months: { ...months },
         lostGroupIds: [...lost],
         ...(savedGroups ? { savedGroups } : {}),
         home:
@@ -143,6 +186,7 @@ export function createWidgetCopy(
       queue.push('widget', async () => {
         await held.writeSavedCopy(() => restore(held.accountId));
         copy.groups = { ...groups };
+        copy.months = { ...months };
         copy.lostGroupIds = [...lost];
         if (savedGroups) copy.savedGroups = savedGroups;
         await held.writeSavedCopy(() => native.write(copy));
@@ -160,6 +204,7 @@ export function createWidgetCopy(
     },
     forgetGroup(id: string, denied = false) {
       delete groups[id];
+      delete months[id];
       archived.delete(id);
       retired.add(id);
       queue.cancel();
@@ -174,6 +219,7 @@ export function createWidgetCopy(
       queue.cancel();
       signature = '';
       groups = {};
+      months = {};
       savedGroups = undefined;
       lost.clear();
       retired.clear();
