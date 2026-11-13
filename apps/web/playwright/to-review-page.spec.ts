@@ -205,6 +205,122 @@ test('possible duplicate shows the matching Expense and requires the explicit ti
   await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
 });
 
+/** A real saved Expense, so the gate exercises the detail read rather than a fabricated match. */
+async function matchingExpense(
+  page: Page,
+  kinds: Parameters<typeof seedReviewPage>[0] = ['duplicate'],
+) {
+  await page.clock.setFixedTime(new Date('2026-11-13T12:00:00.000Z'));
+  await open(page, kinds);
+  const draft = (await rows(page)).find(
+    (row: { values: { description: string } }) => row.values.description === 'Review matching meal',
+  );
+  const response = await page.request.post(`/api/groups/${DEMO_GROUP_ID}/expenses`, {
+    data: { ...draft.values, date: `${draft.values.date}T12:00:00.000Z` },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  const expense = (await response.json()).data;
+  await page.reload();
+  return `/api/groups/${DEMO_GROUP_ID}/expenses/${expense._id}`;
+}
+
+test('matching Expense loading blocks both the tick and Save (#1194)', async ({ page }) => {
+  const path = await matchingExpense(page);
+  let release!: () => void;
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  let reads = 0;
+  await page.route(`**${path}`, async (route) => {
+    reads++;
+    await held;
+    await route.continue();
+  });
+  try {
+    await page.getByRole('button', { name: 'Review Review matching meal', exact: true }).click();
+    const review = panel(page);
+    await expect(review.getByText('Loading matching Expense…', { exact: true })).toBeVisible();
+    await expect(review.getByLabel('It’s a different expense, save it anyway')).toBeDisabled();
+    await expect(
+      review.getByRole('status').filter({ hasText: 'Loading matching Expense…' }),
+    ).toBeVisible();
+    await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
+    expect(reads).toBe(1);
+    release();
+    await expect(review.getByRole('region', { name: 'Possible duplicates' })).toContainText(
+      'Added by You',
+    );
+    await review.getByLabel('It’s a different expense, save it anyway').check();
+    await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
+    expect(reads).toBe(1);
+  } finally {
+    release();
+  }
+});
+
+test('failed matching Expense blocks Save; keyboard Try again reloads only the match (#1194)', async ({
+  page,
+}) => {
+  const path = await matchingExpense(page);
+  let fails = true;
+  await page.route(`**${path}`, (route) =>
+    fails
+      ? route.fulfill({ status: 500, json: { error: 'Unavailable', status: 500 } })
+      : route.continue(),
+  );
+  await page.getByRole('button', { name: 'Review Review matching meal', exact: true }).click();
+  const review = panel(page);
+  const failure = review
+    .getByRole('status')
+    .filter({ hasText: 'Could not load this Expense. Check it in Expenses before saving.' });
+  await expect(failure).toBeVisible();
+  await failure.focus();
+  await expect(failure).toBeFocused();
+  await expect(review.getByLabel('It’s a different expense, save it anyway')).toBeDisabled();
+  await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
+  const retry = review.getByRole('button', { name: 'Try again', exact: true });
+  await expect(retry).toHaveAccessibleDescription(/Could not load this Expense/);
+  const requests: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith('/api/')) requests.push(`${request.method()} ${url.pathname}`);
+  });
+  fails = false;
+  await retry.focus();
+  await page.keyboard.press('Enter');
+  await expect(review.getByRole('region', { name: 'Possible duplicates' })).toContainText(
+    'Added by You',
+  );
+  expect(requests).toEqual([`GET ${path}`]);
+  await review.getByLabel('It’s a different expense, save it anyway').check();
+  await review.getByRole('button', { name: 'Save expense', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
+});
+
+test('Save ready leaves out an unopened matching Expense without fetching it (#1194)', async ({
+  page,
+}) => {
+  const path = await matchingExpense(page, ['duplicate', 'ready']);
+  let matchReads = 0;
+  await page.route(`**${path}`, (route) => {
+    matchReads++;
+    return route.continue();
+  });
+  const check = page.getByRole('region', { name: 'Check before saving', exact: true });
+  await expect(check).toContainText('Looks like “Review matching meal”. Open it to check.');
+  await page.getByRole('button', { name: 'Save 1 ready', exact: true }).click();
+  const confirmation = page.getByRole('dialog', { name: 'Save 1 ready?' });
+  await expect(confirmation).toContainText('Review meal 2');
+  await expect(confirmation).not.toContainText('Review matching meal');
+  await confirmation.getByRole('button', { name: 'Confirm save' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
+  const remaining = await rows(page);
+  expect(remaining).toHaveLength(1);
+  expect(remaining[0].values.description).toBe('Review matching meal');
+  expect(matchReads).toBe(0);
+  await expect(check).toContainText('Open it to check.');
+});
+
 test('Save N ready confirms only ready versions and gives mixed per-item outcomes', async ({
   page,
 }) => {

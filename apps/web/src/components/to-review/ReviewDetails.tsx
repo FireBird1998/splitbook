@@ -1,6 +1,8 @@
 'use client';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
+import { useEffect, useId } from 'react';
 import useSWR from 'swr';
 import { expenseRecordKey } from '@splitbook/shared/query-keys';
 import { formatDate } from '@splitbook/shared/date';
@@ -64,18 +66,30 @@ function ExpenseMatch({
   id,
   description,
   names,
+  onLoaded,
+  disabled,
 }: {
   groupId: string;
   id: string;
   description: string;
   /** Members' names, with the viewer as "You". */
   names: Readonly<Record<string, string>>;
+  onLoaded: (id: string, loaded: boolean) => void;
+  disabled: boolean;
 }) {
-  const { data, error } = useSWR(
+  const { data, error, isValidating, mutate } = useSWR(
     expenseRecordKey(WEB_QUERY_ACCOUNT, groupId, id),
     fetchWebExpenseRecord,
+    { shouldRetryOnError: false },
   );
   const expense = data?.data;
+  const loaded = !!expense;
+  const statusId = useId();
+  const descriptionId = `${statusId}-description`;
+  useEffect(() => {
+    onLoaded(id, loaded);
+    return () => onLoaded(id, false);
+  }, [id, loaded, onLoaded]);
   const author = expense?.createdBy;
   // A current member as To review names them ("You" for the viewer), else the name on the record.
   const addedBy =
@@ -83,20 +97,31 @@ function ExpenseMatch({
     (typeof author === 'object' && author?.name ? author.name : 'a member');
   return (
     <Box>
-      <Typography fontWeight={600}>{expense?.description ?? description}</Typography>
+      <Typography id={descriptionId} fontWeight={600}>
+        {expense?.description ?? description}
+      </Typography>
       {expense ? (
-        <Typography variant="body2">
+        <Typography variant="body2" role="status">
           {formatCurrency(expense.amount, expense.currency)}
           {SEPARATOR}
           {formatDate(expenseLocalDate(expense.date))}
           {SEPARATOR}Added by {addedBy}
         </Typography>
       ) : (
-        <Typography variant="body2">
-          {error
+        <Typography id={statusId} variant="body2" role="status" tabIndex={0}>
+          {error && !isValidating
             ? 'Could not load this Expense. Check it in Expenses before saving.'
             : 'Loading matching Expense…'}
         </Typography>
+      )}
+      {!expense && error && (
+        <Button
+          disabled={disabled || isValidating}
+          aria-describedby={`${descriptionId} ${statusId}`}
+          onClick={() => void mutate()}
+        >
+          Try again
+        </Button>
       )}
     </Box>
   );
@@ -106,12 +131,16 @@ export function ReviewMatches({
   items,
   names,
   currency,
+  onExpenseLoaded,
+  disabled,
 }: {
   item: ToReviewItem;
   items: ToReviewItem[];
   names: Readonly<Record<string, string>>;
   /** The Group's currency. */
   currency?: string;
+  onExpenseLoaded: (id: string, loaded: boolean) => void;
+  disabled: boolean;
 }) {
   return (
     <Box
@@ -124,7 +153,14 @@ export function ReviewMatches({
       </Typography>
       {item.duplicates.map((match) =>
         match.kind === 'expense' ? (
-          <ExpenseMatch key={match.id} groupId={item.draft.groupId} names={names} {...match} />
+          <ExpenseMatch
+            key={match.id}
+            groupId={item.draft.groupId}
+            names={names}
+            onLoaded={onExpenseLoaded}
+            disabled={disabled}
+            {...match}
+          />
         ) : (
           <Box key={match.id}>
             {items.find((other) => other.draft.id === match.id) ? (
