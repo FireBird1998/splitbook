@@ -756,6 +756,7 @@ export default function ToReviewPage({
                 groupName={group?.name || 'this Group'}
                 client={client}
                 refresh={refresh}
+                refreshMatches={() => mutate(TO_REVIEW_KEY)}
                 available={available && items.some((item) => item.id === selected.id) && !pending}
                 savingBlocked={pending || busy}
                 run={run ? `${run.index + 1} of ${run.ids.length}` : undefined}

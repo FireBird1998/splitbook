@@ -209,8 +209,10 @@ test('possible duplicate shows the matching Expense and requires the explicit ti
 async function matchingExpense(
   page: Page,
   kinds: Parameters<typeof seedReviewPage>[0] = ['duplicate'],
+  runningClock = false,
 ) {
-  await page.clock.setFixedTime(new Date('2026-11-13T12:00:00.000Z'));
+  if (runningClock) await page.clock.install({ time: new Date('2026-11-13T12:00:00.000Z') });
+  else await page.clock.setFixedTime(new Date('2026-11-13T12:00:00.000Z'));
   await open(page, kinds);
   const draft = (await rows(page)).find(
     (row: { values: { description: string } }) => row.values.description === 'Review matching meal',
@@ -241,6 +243,7 @@ test('matching Expense loading blocks both the tick and Save (#1194)', async ({ 
     const review = panel(page);
     await expect(review.getByText('Loading matching Expense…', { exact: true })).toBeVisible();
     await expect(review.getByLabel('It’s a different expense, save it anyway')).toBeDisabled();
+    await expect(review.locator('#review-save-reason')).not.toHaveAttribute('role');
     await expect(
       review.getByRole('status').filter({ hasText: 'Loading matching Expense…' }),
     ).toBeVisible();
@@ -258,15 +261,12 @@ test('matching Expense loading blocks both the tick and Save (#1194)', async ({ 
   }
 });
 
-test('failed matching Expense blocks Save; keyboard Try again reloads only the match (#1194)', async ({
+test('failed matching Expense retries the match and To review, retaining keyboard focus (#1194)', async ({
   page,
 }) => {
   const path = await matchingExpense(page);
-  let fails = true;
   await page.route(`**${path}`, (route) =>
-    fails
-      ? route.fulfill({ status: 500, json: { error: 'Unavailable', status: 500 } })
-      : route.continue(),
+    route.fulfill({ status: 500, json: { error: 'Unavailable', status: 500 } }),
   );
   await page.getByRole('button', { name: 'Review Review matching meal', exact: true }).click();
   const review = panel(page);
@@ -274,8 +274,7 @@ test('failed matching Expense blocks Save; keyboard Try again reloads only the m
     .getByRole('status')
     .filter({ hasText: 'Could not load this Expense. Check it in Expenses before saving.' });
   await expect(failure).toBeVisible();
-  await failure.focus();
-  await expect(failure).toBeFocused();
+  await expect(failure).not.toHaveAttribute('tabindex');
   await expect(review.getByLabel('It’s a different expense, save it anyway')).toBeDisabled();
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
   const retry = review.getByRole('button', { name: 'Try again', exact: true });
@@ -285,16 +284,126 @@ test('failed matching Expense blocks Save; keyboard Try again reloads only the m
     const url = new URL(request.url());
     if (url.pathname.startsWith('/api/')) requests.push(`${request.method()} ${url.pathname}`);
   });
-  fails = false;
+  let release!: () => void;
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  await page.unroute(`**${path}`);
+  await page.route(`**${path}`, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await retry.focus();
+  try {
+    await page.keyboard.press('Enter');
+    await expect(retry).toHaveAttribute('aria-disabled', 'true');
+    await expect(retry).toHaveAttribute('aria-busy', 'true');
+    await expect(retry).toBeFocused();
+    await page.keyboard.press('Enter');
+    release();
+    await expect(review.getByRole('region', { name: 'Possible duplicates' })).toContainText(
+      'Added by You',
+    );
+    await expect(review.getByLabel('It’s a different expense, save it anyway')).toBeFocused();
+    await expect(review.getByLabel('It’s a different expense, save it anyway')).not.toBeChecked();
+    expect(requests.sort()).toEqual([`GET ${path}`, 'GET /api/user/to-review'].sort());
+  } finally {
+    release();
+  }
+  await page.keyboard.press('Space');
+  await expect(review.getByLabel('It’s a different expense, save it anyway')).toBeChecked();
+  await page.keyboard.press('Tab');
+  await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
+});
+
+test('Try again drops a deleted matching Expense from the fresh To review read (#1194)', async ({
+  page,
+}) => {
+  const path = await matchingExpense(page);
+  await expect(
+    page.getByRole('region', { name: 'Check before saving', exact: true }),
+  ).toContainText('Review matching meal');
+  const original = await page.request.get(path);
+  expect(original.status()).toBe(200);
+  const originalExpense = (await original.json()).data;
+  const deleted = await page.request.delete(path, {
+    headers: { 'X-Splitbook-Revision': String(originalExpense.revision) },
+  });
+  expect(deleted.status(), await deleted.text()).toBe(200);
+  const record = await page.request.get(path);
+  expect(record.status()).toBe(200);
+  expect((await record.json()).data.isDeleted).toBe(true);
+
+  // Keep the already shown To review snapshot, whose match was valid before the deletion.
+  await page.getByRole('button', { name: 'Review Review matching meal', exact: true }).click();
+  const review = panel(page);
+  await expect(
+    review.getByRole('status').filter({ hasText: 'This Expense is deleted.' }),
+  ).toBeVisible();
+  await expect(review.getByLabel('It’s a different expense, save it anyway')).toBeDisabled();
+  await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
+  const retry = review.getByRole('button', { name: 'Try again', exact: true });
   await retry.focus();
   await page.keyboard.press('Enter');
-  await expect(review.getByRole('region', { name: 'Possible duplicates' })).toContainText(
-    'Added by You',
-  );
-  expect(requests).toEqual([`GET ${path}`]);
-  await review.getByLabel('It’s a different expense, save it anyway').check();
-  await review.getByRole('button', { name: 'Save expense', exact: true }).click();
+  await expect(review.getByRole('region', { name: 'Possible duplicates' })).toHaveCount(0);
+  const save = review.getByRole('button', { name: 'Save expense', exact: true });
+  await expect(save).toBeEnabled();
+  await expect(save).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
+});
+
+test('a match removed while the second review reply is held prevents any save request (#1194)', async ({
+  page,
+}) => {
+  const path = await matchingExpense(page, ['duplicate'], true);
+  await page.getByRole('button', { name: 'Review Review matching meal', exact: true }).click();
+  const review = panel(page);
+  await review.getByLabel('It’s a different expense, save it anyway').check();
+  let release!: () => void;
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  let arrived!: () => void;
+  const checked = new Promise<void>((done) => {
+    arrived = done;
+  });
+  let saveRequests = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('/drafts/save')) saveRequests++;
+  });
+  await page.route(`**/api/groups/${DEMO_GROUP_ID}/drafts/review`, async (route) => {
+    const response = await route.fetch();
+    expect((await response.json()).data[0].duplicates).toHaveLength(1);
+    arrived();
+    await held;
+    await route.fulfill({ response });
+  });
+  try {
+    await review.getByRole('button', { name: 'Save expense', exact: true }).click();
+    await checked;
+    const expense = (await (await page.request.get(path)).json()).data;
+    expect(
+      (
+        await page.request.delete(path, {
+          headers: { 'X-Splitbook-Revision': String(expense.revision) },
+        })
+      ).status(),
+    ).toBe(200);
+    // A real polling read removes the deleted match, while the older preflight reply is delayed.
+    await nextRefresh(page);
+    await expect(review.getByRole('region', { name: 'Possible duplicates' })).toHaveCount(0);
+    release();
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'This item needs another look before saving.' }),
+    ).toBeVisible();
+    expect(saveRequests).toBe(0);
+    expect(await rows(page)).toHaveLength(1);
+  } finally {
+    release();
+  }
 });
 
 test('Save ready leaves out an unopened matching Expense without fetching it (#1194)', async ({

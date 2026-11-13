@@ -48,6 +48,7 @@ export default function ToReviewPanel({
   groupName,
   client,
   refresh,
+  refreshMatches,
   available,
   savingBlocked,
   run,
@@ -66,6 +67,7 @@ export default function ToReviewPanel({
   groupName: string;
   client: WebReviewClient;
   refresh: () => Promise<void>;
+  refreshMatches: () => Promise<unknown>;
   available: boolean;
   savingBlocked: boolean;
   run?: string;
@@ -84,6 +86,12 @@ export default function ToReviewPanel({
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
+  const duplicateTick = useRef<HTMLInputElement>(null);
+  const saveButton = useRef<HTMLButtonElement>(null);
+  const retryOrigin = useRef<HTMLButtonElement | null>(null);
+  const retryStarted = useCallback((button: HTMLButtonElement) => {
+    retryOrigin.current = button;
+  }, []);
   const [loadedExpenseIds, setLoadedExpenseIds] = useState<readonly string[]>([]);
   const expenseLoaded = useCallback((id: string, loaded: boolean) => {
     setLoadedExpenseIds((ids) =>
@@ -125,6 +133,24 @@ export default function ToReviewPanel({
           : duplicate && (!matchesLoaded || !acknowledged)
             ? 'Check the possible duplicate before saving.'
             : '';
+  useEffect(() => {
+    const from = retryOrigin.current;
+    if (!from) return;
+    // Preserve intentional focus moves. Removing the recovered match's button leaves body focused.
+    if (
+      document.activeElement !== from &&
+      (from.isConnected || document.activeElement !== document.body)
+    ) {
+      retryOrigin.current = null;
+      return;
+    }
+    if (!matchesLoaded || blocked || !available || unsent) return;
+    const next = duplicate ? duplicateTick.current : saveButton.current;
+    if (next && !next.disabled) {
+      next.focus();
+      retryOrigin.current = null;
+    }
+  });
   async function action(work: () => Promise<void>) {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -249,10 +275,13 @@ export default function ToReviewPanel({
               currency={context.currency}
               onExpenseLoaded={expenseLoaded}
               disabled={blocked || !available}
+              refreshMatches={refreshMatches}
+              onRetryStart={retryStarted}
             />
             <FormControlLabel
               control={
                 <Checkbox
+                  inputRef={duplicateTick}
                   checked={acknowledged}
                   disabled={blocked || !available || unsent || !matchesLoaded}
                   aria-describedby={reason ? 'review-save-reason' : undefined}
@@ -266,11 +295,12 @@ export default function ToReviewPanel({
           </>
         )}
         {reason && (
-          <Typography id="review-save-reason" role="status" variant="body2" color="text.secondary">
+          <Typography id="review-save-reason" variant="body2" color="text.secondary">
             {reason}
           </Typography>
         )}
         <Button
+          ref={saveButton}
           variant="contained"
           disabled={blocked || !!reason}
           aria-describedby={reason ? 'review-save-reason' : undefined}
