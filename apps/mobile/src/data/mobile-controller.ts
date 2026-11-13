@@ -1,3 +1,10 @@
+import { headerScenesEnabled } from '../config';
+import {
+  readGroupHeader,
+  groupHeaderSchema,
+  type GroupHeader,
+} from '@splitbook/shared/group-header';
+import { headerChanged } from './header-settings';
 import { createHeldUpdate, type HeldAdmission } from './held-update';
 import type { WidgetTarget } from '@splitbook/shared/balances-widget';
 import { createWidgetCopy } from './widget-copy';
@@ -402,6 +409,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     assistants: emptyAssistants(),
     tagManager: emptyTagManager(),
     currencyAdd: { groupId: null, status: 'idle', message: null },
+    headerSettings: null,
     currenciesOpenFor: null,
     groupCurrencies: {
       groupId: null,
@@ -729,6 +737,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         next.detail.status === 'denied')
     )
       next = { ...next, currenciesOpenFor: null };
+    if (
+      next.headerSettings &&
+      (next.screen !== 'group' ||
+        next.detail.id !== next.headerSettings.groupId ||
+        next.detail.status === 'denied')
+    )
+      next = { ...next, headerSettings: null };
     next = projectFreshness(next);
     snapshot = next;
     widgets.update(next);
@@ -7643,6 +7658,93 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     }
   };
+  const openHeaderSettings = () => {
+    const group = snapshot.detail.data;
+    if (!headerScenesEnabled() || snapshot.screen !== 'group' || !group) return;
+    const header = readGroupHeader(group.header);
+    publish({
+      ...snapshot,
+      headerSettings: {
+        groupId: group.id,
+        saved: header,
+        draft: { ...header },
+        status: 'editing',
+        message: null,
+      },
+    });
+  };
+  const closeHeaderSettings = () => {
+    if (snapshot.headerSettings?.status !== 'saving')
+      publish({ ...snapshot, headerSettings: null });
+  };
+  const chooseHeader = (change: Partial<GroupHeader>) => {
+    const state = snapshot.headerSettings;
+    if (!state || state.status === 'saving') return;
+    const draft = groupHeaderSchema.parse({ ...state.draft, ...change });
+    publish({ ...snapshot, headerSettings: { ...state, draft, status: 'editing', message: null } });
+  };
+  const saveHeader = async () => {
+    const state = snapshot.headerSettings;
+    if (
+      !state ||
+      state.status === 'saving' ||
+      !headerChanged(state) ||
+      snapshot.auth.status !== 'authenticated'
+    )
+      return false;
+    if (snapshot.offline.active) {
+      publish({
+        ...snapshot,
+        headerSettings: {
+          ...state,
+          status: 'error',
+          message: 'Changing the header needs a connection. Your choices have not been saved.',
+        },
+      });
+      return false;
+    }
+    const owner = generation;
+    publish({ ...snapshot, headerSettings: { ...state, status: 'saving', message: null } });
+    try {
+      await request(`/api/groups/${state.groupId}/header`, owner, {
+        method: 'PATCH',
+        body: state.draft,
+      });
+      if (!current(owner) || snapshot.headerSettings?.groupId !== state.groupId) return false;
+      invalidateReads(`group:${state.groupId}`);
+      publish({
+        ...snapshot,
+        headerSettings: {
+          ...state,
+          saved: state.draft,
+          status: 'editing',
+          message: 'Header saved for everyone in this Group.',
+        },
+      });
+      await refresh();
+      return true;
+    } catch (error) {
+      if (
+        !current(owner) ||
+        error instanceof Superseded ||
+        snapshot.headerSettings?.groupId !== state.groupId
+      )
+        return false;
+      publish({
+        ...snapshot,
+        headerSettings: {
+          ...state,
+          status: 'error',
+          message:
+            error instanceof RequestError && error.code === 'HEADER_SCENES_DISABLED'
+              ? 'Header scenes are unavailable here. Your choices have not been saved.'
+              : 'Your header was not saved. ' + expenseFailureMessage(error, 'Please try again.'),
+        },
+      });
+      return false;
+    }
+  };
+
   const closeCurrencies = () => {
     if (snapshot.currenciesOpenFor) publish({ ...snapshot, currenciesOpenFor: null });
   };
@@ -8342,6 +8444,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openTags,
     closeTags,
     addGroupCurrency,
+    openHeaderSettings,
+    closeHeaderSettings,
+    chooseHeader,
+    saveHeader,
     openCurrencies,
     closeCurrencies,
     manageTags,
