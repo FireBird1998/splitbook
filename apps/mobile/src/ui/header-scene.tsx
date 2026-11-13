@@ -105,7 +105,19 @@ export function HeaderSceneCard({ group, today }: { group: MobileGroup; today: s
         {[
           [
             'Dates',
-            facts.trip ? [facts.trip.start, facts.trip.end].filter(Boolean).join(' – ') : null,
+            facts.trip
+              ? [facts.trip.start, facts.trip.end]
+                  .filter((day): day is string => !!day)
+                  .map((day) =>
+                    new Date(day + 'T00:00:00Z').toLocaleDateString('en-GB', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                      timeZone: 'UTC',
+                    }),
+                  )
+                  .join(' – ')
+              : null,
           ],
           ['Members', String(facts.members)],
           ['Currency', facts.currencies.join(' · ')],
@@ -139,7 +151,7 @@ export function HeaderSceneCard({ group, today }: { group: MobileGroup; today: s
                   backgroundColor:
                     facts.trip!.today === index + 1
                       ? '#ffd27a'
-                      : facts.trip!.today !== null && index + 1 < facts.trip!.today
+                      : day < today
                         ? '#bfa98a'
                         : 'transparent',
                 }}
@@ -196,6 +208,22 @@ export default function HeaderScene({
         style={{ height: 208, overflow: 'hidden' }}
       >
         <LinearGradient colors={sky[time]} style={StyleSheet.absoluteFill} />
+        {time === 'night'
+          ? [6, 14, 22, 33, 47, 58, 66, 78, 88, 94].map((left, index) => (
+              <View
+                key={left}
+                style={{
+                  position: 'absolute',
+                  left: `${left}%`,
+                  top: 12 + (index % 3) * 12,
+                  width: 2,
+                  height: 2,
+                  backgroundColor: '#e9eefc',
+                  borderRadius: 1,
+                }}
+              />
+            ))
+          : null}
         <View
           style={{
             position: 'absolute',
@@ -208,6 +236,7 @@ export default function HeaderScene({
           }}
         />
         <Animated.View
+          renderToHardwareTextureAndroid
           importantForAccessibility="no-hide-descendants"
           style={[StyleSheet.absoluteFill, { transform: [{ translateY }] }]}
         >

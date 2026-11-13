@@ -51,3 +51,22 @@ it.each(['trip', 'home'] as const)(
     act(() => rendered.unmount());
   },
 );
+
+it('speaks the generated scene description', async () => {
+  const { default: HeaderScene } = await import('./header-scene');
+  const { default: beach } = await import('@splitbook/shared/header-scenes/beach');
+  let renderer!: ReturnType<typeof create>;
+  await act(async () => {
+    renderer = create(
+      <HeaderScene
+        group={group}
+        header={{ style: 'scene', scene: 'beach', time: 'day' }}
+        motion={false}
+        today="2026-09-18"
+      />,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  expect(JSON.stringify(renderer.toJSON())).toContain(beach.description);
+  act(() => renderer.unmount());
+});
