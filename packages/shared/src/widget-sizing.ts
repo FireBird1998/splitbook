@@ -13,9 +13,13 @@ export interface WidgetSection {
   inset?: number;
   /** Minimum height of the whole section, e.g. a fixed column beside a variable list. */
   minHeight?: number;
+  /** Fixed section heading, including when only its overflow count fits. */
+  headingHeight?: number;
   moreHeight?: number;
   required?: boolean;
   grow?: boolean;
+  /** Takes spare height only when no admitted list row grows. */
+  fallbackGrow?: boolean;
   /** A lower-priority prompt is admitted only after this list is complete. */
   whenComplete?: string;
   /** Admit a later section after this many rows of an earlier list, or its complete short list. */
@@ -46,6 +50,7 @@ export function fitWidgetSections(
     rowHeight: Math.max(1, up(s.rowHeight)),
     inset: up(s.inset ?? 0),
     minHeight: up(s.minHeight ?? 0),
+    headingHeight: up(s.headingHeight ?? 0),
     moreHeight: s.moreHeight === undefined ? undefined : up(s.moreHeight),
   }));
   const chosen = sections.map((s) => (s.required ? s.rows : 0));
@@ -56,7 +61,10 @@ export function fitWidgetSections(
   const cost = (i: number) =>
     visible[i]
       ? Math.max(
-          chosen[i] * sections[i].rowHeight + (chosen[i] ? (sections[i].inset ?? 0) : 0) + hint(i),
+          (sections[i].headingHeight ?? 0) +
+            chosen[i] * sections[i].rowHeight +
+            (chosen[i] ? (sections[i].inset ?? 0) : 0) +
+            hint(i),
           sections[i].minHeight ?? 0,
         )
       : 0;
@@ -126,7 +134,9 @@ export function fitWidgetSections(
     spare = Math.max(0, height - used());
   const explicit = sections.some((s, i) => s.grow && chosen[i] > 0);
   const first = chosen.findIndex((rows) => rows > 0);
-  const grows = (i: number) => (explicit ? !!sections[i].grow : i === first);
+  const fallback = sections.some((s, i) => s.fallbackGrow && chosen[i] > 0);
+  const grows = (i: number) =>
+    explicit ? !!sections[i].grow : fallback ? !!sections[i].fallbackGrow : i === first;
   const growing = sections.reduce((sum, _, i) => sum + (grows(i) ? chosen[i] : 0), 0);
   let remainder = spare;
   const extras = sections.map((_, i) => {

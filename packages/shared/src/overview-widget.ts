@@ -1,3 +1,4 @@
+import { widgetPayments } from './widget-payments';
 import {
   readWidgetBalances,
   type WidgetCopy,
@@ -53,6 +54,21 @@ export function overviewWidget(
   const allOwed = read.owed,
     allOwe = read.owe;
   const hidden = read.hidden;
+  const suggested =
+    normal && session.status === 'authenticated' ? widgetPayments(copy, session.accountId) : [];
+  const personCount = (incoming: boolean) =>
+    new Set(suggested.filter((row) => row.incoming === incoming).map((row) => row.person)).size;
+  const payCount = personCount(false),
+    paidCount = personCount(true);
+  const hiddenPayments = hidden
+    ? [
+        payCount ? `You pay ${counted(payCount, 'person', 'people')}` : null,
+        paidCount
+          ? `${counted(paidCount, 'person', 'people')} ${paidCount === 1 ? 'pays' : 'pay'} you`
+          : null,
+      ].filter((v): v is string => !!v)
+    : [];
+  const availablePayments = hidden ? [] : suggested;
   const acrossGroups =
     read.saved && !read.muted ? `Across ${counted(read.groupCount, 'Group')}` : null;
   const ratio =
@@ -229,11 +245,85 @@ export function overviewWidget(
       const showTitle =
         !small || !action || titleLines.length * text.line(10) + footer + gap * 2 + 1 <= height;
       const centerMessage = tall && !!title && state !== 'all-square';
-      const sections: WidgetSection[] = [
+      const compactPayments = size.width / Math.max(1, scale) < 240;
+      const paymentHeaderHeight = text.line(10) + 4;
+      const paymentFont = compactPayments ? 13 : 12;
+      const paymentWidth = width - (compactPayments ? 0 : 48);
+      const measuredPayments = availablePayments.map((row) => {
+        const label = compactPayments
+          ? row.incoming
+            ? `From ${row.firstName}`
+            : `Pay ${row.firstName}`
+          : row.label;
+        const amountWidth = text.width(row.amount, 13, true);
+        const stack = text.width(label, paymentFont) + amountWidth + 8 > paymentWidth;
+        const captionBelow =
+          !compactPayments &&
+          (stack ||
+            text.width(label + SEPARATOR + row.groupName, paymentFont) + amountWidth + 8 >
+              paymentWidth);
+        return {
+          label,
+          stack,
+          captionBelow,
+          inlineCaption: SEPARATOR + row.groupName,
+          textHeight: stack
+            ? text.line(paymentFont) +
+              text.line(13) +
+              2 +
+              (!compactPayments ? text.line(10) + 2 : 0)
+            : captionBelow
+              ? text.line(paymentFont) + text.line(10) + 2
+              : Math.max(text.line(paymentFont), text.line(13)),
+        };
+      });
+      const paymentRowHeight = Math.max(
+        (compactPayments ? 28 : 36) * scale * text.factor,
+        ...measuredPayments.map((row) => row.textHeight + 1 / ratio),
+      );
+      const paymentLimit =
+        level > 0 ? (level === 1 ? 1 : 2) : 2 + Math.floor(Math.max(0, size.height - 464) / 120);
+      const paymentFits = availablePayments.every(
+        (row) => text.width(row.amount, 13, true) <= paymentWidth,
+      );
+      const hasReadGroup = Object.values(copy?.groups ?? {}).some(
+        (group) => !group.archived && !copy?.lostGroupIds?.includes(group.id),
+      );
+      const paymentMessage =
+        normal && tall && !suggested.length && !hasReadGroup ? 'Open the Group to update' : null;
+      const paymentMessageLines = paymentMessage ? text.words(paymentMessage, 11) : [];
+      const paymentCountsLines = hiddenPayments.flatMap((label) => text.words(label, 12));      const sections: WidgetSection[] = [
         ...(showHeader
           ? [{ id: 'header', rows: 1, rowHeight: text.line(small ? 10 : 13), required: true }]
           : []),
         ...(normal ? [{ id: 'balance', rows: 1, rowHeight: balanceHeight, required: true }] : []),
+        ...(normal && tall && availablePayments.length
+          ? [
+              {
+                id: 'payments',
+                rows: availablePayments.length,
+                maxRows: paymentFits ? paymentLimit : 0,
+                rowHeight: paymentRowHeight,
+                headingHeight: paymentHeaderHeight,
+                inset: compactPayments ? 0 : 8,
+                moreHeight: 0,
+                grow: true,
+              },
+            ]
+          : []),
+        ...(normal && tall && (paymentCountsLines.length || paymentMessage)
+          ? [
+              {
+                id: 'payments-message',
+                rows: 1,
+                rowHeight:
+                  paymentHeaderHeight +
+                  (paymentCountsLines.length
+                    ? paymentCountsLines.length * text.line(12)
+                    : paymentMessageLines.length * text.line(11)),
+              },
+            ]
+          : []),
         ...(centerMessage
           ? [{ id: 'message-before', rows: 1, rowHeight: 0, grow: true, required: true }]
           : []),
@@ -254,7 +344,8 @@ export function overviewWidget(
                 id: centerMessage ? 'message-after' : 'space',
                 rows: 1,
                 rowHeight: 0,
-                grow: true,
+                grow: centerMessage,
+                fallbackGrow: !centerMessage,
                 required: true,
               },
             ]),
@@ -271,7 +362,16 @@ export function overviewWidget(
               },
             ]
           : []),
-        ...(footer ? [{ id: 'footer', rows: 1, rowHeight: footer, required: true }] : []),
+        ...(footer
+          ? [
+              {
+                id: 'footer',
+                rows: 1,
+                rowHeight: footer,
+                required: !(normal && tall && availablePayments.length > 0),
+              },
+            ]
+          : []),
       ];
       const primaryOwed = owed.length > 0;
       const primary = {
@@ -286,6 +386,13 @@ export function overviewWidget(
       const loadingRows = [100, 160, 120].map((w) => ({ width: Math.min(width, w) }));
       return {
         sections,
+        compactPayments,
+        measuredPayments,
+        paymentHeaderHeight,
+        paymentMessageLines,
+        paymentCountsLines,
+        paymentLabelFont: text.font(paymentFont),
+        paymentAmountFont: text.font(13),
         primary,
         headerLabel,
         headerTone,
@@ -338,6 +445,35 @@ export function overviewWidget(
   );
   const { owed, owe, owedOverflow, oweOverflow, review, action, actionTarget, ...geometry } =
     layout;
+  const paymentSection = layout.sections.find((s) => s.id === 'payments');
+  const visiblePayments = availablePayments.slice(0, paymentSection?.rows ?? 0).map((row, i) => ({
+    ...row,
+    ...layout.measuredPayments[i],
+    muted: now - row.verifiedAt > 86400000,
+    rowHeight: paymentSection!.rowHeight,
+    dividerHeight: i ? Math.ceil(ratio) / ratio : 0,
+    contentHeight: paymentSection!.rowHeight - (i ? Math.ceil(ratio) / ratio : 0),
+  }));
+  const paymentMore =
+    paymentSection?.rows && paymentSection.more && layout.showOverflow
+      ? `+${counted(paymentSection.more, 'more', 'more')}`
+      : null;
+  const paymentCount =
+    paymentSection && !paymentSection.rows ? counted(availablePayments.length, 'payment') : null;
+  const footerVisible = layout.sections.some((s) => s.id === 'footer');
+  const sameNames = new Map<string, Set<string>>();
+  for (const row of suggested)
+    sameNames.set(row.firstName, new Set([...(sameNames.get(row.firstName) ?? []), row.initials]));
+  const spokenPayments = hidden
+    ? hiddenPayments
+    : suggested.map((row) => {
+        const name =
+          row.firstName +
+          ((sameNames.get(row.firstName)?.size ?? 0) > 1 && row.initials.length > 1
+            ? ' ' + row.initials.slice(1, 2)
+            : '');
+        return `${row.incoming ? name + ' pays you' : 'You pay ' + name} ${row.amount} in ${row.groupName}`;
+      });
   const summary = widgetSummary([
     heading,
     state === 'loading' ? 'Loading' : null,
@@ -345,6 +481,7 @@ export function overviewWidget(
     description,
     normal && allOwed.length ? 'You’re owed ' + allOwed.join(' and ') : null,
     normal && allOwe.length ? 'You owe ' + allOwe.join(' and ') : null,
+    ...spokenPayments,
     read.review?.replace(SEPARATOR, ' '),
     read.saved,
     hidden,
@@ -365,9 +502,13 @@ export function overviewWidget(
     owe,
     owedOverflow,
     oweOverflow,
-    review,
-    action,
+    review: footerVisible ? review : null,
+    action: footerVisible ? action : null,
     actionTarget,
+    payments: visiblePayments,
+    paymentMore,
+    paymentCount,
+    paymentMoreTarget: 'home' as const,
     layout: { ...geometry, padding, width, height, scale },
     reviewTarget: 'review' as const,
   };

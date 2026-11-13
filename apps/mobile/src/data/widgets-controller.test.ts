@@ -1611,3 +1611,19 @@ it.each(['sign-out', 'account-change', 'denied', '401'] as const)(
     }
   },
 );
+
+it('keeps Suggested payments when Balances is read by a payment check without opening the Group', async () => {
+  const f = fixture();
+  f.groupBalances(paymentBalances);
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openWidget({
+    kind: 'settle',
+    groupId,
+    payment: { from: alex.id, to: sam.id, currency: 'INR' },
+  });
+  expect(c.getSnapshot().screen).toBe('settlement');
+  await vi.waitFor(() =>
+    expect(overview(f).payments).toMatchObject([{ groupId, amount: '₹100.00' }]),
+  );
+});

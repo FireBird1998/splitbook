@@ -1,3 +1,4 @@
+import { groupWidgetPayments } from './widget-payments';
 import {
   fitWidgetLayout,
   fitWidgetSections,
@@ -222,35 +223,9 @@ function groupWidgetView(
         .join(SEPARATOR) || 'Balances hidden'
     );
   };
-  const own = (setup.hideAmounts ? [] : currencies).flatMap((bucket) =>
-    bucket.payments
-      .filter((payment) => payment.from === setup.accountId || payment.to === setup.accountId)
-      .map((payment) => {
-        const outgoing = payment.from === setup.accountId;
-        const firstName = (outgoing ? payment.toName : payment.fromName).trim().split(/\s+/)[0];
-        const storedInitials = outgoing ? payment.toInitials : payment.fromInitials;
-        return {
-          label: outgoing ? `You pay ${firstName}` : `${firstName} pays you`,
-          amount: formatCurrency(
-            toMajorAmount(payment.amountMinor, bucket.currency),
-            bucket.currency,
-          ),
-          firstName,
-          // Older copies contain only the first name; the next read adds the app's initials.
-          initials:
-            typeof storedInitials === 'string' && storedInitials
-              ? storedInitials
-              : firstName.slice(0, 1).toUpperCase(),
-          currency: bucket.currency,
-          incoming: payment.to === setup.accountId,
-          payment:
-            payment.from && payment.to
-              ? { from: payment.from, to: payment.to, currency: bucket.currency }
-              : null,
-          person: outgoing ? payment.to : payment.from,
-        };
-      }),
-  );
+  const own = setup.hideAmounts
+    ? []
+    : groupWidgetPayments({ ...part, currencies }, setup.accountId);
   const bucket = currencies[0];
   const allSquare = currencies.every((bucket) => bucket.balanceMinor === 0);
   const age = Math.min(part.verifiedAt, part.balancesVerifiedAt),
