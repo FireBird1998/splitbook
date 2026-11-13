@@ -226,7 +226,8 @@ export function makeRenderer(MAT: Record<string, Material>) {
         bufAll,
         u,
         (v, face) => !!v.win && face !== 'top',
-        (v, face) => (face === 'py' ? '#eae3d1' : '#d6d0bf'),
+        // Keep the actual night colour in portable data, rather than a web-only CSS override.
+        () => '#ffd98a',
       ),
       lit: paths(
         bufAll,

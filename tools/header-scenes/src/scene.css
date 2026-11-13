@@ -129,7 +129,6 @@
   background: rgba(40, 56, 110, 0.62);
 }
 .vq .wins path {
-  fill: #ffd98a;
   opacity: 0;
   transition: opacity 1.2s ease;
 }
