@@ -1,12 +1,13 @@
 # Header scene generator
 
-Typed voxel models for all four Header scenes. Eco city and Mountain village port
-the owner's `vx-engine`, `vx-kit`, `vx-eco` and `vx-alp` prototype. Beach and Sakura
-are redraws from the `VoxelHeaders`, `VoxelAndBeach`, `VoxelSakura` and
-`VoxelAndSakura` design boards; no model source was available for those two.
-The editable models are `src/beach.ts` and `src/sakura.ts`; shared water, light
-and surrounding-island helpers live in `src/island-details.ts`. No board SVG paths
-are imported into the generator.
+Eco city and Mountain village are typed voxel models, ported from the owner's
+`vx-engine`, `vx-kit`, `vx-eco` and `vx-alp` prototype. Beach and Sakura are
+**traced**: the owner asked for the boards' islands exactly, and no model source
+exists for them, so their layers are the `VoxelHeaders` and `VoxelSakura` boards'
+own drawings, kept as generator sources in `src/traced/*.json` with the motion
+rules those drawings use. They pass through the same portable output, check and
+tests as the modelled scenes. To change one, edit its traced source or replace
+`src/beach.ts` / `src/sakura.ts` with a voxel model.
 
 Run from the repository root with Node 22:
 

@@ -34,6 +34,8 @@ export interface SceneVector {
   classes?: string[];
   motion?: SceneMotion;
   delaySeconds?: number;
+  /** Set where one element runs its motion at its own pace. */
+  durationSeconds?: number;
   children?: SceneVector[];
 }
 export interface HeaderSceneArt {
