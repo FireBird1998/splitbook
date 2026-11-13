@@ -251,3 +251,18 @@ it('uses the mark and badge when enlarged action words cannot fit, rather than e
   });
   expect(view.summary).toBe('Record payment in Maple House');
 });
+
+it('wraps a blocked action’s reason in full and keeps its status glyph inside the muted tile', () => {
+  const view = quickWidget(
+    copy,
+    { ...setup, groupId: 'maple', mode: 'payment' },
+    { width: 172, height: 104 },
+    { status: 'expired' },
+  );
+  expect(view.layout).toMatchObject({
+    subtitleLines: ['to record', 'payments'],
+    showSubtitle: true,
+    glyphSize: 24,
+    tileTone: 'muted',
+  });
+});

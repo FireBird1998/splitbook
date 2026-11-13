@@ -37,11 +37,16 @@ export function quickWidget(
         const titleFontSize = compact ? 10 : 15;
         const subtitleFontSize = compact ? 10 : 12;
         const titleLines = text.words(title, titleFontSize);
+        const subtitleLines = subtitle
+          ? normal
+            ? [subtitle]
+            : text.words(subtitle, subtitleFontSize)
+          : [];
         const showTitle = !compact || (!normal && optional);
         const showSubtitle = !compact && optional && !!subtitle;
         const messageHeight =
           (showTitle ? titleLines.length * text.line(titleFontSize) : 0) +
-          (showSubtitle ? 4 + text.line(subtitleFontSize) : 0);
+          (showSubtitle ? 4 + subtitleLines.length * text.line(subtitleFontSize) : 0);
         return {
           sections: [
             {
@@ -56,6 +61,7 @@ export function quickWidget(
           showTitle,
           showSubtitle,
           titleLines,
+          subtitleLines,
           subtitleMaxLines: 1,
           titleFontSize: text.font(titleFontSize),
           subtitleFontSize: text.font(subtitleFontSize),
@@ -83,6 +89,12 @@ export function quickWidget(
       padding,
       gap,
       tileSize,
+      glyphSize: normal
+        ? tileSize
+        : session.status === 'signed-out'
+          ? tileSize * 0.625
+          : tileSize / 2,
+      tileTone: normal ? 'surface' : session.status === 'signed-out' ? 'brand' : 'muted',
       compact: compact || fallback,
       showTile: true,
       showTitle: fitted.showTitle && !fallback,

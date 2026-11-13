@@ -58,7 +58,24 @@ export function drawQuick(
         flexGap: l.gap,
       }}
     >
-      <SvgWidget svg={icon} style={{ width: l.tileSize, height: l.tileSize }} />
+      <FlexWidget
+        style={{
+          width: l.tileSize,
+          height: l.tileSize,
+          borderRadius: 16,
+          backgroundColor: color(
+            l.tileTone === 'brand'
+              ? t.brand.bg
+              : l.tileTone === 'muted'
+                ? t.surfaceMuted
+                : t.surface,
+          ),
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <SvgWidget svg={icon} style={{ width: l.glyphSize, height: l.glyphSize }} />
+      </FlexWidget>
       {l.showTitle || l.showSubtitle ? (
         <FlexWidget style={{ ...(l.compact ? {} : { flex: 1 }), flexGap: 0 }}>
           {l.showTitle
@@ -79,19 +96,23 @@ export function drawQuick(
                 />
               ))
             : null}
-          {l.showSubtitle && view.subtitle ? (
-            <TextWidget
-              text={view.subtitle}
-              maxLines={l.subtitleMaxLines}
-              truncate="END"
-              style={{
-                marginTop: 4,
-                height: l.subtitleLineHeight,
-                fontSize: l.subtitleFontSize,
-                fontFamily: 'Outfit',
-                color: color(t.textSecondary),
-              }}
-            />
+          {l.showSubtitle ? (
+            <FlexWidget style={{ marginTop: 4 }}>
+              {l.subtitleLines.map((line, i) => (
+                <TextWidget
+                  key={i}
+                  text={line}
+                  maxLines={l.subtitleMaxLines}
+                  truncate="END"
+                  style={{
+                    height: l.subtitleLineHeight,
+                    fontSize: l.subtitleFontSize,
+                    fontFamily: 'Outfit',
+                    color: color(t.textSecondary),
+                  }}
+                />
+              ))}
+            </FlexWidget>
           ) : null}
         </FlexWidget>
       ) : null}
