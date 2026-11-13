@@ -129,7 +129,8 @@ it.each(
         Math.max(0, view.layout.sections.length - 1) * view.layout.gap +
         view.layout.padding * 2,
     ).toBeCloseTo(size.height, 5);
-    if (setup.hideAmounts) expect(JSON.stringify(view)).not.toMatch(/₹|1,480|Sam|SC/);
+    if ('hideAmounts' in setup && setup.hideAmounts)
+      expect(JSON.stringify(view)).not.toMatch(/₹|1,480|Sam|SC/);
     if (['lost-access', 'other-account', 'signed-out', 'expired'].includes(state))
       expect(JSON.stringify(view)).not.toMatch(/Maple House|₹|Sam/);
   },
@@ -142,4 +143,12 @@ it('keeps whole words and the complete amount in the smallest large-text state',
   expect(normal.compactAmount).toBe('₹1,480.00');
   expect(normal.layout.balanceLabelLines).toEqual(['You owe']);
   expect(normal.layout.actionLines).toEqual(['Add expense']);
+});
+
+it('reserves the 32 dp icon when a compact large-text header omits its saved line', () => {
+  const view = groupWidget(part, setup, dimensions[0]!, auth, now, 1.3);
+  expect(view.layout.showTile).toBe(true);
+  expect(
+    view.layout.sections.find((section) => section.id === 'header')?.height,
+  ).toBeGreaterThanOrEqual(32);
 });

@@ -315,7 +315,16 @@ function groupLayout(
         : 0;
     const rowHeight = level === 1 ? line(12) + line(13) + 16 : Math.max(38, line(13) + 14);
     const sections: WidgetSection[] = [
-      ...(view.name ? [{ id: 'header', rows: 1, rowHeight: headerHeight, required: true }] : []),
+      ...(view.name
+        ? [
+            {
+              id: 'header',
+              rows: 1,
+              rowHeight: Math.max(headerHeight, showTile ? 32 : 0),
+              required: true,
+            },
+          ]
+        : []),
       ...(balanceHeight
         ? [
             {
@@ -424,6 +433,13 @@ function groupLayout(
   const present = (id: string) => plan.sections.some((s) => s.id === id);
   return {
     ...plan,
+    loadingRows: Array.from(
+      { length: plan.sections.find((s) => s.id === 'loading')?.rows ?? 0 },
+      (_, index) => ({
+        width: Math.min(width, [100, 130, 110][index]!),
+        height: plan.sections.find((s) => s.id === 'loading')!.rowHeight,
+      }),
+    ),
     padding,
     compact,
     width,
@@ -485,16 +501,14 @@ function projectGroupWidget(
     ...full,
     layout,
     more,
-    payments: full.payments
-      .slice(0, limit)
-      .map((p) => ({
-        ...p,
-        displayLabel: layout.compact
-          ? p.incoming
-            ? `${p.firstName} pays you`
-            : `Pay ${p.firstName}`
-          : p.label,
-      })),
+    payments: full.payments.slice(0, limit).map((p) => ({
+      ...p,
+      displayLabel: layout.compact
+        ? p.incoming
+          ? `${p.firstName} pays you`
+          : `Pay ${p.firstName}`
+        : p.label,
+    })),
     summary: widgetSummary([
       'Group',
       full.state === 'loading' ? 'Loading' : null,

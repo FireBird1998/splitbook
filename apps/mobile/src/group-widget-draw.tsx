@@ -262,12 +262,18 @@ export function drawGroup(
     hidden: text(view.hidden ?? '', t.textMuted, 10),
     action: footer,
     loading: (
-      <FlexWidget style={{ flexGap: 10 }}>
-        {[100, 130, 110].map((width, i) => (
-          <FlexWidget
-            key={i}
-            style={{ width, height: 14, backgroundColor: color(t.surfaceMuted), borderRadius: 6 }}
-          />
+      <FlexWidget style={{ height: 'match_parent' }}>
+        {l.loadingRows.map((row, index) => (
+          <FlexWidget key={index} style={{ height: row.height, justifyContent: 'center' }}>
+            <FlexWidget
+              style={{
+                width: row.width,
+                height: 14,
+                backgroundColor: color(t.surfaceMuted),
+                borderRadius: 6,
+              }}
+            />
+          </FlexWidget>
         ))}
       </FlexWidget>
     ),
