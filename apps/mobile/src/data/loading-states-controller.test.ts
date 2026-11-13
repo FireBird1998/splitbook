@@ -1507,6 +1507,7 @@ describe('a new Group opens ready (#189)', () => {
       'POST /api/groups',
       `GET /api/groups/${created}`,
       `GET /api/groups/${created}/expenses`,
+      `GET /api/groups/${created}/expenses`,
       `GET /api/groups/${created}/balances`,
       // Then the Groups list, as after a join, so the saved list holds the new Group (#283).
       'GET /api/groups',

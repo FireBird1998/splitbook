@@ -13,8 +13,7 @@ import { counted, SEPARATOR } from './separator';
 import { widgetSavedTime, type WidgetSession } from './balances-widget';
 import type { GroupCategory } from './types';
 import { dayCount } from './trip-summary';
-import { dayKeyInZone } from './zoned-calendar';
-import { currentMonthKey } from './date';
+import { dayKeyInZone, monthKeyInZone } from './zoned-calendar';
 export interface GroupWidgetSetup {
   kind: 'group';
   hideAmounts?: boolean;
@@ -78,7 +77,10 @@ function monthWidgetView(month: WidgetMonthPart | undefined, setup: GroupWidgetS
     prompt: 'Open the Group to update' as string | null,
     more: null as string | null,
   };
-  const savedMonth = month?.month === currentMonthKey(new Date(now)) ? month : undefined;
+  const savedMonth =
+    month?.month === monthKeyInZone(now, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
+      ? month
+      : undefined;
   if (!savedMonth) return empty;
   try {
     return {

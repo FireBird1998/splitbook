@@ -151,6 +151,7 @@ import {
 import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { getCurrency } from '@splitbook/shared/currency';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
+import { monthKeyInZone } from '@splitbook/shared/zoned-calendar';
 import { currentMonthKey, toDateParam } from '@splitbook/shared/date';
 import {
   groupCurrencies,
@@ -899,7 +900,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               : groupKey(account(), id);
       return verifiedAt > (scoped(untrusted, key) ?? -Infinity);
     },
-    (id) => groupQueries.monthRead(id, currentMonthKey(new Date(now()))),
+    (id) =>
+      groupQueries.monthRead(
+        id,
+        monthKeyInZone(now(), Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
+      ),
   );
 
   const savedCopies = savedCopyBudget({
@@ -1322,6 +1327,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     route: () => route,
     savable: (key) => savable(key),
     freshness,
+    readSettled: () => widgets.update(snapshot),
     // The phone's zone as it is now: one changed meanwhile reads its own days.
     timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     offline: () => offlineSession || snapshot.offline.active,

@@ -361,7 +361,14 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
     // Expenses and its Balances.
     const paths = [...f.rows.keys()].map((key) => key.slice(alex.id.length).split('?')[0]);
     expect(paths.sort()).toEqual(
-      [listPath, maplePath, `${maplePath}/balances`, `${maplePath}/expenses`, homePath].sort(),
+      [
+        listPath,
+        maplePath,
+        `${maplePath}/balances`,
+        `${maplePath}/expenses`,
+        `${maplePath}/expenses`,
+        homePath,
+      ].sort(),
     );
     expect(JSON.stringify([...f.rows.values()])).not.toContain('home-queries-attempt-0001');
     expect(JSON.stringify([...f.rows.values()])).not.toContain('Groceries');
@@ -576,7 +583,12 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
     await settle();
     expect(
       f.calls.slice(sent).map(({ method, path }) => `${method} ${path.split('?')[0]}`),
-    ).toEqual([`GET ${maplePath}`, `GET ${maplePath}/expenses`, `GET ${maplePath}/balances`]);
+    ).toEqual([
+      `GET ${maplePath}`,
+      `GET ${maplePath}/expenses`,
+      `GET ${maplePath}/expenses`,
+      `GET ${maplePath}/balances`,
+    ]);
   });
 
   it('reads nothing on return to the foreground within the window, and after it only what Home shows', async () => {
@@ -1541,6 +1553,7 @@ describe('Home after Create Group (#283)', () => {
       `POST ${listPath}`,
       `GET /api/groups/${zedId}`,
       `GET /api/groups/${zedId}/expenses?page=1&limit=20&includeMemberBreakdown=1`,
+      `GET /api/groups/${zedId}/expenses?page=1&limit=20&includeMemberBreakdown=1&dateFrom=2026-09-01&dateTo=2026-09-30`,
       `GET /api/groups/${zedId}/balances`,
       // The create changed the Groups list: it's read again after the Group's own reads, as
       // after a join, so the saved list holds the new Group (#283).

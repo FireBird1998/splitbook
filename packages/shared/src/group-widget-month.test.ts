@@ -255,3 +255,23 @@ it('uses currency words instead of a more hint when no Month amount row fits', (
   expect(view.month?.totals).toEqual([]);
   expect(view.month?.more).toBe('In 5\u00a0currencies');
 });
+
+it('uses the current phone zone for the Month even while Date retains its former offset', () => {
+  const resolve = Intl.DateTimeFormat.prototype.resolvedOptions;
+  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
+    this: Intl.DateTimeFormat,
+  ) {
+    return { ...resolve.call(this), timeZone: 'Pacific/Honolulu' };
+  });
+  try {
+    const instant = Date.parse('2026-11-01T00:30:00Z');
+    expect(new Date(instant).getUTCMonth()).toBe(10);
+    const view = groupWidget(group, setup, { width: 360, height: 344 }, auth, instant, 1, {
+      ...month,
+      month: '2026-10',
+    });
+    expect(view.month?.share).toBe('₹7,850.00');
+  } finally {
+    vi.restoreAllMocks();
+  }
+});

@@ -2,7 +2,7 @@ import { cachedRead } from './offline-cache';
 import { parseGroup, parseGroups } from './dto';
 import { widgetMonthCopy } from './widget-month-copy';
 import { expensePagePath } from '@splitbook/shared/api-paths';
-import { currentMonthKey } from '@splitbook/shared/date';
+import { monthKeyInZone } from '@splitbook/shared/zoned-calendar';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { parseGroupBalances } from './financial-dto';
 import type { SavedQueryRecords } from './saved-copy-budget';
@@ -88,7 +88,10 @@ export function createWidgetCopy(
           }
         }
         if (!months[id]) {
-          const month = currentMonthKey(new Date(now()));
+          const month = monthKeyInZone(
+            now(),
+            Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          );
           const expected = expensePagePath(id, {
             limit: 20,
             includeMemberBreakdown: true,
@@ -143,7 +146,7 @@ export function createWidgetCopy(
         retired.delete(id);
         archived.delete(id);
       }
-      const month = id ? monthRead(id) : null;
+      const month = id && !lost.has(id) && !retired.has(id) ? monthRead(id) : null;
       if (month && snapshot.detail.data) {
         months[id!] = widgetMonthCopy(
           snapshot.detail.data,

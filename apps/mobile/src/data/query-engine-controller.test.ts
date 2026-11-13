@@ -68,14 +68,15 @@ function gate() {
 }
 
 /** A fictional backend for Alex and Sam, and device stores that outlive a controller. */
-function fixture(options: { freshness?: number } = {}) {
+function fixture(options: { freshness?: number; theme?: 'trip' | 'other' } = {}) {
+  const shownGroup = { ...group, category: options.theme ?? group.category };
   const state = { ledger: 0, offline: false, revoked: false };
   /** How many times this device purged a lost Group's saved copies. */
   let purges = 0;
   const backend = fakeSplitbook();
   backend.world.people.alex = alex;
   backend.world.people.sam = sam;
-  backend.world.groups = [group];
+  backend.world.groups = [shownGroup];
   Object.defineProperty(state, 'offline', {
     get: () => !backend.online,
     set: (value: boolean) => {
@@ -93,7 +94,7 @@ function fixture(options: { freshness?: number } = {}) {
 
   for (const user of [alex, sam])
     Object.defineProperty(backend.world.groupsByAccount, user.id, {
-      get: () => (state.revoked ? [] : [group]),
+      get: () => (state.revoked ? [] : [shownGroup]),
     });
   Object.defineProperty(backend.world, 'home', {
     get: () => ({ buckets: [{ currency: 'INR', youOwe: 30 + state.ledger, youAreOwed: 0 }] }),
@@ -105,7 +106,7 @@ function fixture(options: { freshness?: number } = {}) {
     if ((path === '/api/groups' && method === 'GET') || path === '/api/user/balances')
       return undefined;
     if (state.revoked && path.startsWith(groupPath)) return json({}, 403);
-    if (path === groupPath) return json({ status: 200, data: group });
+    if (path === groupPath) return json({ status: 200, data: shownGroup });
     if (path.startsWith(expensesPath))
       return json({
         status: 200,
@@ -748,3 +749,24 @@ describe('reads cancelled, refused or out of date (#214)', () => {
     expect(f.savedOfGroup()).toEqual([]);
   });
 });
+
+it.each(['trip', 'other'] as const)(
+  'M1-1 / G2 allows one additional current-Month read on a %s Group open',
+  async (theme) => {
+    const f = fixture({ theme });
+    const controller = f.create();
+    await controller.signIn('alex');
+    const before = f.calls.length;
+    await controller.openGroup(groupId);
+    const opened = f.calls.slice(before);
+    expect(opened).toHaveLength(4);
+    expect(opened.filter((r) => r.path.startsWith(expensesPath))).toHaveLength(2);
+    expect(opened.filter((r) => r.path.includes('dateFrom=2026-09-01'))).toHaveLength(1);
+    expect(controller.getSnapshot().financial.month).toBeNull();
+    expect(controller.getSnapshot().financial.expenses.data[0]?.description).toContain('All rent');
+    await controller.back();
+    const again = f.calls.length;
+    await controller.openGroup(groupId);
+    expect(f.calls.slice(again)).toEqual([]);
+  },
+);

@@ -204,6 +204,18 @@
       "publishes": 18,
       "commits": 9,
       "renders": 127
+    },
+    "Open a Trip Group on Expenses": {
+      "requests": 4,
+      "publishes": 8,
+      "commits": 3,
+      "renders": 261
+    },
+    "Open an Other Group on Expenses": {
+      "requests": 4,
+      "publishes": 8,
+      "commits": 3,
+      "renders": 246
     }
   }
 }
