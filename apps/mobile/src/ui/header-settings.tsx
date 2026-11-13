@@ -1,5 +1,5 @@
 import { SEPARATOR } from '@splitbook/shared/separator';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Modal, ScrollView, Switch, View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -14,6 +14,9 @@ import { GroupHeader } from './group-header';
 import { NotAvailableOffline } from './offline-notice';
 import { useTheme } from './theme';
 const Scene = lazy(() => import('./header-scene'));
+const Thumbnail = lazy(() =>
+  import('./header-scene').then((module) => ({ default: module.HeaderSceneThumbnail })),
+);
 export function HeaderSettings({
   state,
   group,
@@ -37,7 +40,13 @@ export function HeaderSettings({
 }) {
   const theme = useTheme();
   const dimmed = state.draft.style === 'classic';
-  const choice = (label: string, selected: boolean, onPress: () => void, disabled = false) => (
+  const choice = (
+    label: string,
+    selected: boolean,
+    onPress: () => void,
+    disabled = false,
+    picture?: ReactNode,
+  ) => (
     <Pressable
       key={label}
       accessibilityRole="radio"
@@ -46,6 +55,7 @@ export function HeaderSettings({
       disabled={disabled || state.status === 'saving'}
       onPress={onPress}
       style={{
+        ...(picture ? { width: '23%', flexGrow: 1, padding: 6 } : {}),
         minHeight: 48,
         minWidth: 48,
         padding: 12,
@@ -55,7 +65,13 @@ export function HeaderSettings({
         backgroundColor: selected ? theme.surfaceMuted : theme.surface,
       }}
     >
-      <CompactText>{label}</CompactText>
+      {picture}
+      <CompactText
+        variant={picture ? 'small' : 'body'}
+        style={picture ? { textAlign: 'center' } : undefined}
+      >
+        {label}
+      </CompactText>
     </Pressable>
   );
   return (
@@ -69,7 +85,7 @@ export function HeaderSettings({
         <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
           {state.draft.style === 'scene' ? (
             <Suspense fallback={<CompactText>Loading preview</CompactText>}>
-              <Scene group={group} header={state.draft} motion={motion} />
+              <Scene group={group} header={state.draft} motion={motion} preview />
             </Suspense>
           ) : (
             <GroupHeader group={{ ...group, header: state.draft }} motion={motion} />
@@ -96,6 +112,9 @@ export function HeaderSettings({
                   state.draft.scene === scene.id,
                   () => onChoose({ scene: scene.id }),
                   dimmed,
+                  <Suspense fallback={<View style={{ height: 64 }} />}>
+                    <Thumbnail scene={scene.id} />
+                  </Suspense>,
                 ),
               )}
             </View>
@@ -151,12 +170,14 @@ export function HeaderSettings({
           {state.message ? (
             <CompactText accessibilityRole="alert">{state.message}</CompactText>
           ) : null}
+        </ScrollView>
+        <View style={{ padding: 16, borderTopWidth: 1, borderColor: theme.border }}>
           <CompactButton
             label={state.status === 'saving' ? 'Saving…' : 'Save'}
             disabled={!headerChanged(state) || state.status === 'saving'}
             onPress={onSave}
           />
-        </ScrollView>
+        </View>
       </SafeAreaView>
     </Modal>
   );

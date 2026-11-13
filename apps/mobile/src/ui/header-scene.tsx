@@ -1,3 +1,6 @@
+import { SEPARATOR } from '@splitbook/shared/separator';
+import { CompactText } from './compact';
+import { useTheme } from './theme';
 import { createElement, memo, useEffect, useState, type ComponentType } from 'react';
 import { Animated, AppState, StyleSheet, View } from 'react-native';
 import Svg, {
@@ -84,14 +87,17 @@ export default function HeaderScene({
   group,
   header,
   motion = true,
+  preview = false,
   today = currentDayKey(),
 }: {
   group: MobileGroup;
   header: GroupHeader;
   motion?: boolean;
   today?: string;
+  preview?: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
+  const theme = useTheme();
   const [art, setArt] = useState<HeaderSceneArt | null>(null);
   const [, setHour] = useState(() => new Date().getHours());
   const translateY = useSceneFloat(motion && headerSceneMotionAvailable);
@@ -161,7 +167,46 @@ export default function HeaderScene({
           {art?.id === header.scene ? <Art art={art} time={time} /> : null}
         </Animated.View>
       </View>
-      <HeaderSceneCard group={group} today={today} time={time} />
+      {preview ? (
+        <View style={{ padding: 12, backgroundColor: theme.surface }}>
+          <CompactText variant="small">
+            Preview{SEPARATOR}
+            {art?.name ?? header.scene}
+            {SEPARATOR}
+            {time}
+          </CompactText>
+        </View>
+      ) : (
+        <HeaderSceneCard group={group} today={today} time={time} />
+      )}
+    </View>
+  );
+}
+
+/** Small generated-art previews are evaluated only while the member chooses a scene. */
+export function HeaderSceneThumbnail({ scene }: { scene: GroupHeader['scene'] }) {
+  const [art, setArt] = useState<HeaderSceneArt | null>(null);
+  useEffect(() => {
+    let active = true;
+    loaders[scene]().then((value) => {
+      if (active) setArt(value.default);
+    });
+    return () => {
+      active = false;
+    };
+  }, [scene]);
+  return (
+    <View
+      importantForAccessibility="no-hide-descendants"
+      style={{
+        height: 64,
+        width: '100%',
+        overflow: 'hidden',
+        backgroundColor: '#d6e7ef',
+        borderRadius: 8,
+      }}
+    >
+      {art ? <Art art={art} time="day" /> : null}
     </View>
   );
 }
