@@ -97,7 +97,7 @@ it.each([1, 1.3, 2])('fits Quick actions at real launcher bounds at %s', (scale)
   expect(blocked.layout.showSubtitle).toBe(false);
   const wide = quickWidget(copy, quick, { width: 172, height: 104 }, auth, scale);
   expect(wide.layout.subtitleMaxLines).toBe(1);
-  expect(wide.layout.showTitle).toBe(true);
+  expect(wide.layout.showTitle).toBe(scale < 2);
   expect(wide.summary).toBe('Add expense in Maple House');
 });
 it('keeps compact expired Balances to two text lines without a stacked lock tile', () => {

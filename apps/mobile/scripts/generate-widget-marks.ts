@@ -22,7 +22,7 @@ async function main() {
       .toFile(`assets/widgets/setup-mark-${mode}.png`);
     const tile = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><rect width="48" height="48" rx="16" fill="${t.brand.bg}"/><g transform="translate(6 6) scale(.065)">${inner}</g><circle cx="38" cy="38" r="9" fill="${t.brand.main}" stroke="${t.surface}" stroke-width="2"/><path d="M34 38h8m-4-4v8" stroke="${t.brand.contrastText}" stroke-width="1.8" stroke-linecap="round"/></svg>`;
     writeFileSync(`assets/widgets/quick-tile-${mode}.svg`, tile);
-    const payment = tile.replace('M34 38h8m-4-4v8', 'M33 35h10l-3-3m3 9H33l3 3');
+    const payment = tile.replace('M34 38h8m-4-4v8', 'M34 35h8m-3-3 3 3-3 3M42 41h-8m3-3-3 3 3 3');
     writeFileSync(`assets/widgets/payment-tile-${mode}.svg`, payment);
     if (mode === 'light') {
       const headerMark = `<g transform="translate(14 14) scale(.03125)">${inner}</g>`;

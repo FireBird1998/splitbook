@@ -1,4 +1,4 @@
-import { fitWidgetLayout, type WidgetDimensions } from './widget-sizing';
+import { fitWidgetLayout, widgetText, type WidgetDimensions } from './widget-sizing';
 import type { WidgetCopy, WidgetSession, WidgetTarget } from './balances-widget';
 export interface QuickWidgetSetup {
   kind: 'quick';
@@ -65,7 +65,11 @@ export function quickWidget(
       },
       0,
     );
-    const fallback = !fitted.fits;
+    const text = widgetText(room, fontScale, fitted.textFactor, size.pixelRatio);
+    const fallback =
+      !fitted.fits ||
+      (fitted.showTitle &&
+        fitted.titleLines.some((line) => text.width(line, compact ? 10 : 15) > room));
     return {
       ...fitted,
       ...(fallback

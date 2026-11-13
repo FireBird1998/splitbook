@@ -171,7 +171,7 @@ it('writes the action and Group at real 2×1 bounds, including large text and Re
       );
       expect(view.title).toBe(mode === 'expense' ? 'Add expense' : 'Record payment');
       expect(view.subtitle).toBe('Maple House');
-      expect(view.layout.showTitle).toBe(true);
+      expect(view.layout.showTitle).toBe(scale < 2);
       expect(view.layout.showSubtitle).toBe(scale < 2);
       expect(view.layout.fits).toBe(true);
       expect(view.summary).toBe(`${view.title} in Maple House`);
@@ -233,3 +233,21 @@ for (const [width, height] of [
           mode === 'payment' ? 'to record payments' : 'to add expenses',
         );
       });
+
+it('uses the mark and badge when enlarged action words cannot fit, rather than ellipsizing the action', () => {
+  const view = quickWidget(
+    copy,
+    { ...setup, groupId: 'maple', mode: 'payment' },
+    { width: 172, height: 104 },
+    session,
+    2,
+  );
+  expect(view.layout).toMatchObject({
+    compact: true,
+    showTitle: false,
+    showSubtitle: false,
+    icon: 'payment',
+    fits: true,
+  });
+  expect(view.summary).toBe('Record payment in Maple House');
+});
