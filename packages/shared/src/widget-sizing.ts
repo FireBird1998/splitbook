@@ -134,7 +134,8 @@ export function fitWidgetSections(
 
 /** The same conservative glyph estimate is used for wrapping, fitting and row height.
  * Proportional labels do not have the fixed width of mono money. */
-export function widgetText(width: number, scale = 1, factor = 1, pixelRatio = 1) {
+function createWidgetText(width: number, scale = 1, factor = 1, pixelRatio = 1) {
+  let narrowing = 0;
   width = nonNegative(width);
   scale = nonNegative(scale) || 1;
   factor = nonNegative(factor) || 1;
@@ -163,17 +164,20 @@ export function widgetText(width: number, scale = 1, factor = 1, pixelRatio = 1)
     ) *
     font(base) *
     scale;
-  return {
+  const text = {
     factor,
     scale,
     font,
     line: (base: number) => Math.ceil(font(base) * scale * 1.3 * pixelRatio - 1e-9) / pixelRatio,
     width: measure,
-    fit: (value: string, base: number, room = width, mono = false) =>
-      Math.max(
+    fit: (value: string, base: number, room = width, mono = false) => {
+      const fitted = Math.max(
         Math.min(base, 10),
         Math.min(base, (base * nonNegative(room)) / Math.max(1, measure(value, base, mono))),
-      ),
+      );
+      narrowing += font(base) - font(fitted);
+      return fitted;
+    },
     words: (value: string, base: number, room = width) => {
       const result: string[] = [];
       // A separator belongs to the following word, never stranded at a line end.
@@ -188,6 +192,10 @@ export function widgetText(width: number, scale = 1, factor = 1, pixelRatio = 1)
       return result;
     },
   };
+  return { text, narrowing: () => narrowing };
+}
+export function widgetText(width: number, scale = 1, factor = 1, pixelRatio = 1) {
+  return createWidgetText(width, scale, factor, pixelRatio).text;
 }
 export type WidgetText = ReturnType<typeof widgetText>;
 
@@ -200,21 +208,24 @@ export function fitWidgetLayout<T extends { sections: readonly WidgetSection[] }
   gap = 8,
 ) {
   const attempt = (optional: boolean, factor: number) => {
-    const { sections, ...settings } = make(
-      widgetText(size.width, scale, factor, size.pixelRatio),
-      optional,
-    );
+    const measurement = createWidgetText(size.width, scale, factor, size.pixelRatio);
+    const { sections, ...settings } = make(measurement.text, optional);
     return {
       ...settings,
       ...fitWidgetSections(size.height, sections, gap, size.pixelRatio),
       textFactor: factor,
+      narrowing: measurement.narrowing(),
     };
   };
   let result = attempt(true, 1);
-  if (!result.fits) result = attempt(false, 1);
+  if (!result.fits || result.narrowing > 0) {
+    const essential = attempt(false, 1);
+    if (!result.fits || essential.narrowing < result.narrowing - 1e-9) result = essential;
+  }
   for (const factor of [0.95, 0.9, 0.85, 0.8]) {
     if (result.fits) break;
     result = attempt(false, factor);
   }
-  return result;
+  const { narrowing: _narrowing, ...layout } = result;
+  return layout;
 }

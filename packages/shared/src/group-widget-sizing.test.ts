@@ -132,6 +132,33 @@ it('keeps the archived separator with final rather than dangling after owe', () 
   expect(view.layout.balanceLabelLines.join(' ')).toBe('You owe · final');
   expect(view.layout.balanceLabelLines.every((line) => !line.endsWith('·'))).toBe(true);
 });
+
+it('uses Group at the true minimum when a longer valid name would crowd out the full balance', () => {
+  const view = groupWidget(
+    { ...part, name: 'Our family summer holiday in the mountains' },
+    setup,
+    { width: 110, height: 110 },
+    auth,
+    now,
+    1.3,
+  );
+  expect(view.layout.fits).toBe(true);
+  expect(view.layout.nameLines).toEqual(['Group']);
+  expect(view.compactAmount).toBe('₹1,480.00');
+});
+
+it('removes the optional tile before shrinking a name that fits without it', () => {
+  const view = groupWidget(
+    { ...part, name: 'MountainAdventureClub' },
+    setup,
+    { width: 240, height: 640 },
+    auth,
+    now,
+    1.3,
+  );
+  expect(view.layout.nameFontSize).toBe(13);
+  expect(view.layout.showTile).toBe(false);
+});
 it('uses a tall real size for more payment rows and shares all leftover height among them', () => {
   const view = groupWidget(part, setup, { width: 372, height: 512 }, auth, now);
   expect(view.payments.length).toBeGreaterThan(4);

@@ -191,7 +191,7 @@ export function drawGroup(
               ? text(
                   payment.amount,
                   view.muted ? t.textMuted : payment.incoming ? t.status.positive : t.text,
-                  13,
+                  l.fontSizes.paymentAmount,
                   true,
                   true,
                 )

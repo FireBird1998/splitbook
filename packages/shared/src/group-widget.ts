@@ -329,7 +329,7 @@ function groupLayout(
         (showTile ? 40 : 0) -
         (!compact && showSaved && view.saved ? text.width(view.saved, 9) + 8 : 0) -
         (showArchivedTag && !stackHeader ? text.width('Archived', 9) + 12 : 0);
-      const name = tiny && scale >= 2 ? 'Group' : (view.name ?? '');
+      const name = tiny && text.width(view.name ?? '', 13) > nameRoom ? 'Group' : (view.name ?? '');
       const nameFont = text.fit(
         name.split(/\s+/).sort((a, b) => b.length - a.length)[0] ?? '',
         13,
