@@ -168,7 +168,7 @@ it.each([
   },
 );
 
-it('draws the overflow hint when no full payment amount fits an in-between width', () => {
+it('draws the people count when no full payment amount fits an in-between width', () => {
   vi.stubGlobal('__DEV__', false);
   const large: WidgetCopy = {
     ...copy,
@@ -198,7 +198,7 @@ it('draws the overflow hint when no full payment amount fits an in-between width
       2,
     ),
   );
-  expect(drawnText(tree)).toContain('+2\u00a0more\u00a0· ₹');
+  expect(drawnText(tree)).toContain('to 2\u00a0people');
   vi.unstubAllGlobals();
 });
 

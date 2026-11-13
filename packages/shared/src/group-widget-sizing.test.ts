@@ -451,3 +451,22 @@ it.each(states.filter(([, , s, ,], i) => [1, 3, 4, 6, 7, 8].includes(i) || s.hid
     }
   },
 );
+
+it.each([1.3, 2])('shows people rather than more with no payment rows at %s text', (scale) => {
+  const pair = {
+    ...part,
+    currencies: [{ ...part.currencies[0]!, payments: part.currencies[0]!.payments.slice(0, 2) }],
+  };
+  const view = groupWidget(pair, setup, { width: 172, height: 224 }, auth, now, scale);
+  expect(view.payments).toHaveLength(0);
+  expect(view.more ?? '').not.toMatch(/more/);
+  expect(view.layout.actionLines.join(' ')).toContain('Add expense');
+  if (scale === 1.3) expect(view.more).toBe('to 2\u00a0people');
+  if (scale === 2) expect(view.more).toBeNull();
+});
+
+it('uses people without a payment row on a narrow tall widget', () => {
+  const view = groupWidget(part, setup, { width: 110, height: 224 }, auth, now, 2);
+  expect(view.payments).toHaveLength(0);
+  expect(view.more).toBe('to 12\u00a0people');
+});

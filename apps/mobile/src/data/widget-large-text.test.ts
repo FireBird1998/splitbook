@@ -71,7 +71,10 @@ it.each([
 ] as const)('limits Group %s at %s text to %s payment lines', (size, scale, lines) => {
   const v = groupWidget(part, setup, widgetDimensions(size), auth, now, scale);
   expect(v.payments).toHaveLength(lines);
-  if (scale > 1 && size !== '2x2') expect(v.more).toContain(String(6 - lines));
+  if (scale === 2 && size === '4x2') {
+    expect(v.more).toBeNull();
+    expect(v.layout.actionLines).toEqual(['Add expense']);
+  } else if (scale > 1 && size !== '2x2') expect(v.more).toContain(String(6 - lines));
 });
 it.each([1, 1.3, 2])('keeps the entire spoken summary when visual lines drop at %s', (scale) => {
   expect(balancesWidget(copy, { kind: 'balances' }, '2x2', auth, now, scale).summary).toBe(

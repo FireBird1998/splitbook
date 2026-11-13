@@ -295,7 +295,7 @@ function groupLayout(
       const money = text.fit(view.compactAmount ?? '', 18, width, true);
       const actionFont = compact && level === 2 ? 10 : 12;
       const actionLabel =
-        !optional || tiny
+        tiny || (!optional && !(compact && level === 2 && !narrow))
           ? null
           : view.target === 'setup'
             ? view.action
@@ -436,7 +436,12 @@ function groupLayout(
                 inset: compact ? 0 : pixels(4) * 2,
                 moreHeight: moreInFooter
                   ? 0
-                  : text.words(paymentOverflow(view.payments), 10).length * text.line(10) + 4,
+                  : Math.max(
+                      text.words(paymentOverflow(view.payments), 10).length,
+                      text.words(view.people ?? '', 10).length,
+                    ) *
+                      text.line(10) +
+                    4,
                 grow: true,
               },
             ]
@@ -514,7 +519,11 @@ function groupLayout(
     gap,
   );
   const payments = settings.sections.find((s) => s.id === 'payments');
-  const more = payments?.more ? paymentOverflow(view.payments.slice(payments.rows)) : '';
+  const more = payments?.more
+    ? payments.rows
+      ? paymentOverflow(view.payments.slice(payments.rows))
+      : (view.people ?? '')
+    : '';
   const text = widgetText(width, scale, 1, ratio);
   const moreLines = more
     ? text.width(more, settings.fontSizes.small) <= width
@@ -569,7 +578,8 @@ function projectGroupWidget(
   const layout = groupLayout(full, size, fontScale);
   const limit = layout.paymentLines;
   const omitted = full.payments.slice(limit);
-  const more = layout.showMore && omitted.length ? paymentOverflow(omitted) : null;
+  const more =
+    layout.showMore && omitted.length ? (limit ? paymentOverflow(omitted) : full.people) : null;
   return {
     ...full,
     layout,
