@@ -72,7 +72,19 @@ it.each([1, 1.3, 2])(
 it.each([266, 360])(
   'keeps 130% amounts on the right at %s dp and compact Add expense on one line',
   (width) => {
-    const wide = groupWidget(part, setup, { width, height: 344 }, auth, now, 1.3);
+    const pair = {
+      ...part,
+      currencies: [
+        {
+          ...part.currencies[0]!,
+          payments: [
+            { ...part.currencies[0]!.payments[0]!, toName: 'Priya', amountMinor: 106000 },
+            { ...part.currencies[0]!.payments[1]!, amountMinor: 42000 },
+          ],
+        },
+      ],
+    };
+    const wide = groupWidget(pair, setup, { width, height: 344 }, auth, now, 1.3);
     expect(wide.layout.stackPayments).toBe(false);
     const small = groupWidget(part, setup, { width: 172, height: 224 }, auth, now, 1.3);
     expect(small.layout.actionLines).toEqual(['＋ Add expense']);
