@@ -12,7 +12,7 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
     app.receiver.push({
       $: {
         'android:name': '.widget.Balances',
-        'android:label': 'Balances',
+        'android:label': 'Overview',
         'android:enabled': String(enabled),
         'android:exported': 'false',
       },
@@ -272,9 +272,9 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
         `<?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="110dp" android:minHeight="110dp"
-    android:targetCellWidth="2" android:targetCellHeight="2"
+    android:targetCellWidth="4" android:targetCellHeight="3"
     android:minResizeWidth="110dp" android:minResizeHeight="40dp"
-    android:maxResizeWidth="640dp" android:maxResizeHeight="220dp"
+    android:maxResizeWidth="640dp" android:maxResizeHeight="640dp"
     android:resizeMode="horizontal|vertical"
     android:description="@string/widget_balances_description"
     android:initialLayout="@layout/rn_widget"
@@ -316,7 +316,7 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
       fs.mkdirSync(path.join(main, 'res/values'), { recursive: true });
       fs.writeFileSync(
         path.join(main, 'res/values/widget_balances.xml'),
-        '<resources><string name="widget_quick_description">Add an Expense or record a payment in one tap</string><string name="widget_group_description">Your balance and Suggested payments in one Group</string><string name="widget_balances_description">What you owe and are owed, by currency</string></resources>\n',
+        '<resources><string name="widget_quick_description">Add an Expense or record a payment in one tap</string><string name="widget_group_description">Your balance and Suggested payments in one Group</string><string name="widget_balances_description">Your balances, payments and Groups</string></resources>\n',
       );
       return mod;
     },
