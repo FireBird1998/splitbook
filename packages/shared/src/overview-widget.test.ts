@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { overviewWidget } from './overview-widget';
+import { widgetText } from './widget-sizing';
 import type { WidgetCopy } from './balances-widget';
 const now = Date.parse('2026-11-13T04:11:00Z');
 beforeAll(() => vi.stubEnv('TZ', 'Asia/Kolkata'));
@@ -149,4 +150,80 @@ it('keeps the separately verified count with Hide amounts and omits it with Draf
     overviewWidget(copy, { ...setup, reviewEnabled: false }, { width: 360, height: 344 }, auth, now)
       .review,
   ).toBeNull();
+});
+
+it('keeps full large amounts within their column, or uses the established readable fallback', () => {
+  const large = {
+    ...copy,
+    home: {
+      ...copy.home!,
+      currencies: [{ currency: 'INR', owedMinor: 123456789012345, oweMinor: 99999999999999 }],
+    },
+  };
+  for (const size of [
+    { width: 172, height: 104 },
+    { width: 172, height: 224 },
+    { width: 360, height: 344 },
+  ]) {
+    const v = overviewWidget(large, setup, size, auth, now, 2),
+      l = v.layout;
+    if (l.compactFallback) {
+      expect(l.compactFallback).toBe('Open to see balances');
+      continue;
+    }
+    const room = l.columns ? (l.width - 8) / 2 - (l.panel ? 20 : 0) : l.width;
+    for (const amount of [...v.owed, ...v.owe])
+      expect(widgetText(room, 2).width(amount, l.fonts.money, true)).toBeLessThanOrEqual(room);
+  }
+});
+
+it.each(['signed-out', 'expired', 'all-square'] as const)(
+  'keeps the board action in the %s state',
+  (state) => {
+    const c = state === 'all-square' ? { ...copy, home: { ...copy.home!, currencies: [] } } : copy;
+    const session = state === 'all-square' ? auth : { status: state };
+    const v = overviewWidget(c, setup, { width: 360, height: 344 }, session, now);
+    expect(v.action).toBe(state === 'all-square' ? '＋ Add expense' : 'Sign in');
+    expect(v.actionTarget).toBe(state === 'all-square' ? 'choose-group' : 'sign-in');
+  },
+);
+it('keeps the To review chip drawn at 130% on the tall board', () => {
+  expect(overviewWidget(copy, setup, { width: 360, height: 344 }, auth, now, 1.3).review).toBe(
+    'To review\u00a0· 3',
+  );
+});
+it.each([1, 1.3, 2])(
+  'budgets the old-copy update note together with its action at %s text',
+  (scale) => {
+    const v = overviewWidget(copy, setup, { width: 360, height: 584 }, auth, now + 86400001, scale),
+      l = v.layout;
+    expect(l.footerNote).toBe('Open to update');
+    expect(v.action).toBe('＋ Add expense');
+    const text = widgetText(l.width, scale);
+    const actionHeight = l.actionLines.length * text.line(l.fonts.action) + 18;
+    const noteHeight = text.line(l.fonts.small);
+    expect(l.sections.find((s) => s.id === 'footer')!.height).toBeGreaterThanOrEqual(
+      l.footerAcross ? Math.max(actionHeight, noteHeight) : actionHeight + noteHeight + 4,
+    );
+  },
+);
+it('reserves the small currency hint and secondary amount before choosing a money font', () => {
+  const c = {
+    ...copy,
+    home: {
+      ...copy.home!,
+      currencies: [
+        { currency: 'INR', owedMinor: 1234567890, oweMinor: 9876543210 },
+        { currency: 'EUR', owedMinor: 1, oweMinor: 0 },
+      ],
+    },
+  };
+  const v = overviewWidget(c, setup, { width: 172, height: 104 }, auth, now),
+    l = v.layout;
+  const t = widgetText(l.width);
+  expect(
+    t.width(l.primary.amount, l.fonts.money, true) +
+      (l.showOverflow && l.primary.overflow ? 4 + t.width(l.primary.overflow, l.fonts.small) : 0),
+  ).toBeLessThanOrEqual(l.width + 0.000001);
+  expect(t.width(l.secondary ?? '', l.fonts.secondary)).toBeLessThanOrEqual(l.width + 0.000001);
 });
