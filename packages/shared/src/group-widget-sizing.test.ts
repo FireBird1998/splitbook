@@ -525,7 +525,9 @@ it('omits Trip day for other Themes, older copies, incomplete and invalid dates'
 
 it('uses the newly reported phone zone while Date keeps its former local day', () => {
   const resolve = Intl.DateTimeFormat.prototype.resolvedOptions;
-  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function () {
+  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
+    this: Intl.DateTimeFormat,
+  ) {
     return { ...resolve.call(this), timeZone: 'Pacific/Honolulu' };
   });
   const instant = Date.parse('2026-11-01T00:30:00Z');
