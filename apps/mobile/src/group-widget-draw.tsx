@@ -261,6 +261,7 @@ export function drawGroup(
     more: text(view.more ?? '', t.brand.main, 10, true),
     hidden: text(view.hidden ?? '', t.textMuted, 10),
     action: footer,
+    update: text(view.action ?? '', t.textSecondary, 11),
     loading: (
       <FlexWidget style={{ height: 'match_parent' }}>
         {l.loadingRows.map((row, index) => (

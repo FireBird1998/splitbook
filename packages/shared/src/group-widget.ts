@@ -368,6 +368,7 @@ function groupLayout(
             },
           ]
         : []),
+      ...(view.action === 'Open to update' ? [{ id: 'update', rows: 1, rowHeight: line(11) }] : []),
       ...(actionLabel
         ? [
             {
@@ -407,6 +408,12 @@ function groupLayout(
   }
   let plan = fitWidgetSections(height, settings.sections, gap);
   let paymentLines = plan.sections.find((s) => s.id === 'payments')?.rows ?? 0;
+  // The existing overflow hint takes precedence over the older-copy prompt.
+  if (paymentLines < view.payments.length && (paymentLines > 0 || size.width >= 280)) {
+    settings.sections = settings.sections.filter((s) => s.id !== 'update');
+    plan = fitWidgetSections(height, settings.sections, gap);
+    paymentLines = plan.sections.find((s) => s.id === 'payments')?.rows ?? 0;
+  }
   if (paymentLines && paymentLines < view.payments.length) {
     const action = settings.sections.find((s) => s.id === 'action');
     const extra = compact ? line(10) + 4 : 0;
