@@ -323,6 +323,8 @@ function ReviewRunContent({
   const descriptionPlaceholder = useDescriptionPlaceholder();
   if (!selected) {
     const summary = summarizeReviewRun(state.outcomes);
+    const reviewedIds = new Set(state.outcomes.map(({ id }) => id));
+    const reviewed = state.items.filter(({ item }) => reviewedIds.has(item.draft.id));
     return (
       <RunScreen
         controller={controller}
@@ -348,9 +350,7 @@ function ReviewRunContent({
             Done for now
           </CompactText>
           <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
-            {reviewedItemsLine(state.items.length, [
-              ...new Set(state.items.map((row) => row.groupName)),
-            ])}
+            {reviewedItemsLine(reviewed.length, [...new Set(reviewed.map((row) => row.groupName))])}
           </CompactText>
         </View>
         <Card>
