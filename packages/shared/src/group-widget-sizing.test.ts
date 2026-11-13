@@ -62,7 +62,7 @@ it.each([1, 1.3, 2])(
     const view = groupWidget(part, setup, { width: 110, height: 110 }, auth, now, scale);
     expect(view.layout.fits).toBe(true);
     expect(view.compactAmount).toBe('₹1,480.00');
-    expect(view.layout.nameLines.join(' ')).toMatch(/^(Maple House|Group)$/);
+    expect(view.layout.nameLines.join(' ')).toBe('Maple House');
     expect(view.layout.nameFontSize).toBeGreaterThanOrEqual(10);
     expect(view.layout.moneyFontSize).toBeGreaterThanOrEqual(10);
     expect(view.layout.sections.some((s) => s.id === 'action')).toBe(false);
@@ -148,7 +148,7 @@ it('keeps the archived separator with final rather than dangling after owe', () 
   expect(view.layout.balanceLabelLines.every((line) => !line.endsWith('·'))).toBe(true);
 });
 
-it('uses Group at the true minimum when a longer valid name would crowd out the full balance', () => {
+it('keeps a long Group name for single-line ellipsis at the true minimum', () => {
   const view = groupWidget(
     { ...part, name: 'Our family summer holiday in the mountains' },
     setup,
@@ -158,7 +158,7 @@ it('uses Group at the true minimum when a longer valid name would crowd out the 
     1.3,
   );
   expect(view.layout.fits).toBe(true);
-  expect(view.layout.nameLines).toEqual(['Group']);
+  expect(view.layout.nameLines).toEqual(['Our family summer holiday in the mountains']);
   expect(view.compactAmount).toBe('₹1,480.00');
 });
 
@@ -218,7 +218,7 @@ it('wraps a tall narrow overflow hint into complete words inside its measured he
     ).toBeLessThanOrEqual(view.layout.width);
 });
 
-it('uses Group when an unbroken name cannot fit even without optional content at the readable floor', () => {
+it('keeps an unbroken Group name for single-line ellipsis at the readable floor', () => {
   const view = groupWidget(
     { ...part, name: 'MountainAdventureClub' },
     setup,
@@ -227,7 +227,7 @@ it('uses Group when an unbroken name cannot fit even without optional content at
     now,
     2,
   );
-  expect(view.layout.nameLines).toEqual(['Group']);
+  expect(view.layout.nameLines).toEqual(['MountainAdventureClub']);
   expect(view.layout.nameFontSize).toBeGreaterThanOrEqual(10);
 });
 it('uses a tall real size for more payment rows and shares all leftover height among them', () => {

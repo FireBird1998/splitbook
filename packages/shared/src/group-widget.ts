@@ -334,17 +334,16 @@ function groupLayout(
         (showTile ? 40 : 0) -
         (!compact && showSaved && view.saved ? text.width(view.saved, 9) + 8 : 0) -
         (showArchivedTag && !stackHeader ? text.width('Archived', 9) + 12 : 0);
-      const name =
-        (tiny && text.width(view.name ?? '', 13) > nameRoom) ||
-        (view.name ?? '').split(/\s+/).some((word) => text.width(word, 10) > width)
-          ? 'Group'
-          : (view.name ?? '');
+      const name = view.name ?? '';
       const nameFont = text.fit(
         name.split(/\s+/).sort((a, b) => text.width(b, 13) - text.width(a, 13))[0] ?? '',
         13,
         nameRoom,
       );
-      const nameLines = text.words(name, nameFont, nameRoom);
+      const nameLines =
+        tiny || name.split(/\s+/).some((word) => text.width(word, nameFont) > nameRoom)
+          ? [name]
+          : text.words(name, nameFont, nameRoom);
       const balanceFont = tiny ? 10 : 14;
       const balanceLabelLines = text.words(
         tiny && view.final

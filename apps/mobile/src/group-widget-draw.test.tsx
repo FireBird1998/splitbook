@@ -227,3 +227,24 @@ it('gives the stacked archived name and tag the full width of their header colum
   expect(header?.props).toMatchObject({ orientation: 'VERTICAL', width: 'match_parent' });
   vi.unstubAllGlobals();
 });
+
+it('keeps the Group name in a width-constrained single-line native text view for ellipsis', () => {
+  vi.stubGlobal('__DEV__', false);
+  const name = 'MountainAdventureClub';
+  const tree = buildWidgetTree(
+    drawGroup(
+      { ...copy, groups: { maple: { ...copy.groups!.maple!, name } } },
+      { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
+      { width: 110, height: 110 },
+      { status: 'authenticated', accountId: 'alex', loading: false },
+      now,
+      lightTokens,
+      2,
+    ),
+  );
+  expect(
+    allNodes(tree).find((node) => (node.props as { text?: string }).text === name)?.props,
+  ).toMatchObject({ width: 'match_parent', maxLines: 1, truncate: 'END' });
+  expect(drawnText(tree)).not.toContain('Group');
+  vi.unstubAllGlobals();
+});

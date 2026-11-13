@@ -93,7 +93,20 @@ export function drawGroup(
           }}
         >
           <FlexWidget style={l.stackHeader ? { width: 'match_parent' } : { flex: 1 }}>
-            {lines(l.nameLines, t.text, l.nameFontSize, true)}
+            {l.nameLines.map((name, index) => (
+              <TextWidget
+                key={index}
+                text={name}
+                maxLines={1}
+                truncate="END"
+                style={{
+                  width: 'match_parent',
+                  color: color(t.text),
+                  fontSize: l.nameFontSize,
+                  fontWeight: 'bold',
+                }}
+              />
+            ))}
           </FlexWidget>
           {l.showArchivedTag ? (
             <FlexWidget
