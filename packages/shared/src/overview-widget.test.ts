@@ -255,3 +255,15 @@ it.each([
     );
   },
 );
+it('keeps fitting compact balance amounts at 200 percent without testing an undrawn secondary line', () => {
+  const v = overviewWidget(
+    copy,
+    setup,
+    { width: 172, height: 104, pixelRatio: 2.625 },
+    auth,
+    now,
+    2,
+  );
+  expect(v.layout.compactLines).toEqual(['Owed ₹2,400.00', 'Owe ₹1,480.00']);
+  expect(v.layout.compactFallback).toBeNull();
+});

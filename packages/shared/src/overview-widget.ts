@@ -156,7 +156,7 @@ export function overviewWidget(
       );
       const compactFallback =
         compactLines.some((line) => text.width(line, compactFont) > width) ||
-        (secondary && text.width(secondary, secondaryFont) > width) ||
+        (!compactLines.length && secondary && text.width(secondary, secondaryFont) > width) ||
         (!hidden &&
           !small &&
           [...owed, ...owe].some((amount) => text.width(amount, moneyFont, true) > columnWidth))
