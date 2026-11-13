@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { overviewWidget } from './overview-widget';
 import { widgetText } from './widget-sizing';
 import type { WidgetCopy } from './balances-widget';
+const clone = (value: WidgetCopy): WidgetCopy => JSON.parse(JSON.stringify(value));
 const now = Date.parse('2026-11-13T04:11:00Z');
 beforeAll(() => vi.stubEnv('TZ', 'Asia/Kolkata'));
 afterAll(() => vi.unstubAllEnvs());
@@ -330,8 +331,8 @@ const paymentCopy: WidgetCopy = {
       currencies: [
         {
           currency: 'INR',
-          balanceMinor: -148000,
-          payments: Array.from({ length: 5 }, (_, i) => ({
+          balanceMinor: -140000,
+          payments: Array.from({ length: 4 }, (_, i) => ({
             from: i === 4 ? 'sam' : 'alex',
             to: i === 4 ? 'alex' : ['sam', 'priya', 'ravi', 'kai'][i]!,
             fromName: i === 4 ? 'Sam Chen' : 'Alex Rao',
@@ -340,6 +341,32 @@ const paymentCopy: WidgetCopy = {
             toInitials: i === 4 ? 'AR' : ['SC', 'PS', 'RK', 'KT'][i]!,
             amountMinor: (5 - i) * 10000,
           })),
+        },
+      ],
+    },
+    goa: {
+      id: 'goa',
+      name: 'Goa Friends Trip',
+      theme: 'trip',
+      archived: false,
+      mainCurrency: 'EUR',
+      verifiedAt: now,
+      balancesVerifiedAt: now,
+      currencies: [
+        {
+          currency: 'EUR',
+          balanceMinor: 10000,
+          payments: [
+            {
+              from: 'sam',
+              to: 'alex',
+              fromName: 'Sam Chen',
+              toName: 'Alex Rao',
+              fromInitials: 'SC',
+              toInitials: 'AR',
+              amountMinor: 10000,
+            },
+          ],
         },
       ],
     },
@@ -386,7 +413,7 @@ it('shortens narrow payments and replaces hidden rows with counts without names 
   expect(h.payments).toEqual([]);
   expect(h.layout.paymentCountsLines).toEqual(['You pay 4 people', '1 person pays you']);
   expect(JSON.stringify(h)).not.toMatch(/Sam|Maple|500/);
-  const incoming = structuredClone(paymentCopy);
+  const incoming = clone(paymentCopy);
   incoming.groups!.maple!.currencies[0]!.payments =
     incoming.groups!.maple!.currencies[0]!.payments.slice(4);
   expect(
@@ -435,7 +462,7 @@ it('keeps payments out of small and all-square layouts and asks for an unread Gr
 });
 
 it('uses the Group spoken-name rule when two people share initials and another differs', () => {
-  const c = structuredClone(paymentCopy);
+  const c = clone(paymentCopy);
   const rows = c.groups!.maple!.currencies[0]!.payments;
   rows.splice(3);
   for (const [i, row] of rows.entries()) {
@@ -450,8 +477,9 @@ it('uses the Group spoken-name rule when two people share initials and another d
 });
 
 it('uses a count without a link or padded rows when no full-style payment row fits', () => {
-  const c = structuredClone(paymentCopy);
+  const c = clone(paymentCopy);
   c.home!.currencies = [{ currency: 'INR', owedMinor: 0, oweMinor: 100000 }];
+  delete c.groups!.goa;
   const g = c.groups!.maple!;
   g.currencies[0].payments = [
     {
@@ -477,8 +505,9 @@ it('uses a count without a link or padded rows when no full-style payment row fi
 it.each([390, 390.5, 391])(
   'reserves the drawn divider for stacked payment text at %s dp',
   (height) => {
-    const c = structuredClone(paymentCopy);
+    const c = clone(paymentCopy);
     c.home!.currencies = [{ currency: 'INR', owedMinor: 240000, oweMinor: 200000 }];
+    delete c.groups!.goa;
     c.groups!.maple!.currencies[0].payments = [0, 1].map((i) => ({
       from: 'alex',
       to: i ? 'sam' : 'priya',

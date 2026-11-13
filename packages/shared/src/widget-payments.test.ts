@@ -40,22 +40,20 @@ const outgoing = group('goa', 'INR', false, 106000).currencies[0];
 outgoing.payments[0].to = 'priya';
 outgoing.payments[0].toName = 'Priya';
 outgoing.payments[0].toInitials = 'PS';
-outgoing.payments.push(...group('goa', 'INR', true, 145000).currencies[0].payments);
-outgoing.balanceMinor = 39000;
 goa.currencies.push(outgoing, ...group('goa', 'EUR', false, 4000).currencies);
 const copy: WidgetCopy = {
   version: 1,
   accountId: 'alex',
   home: {
     verifiedAt: now - 5000,
-    groupCount: 2,
+    groupCount: 3,
     currencies: [
       { currency: 'INR', owedMinor: 39000, oweMinor: 42000 },
       { currency: 'EUR', owedMinor: 0, oweMinor: 4000 },
       { currency: 'JPY', owedMinor: 0, oweMinor: 42000 },
     ],
   },
-  groups: { maple, goa },
+  groups: { maple, goa, kerala: group('kerala', 'INR', true, 145000) },
 };
 it('orders pay before paid, then Home currencies, and amounts only within their currency', () => {
   const rows = widgetPayments(copy, 'alex');
