@@ -1,3 +1,4 @@
+import { SEPARATOR } from './separator';
 import { widgetTextLevel } from './widget-layout';
 import {
   fitWidgetSections,
@@ -137,7 +138,7 @@ function tagShortcuts(
       ];
   const header = fitted.sections.find((section) => section.id === 'header');
   return {
-    header: header ? (horizontal ? `Add expense · ${group}` : group) : null,
+    header: header ? (horizontal ? `Add expense${SEPARATOR}${group}` : group) : null,
     headerSubtitle: header && !horizontal && size.width >= 250 ? 'Add an Expense' : null,
     headerHeight: header?.height ?? 0,
     headerFontSize: fitted.headerFontSize,
