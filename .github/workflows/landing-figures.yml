@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'tools/landing-figures/**'
+      - 'tools/header-scenes/**'
+      - 'packages/shared/src/header-scene-art.ts'
+      - 'packages/shared/src/header-scenes/**'
       - 'apps/web/src/components/landing-figures/generated/**'
       - 'apps/web/public/landing-figures/**'
       # The shared modules the story model runs on.
@@ -17,6 +20,9 @@ on:
     branches: [main]
     paths:
       - 'tools/landing-figures/**'
+      - 'tools/header-scenes/**'
+      - 'packages/shared/src/header-scene-art.ts'
+      - 'packages/shared/src/header-scenes/**'
       - 'apps/web/src/components/landing-figures/generated/**'
       - 'apps/web/public/landing-figures/**'
       - 'packages/shared/src/currency.ts'
@@ -44,3 +50,4 @@ jobs:
       # balance, an edited vendored kit, or any anatomy audit, line-end or page error. The live
       # pages run in the runner's Google Chrome.
       - run: pnpm --filter @splitbook/landing-figures check
+      - run: pnpm --filter @splitbook/header-scenes check

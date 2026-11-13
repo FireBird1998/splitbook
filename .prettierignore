@@ -4,3 +4,5 @@ tools/landing-figures/vendor/
 apps/web/src/components/landing-figures/generated/
 # Matt Pocock skills, kept exactly as installed (skills-lock.json hashes them)
 .agents/skills/
+# Generated shared Header scene vectors; tools/header-scenes owns them.
+packages/shared/src/header-scenes/

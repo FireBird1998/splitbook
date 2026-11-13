@@ -1,10 +1,11 @@
 packages:
   - apps/*
   - packages/*
-  # tools/swarm and tools/landing-figures only, not tools/*: tools/brand keeps its own npm
+  # Explicit standalone tools, not tools/*: tools/brand keeps its own npm
   # lockfile and CI job.
   - tools/swarm
   - tools/landing-figures
+  - tools/header-scenes
 
 # pnpm 10 skips dependency install scripts by default and would nag about these
 # three on every install. They are safe to skip: esbuild, sharp and
