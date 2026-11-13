@@ -298,7 +298,10 @@ export function drawGroup(
       }}
     >
       {l.sections.map((section) => (
-        <FlexWidget key={section.id} style={{ height: section.height, width: 'match_parent' }}>
+        <FlexWidget
+          key={section.id}
+          style={{ height: section.height, width: 'match_parent', justifyContent: 'center' }}
+        >
           {content[section.id]}
         </FlexWidget>
       ))}

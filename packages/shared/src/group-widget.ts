@@ -455,11 +455,20 @@ function groupLayout(
       rowHeight: line(11),
       grow: true,
     });
-    plan = fitWidgetSections(
-      height,
-      settings.sections.filter((s) => s.id !== 'payments'),
-      gap,
-    );
+    settings.sections = settings.sections.filter((s) => s.id !== 'payments');
+    plan = fitWidgetSections(height, settings.sections, gap);
+  }
+  // If no payment can be drawn, the balance takes the spare height; the action stays at
+  // the bottom rather than growing an empty area beneath its button.
+  if (!paymentLines) {
+    settings.sections = settings.sections.filter((s) => s.id !== 'payments');
+    const balance =
+      settings.sections.find((s) => s.id === 'balance') ??
+      settings.sections.find((s) => s.id === 'header');
+    if (balance) {
+      balance.grow = true;
+      plan = fitWidgetSections(height, settings.sections, gap);
+    }
   }
   const present = (id: string) => plan.sections.some((s) => s.id === id);
   return {

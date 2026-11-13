@@ -70,6 +70,9 @@ it.each(dimensions.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scal
       2 * l.padding;
     expect(used).toBeCloseTo(height, 5);
     expect(view.payments).toHaveLength(l.paymentLines);
+    expect(l.sections.find((section) => section.id === 'payments')?.rows ?? 0).toBe(
+      view.payments.length,
+    );
     expect(view.name).toBe('Maple House');
     expect(view.balance).toBe('You owe ₹1,480.00');
     expect(l.sections.at(-1)?.id).toBe('action');
@@ -171,4 +174,22 @@ it('keeps the compact Group name on whole-word lines at 200% on the launcher min
   expect(header.height).toBeGreaterThanOrEqual(
     view.layout.nameLines.length * Math.ceil(view.layout.nameFontSize * 2 * 1.3),
   );
+});
+
+it('spreads a tall balance row instead of leaving spare height below Add expense when payments cannot fit', () => {
+  const large: WidgetGroupPart = {
+    ...part,
+    currencies: [
+      {
+        ...part.currencies[0]!,
+        payments: part.currencies[0]!.payments.map((p) => ({ ...p, amountMinor: 123456789012345 })),
+      },
+    ],
+  };
+  const view = groupWidget(large, setup, { width: 172, height: 584 }, auth, now, 2);
+  expect(view.payments).toHaveLength(0);
+  const action = view.layout.sections.find((section) => section.id === 'action')!;
+  expect(action.height).toBe(action.rowHeight);
+  const balance = view.layout.sections.find((section) => section.id === 'balance')!;
+  expect(balance.height).toBeGreaterThan(584 / 2);
 });
