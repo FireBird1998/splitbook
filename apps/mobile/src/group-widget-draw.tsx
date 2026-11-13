@@ -80,6 +80,7 @@ export function drawGroup(
       <FlexWidget style={{ flex: 1, flexGap: 3 }}>
         <FlexWidget
           style={{
+            ...(l.stackHeader ? { width: 'match_parent' as const } : {}),
             flexDirection: l.stackHeader ? 'column' : 'row',
             alignItems: l.stackHeader ? 'flex-start' : 'center',
             flexGap: 6,

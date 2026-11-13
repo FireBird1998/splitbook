@@ -28,6 +28,15 @@ function minimumHeight(tree: WidgetTree): number {
         Math.max(0, children.length - 1) * (p.separator?.size ?? 0);
   return content + (p.padding?.top ?? 0) + (p.padding?.bottom ?? 0);
 }
+const drawnText = (node: WidgetTree): string[] => [
+  ...((node.props as { text?: string }).text ? [(node.props as { text: string }).text] : []),
+  ...(node.children ?? []).flatMap(drawnText),
+];
+const allNodes = (node: WidgetTree): WidgetTree[] => [
+  node,
+  ...(node.children ?? []).flatMap(allNodes),
+];
+
 const now = Date.parse('2026-11-13T04:11:00Z');
 const copy: WidgetCopy = {
   version: 1,
@@ -112,10 +121,6 @@ it.each([
         lightTokens,
       ),
     );
-    const drawnText = (node: WidgetTree): string[] => [
-      ...((node.props as { text?: string }).text ? [(node.props as { text: string }).text] : []),
-      ...(node.children ?? []).flatMap(drawnText),
-    ];
     expect(drawnText(tree).filter((text) => text === 'Open to update')).toHaveLength(
       count === 2 ? 1 : 0,
     );
@@ -152,10 +157,32 @@ it('draws the overflow hint when no full payment amount fits an in-between width
       lightTokens,
     ),
   );
-  const drawnText = (node: WidgetTree): string[] => [
-    ...((node.props as { text?: string }).text ? [(node.props as { text: string }).text] : []),
-    ...(node.children ?? []).flatMap(drawnText),
-  ];
   expect(drawnText(tree)).toContain('+2\u00a0more\u00a0· ₹');
+  vi.unstubAllGlobals();
+});
+
+it('gives the stacked archived name and tag the full width of their header column', () => {
+  vi.stubGlobal('__DEV__', false);
+  const archived: WidgetCopy = {
+    ...copy,
+    groups: { maple: { ...copy.groups!.maple!, archived: true } },
+  };
+  const tree = buildWidgetTree(
+    drawGroup(
+      archived,
+      { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
+      { width: 172, height: 224 },
+      { status: 'authenticated', accountId: 'alex', loading: false },
+      now,
+      lightTokens,
+      2,
+    ),
+  );
+  const header = allNodes(tree).find(
+    (node) =>
+      node.children?.some((child) => drawnText(child).join(' ') === 'Maple House') &&
+      node.children?.some((child) => drawnText(child).join(' ') === 'Archived'),
+  );
+  expect(header?.props).toMatchObject({ orientation: 'VERTICAL', width: 'match_parent' });
   vi.unstubAllGlobals();
 });
