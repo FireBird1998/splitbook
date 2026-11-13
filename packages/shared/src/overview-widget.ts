@@ -248,7 +248,8 @@ export function overviewWidget(
       const compactPayments = size.width / Math.max(1, scale) < 240;
       const paymentHeaderHeight = text.line(10) + 4;
       const paymentFont = compactPayments ? 13 : 12;
-      const paymentWidth = width - (compactPayments ? 0 : 48);
+      const paymentAvatarSize = Math.max(24, text.line(10));
+      const paymentWidth = width - (compactPayments ? 0 : 24 + paymentAvatarSize);
       const measuredPayments = availablePayments.map((row) => {
         const label = compactPayments
           ? row.incoming
@@ -389,6 +390,7 @@ export function overviewWidget(
         compactPayments,
         measuredPayments,
         paymentHeaderHeight,
+        paymentAvatarSize,
         paymentMessageLines,
         paymentCountsLines,
         paymentLabelFont: text.font(paymentFont),

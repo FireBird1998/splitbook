@@ -522,3 +522,15 @@ it.each([390, 390.5, 391])(
     for (const row of v.payments) expect(row.textHeight).toBeLessThanOrEqual(row.contentHeight);
   },
 );
+it('keeps full-row initials readable at 200 percent on the maximum width', () => {
+  const view = overviewWidget(
+    paymentCopy,
+    setup,
+    { width: 640, height: 640, pixelRatio: 2.625 },
+    auth,
+    now,
+    2,
+  );
+  expect(view.layout.compactPayments).toBe(false);
+  expect(view.layout.paymentAvatarSize).toBeGreaterThanOrEqual(26);
+});

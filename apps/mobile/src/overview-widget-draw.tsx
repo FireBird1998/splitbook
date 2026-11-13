@@ -274,9 +274,9 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
               {!l.compactPayments ? (
                 <FlexWidget
                   style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: 12,
+                    width: l.paymentAvatarSize,
+                    height: l.paymentAvatarSize,
+                    borderRadius: l.paymentAvatarSize / 2,
                     backgroundColor: color(t.brand.bg),
                     justifyContent: 'center',
                     alignItems: 'center',
