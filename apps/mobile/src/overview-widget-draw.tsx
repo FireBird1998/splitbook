@@ -213,7 +213,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
           <FlexWidget
             key={i}
             style={{
-              height: l.sections.find((s) => s.id === 'loading')!.rowHeight,
+              height: l.sections.find((s) => s.id === 'loading')?.rowHeight ?? 0,
               justifyContent: 'center',
             }}
           >
