@@ -420,7 +420,6 @@ function groupLayout(
                   showStateTile ? 48 : 0,
                 ),
                 required: true,
-                grow: true,
               },
             ]
           : []),
@@ -443,7 +442,7 @@ function groupLayout(
             ]
           : []),
         ...(view.hidden && level < 2 && !tiny
-          ? [{ id: 'hidden', rows: 1, rowHeight: text.line(10) + 6, grow: true }]
+          ? [{ id: 'hidden', rows: 1, rowHeight: text.line(10) + 6 }]
           : []),
         ...(view.description && optional && level < 2 && !tiny
           ? [
@@ -451,7 +450,6 @@ function groupLayout(
                 id: 'description',
                 rows: 1,
                 rowHeight: descriptionLines.length * text.line(descriptionFont),
-                grow: true,
               },
             ]
           : []),
@@ -464,6 +462,10 @@ function groupLayout(
                 ...(view.payments.length ? { whenComplete: 'payments' } : {}),
               },
             ]
+          : []),
+        // Messages are fixed blocks. Only list rows (or this space below a message) grow.
+        ...(!view.payments.length && view.state !== 'loading'
+          ? [{ id: 'space', rows: 1, rowHeight: 0, required: true, grow: true }]
           : []),
         ...(actionLabel
           ? [

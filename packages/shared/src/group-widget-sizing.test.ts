@@ -431,3 +431,23 @@ it.each([1.3, 2])(
     expect(l.balanceLabelLines.join(' ')).toContain('final');
   },
 );
+
+it.each(states.filter(([, , s, ,], i) => [1, 3, 4, 6, 7, 8].includes(i) || s.hideAmounts))(
+  'keeps message-state content together above spare height: %s',
+  (_state, copy, setup, session, time) => {
+    const short = groupWidget(copy, setup, { width: 360, height: 224 }, session, time);
+    const tall = groupWidget(copy, setup, { width: 360, height: 584 }, session, time);
+    for (const id of ['header', 'balance', 'title', 'description', 'hidden']) {
+      const block = tall.layout.sections.find((s) => s.id === id);
+      if (!block) continue;
+      expect(block.height).toBe(block.rowHeight);
+      expect(block.height).toBe(short.layout.sections.find((s) => s.id === id)?.height);
+    }
+    expect(tall.layout.sections.find((s) => s.id === 'space')!.height).toBeGreaterThan(300);
+    const action = tall.layout.sections.find((s) => s.id === 'action');
+    if (action) {
+      expect(tall.layout.sections.at(-1)?.id).toBe('action');
+      expect(action.height).toBe(action.rowHeight);
+    }
+  },
+);
