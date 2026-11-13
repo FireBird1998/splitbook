@@ -234,3 +234,42 @@ it('admits the next section after a complete Recent list shorter than its thresh
     { id: 'month', rows: 1 },
   ]);
 });
+
+it('gives spare space to a fallback section only when no visible list rows grow', () => {
+  const sections = [
+    { id: 'header', rows: 1, rowHeight: 10, required: true },
+    { id: 'payments', rows: 1, rowHeight: 20, grow: true },
+    { id: 'space', rows: 1, rowHeight: 1, required: true, fallbackGrow: true },
+    { id: 'footer', rows: 1, rowHeight: 10, required: true },
+  ];
+  const withRows = fitWidgetSections(100, sections, 0);
+  expect(withRows.sections.map((s) => [s.id, s.height])).toEqual([
+    ['header', 10],
+    ['payments', 79],
+    ['space', 1],
+    ['footer', 10],
+  ]);
+  const withoutRows = fitWidgetSections(30, sections, 0);
+  expect(withoutRows.sections.map((s) => [s.id, s.height])).toEqual([
+    ['header', 10],
+    ['space', 10],
+    ['footer', 10],
+  ]);
+});
+
+it('reserves a section heading even when only its count fits, without charging it for each row', () => {
+  const sections = [
+    { id: 'balance', rows: 1, rowHeight: 10, required: true },
+    { id: 'payments', rows: 4, rowHeight: 10, headingHeight: 5, moreHeight: 0, grow: true },
+  ];
+  expect(
+    fitWidgetSections(50, sections, 0).sections.find((s) => s.id === 'payments'),
+  ).toMatchObject({ rows: 3, more: 1 });
+  expect(
+    fitWidgetSections(17, sections, 0).sections.find((s) => s.id === 'payments'),
+  ).toMatchObject({ rows: 0, more: 4, height: 5 });
+  expect(fitWidgetSections(14, sections, 0).sections.map((s) => s.id)).toEqual(['balance']);
+  expect(
+    fitWidgetSections(60, sections, 0).sections.find((s) => s.id === 'payments'),
+  ).toMatchObject({ rows: 4, more: 0 });
+});

@@ -264,6 +264,7 @@ it.each([
     );
   },
 );
+
 it('keeps fitting compact balance amounts at 200 percent without testing an undrawn secondary line', () => {
   const v = overviewWidget(
     copy,
@@ -315,3 +316,120 @@ it.each(['signed-out', 'expired', 'no-groups'] as const)(
     expect(v.layout.sections.at(-1)?.id).toBe('footer');
   },
 );
+const paymentCopy: WidgetCopy = {
+  ...copy,
+  groups: {
+    maple: {
+      id: 'maple',
+      name: 'Maple House',
+      theme: 'home',
+      archived: false,
+      mainCurrency: 'INR',
+      verifiedAt: now,
+      balancesVerifiedAt: now - 86400001,
+      currencies: [
+        {
+          currency: 'INR',
+          balanceMinor: -148000,
+          payments: Array.from({ length: 5 }, (_, i) => ({
+            from: i === 4 ? 'sam' : 'alex',
+            to: i === 4 ? 'alex' : 'sam',
+            fromName: i === 4 ? 'Sam Chen' : 'Alex Rao',
+            toName: i === 4 ? 'Alex Rao' : 'Sam Chen',
+            fromInitials: i === 4 ? 'SC' : 'AR',
+            toInitials: i === 4 ? 'AR' : 'SC',
+            amountMinor: (5 - i) * 10000,
+          })),
+        },
+      ],
+    },
+  },
+};
+it('shows across-Group payments after balances with a Home overflow link and independent old time', () => {
+  const v = overviewWidget(paymentCopy, setup, { width: 360, height: 344 }, auth, now);
+  expect(v.payments).toHaveLength(2);
+  expect(v.payments[0]).toMatchObject({
+    label: 'You pay Sam',
+    groupName: 'Maple House',
+    amount: '₹500.00',
+    initials: 'SC',
+    muted: true,
+    target: {
+      kind: 'settle',
+      groupId: 'maple',
+      payment: { from: 'alex', to: 'sam', currency: 'INR' },
+    },
+  });
+  expect(v.paymentMore).toBe('+3\u00a0more');
+  expect(v.paymentMoreTarget).toBe('home');
+  expect(v.layout.sections.map((s) => s.id)).toEqual([
+    'header',
+    'balance',
+    'payments',
+    'space',
+    'footer',
+  ]);
+  expect(v.summary.indexOf('You pay Sam')).toBeGreaterThan(v.summary.indexOf('You owe'));
+  expect(v.summary.indexOf('You pay Sam')).toBeLessThan(v.summary.indexOf('To review'));
+  expect(v.summary).toContain('in Maple House');
+});
+it('shortens narrow payments and replaces hidden rows with counts without names or money', () => {
+  const v = overviewWidget(paymentCopy, setup, { width: 172, height: 464 }, auth, now);
+  expect(v.payments[0]?.label).toBe('Pay Sam');
+  const h = overviewWidget(
+    paymentCopy,
+    { ...setup, hideAmounts: true },
+    { width: 360, height: 584 },
+    auth,
+    now,
+  );
+  expect(h.payments).toEqual([]);
+  expect(h.layout.paymentCountsLines).toEqual(['You pay 1 person', '1 person pays you']);
+  expect(JSON.stringify(h)).not.toMatch(/Sam|Maple|500/);
+  const incoming = structuredClone(paymentCopy);
+  incoming.groups!.maple!.currencies[0]!.payments =
+    incoming.groups!.maple!.currencies[0]!.payments.slice(4);
+  expect(
+    overviewWidget(incoming, setup, { width: 172, height: 464 }, auth, now).payments[0]?.label,
+  ).toBe('From Sam');
+});
+it.each(sizes.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scale }))))(
+  'fits payment text and section heights at $width×$height with $scale text',
+  ({ width, height, scale }) => {
+    const v = overviewWidget(
+        paymentCopy,
+        setup,
+        { width, height, pixelRatio: 2.625 },
+        auth,
+        now,
+        scale,
+      ),
+      l = v.layout;
+    expect(l.fits).toBe(true);
+    expect(
+      l.sections.reduce((n, s) => n + s.height, 0) +
+        Math.max(0, l.sections.length - 1) * l.gap +
+        l.padding * 2,
+    ).toBeLessThanOrEqual(height + 0.00001);
+    for (const row of v.payments) expect(row.textHeight).toBeLessThanOrEqual(row.contentHeight);
+    if (!v.payments.length) expect(v.paymentMore).toBeNull();
+    if (!l.compactPayments) for (const row of v.payments) expect(row.groupName).toBe('Maple House');
+  },
+);
+it('keeps payments out of small and all-square layouts and asks for an unread Group without a new request', () => {
+  expect(
+    overviewWidget(paymentCopy, setup, { width: 360, height: 224 }, auth, now).payments,
+  ).toEqual([]);
+  expect(
+    overviewWidget(
+      { ...paymentCopy, home: { ...copy.home!, currencies: [] } },
+      setup,
+      { width: 360, height: 584 },
+      auth,
+      now,
+    ).payments,
+  ).toEqual([]);
+  expect(
+    overviewWidget(copy, setup, { width: 360, height: 344 }, auth, now).layout.paymentMessageLines,
+  ).toEqual(['Open the Group to update']);
+});

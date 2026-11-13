@@ -1,3 +1,4 @@
+import { overviewWidget } from '@splitbook/shared/overview-widget';
 import { widgetDimensions } from '../test-utils/widget-size';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MobileController } from './mobile-controller';
@@ -34,6 +35,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
   let storedCopy: WidgetCopy | null = null;
   const requests: { path: string; method: string; query?: string }[] = [];
   const copies: WidgetCopy[] = [];
+  let widgetSession: WidgetSession = { status: 'signed-out' };
   const events: string[] = [];
   const sessionCopies: { status: WidgetSession['status']; copy: WidgetCopy | null }[] = [];
   const group = () => ({
@@ -172,6 +174,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
         setSession: async (state) => {
           sessionCopies.push({ status: state.status, copy: structuredClone(storedCopy) });
           events.push(state.status);
+          widgetSession = structuredClone(state);
         },
         redraw: async () => {
           events.push('redraw');
@@ -248,6 +251,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     groupTags: (value: typeof groupTags) => {
       groupTags = value;
     },
+    record: () => ({ copy: storedCopy, session: widgetSession }),
     requests,
     events,
     sessionCopies,
@@ -506,11 +510,10 @@ it('a widget payment tap opens the chosen payment without sending a Settlement r
     ],
   });
   await c.signIn('alex');
-  await c.openWidget({
-    kind: 'settle',
-    groupId,
-    payment: { from: alex.id, to: priya._id, currency: 'INR' },
-  });
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(overview(f).payments).toHaveLength(1));
+  await c.back();
+  await c.openWidget(overview(f).payments[0]!.target);
   expect(c.getSnapshot().screen).toBe('settlement');
   expect(c.getSnapshot().settlement.draft).toMatchObject({
     paidBy: alex.id,
@@ -633,7 +636,7 @@ it.each(
       'Leave Group',
     ] as const
   ).flatMap((task) =>
-    (['home', 'review', 'choose-group', 'record-payment', 'expense-tag'] as const).map(
+    (['home', 'review', 'choose-group', 'record-payment', 'settle', 'expense-tag'] as const).map(
       (destination) => ({
         task,
         destination,
@@ -698,9 +701,11 @@ it.each(
     await c.openWidget(
       destination === 'expense-tag'
         ? { kind: 'expense-tag', groupId, tagId }
-        : destination === 'record-payment'
-          ? { kind: 'record-payment', groupId }
-          : destination,
+        : destination === 'settle'
+          ? { kind: 'settle', groupId, payment: { from: alex.id, to: sam.id, currency: 'INR' } }
+          : destination === 'record-payment'
+            ? { kind: 'record-payment', groupId }
+            : destination,
     );
     const after = c.getSnapshot();
     expect(after.screen).toBe(before.screen);
@@ -1518,5 +1523,91 @@ it.each(['older', 'equal'] as const)(
     await projection.idle();
     expect(copies.at(-1)?.lostGroupIds).not.toContain(groupId);
     expect(copies.at(-1)?.tags?.[groupId]?.rows).toHaveLength(1);
+  },
+);
+
+const paymentBalances = {
+  byCurrency: [
+    {
+      currency: 'INR',
+      balances: [
+        { user: { _id: alex.id, name: alex.name }, balance: -100 },
+        { user: { _id: sam.id, name: sam.name }, balance: 100 },
+      ],
+      debts: [
+        {
+          from: { _id: alex.id, name: alex.name },
+          to: { _id: sam.id, name: sam.name },
+          amount: 100,
+        },
+      ],
+    },
+  ],
+};
+const overview = (f: ReturnType<typeof fixture>) => {
+  const r = f.record();
+  return overviewWidget(
+    r.copy,
+    { kind: 'balances', widgetId: 27 },
+    { width: 360, height: 584 },
+    r.session,
+    verified + 60000,
+  );
+};
+it('keeps a read Group’s own Suggested payments without any placed Group widget, with its read time', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    c = f.make();
+  f.groupBalances(paymentBalances);
+  await c.signIn('alex');
+  await vi.waitFor(() => expect(f.record().copy?.home).toBeTruthy());
+  vi.spyOn(Date, 'now').mockReturnValue(verified + 60000);
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(overview(f).payments).toHaveLength(1));
+  expect(overview(f).payments[0]).toMatchObject({
+    groupName: 'Maple House',
+    amount: '₹100.00',
+    verifiedAt: verified + 60000,
+    target: { kind: 'settle', groupId, payment: { from: alex.id, to: sam.id, currency: 'INR' } },
+  });
+  expect(f.record().copy?.home?.verifiedAt).toBe(verified);
+  const n = f.requests.length;
+  overview(f);
+  expect(f.requests).toHaveLength(n);
+});
+it.each(['sign-out', 'account-change', 'denied', '401'] as const)(
+  'guards Overview payments after %s',
+  async (reason) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture(),
+      c = f.make();
+    f.groupBalances(paymentBalances);
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await vi.waitFor(() => expect(overview(f).payments).toHaveLength(1));
+    const before = f.record().copy;
+    f.events.length = 0;
+    if (reason === 'sign-out') await c.signOut();
+    if (reason === 'account-change') await c.signIn('sam');
+    if (reason === 'denied') {
+      f.refuse(403);
+      await c.openGroup(groupId, false);
+    }
+    if (reason === '401') {
+      f.expire();
+      await c.refreshHome();
+    }
+    await vi.waitFor(() => expect(overview(f).payments).toEqual([]));
+    if (reason === '401') {
+      expect(f.record().copy).toEqual(before);
+      expect(f.record().session.status).toBe('expired');
+      expect(f.events).not.toContain('clear');
+    } else if (reason === 'denied') {
+      expect(f.record().copy?.groups?.[groupId]).toBeUndefined();
+    } else {
+      expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+      if (reason === 'sign-out') expect(f.record().copy).toBeNull();
+      if (reason === 'account-change') expect(f.record().copy?.groups ?? {}).toEqual({});
+    }
   },
 );
