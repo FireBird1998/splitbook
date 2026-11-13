@@ -448,3 +448,28 @@ it('uses the Group spoken-name rule when two people share initials and another d
   expect(v.summary).toContain('You pay Priya K ₹300.00 in Maple House');
   expect(v.summary).not.toContain('Priya S');
 });
+
+it('uses a count without a link or padded rows when no full-style payment row fits', () => {
+  const c = structuredClone(paymentCopy);
+  c.home!.currencies = [{ currency: 'INR', owedMinor: 0, oweMinor: 100000 }];
+  const g = c.groups!.maple!;
+  g.currencies[0].payments = [
+    {
+      from: 'alex',
+      to: 'sam',
+      fromName: 'Alex',
+      toName: 'Ananthapadmanabhan',
+      fromInitials: 'AR',
+      toInitials: 'AS',
+      amountMinor: 100000,
+    },
+  ];
+  const v = overviewWidget(c, setup, { width: 480, height: 280, pixelRatio: 2.625 }, auth, now, 2);
+  expect(v.payments).toEqual([]);
+  expect(v.paymentMore).toBeNull();
+  expect(v.paymentCount).toBe('1\u00a0payment');
+  expect(v.layout.compactPayments).toBe(false);
+  expect(
+    v.layout.sections.find((s) => s.id === 'payments')!.height - v.layout.paymentHeaderHeight,
+  ).toBeLessThan(1);
+});

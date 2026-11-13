@@ -243,7 +243,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       <FlexWidget
         style={{
           width: 'match_parent',
-          ...(l.compactPayments
+          ...(l.compactPayments || !view.payments.length
             ? {}
             : { backgroundColor: color(t.surfaceMuted), borderRadius: 14, paddingVertical: 4 }),
         }}
