@@ -32,6 +32,8 @@ test('authenticated Group list has the same meaning through web and native adapt
     // Android keeps the Group's extra currencies, normalised, and its latest Expense's (#720).
     alternateCurrencies: normaliseExtraCurrencies(sent.defaultCurrency, sent.alternateCurrencies),
     latestExpenseCurrency: sent.latestExpenseCurrency ?? null,
+    // Both adapters read the Group's header the same way (#1201); the switch is off here.
+    header: webGroup.header,
     startDate: null,
     endDate: null,
     createdAt: new Date(webGroup.createdAt),
