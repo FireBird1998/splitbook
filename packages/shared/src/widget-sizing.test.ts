@@ -1,6 +1,16 @@
 import { expect, it } from 'vitest';
 import { fitWidgetSections } from './widget-sizing';
 
+it('adds rows in rounds so both already-admitted lists grow', () => {
+  const result = fitWidgetSections(160, [
+    { id: 'payments', rows: 12, rowHeight: 30, grow: true },
+    { id: 'groups', rows: 8, rowHeight: 30, grow: true },
+  ], 0);
+  expect(result.sections.map((s) => [s.id, s.rows])).toEqual([
+    ['payments', 3], ['groups', 2],
+  ]);
+});
+
 it('uses the first content row for spare height when no section asks to grow, not the footer', () => {
   const result = fitWidgetSections(200, [
     { id: 'balance', rows: 1, rowHeight: 40, required: true },

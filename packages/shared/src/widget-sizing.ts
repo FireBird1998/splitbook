@@ -38,14 +38,14 @@ export function fitWidgetSections(height: number, sections: readonly WidgetSecti
       break;
     }
   }
-  for (const [index, section] of sections.entries()) {
-    if (section.required || !chosen[index]) continue;
-    while (chosen[index] < section.rows) {
+  let added = true;
+  while (added) {
+    added = false;
+    for (const [index, section] of sections.entries()) {
+      if (section.required || !chosen[index] || chosen[index] >= section.rows) continue;
       chosen[index]++;
-      if (used() > height) {
-        chosen[index]--;
-        break;
-      }
+      if (used() > height) chosen[index]--;
+      else added = true;
     }
   }
   const spare = Math.max(0, height - used());
