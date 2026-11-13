@@ -1,7 +1,6 @@
 /** Sakura, redrawn from the web and Android Sakura boards. */
 import { Model, hash3, noise2, island, cubePoly, figure, layerOf, svgWrap } from './kit.ts';
 import {
-  waterfall,
   waterEffects,
   lamp,
   glowLayer,
@@ -9,7 +8,7 @@ import {
   project as s,
 } from './island-details.ts';
 
-/** Broad, interlocking cloud-like blossom clusters, rather than a spherical tree. */
+/** A lumpy cloud of blossom on a dark forked trunk, never a ball. */
 function cherry(
   m: Model,
   x: number,
@@ -19,64 +18,66 @@ function cherry(
   radius: number,
   group: string,
 ) {
-  m.box(x, y, z, x + 1, y + 1, z + height, 'cherryTrunk');
-  const lobes =
-    radius >= 5
-      ? [
-          [-4, -1, 1],
-          [0, -4, 4],
-          [4, -2, 0],
-          [-3, 3, 0],
-          [1, 1, 2],
-          [4, 3, 0],
-          [0, 4, 1],
-          [-4, -4, 2],
-        ]
-      : [
-          [-2, 0, 0],
-          [2, 0, 1],
-          [0, -2, 2],
-          [0, 2, 0],
-          [0, 0, 3],
-        ];
-  for (const [dx, dy, dz] of lobes) {
-    const r = radius >= 5 ? 2 : Math.max(1, Math.round(radius * 0.6));
-    for (let xx = -r; xx <= r; xx++)
-      for (let yy = -r; yy <= r; yy++)
-        for (let zz = -1; zz <= 1; zz++) {
-          if (Math.hypot(xx / (r + 0.5), yy / (r + 0.5), zz / 2.5) > 1.2) continue;
+  const wide = radius >= 5;
+  m.box(x, y, z, x + (wide ? 1 : 0), y + (wide ? 1 : 0), z + height, 'cherryTrunk');
+  if (wide) {
+    m.box(x - 1, y, z + height - 1, x - 1, y, z + height + 1, 'cherryTrunk');
+    m.box(x + 2, y + 1, z + height - 2, x + 2, y + 1, z + height, 'cherryTrunk');
+  }
+  const lobes = wide ? 14 : radius >= 3 ? 6 : 4;
+  const r = wide ? 3.3 : radius >= 3 ? 2.4 : 1.7;
+  for (let i = 0; i < lobes; i++) {
+    const a = (i / lobes) * Math.PI * 2 + hash3(x, y, i, 90) * 0.9;
+    const reach = i === 0 ? 0 : radius * (0.35 + hash3(x, i, y, 91) * 0.5);
+    const cx = x + Math.cos(a) * reach,
+      cy = y + Math.sin(a) * reach,
+      cz = z + height + 1 + hash3(i, x, y, 92) * (wide ? 2.6 : 1.5);
+    for (let xx = Math.floor(cx - r); xx <= Math.ceil(cx + r); xx++)
+      for (let yy = Math.floor(cy - r); yy <= Math.ceil(cy + r); yy++)
+        for (let zz = Math.floor(cz - r * 0.7); zz <= Math.ceil(cz + r * 0.7); zz++) {
+          if (zz < z + height - 1) continue;
+          if (
+            Math.hypot((xx - cx) / r, (yy - cy) / r, (zz - cz) / (r * 0.72)) >
+            1 - hash3(xx, yy, zz, 93) * 0.22
+          )
+            continue;
+          const h = hash3(xx, yy, zz, 78);
           m.set(
-            x + dx + xx,
-            y + dy + yy,
-            z + height + dz + zz,
-            hash3(x + xx, y + yy, z + zz, 78) < 0.7
+            xx,
+            yy,
+            zz,
+            h < 0.5
               ? 'cherryPink'
-              : hash3(x + xx, y + yy, z + zz, 78) < 0.85
-                ? 'cherryLight'
-                : 'cherryRose',
+              : h < 0.72
+                ? 'cherryRose'
+                : h < 0.86
+                  ? 'cherryDeep'
+                  : 'cherryLight',
             { g: group },
           );
         }
   }
 }
-function pagoda(m: Model) {
-  const x = -4,
-    y = -12;
-  m.box(x - 5, y - 5, 1, x + 5, y + 5, 1, 'stone');
+/** Two storeys on a stone base: white walls, red timber, blue-grey roofs with turned-up corners. */
+function pagoda(m: Model, x: number, y: number) {
+  m.box(x - 6, y - 6, 1, x + 6, y + 6, 1, 'gardenStone');
   const walls = (radius: number, bottom: number, top: number) => {
     m.box(x - radius, y - radius, bottom, x + radius, y + radius, top, 'pagodaWall');
-    for (const xx of [x - radius, x, x + radius])
-      for (const yy of [y - radius, y + radius]) m.box(xx, yy, bottom, xx, yy, top, 'pagodaTimber');
-    for (const yy of [y - radius, y, y + radius])
-      m.box(x + radius, yy, bottom, x + radius, yy, top, 'pagodaTimber');
-    for (const zz of [bottom + 1, bottom + 2]) {
-      m.set(x - 2, y + radius, zz, 'glass', { win: true });
-      m.set(x + 2, y + radius, zz, 'glass', { win: true });
-      m.set(x + radius, y - 1, zz, 'glass', { win: true });
+    for (let k = -radius; k <= radius; k++) {
+      const post = Math.abs(k) === radius || k === 0;
+      for (let z = bottom; z <= top; z++) {
+        if (post) {
+          m.set(x + k, y + radius, z, 'pagodaRed');
+          m.set(x + radius, y + k, z, 'pagodaRed');
+        } else if (z > bottom) {
+          m.set(x + k, y + radius, z, 'pagodaWall', { win: true });
+          m.set(x + radius, y + k, z, 'pagodaWall', { win: true });
+        }
+      }
     }
   };
-  const roof = (radius: number, bottom: number) => {
-    for (let k = 0; k < 2; k++)
+  const roof = (radius: number, bottom: number, tiers: number) => {
+    for (let k = 0; k < tiers; k++)
       m.box(
         x - radius + k,
         y - radius + k,
@@ -84,116 +85,177 @@ function pagoda(m: Model) {
         x + radius - k,
         y + radius - k,
         bottom + k,
-        k ? 'pagodaRoof' : 'pagodaEave',
+        'pagodaRoof',
       );
+    for (const [dx, dy] of [
+      [1, 1],
+      [1, -1],
+      [-1, 1],
+      [-1, -1],
+    ]) {
+      m.set(x + dx * radius, y + dy * radius, bottom, 'pagodaEave');
+      m.set(x + dx * radius, y + dy * radius, bottom + 1, 'pagodaEave');
+    }
   };
-  walls(4, 2, 6);
-  roof(6, 7);
-  walls(3, 9, 12);
-  roof(4, 13);
-  m.set(x, y, 15, 'finial');
-  m.set(x, y, 16, 'finial');
+  walls(4, 2, 5);
+  m.set(x, y + 4, 2, 'door');
+  m.set(x, y + 4, 3, 'door');
+  roof(5, 6, 2);
+  walls(3, 8, 10);
+  roof(4, 11, 2);
+  m.box(x - 1, y - 1, 13, x + 1, y + 1, 13, 'pagodaRoof');
+  m.box(x, y, 14, x, y, 15, 'finial');
 }
-function torii(m: Model) {
-  for (const y of [-14, 0]) {
-    m.box(17, y, 1, 17, y, 10, 'toriiRed');
-    m.set(17, y, 1, 'pagodaEave');
+function torii(m: Model, x: number, y0: number, y1: number) {
+  for (const y of [y0, y1]) {
+    m.box(x, y, 1, x, y, 9, 'toriiRed');
+    m.set(x, y, 1, 'pagodaEave');
   }
-  m.box(17, -16, 8, 17, 2, 8, 'toriiRed');
-  m.box(17, -17, 11, 17, 3, 11, 'pagodaEave');
-  m.box(17, -15, 10, 17, 1, 10, 'toriiRed');
-  m.set(17, -17, 12, 'pagodaEave');
-  m.set(17, 3, 12, 'pagodaEave');
+  m.box(x, y0 - 1, 7, x, y1 + 1, 7, 'toriiRed');
+  m.box(x, y0 - 2, 10, x, y1 + 2, 10, 'toriiRed');
+  m.box(x, y0 - 3, 11, x, y1 + 3, 11, 'pagodaEave');
+  m.set(x, y0 - 3, 12, 'pagodaEave');
+  m.set(x, y1 + 3, 12, 'pagodaEave');
+  m.set(x, (y0 + y1) / 2, 8, 'toriiRed');
+  m.set(x, (y0 + y1) / 2, 9, 'toriiRed');
+}
+function shrub(m: Model, x: number, y: number) {
+  m.set(x, y, 1, 'cherryTrunk');
+  for (let dx = -1; dx <= 1; dx++)
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dz = 0; dz <= 2; dz++)
+        if (Math.abs(dx) + Math.abs(dy) + (dz === 1 ? 0 : 1) <= 2)
+          m.set(x + dx, y + dy, 2 + dz, 'shrubDark');
 }
 export function sakuraScene() {
   const m = new Model();
-  const pond = (x: number, y: number) => Math.hypot((x - 1) / 7, (y - 15) / 5);
+  const U = (x: number, y: number) => x - y,
+    V = (x: number, y: number) => x + y;
+  const disc = (x: number, y: number) =>
+    Math.hypot(U(x, y) / 38, V(x, y) / 25) + (noise2(x * 0.2 + 40, y * 0.2 + 40, 76) - 0.5) * 0.16;
+  const pond = (x: number, y: number) =>
+    Math.hypot((x + 5) / 6.4, (y - 8) / 5) + (noise2(x * 0.45, y * 0.45, 79) - 0.5) * 0.4;
+  const seg = (px: number, py: number, ax: number, ay: number, bx: number, by: number) => {
+    const dx = bx - ax,
+      dy = by - ay,
+      t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+    return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+  };
   const path = (x: number, y: number) =>
-    (Math.abs(y - 3) <= 1 && x >= -9 && x <= 18) || (Math.abs(x - 17) <= 1 && y >= -13 && y <= 13);
-  island(m, {
-    rx: 27,
-    ry: 25,
-    seed: 76,
-    depth: 9,
-    taper: 0.75,
-    rough: 0.15,
-    surf: (x, y) =>
-      pond(x, y) < 1
-        ? 'water'
-        : pond(x, y) < 1.2
-          ? 'stone'
-          : path(x, y)
-            ? 'gardenStone'
+    seg(x, y, -3, -3, 6, -6) <= 1.3 ||
+    seg(x, y, 6, -6, 13, -13) <= 1.4 ||
+    seg(x, y, 13, -13, 22, -15) <= 1.4;
+  const stream = (x: number, y: number) => x - y >= -17 && x - y <= -16 && V(x, y) > 6;
+  const CHERRIES: [number, number, number, number][] = [
+    [-17, 0, 6, 8],
+    [9, 2, 4, 3],
+    [17, -19, 4, 3],
+    [-25, 11, 2, 2],
+  ];
+  for (let x = -36; x <= 36; x++)
+    for (let y = -36; y <= 36; y++) {
+      const d = disc(x, y);
+      if (d > 1) continue;
+      let depth = Math.max(
+        2,
+        Math.round(11 * Math.pow(1 - d, 0.7) * (0.7 + 0.6 * noise2(x * 0.4 + 9, y * 0.4 + 3, 77))),
+      );
+      if (hash3(x, y, 0, 81) < 0.07) depth += 1 + Math.floor(hash3(x, y, 1, 82) * 3);
+      for (let z = -depth; z < 0; z++)
+        m.set(x, y, z, z >= -2 ? 'dirt' : z <= -depth + 1 && depth > 4 ? 'rockD' : 'rock');
+      let top: string;
+      const p = pond(x, y);
+      if (p < 1 || stream(x, y)) top = 'water';
+      else if (p < 1.25 && hash3(x, y, 0, 83) < 0.45) top = 'stone';
+      else if (path(x, y)) top = (x + y) % 2 ? 'gardenStone' : 'gardenStoneLight';
+      else {
+        const near = Math.min(
+          ...CHERRIES.map(([cx, cy, , r]) => Math.hypot(x - cx, y - cy) / (r + 5)),
+        );
+        const h = hash3(x, y, 0, 80);
+        top =
+          near < 1 && h < 0.3 * (1.15 - near)
+            ? h < 0.07
+              ? 'petalLight'
+              : 'petal'
             : noise2(x * 0.3, y * 0.3, 77) < 0.5
               ? 'sakuraGrass'
-              : 'sakuraGrassLight',
-  });
-  pagoda(m);
-  torii(m);
-  cherry(m, -19, 0, 1, 7, 5, 'sway');
-  cherry(m, 18, -12, 1, 5, 2, 'sway2');
-  cherry(m, 21, 9, 1, 5, 3, 'sway');
-  // Pale bamboo behind the torii, with jointed stalks and a blocky leafy crown.
+              : 'sakuraGrassLight';
+      }
+      m.set(x, y, 0, top);
+    }
+  pagoda(m, -3, -11);
+  torii(m, 13, -17, -9);
+  cherry(m, CHERRIES[0][0], CHERRIES[0][1], 1, 5, 8, 'sway');
+  cherry(m, CHERRIES[1][0], CHERRIES[1][1], 1, 4, 3, 'sway2');
+  cherry(m, CHERRIES[2][0], CHERRIES[2][1], 1, 4, 3, 'sway');
+  cherry(m, CHERRIES[3][0], CHERRIES[3][1], 1, 2, 2, 'sway2');
+  // Bamboo behind the torii: jointed stalks of different heights with leafy side shoots.
   for (const [x, y, h] of [
-    [15, -18, 10],
-    [18, -16, 12],
-    [21, -12, 9],
-    [14, -16, 8],
-  ]) {
+    [6, -23, 9],
+    [8, -24, 12],
+    [10, -23, 10],
+    [5, -21, 7],
+    [9, -21, 13],
+    [11, -25, 8],
+    [7, -26, 11],
+    [12, -22, 11],
+    [4, -24, 10],
+    [13, -24, 7],
+  ] as const) {
+    if (!m.has(x, y, 0)) continue;
     for (let z = 1; z <= h; z++) m.set(x, y, z, z % 3 ? 'bamboo' : 'bambooDark');
-    for (let k = -2; k <= 2; k++) m.set(x + k, y, h - Math.abs(k), 'bamboo', { g: 'sway2' });
-  }
-  // Petal-speckled ground, with most petals close to each cherry canopy.
-  for (let x = -28; x <= 28; x++)
-    for (let y = -26; y <= 26; y++) {
-      if (!m.has(x, y, 0) || m.has(x, y, 1) || path(x, y) || pond(x, y) < 1.3) continue;
-      const nearby = Math.min(
-        Math.hypot(x + 19, y + 1),
-        Math.hypot(x - 21, y - 9),
-        Math.hypot(x - 18, y + 12),
-      );
-      if (nearby < 11 && hash3(x, y, 0, 80) < 0.1)
-        m.set(x, y, 0, hash3(x, y, 1, 81) < 0.25 ? 'cherryLight' : 'cherryPink');
+    for (let z = Math.max(4, h - 5); z <= h; z += 2) {
+      const side = (z + x) % 2 ? 1 : -1;
+      m.set(x + side, y, z, 'bamboo', { g: 'sway2' });
+      m.set(x, y + side, z + 1, 'bambooDark', { g: 'sway2' });
     }
-  // Red low-arched bridge across the pond's front bank.
-  for (let x = -3; x <= 5; x++)
-    for (const y of [20, 21]) {
-      const z = Math.abs(x - 1) < 3 ? 2 : 1;
+    m.set(x, y, h + 1, 'bamboo', { g: 'sway2' });
+  }
+  // The red bridge crosses the stream just before it falls off the front-left edge.
+  for (let x = -5; x <= 1; x++)
+    for (const y of [15, 16]) {
+      const z = x > -4 && x < 0 ? 2 : 1;
       m.set(x, y, z, 'toriiRed');
-      if (x % 3 === 1 || x === -3 || x === 5) m.set(x, y, z + 1, 'bridgeRed');
+      if (x === -5 || x === 1 || x === -2)
+        m.set(x, y === 15 ? 15 : 16, z + (y === 15 ? 1 : 0), y === 15 ? 'bridgeRed' : 'toriiRed');
     }
-  for (let y = 19; y <= 26; y++) for (const x of [1, 2]) m.set(x, y, 0, 'fall');
-  waterfall(m, 1, 26, 0, -9);
-  m.set(7, -11, 1, 'stone');
-  lamp(m, 7, -11, 2);
-  lamp(m, 5, 18, 1);
+  let edge: [number, number] = [-3, 13];
+  for (let t = 0; t < 30; t++) if (m.has(-3 + t, 13 + t, 0)) edge = [-3 + t, 13 + t];
+  for (const dx of [0, 1])
+    for (let z = 0; z >= -10; z--)
+      m.set(edge[0] + 1 + dx, edge[1] + 1 - dx + (dx ? 1 : 0), z, 'fall');
+  lamp(m, 5, -5, 1);
+  lamp(m, 11, 9, 1);
   for (const [x, y] of [
-    [-21, 15],
-    [-15, 7],
-    [10, 20],
-    [24, 5],
-    [-26, 4],
-  ]) {
-    m.set(x, y, 1, 'cherryTrunk');
-    m.box(x - 1, y - 1, 2, x + 1, y + 1, 3, 'gardenShrub');
-  }
+    [-22, 14],
+    [6, 14],
+    [20, -4],
+    [-12, 19],
+    [-27, 5],
+    [14, 6],
+  ] as const)
+    if (m.has(x, y, 0)) shrub(m, x, y);
   for (const [x, y] of [
-    [-17, 8],
-    [-15, 8],
-    [-23, 13],
-    [3, 5],
-  ])
+    [-12, 5],
+    [-11, 4],
+    [-12, 4],
+    [-18, 12],
+    [1, 5],
+    [2, 6],
+  ] as const)
     m.set(x, y, 1, 'stone');
+  m.set(-12, 4, 2, 'stone');
   const main = layerOf(m, 4);
-  let fx = waterEffects(m, s, [[1, 26, 0]], 83);
-  const [px, py] = s(0, 15, 1);
+  let fx = waterEffects(m, s, [[edge[0] + 1, edge[1] + 1, 0]], 83);
+  const [px, py] = s(-6, 8, 1);
   fx += `<g class="koi">${cubePoly(px, py, 1.1, '#f6efe4')}${cubePoly(px + 1.5, py, 0.8, '#e88743')}</g><g class="koi koi2">${cubePoly(px - 10, py + 4, 1.1, '#f6efe4')}${cubePoly(px - 8.5, py + 4, 0.8, '#e88743')}</g>`;
-  const [wx, wy] = s(-9, 3, 1),
-    [fx0, fy0] = s(6.5, 11.5, 1);
+  const [wx, wy] = s(-2.5, -5.5, 1),
+    [fx0, fy0] = s(3.5, 10.5, 1);
   fx += `<g class="walker" style="animation-delay: -3s"><g class="wbob">${figure(wx, wy, '#6877a8', '#55628f', cubePoly(wx, wy - 9.3, 3.5, '#dcc48d'))}</g></g>`;
   fx += `<g class="fox"><g class="wbob">${cubePoly(fx0, fy0 - 1, 2.3, '#d98a4f')}${cubePoly(fx0 + 3.5, fy0 - 2.6, 1.7, '#d98a4f')}${cubePoly(fx0 + 4.6, fy0 - 1.2, 0.9, '#f6efe4')}${cubePoly(fx0 - 4, fy0 - 2, 1.6, '#d98a4f')}${cubePoly(fx0 - 5.7, fy0 - 3.5, 1, '#f6efe4')}${cubePoly(fx0 + 3, fy0 - 5, 0.8, '#8b4936')}</g></g>`;
   for (let k = 0; k < 16; k++) {
-    const [px, py] = s(-22 + hash3(k, 1, 0, 84) * 14, -8 + hash3(k, 2, 0, 85) * 17, 12);
+    const [px, py] = s(-22 + hash3(k, 1, 0, 84) * 14, -4 + hash3(k, 2, 0, 85) * 14, 12);
     fx += `<g class="pt${k % 2 ? ' pt2' : ''}" style="animation-delay: -${(hash3(k, 3, 0, 86) * 7).toFixed(1)}s">${cubePoly(px, py, 1.2, '#fbe9ee')}</g>`;
   }
   const origin: [number, number] = [300, 116];
@@ -220,13 +282,13 @@ export function sakuraScene() {
       clouds: layers.clouds,
       main: mainSvg,
       front: layers.front,
-      glow: glowLayer(main, origin, [s(7.5, -10.5, 3.5), s(5.5, 18.5, 2.5)], 'sakura'),
+      glow: glowLayer(main, origin, [s(5.5, -4.5, 2.5), s(11.5, 9.5, 2.5)], 'sakura'),
     },
   };
 }
 export const sakuraCss = `
 .vq .walker { animation:sakuraWalk 30s linear infinite; }
-@keyframes sakuraWalk { 0%,100% { transform:translate(0,0) } 45%,55% { transform:translate(76px,38px) } }
+@keyframes sakuraWalk { 0%,100% { transform:translate(0,0) } 45%,55% { transform:translate(84px,-6px) } }
 .vq .fox { animation:sakuraFox 18s ease-in-out infinite; }
 @keyframes sakuraFox { 0%,10%,90%,100% { transform:translate(0,0) } 40%,60% { transform:translate(36px,18px) } }
 .vq .pt { opacity:0; animation:sakuraPetal 7s linear infinite; }

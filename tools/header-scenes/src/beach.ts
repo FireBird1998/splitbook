@@ -8,169 +8,244 @@ import {
   project as s,
 } from './island-details.ts';
 
-/** A stepped crown of drooping fronds, separate from its leaning trunk. */
-function palm(m: Model, x: number, y: number, z: number, height: number, group: string) {
-  for (let k = 0; k < height; k++) m.set(x + Math.floor(k / 4), y, z + k, 'palmTrunk');
-  const cx = x + Math.floor((height - 1) / 4),
-    top = z + height;
-  for (let dx = -2; dx <= 2; dx++)
-    for (let dy = -2; dy <= 2; dy++)
-      if (Math.abs(dx) + Math.abs(dy) <= 3) m.set(cx + dx, y + dy, top, 'palm', { g: group });
-  for (const [dx, dy] of [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-    [1, 1],
-    [-1, -1],
-  ]) {
-    for (let k = 1; k <= 4; k++) {
-      const zz = top - Math.max(0, k - 2);
-      m.set(cx + dx * k, y + dy * k, zz, k % 2 ? 'palm' : 'palmLight', { g: group });
-      if (k === 4) m.set(cx + dx * k, y + dy * k, zz - 1, 'palm', { g: group });
-      if (k < 4)
-        m.set(cx + dx * k + (dy ? 1 : 0), y + dy * k + (dx ? 1 : 0), zz, 'palm', { g: group });
-    }
+/** A leaning trunk under an umbrella of fronds that droop at their tips. */
+function palm(
+  m: Model,
+  x: number,
+  y: number,
+  z: number,
+  height: number,
+  group: string,
+  lean: [number, number] = [1, 0],
+  reach = 4,
+) {
+  let cx = x,
+    cy = y;
+  for (let k = 0; k < height; k++) {
+    cx = x + Math.round((lean[0] * k * k) / (height * 3));
+    cy = y + Math.round((lean[1] * k * k) / (height * 3));
+    m.set(cx, cy, z + k, k % 3 === 2 ? 'palmTrunkDark' : 'palmTrunk');
   }
+  const top = z + height;
+  const leaf = (dx: number, dy: number, dz: number, light = false) =>
+    m.set(cx + dx, cy + dy, top + dz, light ? 'palmLight' : 'palm', { g: group });
+  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) leaf(dx, dy, 0, !dx && !dy);
+  leaf(0, 0, 1, true);
+  // Coconuts tucked under the crown.
+  m.set(cx + 1, cy, top - 1, 'coconut');
+  m.set(cx, cy + 1, top - 1, 'coconut');
+  const fronds: [number, number, number][] = [
+    [1, 0, reach],
+    [-1, 0, reach],
+    [0, 1, reach],
+    [0, -1, reach],
+    [1, 1, reach - 1],
+    [-1, -1, reach - 1],
+    [1, -1, reach - 1],
+    [-1, 1, reach - 1],
+  ];
+  for (const [dx, dy, len] of fronds)
+    for (let k = 2; k <= len + 1; k++) {
+      const droop = k <= 2 ? 0 : k === 3 ? 0 : k - 3;
+      leaf(dx * k, dy * k, -droop, k % 2 === 0);
+      if (k >= 3) leaf(dx * k, dy * k, -droop - 1);
+      if (k === len + 1) leaf(dx * k, dy * k, -droop - 2);
+    }
 }
-function hut(m: Model) {
-  m.box(1, -14, 1, 9, -6, 1, 'plank');
-  m.box(2, -13, 2, 8, -7, 5, 'hutWall');
-  for (const x of [3, 6]) for (const z of [3, 4]) m.set(x, -7, z, 'glass', { win: true });
-  for (const y of [-11, -9]) m.set(8, y, 3, 'glass', { win: true });
-  m.set(5, -7, 2, 'door');
-  m.set(5, -7, 3, 'door');
-  // A low pyramidal thatch roof with one-cell eaves, leaving the windows exposed.
-  for (let k = 0; k < 3; k++)
-    m.box(1 + k, -14 + k, 6 + k, 9 - k, -6 - k, 6 + k, (x, y) =>
-      (x + y + k) % 3 ? 'thatch' : 'thatchLight',
+/** A thatched hut raised on a plank deck, with a stepped pyramid roof. */
+function hut(m: Model, x0: number, y0: number, z0: number) {
+  m.box(x0 - 1, y0 - 1, z0, x0 + 5, y0 + 5, z0, 'plank');
+  for (const [px, py] of [
+    [x0 - 1, y0 + 5],
+    [x0 + 5, y0 + 5],
+    [x0 + 5, y0 - 1],
+  ])
+    m.box(px, py, z0 - 1, px, py, z0, 'timberD');
+  m.box(x0, y0, z0 + 1, x0 + 4, y0 + 4, z0 + 4, 'hutWall');
+  for (const x of [x0, x0 + 4]) m.set(x, y0 + 4, z0 + 3, 'glass', { win: true });
+  m.set(x0 + 4, y0 + 2, z0 + 3, 'glass', { win: true });
+  m.set(x0 + 2, y0 + 4, z0 + 1, 'door');
+  m.set(x0 + 2, y0 + 4, z0 + 2, 'door');
+  m.set(x0 + 2, y0 + 4, z0 + 3, 'door');
+  for (let k = 0; k < 4; k++)
+    m.box(x0 - 1 + k, y0 - 1 + k, z0 + 5 + k, x0 + 5 - k, y0 + 5 - k, z0 + 5 + k, (x, y) =>
+      (x * 3 + y * 5 + k) % 4 ? 'thatch' : 'thatchLight',
     );
 }
-function sailboat(): Model {
+function sailboat(x0: number, y0: number): Model {
   const boat = new Model();
-  boat.box(20, -8, 1, 24, -2, 1, 'boatRed', { g: 'boat' });
-  boat.box(20, -8, 2, 24, -2, 2, 'white', { g: 'boat' });
-  boat.box(21, -7, 3, 23, -3, 3, 'plank', { g: 'boat' });
-  for (let z = 3; z <= 12; z++) boat.set(22, -5, z, 'mast', { g: 'boat' });
-  // A tall white sail on one side of the mast, a smaller jib on the other.
-  for (let z = 4; z <= 11; z++) {
-    const span = Math.max(1, Math.floor((12 - z) / 2));
-    for (let y = -2; y <= -5 + span; y++) boat.set(23, y, z, 'white', { g: 'boat' });
-    for (let y = -6; y >= -6 - Math.floor(span * 0.6); y--)
-      boat.set(22, y, z - 1, 'sailShade', { g: 'boat' });
+  const g = { g: 'boat' };
+  boat.box(x0, y0, 1, x0 + 6, y0 + 2, 1, 'boatRed', g);
+  boat.box(x0 + 1, y0, 2, x0 + 5, y0 + 2, 2, 'white', g);
+  boat.set(x0 + 7, y0 + 1, 1, 'boatRed', g);
+  for (let z = 3; z <= 11; z++) boat.set(x0 + 3, y0 + 1, z, 'mastWood', g);
+  // A tall mainsail behind the mast and a lower jib in front of it.
+  for (let z = 3; z <= 10; z++) {
+    for (let k = 1; k <= Math.ceil((11 - z) / 3); k++) boat.set(x0 + 3 - k, y0 + 1, z, 'white', g);
+    if (z <= 7)
+      for (let k = 1; k <= Math.ceil((8 - z) / 2); k++)
+        boat.set(x0 + 3 + k, y0 + 1, z, 'sailShade', g);
   }
   return boat;
 }
 
 export function beachScene() {
   const m = new Model();
+  // Screen axes: u runs across the header, v toward the viewer. The lagoon is a wide oval in them.
+  const U = (x: number, y: number) => x - y,
+    V = (x: number, y: number) => x + y;
+  const disc = (x: number, y: number) =>
+    Math.hypot(U(x, y) / 39, V(x, y) / 24) + (noise2(x * 0.2 + 40, y * 0.2 + 40, 60) - 0.5) * 0.1;
   const land = (x: number, y: number) =>
-    Math.hypot((x + 2) / 21, (y + 2) / 20) + (noise2(x * 0.2, y * 0.2, 62) - 0.5) * 0.14;
-  const hill = (x: number, y: number) =>
-    Math.max(
-      0,
-      Math.round(
-        10 *
-          Math.min(
-            1,
-            Math.max(
-              0,
-              1.5 -
-                Math.hypot((x + 12) / 7.5, (y + 2) / 7.5) +
-                (noise2(x * 0.4, y * 0.4, 64) - 0.5) * 0.15,
-            ),
-          ),
-      ),
-    );
-  island(m, {
-    rx: 28,
-    ry: 27,
-    seed: 60,
-    depth: 14,
-    taper: 0.5,
-    rough: 0.12,
-    hTop: (x, y) => (land(x, y) > 1 ? 0 : Math.max(1, hill(x, y) + 1)),
-    surf: (x, y, z) =>
-      land(x, y) > 1
-        ? 'sea'
-        : z > 3
-          ? hash3(x, y, z, 61) > 0.45
-            ? 'grass'
-            : 'rockMoss'
-          : land(x, y) > 0.82
-            ? 'beachSand'
-            : 'lawn',
-    sub: (x, y, z, top) =>
-      top > 3 ? (z < top - 3 ? 'rock' : 'rockMoss') : z === 0 ? 'beachSand' : 'dirt',
-  });
-  // A vertical cascade in a narrow cleft, with a short stream across the sand below.
-  for (let x = -13; x <= -10; x++)
-    for (let y = 5; y <= 13; y++) for (let z = 2; z <= 14; z++) m.del(x, y, z);
-  waterfall(m, -12, 4, 10, 1);
-  for (let y = 4; y <= 13; y++) for (const x of [-12, -11]) m.set(x, y, 1, 'fall');
-  hut(m);
-  palm(m, -20, 5, 2, 9, 'sway');
-  palm(m, 13, -16, 2, 9, 'sway2');
-  palm(m, -5, -16, 2, 8, 'sway');
-  palm(m, 3, 2, 2, 5, 'sway2');
-  // The red-and-white beach parasol is a prominent landmark beside the hut.
-  m.box(8, 6, 2, 8, 6, 5, 'timberD');
+    Math.hypot((U(x, y) + 5) / 27, (V(x, y) + 5) / 13.5) +
+    (noise2(x * 0.25, y * 0.25, 62) - 0.5) * 0.26;
+  const HILL: [number, number] = [-15, 5];
+  const hillAt = (x: number, y: number) => {
+    const d =
+      Math.hypot((x - HILL[0]) / 6.2, (y - HILL[1]) / 6.2) +
+      (noise2(x * 0.5, y * 0.5, 64) - 0.5) * 0.34;
+    return d >= 1 ? 0 : Math.round(13 * Math.pow(1 - d, 0.55));
+  };
+  const isLand = (x: number, y: number) => land(x, y) <= 1;
+  for (let x = -34; x <= 34; x++)
+    for (let y = -34; y <= 34; y++) {
+      const d = disc(x, y);
+      if (d > 1) continue;
+      const dry = isLand(x, y);
+      const top = dry ? 1 + hillAt(x, y) : 0;
+      let depth = Math.max(
+        5,
+        Math.round(15 * Math.pow(1 - d, 0.5) * (0.7 + 0.6 * noise2(x * 0.4 + 9, y * 0.4 + 3, 61))),
+      );
+      if (hash3(x, y, 0, 65) < 0.07) depth += 1 + Math.floor(hash3(x, y, 1, 66) * 3);
+      for (let z = -depth; z <= top; z++) {
+        let mat: string;
+        if (z === top) {
+          if (!dry) mat = hash3(x, y, 0, 66) < 0.1 ? 'seaLight' : 'sea';
+          else if (top > 2) mat = hash3(x, y, z, 61) < 0.8 ? 'cliff' : 'cliffRock';
+          else {
+            const shore = land(x, y) + Math.max(0, V(x, y) + 5) * 0.022;
+            mat =
+              shore > 0.8
+                ? hash3(x, y, 1, 67) < 0.3
+                  ? 'beachSandLight'
+                  : 'beachSand'
+                : noise2(x * 0.3, y * 0.3, 68) < 0.5
+                  ? 'lawn'
+                  : 'grass';
+          }
+        } else if (z > 0)
+          mat = top > 2 ? (hash3(x, y, z, 62) < 0.4 ? 'cliffMoss' : 'cliffRock') : 'beachSand';
+        else if (z >= -2) mat = dry ? 'beachSand' : 'sea';
+        else if (z === -3) mat = 'beachSand';
+        else if (z === -4) mat = 'dirt';
+        else mat = z <= -depth + 1 && depth > 5 ? 'rockD' : 'rock';
+        m.set(x, y, z, mat);
+      }
+    }
+  // The waterfall steps down the hill toward the viewer, then a stream crosses the sand to the sea.
+  let fallFoot: [number, number, number] = [HILL[0], HILL[1], 2];
+  for (const lane of [0, 1]) {
+    let x = HILL[0] + lane,
+      y = HILL[1] + 1 - lane + 1;
+    let z = m.top(x, y) ?? 1;
+    while (z > 1) {
+      const next = m.top(x + 1, y + 1) ?? 1;
+      for (let zz = Math.min(z, next + 1); zz <= z; zz++)
+        m.set(x, y, zz, hash3(x, y, zz, 69) < 0.5 ? 'foam' : 'fall');
+      x++;
+      y++;
+      z = next;
+    }
+    fallFoot = [x, y, 2];
+    for (; isLand(x, y) && m.has(x, y, 1); x++, y++)
+      m.set(x, y, 1, hash3(x, y, 0, 71) < 0.3 ? 'foam' : 'fall');
+    for (let k = 0; k < 3 && m.has(x, y, 0); k++, x++, y++) m.set(x, y, 0, 'seaLight');
+  }
+  hut(m, 3, -11, 2);
+  palm(m, -17, 11, 2, 10, 'sway', [1, 1], 4);
+  palm(m, -4, -13, 2, 11, 'sway2', [-1, 0], 3);
+  palm(m, 15, -13, 2, 9, 'sway', [1, -1], 3);
+  palm(m, -3, -4, 2, 5, 'sway2', [0, 0], 2);
+  // The red-and-white parasol with towels beside it.
+  m.box(4, -1, 2, 4, -1, 3, 'timberD');
   for (let dx = -2; dx <= 2; dx++)
     for (let dy = -2; dy <= 2; dy++) {
       if (Math.abs(dx) + Math.abs(dy) > 3) continue;
+      const ring = Math.max(Math.abs(dx), Math.abs(dy));
       m.set(
-        8 + dx,
-        6 + dy,
-        Math.max(Math.abs(dx), Math.abs(dy)) < 2 ? 6 : 5,
-        (dx + dy) % 2 ? 'white' : 'boatRed',
+        4 + dx,
+        -1 + dy,
+        ring < 2 ? 4 : 3,
+        Math.floor((Math.atan2(dy, dx) * 4) / Math.PI + 8.5) & 1 ? 'white' : 'boatRed',
       );
     }
-  // Jetty from the sandy bank to the moored boat.
-  m.box(13, 1, 1, 26, 3, 1, 'plank');
-  for (const x of [14, 20, 25]) for (const y of [1, 3]) m.box(x, y, -2, x, y, 1, 'timberD');
+  m.set(4, -1, 5, 'boatRed');
   for (const [x, y] of [
-    [-21, 13],
-    [-7, 16],
-    [12, 14],
-    [8, 9],
-  ])
-    m.set(x, y, 2, 'stone');
-  // The board's large lantern cube on a low wooden post.
-  m.set(-1, 8, 2, 'timberD');
-  m.set(-1, 8, 3, 'timberD');
-  m.set(-1, 8, 4, 'lamp', { lit: true });
-  for (const [x, y] of [
-    [-10, 2],
-    [-7, 5],
-    [-5, -1],
-    [3, -16],
-    [11, -8],
-  ]) {
-    const z = m.top(x, y);
-    if (z !== null) {
-      m.set(x, y, z + 1, 'leafB');
-      m.set(x + 1, y, z + 1, 'leafA');
-    }
+    [-1, 2],
+    [0, 2],
+    [8, -5],
+  ] as const)
+    if (m.top(x, y) === 1) m.set(x, y, 1, 'towelPink');
+  // A short jetty on dark posts from the beach toward the moored boat.
+  for (let x = 13; x <= 20; x++) for (const y of [-5, -4]) m.set(x, y, 1, 'plank');
+  for (const x of [13, 16, 20]) for (const y of [-6, -3]) m.box(x, y, 0, x, y, 2, 'jettyPost');
+  // Boulders on the shore.
+  for (const [x, y, w] of [
+    [-12, 17, 2],
+    [1, 11, 2],
+    [13, -19, 2],
+    [-8, 15, 1],
+  ] as const) {
+    m.box(x, y, 1, x + w - 1, y + w - 1, w, 'stone');
+    if (w > 1) m.set(x, y + 1, w + 1, 'stone');
   }
-  const falls: [number, number, number][] = [
-    [-12, 13, 1],
-    [-7, 26, 0],
-    [27, -2, 0],
-  ];
-  waterfall(m, -7, 26, 0, -9);
-  waterfall(m, 27, -2, 0, -9);
-  // The hull and sail are voxels in the same visibility solution as the water and jetty.
-  for (const v of sailboat().v.values()) m.set(v.x, v.y, v.z, v.m, { g: v.g });
+  // The lantern: a big glowing cube on a wooden post.
+  m.box(-5, 6, 2, -5, 6, 4, 'timberD');
+  m.box(-6, 5, 5, -5, 6, 6, 'lamp', { lit: true });
+  for (const [x, y] of [
+    [-9, 3],
+    [-11, -5],
+    [0, -5],
+    [7, -7],
+    [-4, 1],
+    [-13, -2],
+    [8, 1],
+    [-17, 7],
+    [-2, -11],
+    [5, -3],
+    [-9, 10],
+  ] as const) {
+    const z = m.top(x, y);
+    if (z === null || z !== 1 || !isLand(x, y)) continue;
+    m.set(x, y, 2, 'leafB');
+    m.set(x + 1, y, 2, 'leafA');
+    if (hash3(x, y, 0, 70) < 0.5) m.set(x, y, 3, 'leafB');
+  }
+  // Two more falls spill over the lagoon's rim, front-left and right.
+  const rim = (x: number, y: number): [number, number, number] => {
+    while (m.has(x + 1, y + 1, 0)) {
+      x++;
+      y++;
+    }
+    return [x + 1, y + 1, 0];
+  };
+  const left = rim(-10, 10),
+    right = rim(16, -17);
+  for (const [fx0, fy0] of [left, right])
+    for (const dx of [0, 1]) for (let z = 0; z >= -10; z--) m.set(fx0 + dx, fy0 - dx, z, 'fall');
+  const falls: [number, number, number][] = [fallFoot, left, right];
+  for (const v of sailboat(17, -15).v.values()) m.set(v.x, v.y, v.z, v.m, { g: v.g });
   const main = layerOf(m, 4);
-  const [vx, vy] = s(13.5, -5.25, 4),
-    [cx, cy] = s(-13, 13, 2);
+  const [vx, vy] = s(10.5, -5.5, 2),
+    [cx, cy] = s(-9, 13, 2);
   let fx = waterEffects(m, s, falls, 65);
   fx += `<g class="bx-walk" style="animation-delay: -3s"><g class="wbob">${figure(vx, vy, '#e9e2d0', '#4f6f8f', cubePoly(vx, vy - 9.3, 3.5, '#dcc48d'))}</g></g>`;
   fx += `<g class="bx-crab">${cubePoly(cx, cy, 1.4, '#c9553f')}${cubePoly(cx - 2, cy - 1, 0.7, '#e07050')}${cubePoly(cx + 2, cy - 1, 0.7, '#e07050')}</g>`;
   fx += `<g class="bx-gull"><polygon points="-108,-72 -102,-70 -96,-73 -102,-68" fill="#ffffff"></polygon></g>`;
-  const origin: [number, number] = [300, 118];
+  const origin: [number, number] = [306, 126];
   const mainSvg = svgWrap(
-    `<ellipse class="shadow" cx="300" cy="228" rx="125" ry="7" fill="#1b2340" fill-opacity="0.1"></ellipse><g transform="translate(${origin.join(' ')})"><g class="float">${main.svg}${fx}</g></g>`,
+    `<ellipse class="shadow" cx="300" cy="228" rx="140" ry="7" fill="#1b2340" fill-opacity="0.1"></ellipse><g transform="translate(${origin.join(' ')})"><g class="float">${main.svg}${fx}</g></g>`,
   );
   const islet = (seed: number, radius: number, u: number) => {
     const mm = new Model();
@@ -186,7 +261,7 @@ export function beachScene() {
       clouds: layers.clouds,
       main: mainSvg,
       front: layers.front,
-      glow: glowLayer(main, origin, [s(-0.5, 8.5, 4.5), s(5, -4, 3)], 'beach'),
+      glow: glowLayer(main, origin, [s(-5, 6, 6), s(6, -7, 5)], 'beach'),
     },
   };
 }
