@@ -1,3 +1,4 @@
+import type { GroupHeader } from './group-header';
 import type { CrossCurrencySettlementFields } from './cross-currency-settlement';
 // ─── User ───────────────────────────────────────────────
 export interface IUser {
@@ -30,6 +31,7 @@ export interface IGroupTag {
 }
 
 export interface IGroup {
+  header?: GroupHeader;
   _id: string;
   name: string;
   description?: string;

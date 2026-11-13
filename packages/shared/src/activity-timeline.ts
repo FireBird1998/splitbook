@@ -1,3 +1,4 @@
+import { groupHeaderSchema, HEADER_SCENES, type GroupHeader } from './group-header';
 import { assistantRuleLabel } from './assistant-rule';
 import { formatCurrency } from './currency';
 import { memberLabel, recordedText } from './member-label';
@@ -65,6 +66,21 @@ function currencyListChange(changes: unknown) {
   return only ? extraCurrencyChange(changes) : null;
 }
 
+/** A recorded header change, read defensively for older Activity rows. */
+function headerChange(changes: unknown) {
+  if (!isRecord(changes) || !isRecord(changes.header)) return null;
+  const old = groupHeaderSchema.safeParse(changes.header.old);
+  const next = groupHeaderSchema.safeParse(changes.header.new);
+  return old.success && next.success ? { old: old.data, new: next.data } : null;
+}
+function headerWords(header: GroupHeader): string {
+  if (header.style === 'classic') return 'Classic header';
+  const scene = HEADER_SCENES.find(({ id }) => id === header.scene)!.name;
+  return header.time === 'auto'
+    ? `${scene}, following the clock`
+    : `${scene}, at ${header.time[0].toUpperCase()}${header.time.slice(1)}`;
+}
+
 /**
  * The member an admin removed, as "you" or by the name recorded then (#875). Null for a removal
  * recorded before removals named the member.
@@ -109,6 +125,8 @@ export function formatActivityHeadline(activity: ActivityLike, viewerId?: string
     case 'group_created':
       return `${actorName} created the group`;
     case 'group_updated': {
+      const header = headerChange(meta.changes);
+      if (header) return `${actorName} changed the header to ${headerWords(header.new)}`;
       const currencies = currencyListChange(meta.changes);
       return currencies
         ? `${actorName} ${extraCurrencyChangeWords(currencies)}`
@@ -141,6 +159,8 @@ export function formatActivityDetail(activity: ActivityLike, viewerId?: string):
   }
 
   if (activity.type === 'group_updated') {
+    const header = headerChange(meta.changes);
+    if (header) return `Previously: ${headerWords(header.old)}`;
     const currencies = currencyListChange(meta.changes);
     return currencies ? extraCurrencyChangeDetail(currencies, meta) : null;
   }
@@ -205,6 +225,8 @@ export function activityLineParts(activity: ActivityLike, viewerId?: string): Ac
     case 'group_created':
       return line('created the Group');
     case 'group_updated': {
+      const header = headerChange(meta.changes);
+      if (header) return line('changed the header to', headerWords(header.new));
       const currencies = currencyListChange(meta.changes);
       return line(currencies ? extraCurrencyChangeWords(currencies) : 'updated the Group');
     }

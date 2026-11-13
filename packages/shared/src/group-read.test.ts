@@ -156,3 +156,11 @@ it('accepts documented absent images/dates without fabricating values', () => {
   expect(read.startDate).toBeNull();
   expect(read.endDate).toBeNull();
 });
+
+it('accepts old Saved copy rows and keeps a new header through wire round trips', () => {
+  const header = { style: 'scene', scene: 'eco-city', time: 'night' } as const;
+  const read = (data: unknown) =>
+    parseGroupListResponse(JSON.parse(JSON.stringify({ status: 200, data: [data] })))[0];
+  expect(read(group).header).toBeUndefined();
+  expect(read({ ...group, header }).header).toEqual(header);
+});

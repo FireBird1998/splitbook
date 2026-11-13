@@ -1,3 +1,5 @@
+import { readGroupHeader, type GroupHeader } from '@splitbook/shared/group-header';
+import { headerScenesEnabled } from '@/lib/header-scenes';
 import {
   readGroupsMetadata,
   readGroupMetadata,
@@ -41,10 +43,11 @@ import {
  * (#719), so reading or saving it never fails on old data.
  */
 function withReadableCurrencies<
-  T extends { defaultCurrency: string; alternateCurrencies?: unknown },
->(group: T): T & { alternateCurrencies: string[] } {
+  T extends { defaultCurrency: string; alternateCurrencies?: unknown; header?: GroupHeader },
+>(group: T): T & { alternateCurrencies: string[]; header: GroupHeader } {
   return {
     ...group,
+    header: readGroupHeader(group.header, headerScenesEnabled()),
     alternateCurrencies: normaliseExtraCurrencies(
       group.defaultCurrency,
       Array.isArray(group.alternateCurrencies) ? group.alternateCurrencies : [],
