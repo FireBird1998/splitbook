@@ -96,6 +96,84 @@ export function widgetSavedTime(verifiedAt: number, now: number) {
   return `Saved ${saved.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][saved.getUTCMonth()]}`;
 }
 
+/** Size-independent reading shared by Overview and the original small-view contract. */
+export function readWidgetBalances(
+  copy: WidgetCopy | null,
+  setup: { reviewEnabled?: boolean; hideAmounts?: boolean },
+  session: WidgetSession,
+  now: number,
+) {
+  const empty = {
+    state: 'no-copy' as BalancesWidgetView['state'],
+    title: 'Nothing saved yet' as string | null,
+    description: 'Open Splitbook to load your balances.' as string | null,
+    target: 'home' as WidgetTarget,
+    saved: null as string | null,
+    muted: false,
+    review: null as string | null,
+    hidden: null as string | null,
+    owed: [] as string[],
+    owe: [] as string[],
+    groupCount: 0,
+  };
+  if (session.status !== 'authenticated')
+    return {
+      ...empty,
+      state: session.status,
+      title: session.status === 'expired' ? 'Sign in again' : 'Sign in to Splitbook',
+      description: session.status === 'expired' ? 'to see balances' : 'to see your balances here',
+      target: 'sign-in' as const,
+    };
+  if (!copy || copy.accountId !== session.accountId || !copy.home)
+    return session.loading
+      ? { ...empty, state: 'loading' as const, title: null, description: null }
+      : empty;
+  const home = copy.home;
+  const muted = now - home.verifiedAt > 86_400_000;
+  const base = {
+    ...empty,
+    saved: widgetSavedTime(home.verifiedAt, now),
+    muted,
+    groupCount: home.groupCount,
+    review:
+      setup.reviewEnabled !== false && !muted && copy.review && copy.review.count > 0
+        ? `To review${SEPARATOR}${copy.review.count}`
+        : null,
+  };
+  if (!home.groupCount)
+    return {
+      ...base,
+      state: 'no-groups' as const,
+      title: 'No Groups yet',
+      description: 'Share costs with a Group.',
+      target: 'create-group' as const,
+    };
+  if (home.currencies.every((row) => row.oweMinor === 0 && row.owedMinor === 0))
+    return {
+      ...base,
+      state: 'all-square' as const,
+      title: 'You’re all square',
+      description: 'Nobody owes anybody, in any currency.',
+    };
+  const lines = (field: 'owedMinor' | 'oweMinor') => {
+    const rows = home.currencies.filter((row) => row[field] > 0);
+    return setup.hideAmounts
+      ? rows.length
+        ? [`in ${counted(rows.length, 'currency', 'currencies')}`]
+        : []
+      : rows.map((row) => formatCurrency(toMajorAmount(row[field], row.currency), row.currency));
+  };
+  return {
+    ...base,
+    state: 'normal' as const,
+    title: null,
+    description: null,
+    hidden: setup.hideAmounts ? 'Amounts hidden' : null,
+    owed: lines('owedMinor'),
+    owe: lines('oweMinor'),
+  };
+}
+
 function balancesWidgetView(
   copy: WidgetCopy | null,
   setup: { kind: 'balances'; reviewEnabled?: boolean; hideAmounts?: boolean },
@@ -104,109 +182,32 @@ function balancesWidgetView(
   now: number,
   fontScale = 1,
 ): BalancesWidgetView {
-  const view: BalancesWidgetView = {
+  const { groupCount, ...read } = readWidgetBalances(copy, setup, session, now);
+  const layout = balancesLayout(size, fontScale, read.state === 'normal');
+  const limit = layout.currencyLines;
+  const overflow = (rows: string[]) =>
+    !read.hidden && rows.length > limit
+      ? size === '2x1'
+        ? `+${rows.length - limit}`
+        : `+${counted(rows.length - limit, 'currency', 'currencies')}`
+      : null;
+  return {
+    ...read,
+    layout,
     summary: '',
     compactLines: [],
     compactFallback: null,
-    layout: balancesLayout(size, fontScale, false),
-    state: 'no-copy',
-    hidden: null,
     size,
-    saved: null,
-    muted: false,
-    owed: [],
-    owe: [],
-    owedOverflow: null,
-    oweOverflow: null,
-    review: null,
-    footer: null,
-    title: 'Nothing saved yet',
-    description: 'Open Splitbook to load your balances.',
-    target: 'home',
-  };
-  if (session.status === 'signed-out' || session.status === 'expired')
-    return {
-      ...view,
-      state: session.status,
-      title: session.status === 'expired' ? 'Sign in again' : 'Sign in to Splitbook',
-      description: session.status === 'expired' ? 'to see balances' : 'to see your balances here',
-      target: 'sign-in',
-    };
-  if (!copy || copy.accountId !== session.accountId || !copy.home)
-    return session.loading ? { ...view, state: 'loading', title: null, description: null } : view;
-  const home = copy.home;
-  view.saved = widgetSavedTime(home.verifiedAt, now);
-  view.muted = now - home.verifiedAt > 86_400_000;
-  view.footer = view.muted
-    ? 'Open to update'
-    : size === '4x2'
-      ? `Across ${counted(home.groupCount, 'Group')}`
-      : null;
-  view.review =
-    setup.reviewEnabled !== false &&
-    !view.muted &&
-    size !== '2x1' &&
-    copy.review &&
-    copy.review.count > 0
-      ? `To review${SEPARATOR}${copy.review.count}`
-      : null;
-  if (!home.groupCount)
-    return {
-      ...view,
-      state: 'no-groups',
-      title: 'No Groups yet',
-      description: 'Share costs with a Group.',
-      target: 'create-group',
-    };
-  if (home.currencies.every((row) => row.oweMinor === 0 && row.owedMinor === 0))
-    return {
-      ...view,
-      state: 'all-square',
-      title: 'You’re all square',
-      description: 'Nobody owes anybody, in any currency.',
-    };
-  if (setup.hideAmounts) {
-    const summary = (field: 'oweMinor' | 'owedMinor') => {
-      const count = home.currencies.filter((row) => row[field] > 0).length;
-      return count ? [`in ${counted(count, 'currency', 'currencies')}`] : [];
-    };
-    return {
-      ...view,
-      state: 'normal',
-      title: null,
-      description: null,
-      hidden: 'Amounts hidden',
-      owed: summary('owedMinor'),
-      owe: summary('oweMinor'),
-    };
-  }
-  const limit = balancesLayout(size, fontScale, true).currencyLines;
-  const lines = (field: 'oweMinor' | 'owedMinor') => {
-    const rows = home.currencies.filter((row) => row[field] > 0);
-    const remaining = rows.length - limit;
-    return {
-      lines: rows
-        .slice(0, limit)
-        .map((row) => formatCurrency(toMajorAmount(row[field], row.currency), row.currency)),
-      overflow:
-        remaining > 0
-          ? size === '2x1'
-            ? `+${remaining}`
-            : `+${counted(remaining, 'currency', 'currencies')}`
-          : null,
-    };
-  };
-  const owed = lines('owedMinor'),
-    owe = lines('oweMinor');
-  return {
-    ...view,
-    state: 'normal',
-    title: null,
-    description: null,
-    owed: owed.lines,
-    owe: owe.lines,
-    owedOverflow: owed.overflow,
-    oweOverflow: owe.overflow,
+    owed: read.owed.slice(0, limit),
+    owe: read.owe.slice(0, limit),
+    owedOverflow: overflow(read.owed),
+    oweOverflow: overflow(read.owe),
+    review: size === '2x1' ? null : read.review,
+    footer: read.muted
+      ? 'Open to update'
+      : read.saved && size === '4x2'
+        ? `Across ${counted(groupCount, 'Group')}`
+        : null,
   };
 }
 

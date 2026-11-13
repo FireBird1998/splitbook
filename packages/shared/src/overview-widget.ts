@@ -1,5 +1,5 @@
 import {
-  balancesWidget,
+  readWidgetBalances,
   type WidgetCopy,
   type WidgetSession,
   type WidgetTarget,
@@ -7,8 +7,6 @@ import {
 import { fitWidgetLayout, type WidgetDimensions, type WidgetSection } from './widget-sizing';
 import { widgetTextLevel } from './widget-layout';
 import { widgetSummary } from './widget-accessibility';
-import { formatCurrency } from './currency';
-import { toMajorAmount } from './exact-money';
 import { counted, SEPARATOR } from './separator';
 
 export interface OverviewSetup {
@@ -27,7 +25,7 @@ export function overviewWidget(
   scale = 1,
 ) {
   // Keep the established account, saved-time and message readings in one place.
-  const read = balancesWidget(copy, setup, '4x2', session, now);
+  const read = readWidgetBalances(copy, setup, session, now);
   const otherAccount =
     session.status === 'authenticated' && !!copy && copy.accountId !== session.accountId;
   const state = otherAccount ? 'other-account' : read.state;
@@ -44,20 +42,11 @@ export function overviewWidget(
   const wide = size.width >= 280;
   const heading = tall ? 'Overview' : 'Balances';
   const level = widgetTextLevel(scale);
-  const moneyRows = (field: 'owedMinor' | 'oweMinor') =>
-    normal && copy?.home
-      ? copy.home.currencies
-          .filter((r) => r[field] > 0)
-          .map((r) => formatCurrency(toMajorAmount(r[field], r.currency), r.currency))
-      : [];
-  const allOwed = moneyRows('owedMinor'),
-    allOwe = moneyRows('oweMinor');
-  const hidden = normal && setup.hideAmounts ? 'Amounts hidden' : null;
-  const counts = (field: 'owedMinor' | 'oweMinor') => {
-    const n = normal ? (copy?.home?.currencies.filter((r) => r[field] > 0).length ?? 0) : 0;
-    return n ? [`in ${counted(n, 'currency', 'currencies')}`] : [];
-  };
-  const groupCount = read.footer && !read.muted ? read.footer : null;
+  const allOwed = read.owed,
+    allOwe = read.owe;
+  const hidden = read.hidden;
+  const acrossGroups =
+    read.saved && !read.muted ? `Across ${counted(read.groupCount, 'Group')}` : null;
   const ratio =
     size.pixelRatio && Number.isFinite(size.pixelRatio) && size.pixelRatio > 0
       ? size.pixelRatio
@@ -82,8 +71,8 @@ export function overviewWidget(
                 ? 2
                 : 3
               : 2;
-      const owed = hidden ? counts('owedMinor') : allOwed.slice(0, cap);
-      const owe = hidden ? counts('oweMinor') : allOwe.slice(0, cap);
+      const owed = allOwed.slice(0, cap);
+      const owe = allOwe.slice(0, cap);
       const overflow = (rows: string[]) =>
         !hidden && rows.length > cap
           ? small
@@ -92,29 +81,46 @@ export function overviewWidget(
           : null;
       const owedOverflow = overflow(allOwed),
         oweOverflow = overflow(allOwe);
-      const columns = wide || (small && !!hidden && !level);
-      const panel = wide;
+      const columns =
+        (wide &&
+          (hidden ||
+            [...owed, ...owe].every(
+              (amount) => text.width(amount, 10, true) <= (width - 8) / 2 - 20,
+            ))) ||
+        (small && !!hidden && !level);
+      const panel = wide && columns;
       const columnWidth = columns ? (width - 8) / 2 - (panel ? 20 : 0) : width;
       const showSaved = optional && !level && !!read.saved;
       const showHeader = !small || (normal && !level);
+      const showOverflow = optional && level < 2;
+      const primaryOverflow = owed.length ? owedOverflow : oweOverflow;
+      const moneyRoom = small
+        ? width - (showOverflow && primaryOverflow ? text.width(primaryOverflow, 10) + 4 : 0)
+        : columnWidth;
       const moneyBase = small ? 19 : level === 2 ? 13 : 16;
       const moneyFont = text.fit(
         [...owed, ...owe].sort((a, b) => b.length - a.length)[0] ?? '',
         hidden ? 11 : moneyBase,
-        small ? width : columnWidth,
+        moneyRoom,
         !hidden,
       );
       const labelFont = small ? 10 : 11;
       const bodyFont = small ? 10 : 12;
-      const showOverflow = optional && level < 2;
-      const review = !small && optional && !level ? read.review : null;
+      const review = !small && optional && (!level || (tall && level === 1)) ? read.review : null;
       const action =
-        normal && wide && tall && optional
+        (normal || state === 'all-square') && wide && tall && optional
           ? '＋ Add expense'
           : state === 'no-groups' && !small
             ? '＋ Create a Group'
-            : null;
-      const actionTarget: WidgetTarget = state === 'no-groups' ? 'create-group' : 'choose-group';
+            : (state === 'signed-out' || state === 'expired') && !small
+              ? 'Sign in'
+              : null;
+      const actionTarget: WidgetTarget =
+        state === 'no-groups'
+          ? 'create-group'
+          : state === 'signed-out' || state === 'expired'
+            ? 'sign-in'
+            : 'choose-group';
       const actionFont = 12;
       const actionLines = action ? text.words(action, actionFont, width - 24) : [];
       const privacyLines = hidden
@@ -128,7 +134,7 @@ export function overviewWidget(
       const showStateTile = !normal && state !== 'loading' && optional && !level && !small;
       const secondary =
         small && normal && !hidden && owed.length && owe.length ? `You owe ${owe[0]}` : null;
-      const secondaryFont = level ? 9 : 12;
+      const secondaryFont = text.fit(secondary ?? '', level ? 9 : 12, width);
       const compactLines =
         small && normal && level > 0
           ? hidden
@@ -140,16 +146,22 @@ export function overviewWidget(
         small && level === 2 ? 9 : 10,
         width,
       );
-      const compactFallback = compactLines.some((line) => text.width(line, compactFont) > width)
-        ? 'Open to see balances'
-        : null;
+      const compactFallback =
+        compactLines.some((line) => text.width(line, compactFont) > width) ||
+        (secondary && text.width(secondary, secondaryFont) > width) ||
+        (!hidden &&
+          !small &&
+          [...owed, ...owe].some((amount) => text.width(amount, moneyFont, true) > columnWidth))
+          ? 'Open to see balances'
+          : null;
+      const fallbackLines = compactFallback ? text.words(compactFallback, 10) : [];
       const colHeight = (rows: string[], more: string | null) =>
         text.line(labelFont) +
         Math.max(1, rows.length) * text.line(hidden ? 11 : moneyFont) +
         (showOverflow && more ? text.line(10) : 0) +
         (panel ? 20 : 0);
       const balanceHeight = compactFallback
-        ? text.line(10) * 2
+        ? text.line(10) * fallbackLines.length
         : compactLines.length
           ? compactLines.length * text.line(compactFont)
           : small && !hidden
@@ -157,20 +169,27 @@ export function overviewWidget(
             : columns
               ? Math.max(colHeight(owed, owedOverflow), colHeight(owe, oweOverflow))
               : colHeight(owed, owedOverflow) + colHeight(owe, oweOverflow) + 6;
+      const footerNote =
+        !small && read.muted
+          ? 'Open to update'
+          : !review && !action && !small && showSaved
+            ? acrossGroups
+            : null;
+      const leadingHeight = review ? text.line(11) + 10 : footerNote ? text.line(10) : 0;
       const footerAcross =
         wide &&
-        !!review &&
+        !!(review || footerNote) &&
         !!action &&
-        text.width(review, 11) + 20 + text.width(action, actionFont) + 24 + 8 <= width;
-      const footerHeight =
-        (review ? text.line(11) + 10 : 0) +
-        (action ? actionLines.length * text.line(actionFont) + 18 : 0);
-      const footer =
-        (footerAcross
-          ? Math.max(text.line(11) + 10, actionLines.length * text.line(actionFont) + 18)
-          : footerHeight + (review && action ? 4 : 0)) ||
-        (!small && read.muted ? text.line(11) : 0) ||
-        (!small && showSaved && groupCount ? text.line(10) : 0);
+        text.width(review ?? footerNote ?? '', review ? 11 : 10) +
+          (review ? 20 : 0) +
+          text.width(action, actionFont) +
+          24 +
+          8 <=
+          width;
+      const actionHeight = action ? actionLines.length * text.line(actionFont) + 18 : 0;
+      const footer = footerAcross
+        ? Math.max(leadingHeight, actionHeight)
+        : leadingHeight + actionHeight + (leadingHeight && actionHeight ? 4 : 0);
       const sections: WidgetSection[] = [
         ...(showHeader
           ? [{ id: 'header', rows: 1, rowHeight: text.line(small ? 10 : 13), required: true }]
@@ -239,11 +258,13 @@ export function overviewWidget(
         actionTarget,
         actionLines,
         footerAcross,
+        footerNote,
         privacyLines,
         titleLines,
         descriptionLines,
         compactLines,
         compactFallback,
+        fallbackLines,
         secondary,
         fonts: {
           heading: text.font(small ? 10 : 13),
@@ -263,17 +284,15 @@ export function overviewWidget(
     },
     gap,
   );
+  const { owed, owe, owedOverflow, oweOverflow, review, action, actionTarget, ...geometry } =
+    layout;
   const summary = widgetSummary([
     heading,
     state === 'loading' ? 'Loading' : null,
     title,
     description,
-    normal && allOwed.length
-      ? 'You’re owed ' + (hidden ? counts('owedMinor').join('') : allOwed.join(' and '))
-      : null,
-    normal && allOwe.length
-      ? 'You owe ' + (hidden ? counts('oweMinor').join('') : allOwe.join(' and '))
-      : null,
+    normal && allOwed.length ? 'You’re owed ' + allOwed.join(' and ') : null,
+    normal && allOwe.length ? 'You owe ' + allOwe.join(' and ') : null,
     read.review?.replace(SEPARATOR, ' '),
     read.saved,
     hidden,
@@ -290,9 +309,14 @@ export function overviewWidget(
     hidden,
     saved: read.saved,
     muted: read.muted,
-    groupCount,
-    ...layout,
-    layout: { ...layout, padding, width, height, scale },
+    owed,
+    owe,
+    owedOverflow,
+    oweOverflow,
+    review,
+    action,
+    actionTarget,
+    layout: { ...geometry, padding, width, height, scale },
     reviewTarget: 'review' as const,
   };
 }

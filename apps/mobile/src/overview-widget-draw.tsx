@@ -62,7 +62,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
   );
 
   const balance = l.compactFallback ? (
-    text(l.compactFallback, t.textSecondary, f.small)
+    <FlexWidget>{lines(l.fallbackLines, t.textSecondary, f.small)}</FlexWidget>
   ) : l.compactLines.length ? (
     <FlexWidget>
       {l.compactLines.map((line, i) => (
@@ -162,6 +162,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
           {text(view.review, t.brand.main, f.review, true)}
         </FlexWidget>
       ) : null}
+      {!view.review && l.footerNote ? text(l.footerNote, t.textMuted, f.small) : null}
       {view.action ? (
         <FlexWidget
           clickAction="OPEN_URI"
@@ -177,11 +178,6 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
           {lines(l.actionLines, t.brand.main, f.action, true)}
         </FlexWidget>
       ) : null}
-      {view.muted
-        ? text('Open to update', t.textMuted, f.small)
-        : !view.review && !view.action && view.groupCount
-          ? text(view.groupCount, t.textSecondary, f.small)
-          : null}
     </FlexWidget>
   );
   const content: Record<string, React.ReactNode> = {
