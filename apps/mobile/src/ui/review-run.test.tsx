@@ -87,6 +87,7 @@ afterEach(async () => {
   });
   for (const controller of controllers.splice(0)) controller.dispose();
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 function fixture(
   options: {
@@ -390,6 +391,68 @@ async function signIn(f: ReturnType<typeof fixture>) {
   });
 }
 describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mode) => {
+  it('counts only the item reviewed here when both upcoming items finish elsewhere (#1195)', async () => {
+    vi.stubEnv('TZ', 'UTC');
+    vi.useFakeTimers({ now: Date.parse(iso), toFake: ['Date'] });
+    const f = fixture();
+    f.items().splice(3);
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    f.items().splice(1);
+    await act(async () => {
+      await f.controller.refreshToReview();
+    });
+    await tap(tree, 'Skip for now');
+
+    expect(text(tree)).toContain('Done for now');
+    expect(text(tree)).toContain('You went through 1\u00a0item in Maple House');
+    expect(text(tree)).not.toContain('You went through 3');
+    expect(tally(tree)).toContain('Saved 0');
+    expect(tally(tree)).toContain('Deleted 0');
+    expect(tally(tree)).toContain('Left for later 1');
+  });
+
+  it('keeps original progress positions when the middle item is passed over (#1195)', async () => {
+    vi.stubEnv('TZ', 'UTC');
+    vi.useFakeTimers({ now: Date.parse(iso), toFake: ['Date'] });
+    const f = fixture();
+    f.items().splice(3);
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    expect(text(tree)).toContain('Review\u00a0· 1 of 3');
+    f.items().splice(1, 1);
+    await act(async () => {
+      await f.controller.refreshToReview();
+    });
+    await tap(tree, 'Skip for now');
+    expect(text(tree)).toContain('Review\u00a0· 3 of 3');
+    expect(text(tree)).not.toContain('Done for now');
+  });
+
+  it('leaves a Group visited only by passed-over items out of the summary (#1195)', async () => {
+    vi.stubEnv('TZ', 'UTC');
+    vi.useFakeTimers({ now: Date.parse(iso), toFake: ['Date'] });
+    const f = fixture({ laterReadyGroup: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    f.items().splice(1);
+    await act(async () => {
+      await f.controller.refreshToReview();
+    });
+    await tap(tree, 'Skip for now');
+    expect(text(tree)).toContain('You went through 1\u00a0item in Maple House');
+    expect(text(tree)).not.toContain('Goa Friends Trip');
+  });
+
   it('starts at Home, skips without saving, crosses Groups and closes back to Home', async () => {
     const f = fixture({ laterReadyGroup: true });
     await signIn(f);

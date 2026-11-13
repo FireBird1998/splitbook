@@ -47,6 +47,7 @@ export function createReviewRun(options: {
 }) {
   let edits: ReturnType<typeof draftEditQueue<ExpenseDraftValues>> | null = null;
   let writing: Promise<void> | undefined;
+  let presentIds: ReadonlySet<string> | null = null;
   const update = (patch: Partial<ReviewRunState>) => {
     const state = options.read();
     if (options.current() && state) options.publish({ ...state, ...patch });
@@ -78,7 +79,13 @@ export function createReviewRun(options: {
         });
     }
   };
-  const receive = (read: ToReviewRead) => {
+  const receive = (read: ToReviewRead, ready: boolean) => {
+    if (!options.current()) return;
+    // Only a completed read establishes absence, even while an edit/save blocks field adoption.
+    if (ready)
+      presentIds = new Set(
+        read.groups.flatMap((group) => group.items.map((item) => item.draft.id)),
+      );
     const state = options.read(),
       selected = item();
     if (!state || !selected || state.busy || state.pending || state.unkept) return;
@@ -154,8 +161,16 @@ export function createReviewRun(options: {
     const state = options.read(),
       selected = item();
     if (!state || !selected || !options.current()) return;
+    let next = state.index + 1;
+    // Only upcoming items are passed over. Finishing elsewhere is not an outcome in this run.
+    while (
+      next < state.items.length &&
+      presentIds &&
+      !presentIds.has(state.items[next].item.draft.id)
+    )
+      next++;
     update({
-      index: state.index + 1,
+      index: next,
       outcomes: [...state.outcomes, { id: selected.item.draft.id, status }],
       context: null,
       matches: [],
