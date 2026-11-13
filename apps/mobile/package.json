@@ -31,6 +31,7 @@
     "react-native-nitro-google-signin": "2.3.0",
     "react-native-nitro-modules": "0.37.1",
     "react-native-safe-area-context": "~5.10.1",
+    "react-native-svg": "15.16.0",
     "use-sync-external-store": "^1.6.0",
     "zod": "^4.5.4"
   },
