@@ -66,6 +66,7 @@ const copy: WidgetCopy = {
 };
 it.each([
   { width: 172, height: 344, scale: 1, compact: true },
+  { width: 266, height: 344, scale: 1.3, compact: true },
   { width: 360, height: 344, scale: 1.3, compact: false },
   { width: 360, height: 344, scale: 2, compact: true },
 ])(

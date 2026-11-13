@@ -281,7 +281,7 @@ function groupLayout(
   const cornerRadius = tiny ? 12 : 24;
   const width = Math.max(1, Math.floor(size.width * ratio) / ratio - padding * 2);
   const height = Math.max(0, Math.floor(size.height * ratio) / ratio - paddingVertical * 2);
-  const compact = level === 2 ? size.width / scale < 240 : size.width < 240;
+  const compact = size.width / Math.max(1, scale) < 240;
   const gap = tiny ? 4 : 8;
   const settings = fitWidgetLayout(
     { width, height, pixelRatio: ratio },
