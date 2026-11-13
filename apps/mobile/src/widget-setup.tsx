@@ -40,6 +40,7 @@ const pendingChoices = new Map<
     groupId: string | null;
     hideAmounts: boolean;
     mode?: 'expense' | 'payment';
+    tagIds?: string[];
   }
 >();
 const store = createWidgetsStore(widgetKey(mobileBuildSettings, __DEV__));
@@ -60,6 +61,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
   const [selected, setSelected] = useState<string | null>(null),
     [hideAmounts, setHideAmounts] = useState(false),
     [mode, setMode] = useState<'expense' | 'payment'>('expense'),
+    [tagIds, setTagIds] = useState<string[] | undefined>(undefined),
     [error, setError] = useState(''),
     [buttonLabel, setButtonLabel] = useState<'Save' | 'Add widget'>('Add widget');
   const cancel = () => {
@@ -91,6 +93,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
           setSelected(quick ? (restored.groupId ?? 'ask') : restored.groupId);
           setHideAmounts(restored.hideAmounts);
           setMode(restored.mode ?? 'expense');
+          setTagIds(restored.tagIds);
         }
       })
       .catch(() => setError('Could not read saved Groups. Open Splitbook and try again.'));
@@ -108,6 +111,11 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
     record?.session.status === 'authenticated' &&
     record.copy?.accountId === record.session.accountId;
   const groups = signedIn ? (record.copy?.savedGroups?.rows.filter((g) => !g.archived) ?? []) : [];
+  const activeTags =
+    selected && selected !== 'ask' && signedIn ? (record?.copy?.tags?.[selected] ?? []) : [];
+  const chosenTags = (tagIds ?? activeTags.slice(0, 4).map((tag) => tag.id)).filter((id) =>
+    activeTags.some((tag) => tag.id === id),
+  );
   const blocked = !balances && (!signedIn || ((!quick || mode === 'payment') && !groups.length));
   const copy = (value: string, bold = false, size = 14, color = t.text) => (
     <Text
@@ -145,7 +153,15 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                 accountId:
                   latest.session.status === 'authenticated' ? latest.session.accountId : '',
                 groupId: selected === 'ask' ? null : selected!,
-                ...(mode === 'payment' ? { mode } : {}),
+                ...(mode === 'payment'
+                  ? { mode }
+                  : selected !== 'ask' && (tagIds || activeTags.length)
+                    ? {
+                        tagIds: chosenTags.filter((id) =>
+                          latest.copy?.tags?.[selected!]?.some((tag) => tag.id === id),
+                        ),
+                      }
+                    : {}),
               }
             : {
                 kind: 'group',
@@ -266,6 +282,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                           groupId,
                           hideAmounts: false,
                           mode: value,
+                          tagIds,
                         });
                       }}
                       style={{
@@ -332,6 +349,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                       accessibilityLabel="Ask each time"
                       onPress={() => {
                         setSelected('ask');
+                        setTagIds(undefined);
                         pendingChoices.set(widgetInfo.widgetId, {
                           groupId: 'ask',
                           mode,
@@ -372,8 +390,10 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                       accessibilityLabel={group.name}
                       onPress={() => {
                         setSelected(group.id);
+                        setTagIds(group.id === selected ? tagIds : undefined);
                         pendingChoices.set(widgetInfo.widgetId, {
                           groupId: group.id,
+                          tagIds: group.id === selected ? tagIds : undefined,
                           mode,
                           accountId: record!.copy!.accountId,
                           hideAmounts,
@@ -413,6 +433,63 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                   ))}
                 </View>
               </>
+            ) : null}
+            {quick && mode === 'expense' && selected && selected !== 'ask' ? (
+              <View style={{ gap: 12 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  {copy('TAG SHORTCUTS', true, 12, t.textSecondary)}
+                  {copy(`${chosenTags.length} of 4 chosen`, false, 12, t.textSecondary)}
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {activeTags.map((tag) => {
+                    const checked = chosenTags.includes(tag.id);
+                    return (
+                      <Pressable
+                        key={tag.id}
+                        accessibilityRole="checkbox"
+                        accessibilityLabel={tag.name}
+                        accessibilityState={{ checked }}
+                        onPress={() => {
+                          if (!checked && chosenTags.length >= 4) return;
+                          const next = checked
+                            ? chosenTags.filter((id) => id !== tag.id)
+                            : [...chosenTags, tag.id];
+                          setTagIds(next);
+                          pendingChoices.set(widgetInfo.widgetId, {
+                            accountId: record!.copy!.accountId,
+                            groupId: selected,
+                            hideAmounts: false,
+                            mode,
+                            tagIds: next,
+                          });
+                        }}
+                        style={{
+                          borderRadius: 99,
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderWidth: 1,
+                          borderColor: checked ? t.brand.main : t.borderStrong,
+                          backgroundColor: checked ? t.brand.bg : t.surface,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        {checked ? (
+                          <Ionicons name="checkmark" size={14} color={t.brand.main} />
+                        ) : null}
+                        {copy(tag.name, checked, 13, checked ? t.brand.main : t.text)}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {copy(
+                  'Shown when the widget is three columns or wider, or two rows tall.',
+                  false,
+                  13,
+                  t.textSecondary,
+                )}
+              </View>
             ) : null}
             {!quick ? (
               <>

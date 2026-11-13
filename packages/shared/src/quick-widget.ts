@@ -1,4 +1,10 @@
-import { fitWidgetLayout, widgetText, type WidgetDimensions } from './widget-sizing';
+import { widgetTextLevel } from './widget-layout';
+import {
+  fitWidgetSections,
+  fitWidgetLayout,
+  widgetText,
+  type WidgetDimensions,
+} from './widget-sizing';
 import type { WidgetCopy, WidgetSession, WidgetTarget } from './balances-widget';
 export interface QuickWidgetSetup {
   kind: 'quick';
@@ -7,7 +13,141 @@ export interface QuickWidgetSetup {
   groupId: string | null;
   /** Absent on widgets placed before Quick actions. */
   mode?: 'expense' | 'payment';
+  tagIds?: string[];
 }
+interface QuickButton {
+  id: string;
+  label: string;
+  summary: string;
+  target: WidgetTarget;
+  width: number;
+  primary: boolean;
+  fontSize: number;
+}
+interface QuickShortcuts {
+  header: string | null;
+  headerSubtitle: string | null;
+  headerHeight: number;
+  headerFontSize: number;
+  fontSize: number;
+  padding: number;
+  gap: number;
+  rows: { height: number; buttons: QuickButton[] }[];
+}
+
+/** Geometry and admission are projected here; native drawing just paints rows. */
+function tagShortcuts(
+  copy: WidgetCopy,
+  setup: QuickWidgetSetup,
+  size: WidgetDimensions,
+  fontScale: number,
+  group: string,
+): QuickShortcuts | null {
+  const tags = (setup.tagIds ?? [])
+    .slice(0, 4)
+    .flatMap((id) => copy.tags?.[setup.groupId!]?.find((tag) => tag.id === id) ?? []);
+  if (!tags.length || (size.width < 250 && size.height < 180)) return null;
+  const padding = 12,
+    gap = 6,
+    width = size.width - padding * 2;
+  const horizontal = size.height < 180;
+  const columns = size.width < 250 ? 2 : 4;
+  const text = widgetText(width, fontScale, 1, size.pixelRatio);
+  const minHeight = Math.max(36, text.line(12) + 16);
+  const addWidth = Math.max(44, text.line(18) + 16);
+  const across = fitWidgetSections(
+    width,
+    [
+      { id: 'add', rows: 1, rowHeight: addWidth, required: true },
+      {
+        id: 'tags',
+        rows: tags.length,
+        rowHeight: Math.max(44, text.line(12) + 16) + gap,
+        maxRows: [4, 3, 1][widgetTextLevel(fontScale)],
+        grow: true,
+      },
+    ],
+    gap,
+    size.pixelRatio,
+  );
+  const tagWidth = across.sections.find((section) => section.id === 'tags');
+  const visible = horizontal ? tags.slice(0, tagWidth?.rows ?? 0) : tags;
+  if (!visible.length) return null;
+  const rowCount = horizontal ? 1 : Math.ceil(visible.length / columns);
+  const fitted = fitWidgetLayout(
+    { ...size, width, height: size.height - padding * 2 },
+    fontScale,
+    (text, optional) => ({
+      sections: [
+        ...(!horizontal
+          ? [{ id: 'add', rows: 1, rowHeight: Math.max(40, text.line(14) + 12), required: true }]
+          : []),
+        {
+          id: 'tags',
+          rows: rowCount,
+          rowHeight: Math.max(minHeight, text.line(12) + 16),
+          grow: true,
+          required: horizontal,
+        },
+        {
+          id: 'header',
+          rows: optional && !widgetTextLevel(fontScale) ? 1 : 0,
+          rowHeight: text.line(12) + (!horizontal && size.width >= 250 ? text.line(12) : 0),
+          whenComplete: 'tags',
+        },
+      ],
+      fontSize: text.font(12),
+      headerFontSize: text.font(12),
+    }),
+    gap,
+  );
+  if (!fitted.fits) return null;
+  const list = fitted.sections.find((section) => section.id === 'tags');
+  if (!list?.rows) return null;
+  const add: QuickButton = {
+    id: 'add',
+    label: horizontal ? '＋' : '＋ Add expense',
+    summary: `Add expense in ${group}`,
+    target: { kind: 'expense', groupId: setup.groupId! },
+    width: horizontal ? addWidth : width,
+    primary: true,
+    fontSize: text.font(horizontal ? 18 : 14),
+  };
+  const buttons = visible
+    .slice(0, horizontal ? visible.length : list.rows * columns)
+    .map((tag) => ({
+      id: tag.id,
+      label: tag.name,
+      summary: `Add expense in ${group} with ${tag.name}`,
+      target: { kind: 'expense-tag' as const, groupId: setup.groupId!, tagId: tag.id },
+      width: horizontal
+        ? tagWidth!.height / tagWidth!.rows - gap
+        : (width - (columns - 1) * gap) / columns,
+      primary: false,
+      fontSize: fitted.fontSize,
+    }));
+  const rows = horizontal
+    ? [{ height: list.height, buttons: [add, ...buttons] }]
+    : [
+        { height: fitted.sections.find((section) => section.id === 'add')!.height, buttons: [add] },
+        ...Array.from({ length: list.rows }, (_, i) => ({
+          height: list.rowHeight,
+          buttons: buttons.slice(i * columns, (i + 1) * columns),
+        })),
+      ];
+  const header = fitted.sections.find((section) => section.id === 'header');
+  return {
+    header: header ? (horizontal ? `Add expense · ${group}` : group) : null,
+    headerSubtitle: header && !horizontal && size.width >= 250 ? 'Add an Expense' : null,
+    headerHeight: header?.height ?? 0,
+    headerFontSize: fitted.headerFontSize,
+    fontSize: fitted.fontSize,
+    rows,
+    gap,
+    padding,
+  };
+}
+
 export function quickWidget(
   copy: WidgetCopy | null,
   setup: QuickWidgetSetup,
@@ -121,6 +261,7 @@ export function quickWidget(
     target: WidgetTarget,
   ) => ({
     state,
+    shortcuts: null as QuickShortcuts | null,
     layout: layout(title, subtitle, false),
     size,
     title,
@@ -167,6 +308,8 @@ export function quickWidget(
   const subtitle = group?.name ?? 'Choose a Group';
   return {
     state: 'normal',
+    shortcuts:
+      !payment && group && copy ? tagShortcuts(copy, setup, size, fontScale, group.name) : null,
     layout: layout(action, subtitle, true),
     size,
     title: action,

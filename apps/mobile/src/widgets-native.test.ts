@@ -904,3 +904,27 @@ it('preserves an archived Group’s Month through query eviction and removes it 
   await store.clear();
   expect((await store.read()).copy).toBeNull();
 });
+
+it('retains Tags for every previously read Group across restarts, while fresh reads and refusals replace them', async () => {
+  const first = createWidgetsStore('development');
+  await first.write({
+    version: 1,
+    accountId: 'alex',
+    home: null,
+    tags: { maple: [{ id: 'rent', name: 'Rent' }], trip: [{ id: 'taxi', name: 'Taxi' }] },
+  });
+  const restarted = createWidgetsStore('development');
+  await restarted.write({ version: 1, accountId: 'alex', home: null, tags: { maple: [] } });
+  expect((await restarted.read()).copy?.tags).toEqual({
+    maple: [],
+    trip: [{ id: 'taxi', name: 'Taxi' }],
+  });
+  await restarted.write({ version: 1, accountId: 'alex', home: null, lostGroupIds: ['trip'] });
+  expect((await restarted.read()).copy?.tags).toEqual({ maple: [] });
+  await restarted.setSession({ status: 'expired' });
+  expect((await restarted.read()).copy?.tags).toEqual({ maple: [] });
+  await restarted.write({ version: 1, accountId: 'sam', home: null });
+  expect((await restarted.read()).copy?.tags).toBeUndefined();
+  await restarted.clear();
+  expect((await restarted.read()).copy).toBeNull();
+});

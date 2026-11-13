@@ -294,3 +294,88 @@ it('blocked summaries retain the action and only name an available Group', () =>
     'Set up again. Another account',
   );
 });
+
+it('draws ordered Tag shortcuts in a row or grid and drops the header before the last Tags at large text', () => {
+  const tags = ['Groceries', 'Rent', 'Bills', 'Dining'].map((name, i) => ({ id: `tag${i}`, name }));
+  const tagged = { ...copy, tags: { maple: tags } };
+  const chosen = { ...setup, groupId: 'maple', tagIds: tags.map((tag) => tag.id) };
+  for (const size of [
+    { width: 360, height: 104 },
+    { width: 172, height: 224 },
+    { width: 360, height: 224 },
+  ]) {
+    const view = quickWidget(tagged, chosen, size, session);
+    expect(
+      view.shortcuts?.rows.flatMap((row) => row.buttons).map((button) => button.label),
+    ).toEqual(
+      size.height < 180
+        ? ['＋', 'Groceries', 'Rent', 'Bills', 'Dining']
+        : ['＋ Add expense', 'Groceries', 'Rent', 'Bills', 'Dining'],
+    );
+    expect(
+      view.shortcuts?.rows
+        .flatMap((row) => row.buttons)
+        .slice(1)
+        .map((button) => button.summary),
+    ).toEqual(tags.map((tag) => `Add expense in Maple House with ${tag.name}`));
+    if (size.width < 200)
+      expect(view.shortcuts?.rows.map((row) => row.buttons.length)).toEqual([1, 2, 2]);
+  }
+  for (const [scale, count] of [
+    [1.3, 3],
+    [2, 1],
+  ]) {
+    const view = quickWidget(tagged, chosen, { width: 360, height: 104 }, session, scale);
+    expect(view.shortcuts?.header).toBeNull();
+    expect(
+      view.shortcuts?.rows
+        .flatMap((row) => row.buttons)
+        .slice(1)
+        .map((button) => button.label),
+    ).toEqual(tags.slice(0, count).map((tag) => tag.name));
+  }
+  const archived = quickWidget(
+    { ...tagged, tags: { maple: tags.filter((tag) => tag.id !== 'tag1') } },
+    chosen,
+    { width: 360, height: 104 },
+    session,
+  );
+  expect(
+    archived.shortcuts?.rows
+      .flatMap((row) => row.buttons)
+      .slice(1)
+      .map((button) => button.label),
+  ).toEqual(['Groceries', 'Bills', 'Dining']);
+  expect(
+    quickWidget({ ...tagged, tags: { maple: [] } }, chosen, { width: 360, height: 104 }, session)
+      .shortcuts,
+  ).toBeNull();
+});
+
+it('fits three ordered Tags at real 3×1 bounds and keeps a long Group name for ellipsis', () => {
+  const tags = ['Groceries', 'Rent', 'Bills', 'Dining'].map((name, i) => ({ id: String(i), name }));
+  const view = quickWidget(
+    { ...copy, tags: { maple: tags } },
+    { ...setup, groupId: 'maple', tagIds: ['0', '1', '2', '3'] },
+    { width: 266, height: 104 },
+    session,
+  );
+  expect(view.shortcuts?.rows[0].buttons.map((button) => button.label)).toEqual([
+    '＋',
+    'Groceries',
+    'Rent',
+    'Bills',
+  ]);
+  const long = 'Maple House with a very long Group name';
+  const named = quickWidget(
+    {
+      ...copy,
+      savedGroups: { ...copy.savedGroups!, rows: [{ ...copy.savedGroups!.rows[0], name: long }] },
+    },
+    { ...setup, groupId: 'maple' },
+    { width: 172, height: 104 },
+    session,
+  );
+  expect(named.subtitle).toBe(long);
+  expect(named.summary).toContain(long);
+});

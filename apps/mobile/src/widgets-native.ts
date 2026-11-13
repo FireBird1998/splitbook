@@ -114,6 +114,14 @@ export function createWidgetsStore(environment: string) {
           ...copy,
           groups: { ...finalGroups, ...copy.groups },
           months: { ...finalMonths, ...copy.months },
+          tags: {
+            ...Object.fromEntries(
+              Object.entries(previous.tags ?? {}).filter(
+                ([id]) => !copy.lostGroupIds?.includes(id),
+              ),
+            ),
+            ...copy.tags,
+          },
         };
         // To review has its own verification time. Offline Home restoration must not erase it.
         if (

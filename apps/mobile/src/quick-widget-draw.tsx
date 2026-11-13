@@ -39,6 +39,104 @@ export function drawQuick(
   const icon =
     tiles[l.icon] ??
     `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="${t.textSecondary}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[l.icon]}</g></svg>`;
+  if (view.shortcuts) {
+    const shortcuts = view.shortcuts;
+    return (
+      <FlexWidget
+        accessibilityLabel={view.summary}
+        style={{
+          width: 'match_parent',
+          height: 'match_parent',
+          padding: shortcuts.padding,
+          borderRadius: 24,
+          backgroundColor: color(t.surface),
+          flexGap: shortcuts.gap,
+          justifyContent: 'center',
+        }}
+      >
+        {shortcuts.header ? (
+          <FlexWidget
+            style={{
+              height: shortcuts.headerHeight,
+              flexDirection: 'row',
+              alignItems: 'center',
+              flexGap: 6,
+            }}
+          >
+            <SvgWidget
+              svg={t.mode === 'dark' ? darkMark : lightMark}
+              style={{ width: 14, height: 14 }}
+            />
+            <FlexWidget style={{ flex: 1 }}>
+              <TextWidget
+                text={shortcuts.header}
+                maxLines={1}
+                truncate="END"
+                style={{
+                  fontSize: shortcuts.headerFontSize,
+                  fontWeight: 'bold',
+                  color: color(t.text),
+                }}
+              />
+              {shortcuts.headerSubtitle ? (
+                <TextWidget
+                  text={shortcuts.headerSubtitle}
+                  maxLines={1}
+                  truncate="END"
+                  style={{ fontSize: shortcuts.headerFontSize, color: color(t.textSecondary) }}
+                />
+              ) : null}
+            </FlexWidget>
+          </FlexWidget>
+        ) : null}
+        {shortcuts.rows.map((row, i) => (
+          <FlexWidget
+            key={i}
+            style={{
+              height: row.height,
+              flexDirection: 'row',
+              flexGap: shortcuts.gap,
+              alignItems: 'center',
+            }}
+          >
+            {row.buttons.map((button) => (
+              <FlexWidget
+                key={button.id}
+                clickAction="OPEN_URI"
+                clickActionData={{
+                  uri: widgetLink(
+                    button.target,
+                    __DEV__ ? Constants.expoConfig?.hostUri : undefined,
+                  ),
+                }}
+                accessibilityLabel={button.summary}
+                style={{
+                  width: button.width,
+                  height: 'match_parent',
+                  borderRadius: 12,
+                  backgroundColor: color(button.primary ? t.brand.bg : t.surfaceMuted),
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  paddingHorizontal: 4,
+                }}
+              >
+                <TextWidget
+                  text={button.label}
+                  maxLines={1}
+                  truncate="END"
+                  style={{
+                    fontSize: button.fontSize,
+                    fontWeight: 'bold',
+                    color: color(button.primary ? t.brand.main : t.text),
+                  }}
+                />
+              </FlexWidget>
+            ))}
+          </FlexWidget>
+        ))}
+      </FlexWidget>
+    );
+  }
   return (
     <FlexWidget
       clickAction="OPEN_URI"

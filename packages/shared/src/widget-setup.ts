@@ -23,6 +23,9 @@ export function widgetSetupChoices(
     ...(current?.kind === 'quick' && current.accountId === accountId && current.mode === 'payment'
       ? { mode: 'payment' as const }
       : {}),
+    ...(current?.kind === 'quick' && current.accountId === accountId && current.tagIds
+      ? { tagIds: current.tagIds }
+      : {}),
     hideAmounts: current && 'hideAmounts' in current ? current.hideAmounts === true : false,
   };
 }

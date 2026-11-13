@@ -886,7 +886,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     (id) => {
       const group = queryClient.getQueryData<Envelope>(groupKey(account(), id));
       const balances = queryClient.getQueryData<Envelope>(groupBalancesKey(account(), id));
-      return group && balances ? { group, balances } : null;
+      return group ? { group, balances } : null;
     },
     (path, verifiedAt) => {
       const id = path.split('/')[3];
@@ -2736,7 +2736,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             const intended =
               target === 'create-group'
                 ? snapshot.screen === 'create'
-                : typeof target !== 'string' && target.kind === 'expense'
+                : typeof target !== 'string' &&
+                    (target.kind === 'expense' || target.kind === 'expense-tag')
                   ? snapshot.screen === 'expense' && snapshot.expense.groupId === target.groupId
                   : typeof target !== 'string' &&
                       (target.kind === 'settle' || target.kind === 'record-payment')
@@ -8249,8 +8250,26 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     if (snapshot.auth.status !== 'authenticated') return;
     if (typeof target !== 'string') {
-      if (target.kind === 'expense') await openExpense(target.groupId);
-      else {
+      if (target.kind === 'expense' || target.kind === 'expense-tag') {
+        await openExpense(target.groupId);
+        const editor = snapshot.expense;
+        if (
+          target.kind === 'expense-tag' &&
+          owns() &&
+          snapshot.screen === 'expense' &&
+          editor.groupId === target.groupId &&
+          editor.status === 'editing' &&
+          editor.draft &&
+          editor.blank &&
+          !editor.attempt &&
+          !editor.mutation &&
+          !expenseDraftChanged(editor.draft, editor.blank) &&
+          editor.context?.tags.some(
+            (tag) => tag.id === target.tagId && !tag.isArchived && !tag.isDeleted,
+          )
+        )
+          await updateExpenseDraft({ tagId: target.tagId });
+      } else {
         await openGroup(target.groupId, false, 'balances');
         if (!owns() || heldTaskProtected()) return;
         if (

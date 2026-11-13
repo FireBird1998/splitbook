@@ -66,7 +66,13 @@ beforeEach(() => {
   redraw.mockResolvedValue(undefined);
 });
 afterEach(() => {
-  if (screen) act(() => screen!.unmount());
+  if (screen)
+    act(() => {
+      host('Pressable')
+        .find((n) => n.props.accessibilityLabel === 'Cancel widget setup')
+        ?.props.onPress();
+      screen!.unmount();
+    });
   screen = undefined;
   vi.restoreAllMocks();
 });
@@ -363,4 +369,96 @@ it('Record payment with no saved Groups offers Create a Group and cannot save an
   expect(text()).toContain('No Groups yet');
   expect(textOf(button())).toBe('Create a Group');
   expect(store.saveSetup).not.toHaveBeenCalled();
+});
+
+it('prefills the first four active Tags, lets a member swap one, and keeps their chosen order', async () => {
+  const tags = ['Groceries', 'Rent', 'Bills', 'Dining', 'Travel'].map((name, i) => ({
+    id: `tag${i}`,
+    name,
+  }));
+  store.read.mockResolvedValue({ copy: { ...copy, tags: { maple: tags } }, session });
+  await render('Quick', { kind: 'quick', widgetId: 989, accountId: 'alex', groupId: 'maple' });
+  const chips = () => host('Pressable').filter((n) => n.props.accessibilityRole === 'checkbox');
+  expect(
+    chips()
+      .filter((n) => n.props.accessibilityState.checked)
+      .map((n) => n.props.accessibilityLabel),
+  ).toEqual(['Groceries', 'Rent', 'Bills', 'Dining']);
+  await act(async () =>
+    chips()
+      .find((n) => n.props.accessibilityLabel === 'Travel')!
+      .props.onPress(),
+  );
+  expect(chips().filter((n) => n.props.accessibilityState.checked)).toHaveLength(4);
+  await act(async () =>
+    chips()
+      .find((n) => n.props.accessibilityLabel === 'Rent')!
+      .props.onPress(),
+  );
+  await act(async () =>
+    chips()
+      .find((n) => n.props.accessibilityLabel === 'Travel')!
+      .props.onPress(),
+  );
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup).toHaveBeenCalledWith({
+    kind: 'quick',
+    widgetId: 989,
+    accountId: 'alex',
+    groupId: 'maple',
+    tagIds: ['tag0', 'tag2', 'tag3', 'tag4'],
+  });
+});
+
+it('keeps remaining chosen Tags after an archive, permits none, and offers none for payment or Ask each time', async () => {
+  store.read.mockResolvedValue({
+    copy: {
+      ...copy,
+      tags: {
+        maple: [
+          { id: 'bills', name: 'Bills' },
+          { id: 'rent', name: 'Rent' },
+        ],
+      },
+    },
+    session,
+  });
+  await render('Quick', {
+    kind: 'quick',
+    widgetId: 989,
+    accountId: 'alex',
+    groupId: 'maple',
+    tagIds: ['rent', 'archived', 'bills'],
+  });
+  const chips = () => host('Pressable').filter((n) => n.props.accessibilityRole === 'checkbox');
+  expect(chips().map((n) => n.props.accessibilityLabel)).toEqual(['Bills', 'Rent']);
+  expect(chips().every((n) => n.props.accessibilityState.checked)).toBe(true);
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup.mock.calls[0][0].tagIds).toEqual(['rent', 'bills']);
+  await act(async () =>
+    host('Pressable')
+      .find((n) => n.props.accessibilityLabel === 'Record payment')!
+      .props.onPress(),
+  );
+  expect(chips()).toEqual([]);
+  await act(async () =>
+    host('Pressable')
+      .find((n) => n.props.accessibilityLabel === 'Add expense')!
+      .props.onPress(),
+  );
+  while (chips().some((n) => n.props.accessibilityState.checked))
+    await act(async () =>
+      chips()
+        .find((n) => n.props.accessibilityState.checked)!
+        .props.onPress(),
+    );
+  expect(chips().filter((n) => n.props.accessibilityState.checked)).toHaveLength(0);
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup.mock.calls.at(-1)![0].tagIds).toEqual([]);
+  await act(async () =>
+    host('Pressable')
+      .find((n) => n.props.accessibilityLabel === 'Ask each time')!
+      .props.onPress(),
+  );
+  expect(chips()).toEqual([]);
 });

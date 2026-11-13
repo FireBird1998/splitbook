@@ -14,6 +14,8 @@ export interface WidgetCopy {
   };
   groups?: Record<string, WidgetGroupPart>;
   months?: Record<string, WidgetMonthPart>;
+  /** Active Tags from Group reads already made by the app, in their read order. */
+  tags?: Record<string, { id: string; name: string }[]>;
   lostGroupIds?: string[];
   savedGroups?: {
     verifiedAt: number;
@@ -39,6 +41,7 @@ export type WidgetTarget =
       groupId: string;
       payment?: { from: string; to: string; currency: string };
     }
+  | { kind: 'expense-tag'; groupId: string; tagId: string }
   | { kind: 'setup'; widgetId: number };
 export type WidgetSession =
   | { status: 'authenticated'; accountId: string; loading: boolean }
