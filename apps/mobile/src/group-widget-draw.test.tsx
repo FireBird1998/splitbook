@@ -168,43 +168,46 @@ it.each([
   },
 );
 
-it('draws the people count when no full payment amount fits an in-between width', () => {
-  vi.stubGlobal('__DEV__', false);
-  const large: WidgetCopy = {
-    ...copy,
-    groups: {
-      maple: {
-        ...copy.groups!.maple!,
-        currencies: [
-          {
-            ...copy.groups!.maple!.currencies[0]!,
-            payments: copy.groups!.maple!.currencies[0]!.payments.map((p) => ({
-              ...p,
-              amountMinor: 123456789012345,
-            })),
-          },
-        ],
+it.each([225, 240])(
+  'draws the people count in secondary grey when no payment amount fits at %s dp',
+  (width) => {
+    vi.stubGlobal('__DEV__', false);
+    const large: WidgetCopy = {
+      ...copy,
+      groups: {
+        maple: {
+          ...copy.groups!.maple!,
+          currencies: [
+            {
+              ...copy.groups!.maple!.currencies[0]!,
+              payments: copy.groups!.maple!.currencies[0]!.payments.map((p) => ({
+                ...p,
+                amountMinor: 123456789012345,
+              })),
+            },
+          ],
+        },
       },
-    },
-  };
-  const tree = buildWidgetTree(
-    drawGroup(
-      large,
-      { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
-      { width: 225, height: 344 },
-      { status: 'authenticated', accountId: 'alex', loading: false },
-      now,
-      lightTokens,
-      2,
-    ),
-  );
-  expect(drawnText(tree)).toContain('to 2\u00a0people');
-  expect(
-    allNodes(tree).find((node) => (node.props as { text?: string }).text === 'to 2\u00a0people')
-      ?.props,
-  ).toMatchObject({ color: lightTokens.textSecondary });
-  vi.unstubAllGlobals();
-});
+    };
+    const tree = buildWidgetTree(
+      drawGroup(
+        large,
+        { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
+        { width, height: 344 },
+        { status: 'authenticated', accountId: 'alex', loading: false },
+        now,
+        lightTokens,
+        width === 240 ? 1 : 2,
+      ),
+    );
+    expect(drawnText(tree)).toContain('to 2\u00a0people');
+    expect(
+      allNodes(tree).find((node) => (node.props as { text?: string }).text === 'to 2\u00a0people')
+        ?.props,
+    ).toMatchObject({ color: lightTokens.textSecondary });
+    vi.unstubAllGlobals();
+  },
+);
 
 it('gives the stacked archived name and tag the full width of their header column', () => {
   vi.stubGlobal('__DEV__', false);

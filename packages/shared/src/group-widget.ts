@@ -355,15 +355,15 @@ function groupLayout(
         width -
           (showTile ? 40 : 0) -
           (showSaved && view.saved ? text.width(view.saved, 9) + 8 : 0) -
-          text.width(view.tripDay, 9) -
-          20 >=
+          text.width(view.tripDay, 11) -
+          22 >=
           100;
       const nameRoom =
         width -
         (showTile ? 40 : 0) -
         (!compact && showSaved && view.saved ? text.width(view.saved, 9) + 8 : 0) -
         (showArchivedTag && !stackHeader ? text.width('Archived', 9) + 12 : 0) -
-        (showTripDay ? text.width(view.tripDay!, 9) + 20 : 0);
+        (showTripDay ? text.width(view.tripDay!, 11) + 22 : 0);
       const name = view.name ?? '';
       const nameFont = text.fit(
         name.split(/\s+/).sort((a, b) => text.width(b, 13) - text.width(a, 13))[0] ?? '',
