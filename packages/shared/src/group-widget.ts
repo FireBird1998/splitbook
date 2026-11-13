@@ -324,6 +324,13 @@ function groupLayout(
           : balanceLines.length * line(14)
         : 0;
     const rowHeight = level === 1 ? line(12) + line(13) + 16 : Math.max(38, line(13) + 14);
+    const updateInFooter =
+      !compact &&
+      !!actionLabel &&
+      'Open to update'.length * 11 * scale * 0.62 +
+        actionLabel.length * actionFont * scale * 0.62 +
+        32 <=
+        width;
     const sections: WidgetSection[] = [
       ...(view.name
         ? [
@@ -396,6 +403,7 @@ function groupLayout(
       showStateTile,
       nameLines,
       nameFont,
+      updateInFooter,
       money,
       actionFont,
       actionLines,
@@ -425,12 +433,12 @@ function groupLayout(
   let plan = fitWidgetSections(height, settings.sections, gap);
   let paymentLines = plan.sections.find((s) => s.id === 'payments')?.rows ?? 0;
   // The existing overflow hint takes precedence over the older-copy prompt.
-  if (paymentLines < view.payments.length && (paymentLines > 0 || size.width >= 280)) {
+  if (paymentLines < view.payments.length && (paymentLines > 0 || !compact || size.width >= 280)) {
     settings.sections = settings.sections.filter((s) => s.id !== 'update');
     plan = fitWidgetSections(height, settings.sections, gap);
     paymentLines = plan.sections.find((s) => s.id === 'payments')?.rows ?? 0;
   }
-  if (paymentLines && paymentLines < view.payments.length) {
+  if ((paymentLines > 0 || !compact) && paymentLines < view.payments.length) {
     const action = settings.sections.find((s) => s.id === 'action');
     const extra = compact ? line(10) + 4 : 0;
     if (action) action.rowHeight += extra;
@@ -474,7 +482,11 @@ function groupLayout(
     showDescription: level < 2 && (!compact || level === 0),
     showPeople: present('people'),
     showPrivacyLabel: present('hidden'),
-    showMore: paymentLines > 0 && paymentLines < view.payments.length,
+    showMore: (paymentLines > 0 || !compact) && paymentLines < view.payments.length,
+    showUpdateInFooter:
+      settings.updateInFooter &&
+      view.action === 'Open to update' &&
+      paymentLines === view.payments.length,
     stackPayments: level === 1,
     stackHeader: level > 0,
     actionFontSize: settings.actionFont * factor,
@@ -511,7 +523,7 @@ function projectGroupWidget(
   const limit = layout.paymentLines;
   const omitted = full.payments.slice(limit);
   const more =
-    omitted.length && (size.width >= 280 || limit > 0)
+    omitted.length && (size.width >= 280 || !layout.compact || limit > 0)
       ? `+${counted(omitted.length, 'more', 'more')}${SEPARATOR}${[
           ...new Set(
             omitted

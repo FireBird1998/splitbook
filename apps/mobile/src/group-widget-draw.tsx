@@ -231,6 +231,8 @@ export function drawGroup(
         >
           {text(view.more, t.brand.main, 10, true)}
         </FlexWidget>
+      ) : l.showUpdateInFooter ? (
+        text(view.action!, t.textSecondary, 11)
       ) : !l.compact ? (
         <FlexWidget style={{ flex: 1 }} />
       ) : null}

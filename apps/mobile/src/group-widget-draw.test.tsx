@@ -75,22 +75,66 @@ it.each([
   vi.unstubAllGlobals();
 });
 
-it.each([2, 12])('keeps the older-copy update hint behind an overflow of %s payments', (count) => {
+it.each([
+  { count: 2, height: 200 },
+  { count: 2, height: 304 },
+  { count: 12, height: 304 },
+])(
+  'keeps the older-copy update hint behind an overflow of $count payments at $height dp',
+  ({ count, height }) => {
+    vi.stubGlobal('__DEV__', false);
+    const stale: WidgetCopy = {
+      ...copy,
+      groups: {
+        maple: {
+          ...copy.groups!.maple!,
+          verifiedAt: now - 172800000,
+          balancesVerifiedAt: now - 172800000,
+          currencies: [
+            {
+              ...copy.groups!.maple!.currencies[0]!,
+              payments: Array.from(
+                { length: count },
+                (_, i) => copy.groups!.maple!.currencies[0]!.payments[i % 2]!,
+              ),
+            },
+          ],
+        },
+      },
+    };
+    const tree = buildWidgetTree(
+      drawGroup(
+        stale,
+        { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
+        { width: 372, height },
+        { status: 'authenticated', accountId: 'alex', loading: false },
+        now,
+        lightTokens,
+      ),
+    );
+    const drawnText = (node: WidgetTree): string[] => [
+      ...((node.props as { text?: string }).text ? [(node.props as { text: string }).text] : []),
+      ...(node.children ?? []).flatMap(drawnText),
+    ];
+    expect(drawnText(tree).includes('Open to update')).toBe(count === 2);
+    vi.unstubAllGlobals();
+  },
+);
+
+it('draws the overflow hint when no full payment amount fits an in-between width', () => {
   vi.stubGlobal('__DEV__', false);
-  const stale: WidgetCopy = {
+  const large: WidgetCopy = {
     ...copy,
     groups: {
       maple: {
         ...copy.groups!.maple!,
-        verifiedAt: now - 172800000,
-        balancesVerifiedAt: now - 172800000,
         currencies: [
           {
             ...copy.groups!.maple!.currencies[0]!,
-            payments: Array.from(
-              { length: count },
-              (_, i) => copy.groups!.maple!.currencies[0]!.payments[i % 2]!,
-            ),
+            payments: copy.groups!.maple!.currencies[0]!.payments.map((p) => ({
+              ...p,
+              amountMinor: 123456789012345,
+            })),
           },
         ],
       },
@@ -98,9 +142,9 @@ it.each([2, 12])('keeps the older-copy update hint behind an overflow of %s paym
   };
   const tree = buildWidgetTree(
     drawGroup(
-      stale,
+      large,
       { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
-      { width: 372, height: 304 },
+      { width: 266, height: 344 },
       { status: 'authenticated', accountId: 'alex', loading: false },
       now,
       lightTokens,
@@ -110,6 +154,6 @@ it.each([2, 12])('keeps the older-copy update hint behind an overflow of %s paym
     ...((node.props as { text?: string }).text ? [(node.props as { text: string }).text] : []),
     ...(node.children ?? []).flatMap(drawnText),
   ];
-  expect(drawnText(tree).includes('Open to update')).toBe(count === 2);
+  expect(drawnText(tree)).toContain('+2\u00a0more\u00a0· ₹');
   vi.unstubAllGlobals();
 });
