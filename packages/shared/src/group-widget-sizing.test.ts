@@ -108,7 +108,7 @@ it.each([1, 1.3, 2])(
       const used =
         l.sections.reduce((sum, section) => sum + pixels(section.height), 0) +
         Math.max(0, l.sections.length - 1) * pixels(l.gap) +
-        pixels(l.padding) * 2;
+        pixels(l.paddingVertical) * 2;
       expect(used).toBeLessThanOrEqual(Math.floor(size.height * 2.625));
       const row = l.paymentRows[0];
       if (row) expect(row.height).toBeGreaterThanOrEqual(28 * scale * l.textFactor);
@@ -159,6 +159,28 @@ it('removes the optional tile before shrinking a name that fits without it', () 
   expect(view.layout.nameFontSize).toBe(13);
   expect(view.layout.showTile).toBe(false);
 });
+
+it.each([1, 1.3, 2])(
+  'keeps the true minimum text rectangle clear of its rounded corners at %s',
+  (scale) => {
+    const view = groupWidget(
+      part,
+      setup,
+      { width: 110, height: 110, pixelRatio: 2.625 },
+      auth,
+      now,
+      scale,
+    );
+    const l = view.layout;
+    const bottom = 'paddingVertical' in l ? Number(l.paddingVertical) : l.padding;
+    const radius = 'cornerRadius' in l ? Number(l.cornerRadius) : 24;
+    const inset = radius - Math.sqrt(radius ** 2 - Math.max(0, radius - bottom) ** 2);
+    expect(l.padding).toBeGreaterThanOrEqual(inset);
+    expect(
+      widgetText(l.width, scale).width(view.compactAmount!, l.moneyFontSize, true),
+    ).toBeLessThanOrEqual(l.width + 0.00001);
+  },
+);
 it('uses a tall real size for more payment rows and shares all leftover height among them', () => {
   const view = groupWidget(part, setup, { width: 372, height: 512 }, auth, now);
   expect(view.payments.length).toBeGreaterThan(4);
@@ -166,7 +188,7 @@ it('uses a tall real size for more payment rows and shares all leftover height a
   expect(
     view.layout.sections.reduce((sum, s) => sum + s.height, 0) +
       view.layout.gap * 2 +
-      view.layout.padding * 2,
+      view.layout.paddingVertical * 2,
   ).toBe(512);
 });
 
@@ -194,7 +216,7 @@ it.each(dimensions.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scal
         return sum + section.height;
       }, 0) +
       Math.max(0, l.sections.length - 1) * l.gap +
-      2 * l.padding;
+      2 * l.paddingVertical;
     expect(used).toBeCloseTo(height, 5);
     expect(view.payments).toHaveLength(l.paymentLines);
     expect(l.sections.find((section) => section.id === 'payments')?.rows ?? 0).toBe(
@@ -275,7 +297,7 @@ it.each(
     expect(
       view.layout.sections.reduce((sum, section) => sum + section.height, 0) +
         Math.max(0, view.layout.sections.length - 1) * view.layout.gap +
-        view.layout.padding * 2,
+        view.layout.paddingVertical * 2,
     ).toBeCloseTo(size.height, 5);
     if ('hideAmounts' in setup && setup.hideAmounts)
       expect(JSON.stringify(view)).not.toMatch(/₹|1,480|Sam|SC/);

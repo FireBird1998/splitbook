@@ -272,11 +272,15 @@ function groupLayout(
   const pixels = (dp: number) => Math.ceil(dp * ratio - 1e-9) / ratio;
   // Even the declaration's 110 dp minimum keeps the complete balance at 10 sp.
   const minimumMoneyWidth = widgetText(size.width, scale).width(view.compactAmount ?? '', 10, true);
-  const padding = pixels(
-    tiny ? Math.min(8, Math.max(0, Math.floor((size.width - minimumMoneyWidth) / 2))) : 14,
-  );
+  const padding = tiny
+    ? Math.floor(
+        Math.min(8, Math.max(0, Math.floor((size.width - minimumMoneyWidth) / 2))) * ratio,
+      ) / ratio
+    : pixels(14);
+  const paddingVertical = tiny ? pixels(8) : padding;
+  const cornerRadius = tiny ? 12 : 24;
   const width = Math.max(1, Math.floor(size.width * ratio) / ratio - padding * 2);
-  const height = Math.max(0, Math.floor(size.height * ratio) / ratio - padding * 2);
+  const height = Math.max(0, Math.floor(size.height * ratio) / ratio - paddingVertical * 2);
   const compact = level === 2 ? size.width / scale < 240 : size.width < 240;
   const gap = tiny ? 4 : 8;
   const settings = fitWidgetLayout(
@@ -505,6 +509,8 @@ function groupLayout(
   return {
     ...settings,
     padding,
+    paddingVertical,
+    cornerRadius,
     width,
     compact,
     scale,

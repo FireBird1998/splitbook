@@ -326,10 +326,11 @@ export function drawGroup(
       style={{
         width: 'match_parent',
         height: 'match_parent',
-        padding: l.padding,
+        paddingHorizontal: l.padding,
+        paddingVertical: l.paddingVertical,
         flexGap: l.gap,
         backgroundColor: color(t.surface),
-        borderRadius: 24,
+        borderRadius: l.cornerRadius,
       }}
     >
       {l.sections.map((section) => (
