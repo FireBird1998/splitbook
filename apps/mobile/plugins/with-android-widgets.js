@@ -271,7 +271,7 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
         path.join(main, 'res/xml/widget_balances.xml'),
         `<?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="110dp" android:minHeight="110dp"
+    android:minWidth="250dp" android:minHeight="180dp"
     android:targetCellWidth="4" android:targetCellHeight="3"
     android:minResizeWidth="110dp" android:minResizeHeight="40dp"
     android:maxResizeWidth="640dp" android:maxResizeHeight="640dp"
