@@ -1,3 +1,4 @@
+import { widgetDimensions } from '../test-utils/widget-size';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { balancesWidget, type WidgetCopy } from '@splitbook/shared/balances-widget';
 import { groupWidget, type WidgetGroupPart } from '@splitbook/shared/group-widget';
@@ -56,13 +57,19 @@ it('summarizes Balances with complete amounts and their verification time', () =
   );
 });
 it('summarizes a Group with first names only', () => {
-  expect(groupWidget(part, setup, '4x2', auth, now).summary).toBe(
+  expect(groupWidget(part, setup, widgetDimensions('4x2'), auth, now).summary).toBe(
     'Group. Maple House. You owe ₹1,480.00. You pay Priya ₹1,480.00. Saved 9:41.',
   );
 });
 it('speaks the visible Group name but not amounts or member names when hidden', () => {
   const b = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x2', auth, now).summary;
-  const g = groupWidget(part, { ...setup, hideAmounts: true }, '4x2', auth, now).summary;
+  const g = groupWidget(
+    part,
+    { ...setup, hideAmounts: true },
+    widgetDimensions('4x2'),
+    auth,
+    now,
+  ).summary;
   expect(b).toContain('Amounts hidden');
   expect(g).toContain('You owe 1\u00a0person');
   expect(g).toContain('Amounts and names hidden');
@@ -73,7 +80,7 @@ it.each(['signed-out', 'expired'] as const)(
   'speaks the %s explanation without saved private data',
   (status) => {
     const b = balancesWidget(copy, { kind: 'balances' }, '2x2', { status }, now).summary;
-    const g = groupWidget(part, setup, '4x2', { status }, now).summary;
+    const g = groupWidget(part, setup, widgetDimensions('4x2'), { status }, now).summary;
     expect(b + g).toContain(status === 'expired' ? 'Sign in again' : 'Sign in');
     expect(b + g).not.toMatch(/₹|€|Maple|Priya|Saved/);
   },
@@ -119,23 +126,32 @@ it.each(['2x1', '2x2', '4x2'] as const)(
 it.each(['2x2', '4x2', '4x3'] as const)(
   'announces every saved Group state without names after lost access or account change at %s',
   (size) => {
-    expect(groupWidget(undefined, setup, size, { ...auth, loading: true }, now).summary).toContain(
-      'Loading',
+    expect(
+      groupWidget(undefined, setup, widgetDimensions(size), { ...auth, loading: true }, now)
+        .summary,
+    ).toContain('Loading');
+    expect(groupWidget(undefined, setup, widgetDimensions(size), auth, now).summary).toContain(
+      'Nothing saved yet',
     );
-    expect(groupWidget(undefined, setup, size, auth, now).summary).toContain('Nothing saved yet');
-    expect(groupWidget({ ...part, currencies: [] }, setup, size, auth, now).summary).toContain(
-      'all square',
-    );
-    expect(groupWidget({ ...part, archived: true }, setup, size, auth, now).summary).toContain(
-      'final',
-    );
-    expect(groupWidget(part, setup, size, auth, now + 86400001).summary).toContain(
-      'Open to update',
-    );
-    const lost = groupWidget(null, setup, size, auth, now).summary;
+    expect(
+      groupWidget({ ...part, currencies: [] }, setup, widgetDimensions(size), auth, now).summary,
+    ).toContain('all square');
+    expect(
+      groupWidget({ ...part, archived: true }, setup, widgetDimensions(size), auth, now).summary,
+    ).toContain('final');
+    expect(
+      groupWidget(part, setup, widgetDimensions(size), auth, now + 86400001).summary,
+    ).toContain('Open to update');
+    const lost = groupWidget(null, setup, widgetDimensions(size), auth, now).summary;
     expect(lost).toContain('no longer in this Group');
     expect(lost).not.toMatch(/Maple|Priya|₹/);
-    const other = groupWidget(part, setup, size, { ...auth, accountId: 'sam' }, now).summary;
+    const other = groupWidget(
+      part,
+      setup,
+      widgetDimensions(size),
+      { ...auth, accountId: 'sam' },
+      now,
+    ).summary;
     expect(other).toContain('Set up this widget again');
     expect(other).not.toMatch(/Maple|Priya|₹/);
   },
@@ -198,9 +214,15 @@ it('speaks the compact Group’s Main currency amount and wide payment overflow'
       },
     ],
   };
-  expect(groupWidget(multi, setup, '2x2', auth, now).summary).toContain('You owe ₹1,480.00');
-  expect(groupWidget(multi, setup, '2x2', auth, now).summary).toContain('In 3\u00a0currencies');
-  expect(groupWidget(multi, setup, '4x2', auth, now).summary).toContain('+1\u00a0more');
+  expect(groupWidget(multi, setup, widgetDimensions('2x2'), auth, now).summary).toContain(
+    'You owe ₹1,480.00',
+  );
+  expect(groupWidget(multi, setup, widgetDimensions('2x2'), auth, now).summary).toContain(
+    'In 3\u00a0currencies',
+  );
+  expect(groupWidget(multi, setup, widgetDimensions('4x2'), auth, now).summary).toContain(
+    'Sam pays you ¥3,000',
+  );
 });
 
 it('names the extra currency when compact Balances omits it', () => {
@@ -250,7 +272,7 @@ it('speaks the second initial only for rows that share a first name', () => {
   const summary = groupWidget(
     priyas(['Priya', 'PS'], ['Priya', 'PK']),
     setup,
-    '4x3',
+    widgetDimensions('4x3'),
     auth,
     now,
   ).summary;
@@ -262,7 +284,13 @@ it.each([
   ['old copies without initials', ['Priya', undefined], ['Priya', undefined]],
   ['matching initials', ['Priya', 'PS'], ['Priya', 'PS']],
 ] as const)('keeps first names only for %s', (_, first, second) => {
-  const summary = groupWidget(priyas([...first], [...second]), setup, '4x3', auth, now).summary;
+  const summary = groupWidget(
+    priyas([...first], [...second]),
+    setup,
+    widgetDimensions('4x3'),
+    auth,
+    now,
+  ).summary;
   expect(summary).toContain('You pay Priya ₹1,060.00');
   expect(summary).toContain('Priya pays you ₹420.00');
 });
@@ -270,7 +298,7 @@ it('speaks no names or initials for duplicate first names when hidden', () => {
   const summary = groupWidget(
     priyas(['Priya', 'PS'], ['Priya', 'PK']),
     { ...setup, hideAmounts: true },
-    '4x3',
+    widgetDimensions('4x3'),
     auth,
     now,
   ).summary;

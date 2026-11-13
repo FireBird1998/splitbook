@@ -63,3 +63,16 @@ it('declares a system-bound font-change job only when widgets are enabled, witho
     expect(actions).not.toContain('android.intent.action.CONFIGURATION_CHANGED');
   }
 }, 30_000);
+
+it('keeps the Group receiver home-screen only, private and behind the unchanged switch', () => {
+  for (const enabled of ['true', 'false']) {
+    const group = application(enabled).receiver.find(
+      (entry: { $: Record<string, string> }) => entry.$['android:name'] === '.widget.Group',
+    );
+    expect(group.$).toMatchObject({
+      'android:label': 'Group',
+      'android:enabled': enabled,
+      'android:exported': 'false',
+    });
+  }
+}, 30_000);

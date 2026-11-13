@@ -1,3 +1,4 @@
+import { widgetDimensions } from '../test-utils/widget-size';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { balancesWidget, type WidgetCopy } from '@splitbook/shared/balances-widget';
 import { groupWidget, type WidgetGroupPart } from '@splitbook/shared/group-widget';
@@ -129,7 +130,7 @@ it.each(['2x1', '2x2', '4x2'] as const)(
 it.each(['2x2', '4x2', '4x3'] as const)(
   'hides every Group amount, payment identity and payment target at %s',
   (size) => {
-    const v = groupWidget(part, setup, size, session, now);
+    const v = groupWidget(part, setup, widgetDimensions(size), session, now);
     expect(v).toMatchObject({
       name: 'Maple House',
       saved: 'Saved 9:41',
@@ -146,11 +147,15 @@ it.each(['2x2', '4x2', '4x3'] as const)(
       { status: 'expired' as const },
       { ...session, accountId: 'other' },
     ])
-      privateOutput(groupWidget(part, setup, size, state, now));
+      privateOutput(groupWidget(part, setup, widgetDimensions(size), state, now));
     for (const value of [null, undefined, { ...part, archived: true }, { ...part, currencies: [] }])
-      privateOutput(groupWidget(value, setup, size, session, now));
-    privateOutput(groupWidget(undefined, setup, size, { ...session, loading: true }, now));
-    expect(groupWidget({ ...part, archived: true }, setup, size, session, now)).toMatchObject({
+      privateOutput(groupWidget(value, setup, widgetDimensions(size), session, now));
+    privateOutput(
+      groupWidget(undefined, setup, widgetDimensions(size), { ...session, loading: true }, now),
+    );
+    expect(
+      groupWidget({ ...part, archived: true }, setup, widgetDimensions(size), session, now),
+    ).toMatchObject({
       final: true,
       addExpense: false,
       balance: 'You owe 2\u00a0people\u00a0· final',
@@ -175,7 +180,7 @@ it('counts distinct people separately in each direction across currencies withou
     },
     ...part.currencies,
   ];
-  const v = groupWidget({ ...part, currencies }, setup, '4x2', session, now);
+  const v = groupWidget({ ...part, currencies }, setup, widgetDimensions('4x2'), session, now);
   expect(v.balance).toBe('You owe 2\u00a0people\u00a0· You’re owed by 1\u00a0person');
   privateOutput(v);
 });

@@ -53,7 +53,7 @@ async function representation(info: WidgetInfo) {
             groupId: '',
             accountId: '',
           };
-    const size = info.width < 280 ? '2x2' : info.height >= 260 ? '4x3' : '4x2';
+    const size = { width: info.width, height: info.height, pixelRatio: info.screenInfo.density };
     return {
       light: drawGroup(
         record.copy,
@@ -133,7 +133,15 @@ export function registerAndroidWidgets() {
           if (legacy) await widgetStore.saveSetupIfAbsent(legacy);
         }
       }
-      renderWidget(await representation(widgetInfo));
+      // WorkManager captures bounds before queuing an event. A later resize can overtake
+      // it, while native drawing already uses the current bounds: project Group from those
+      // same current dimensions, not the earlier event's. Fixed-size widgets stay unchanged.
+      const currentInfo =
+        widgetInfo.widgetName === 'Group'
+          ? ((await getWidgetInfo('Group')).find((info) => info.widgetId === widgetInfo.widgetId) ??
+            widgetInfo)
+          : widgetInfo;
+      if (currentInfo) renderWidget(await representation(currentInfo));
     });
   });
 }

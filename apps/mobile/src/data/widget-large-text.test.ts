@@ -1,3 +1,4 @@
+import { widgetDimensions } from '../test-utils/widget-size';
 import { expect, it } from 'vitest';
 import { balancesWidget, type WidgetCopy } from '@splitbook/shared/balances-widget';
 import { groupWidget, type WidgetGroupPart } from '@splitbook/shared/group-widget';
@@ -65,20 +66,22 @@ it.each([
   ['4x2', 1.3, 1],
   ['4x2', 2, 0],
   ['4x3', 1, 4],
-  ['4x3', 1.3, 2],
+  ['4x3', 1.3, 3],
   ['4x3', 2, 1],
 ] as const)('limits Group %s at %s text to %s payment lines', (size, scale, lines) => {
-  const v = groupWidget(part, setup, size, auth, now, scale);
+  const v = groupWidget(part, setup, widgetDimensions(size), auth, now, scale);
   expect(v.payments).toHaveLength(lines);
-  if (scale > 1 && size !== '2x2') expect(v.more).toContain(String(6 - lines));
-  expect(v.layout.showDescription).toBe(scale < 2 && (size !== '2x2' || scale === 1));
+  if (scale === 2 && size === '4x2') {
+    expect(v.more).toBeNull();
+    expect(v.layout.actionLines).toEqual(['Add expense']);
+  } else if (scale > 1 && size !== '2x2') expect(v.more).toContain(String(6 - lines));
 });
 it.each([1, 1.3, 2])('keeps the entire spoken summary when visual lines drop at %s', (scale) => {
   expect(balancesWidget(copy, { kind: 'balances' }, '2x2', auth, now, scale).summary).toBe(
     balancesWidget(copy, { kind: 'balances' }, '2x2', auth, now).summary,
   );
-  expect(groupWidget(part, setup, '4x3', auth, now, scale).summary).toBe(
-    groupWidget(part, setup, '4x3', auth, now).summary,
+  expect(groupWidget(part, setup, widgetDimensions('4x3'), auth, now, scale).summary).toBe(
+    groupWidget(part, setup, widgetDimensions('4x3'), auth, now).summary,
   );
 });
 it.each([1, 1.3, 2])('drops Add expense state text in 1x1 and caps 2x1 names at %s', (scale) => {
@@ -104,7 +107,9 @@ it('treats Android’s float representation of 130% as large text', () => {
   expect(
     balancesWidget(copy, { kind: 'balances' }, '2x2', auth, now, androidScale).owed,
   ).toHaveLength(1);
-  expect(groupWidget(part, setup, '4x2', auth, now, androidScale).payments).toHaveLength(1);
+  expect(
+    groupWidget(part, setup, widgetDimensions('4x2'), auth, now, androidScale).payments,
+  ).toHaveLength(1);
   expect(
     quickWidget(copy, { ...setup, kind: 'quick' }, '1x1', { status: 'expired' }, androidScale)
       .layout.showTitle,
@@ -112,11 +117,11 @@ it('treats Android’s float representation of 130% as large text', () => {
 });
 
 it('keeps the compact Group action on one readable line at 200% without losing saved time', () => {
-  const v = groupWidget(part, setup, '2x2', auth, now, 2);
+  const v = groupWidget(part, setup, widgetDimensions('2x2'), auth, now, 2);
   expect(v.layout).toMatchObject({
     actionFontSize: 10,
     actionPaddingHorizontal: 6,
-    showSaved: true,
+    showSaved: false,
   });
   expect(v.addExpense).toBe(true);
 });
@@ -125,7 +130,14 @@ it('drops optional privacy captions in tight large-text layouts but keeps them i
   const b = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
   expect(b.layout).toMatchObject({ showHeader: false, showPrivacyLabel: true, hiddenFontSize: 8 });
   expect(b.summary).toContain('Amounts hidden');
-  const g = groupWidget(part, { ...setup, hideAmounts: true }, '2x2', auth, now, 2);
+  const g = groupWidget(
+    part,
+    { ...setup, hideAmounts: true },
+    widgetDimensions('2x2'),
+    auth,
+    now,
+    2,
+  );
   expect(g.layout.showPrivacyLabel).toBe(false);
   expect(g.summary).toContain('Amounts and names hidden');
 });

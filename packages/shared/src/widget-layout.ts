@@ -1,5 +1,4 @@
 import type { BalancesWidgetSize } from './balances-widget';
-import type { GroupWidgetSize } from './group-widget';
 /** A widget gives up optional lines before it gives up readable type. */
 export function widgetTextLevel(scale: number) {
   const percent = Math.round(scale * 100);
@@ -30,23 +29,6 @@ export function balancesLayout(
     showSecondary: !small || !level,
     moneyFontSize: level === 2 ? 13 : small ? 19 : 16,
     stateTitleSize: small ? (level === 2 ? 10 : 12) : 14,
-  };
-}
-export function groupLayout(size: GroupWidgetSize, scale: number) {
-  const level = widgetTextLevel(scale),
-    small = size === '2x2';
-  return {
-    actionFontSize: small && level === 2 ? 10 : 12,
-    actionPaddingHorizontal: small && level === 2 ? 6 : 12,
-    paymentLines: small ? 0 : size === '4x3' ? [4, 2, 1][level]! : [2, 1, 0][level]!,
-    showDescription: level < 2 && (!small || !level),
-    showTile: level < 2,
-    showPeople: level < 2,
-    showSaved: true,
-    showPrivacyLabel: !small || level < 2,
-    stackPayments: level === 2,
-    stackHeader: level > 0,
-    moneyFontSize: level === 2 ? 13 : 18,
   };
 }
 export function quickLayout(size: '1x1' | '2x1', scale: number, normal: boolean) {
