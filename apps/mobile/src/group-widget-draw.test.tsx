@@ -199,6 +199,10 @@ it('draws the people count when no full payment amount fits an in-between width'
     ),
   );
   expect(drawnText(tree)).toContain('to 2\u00a0people');
+  expect(
+    allNodes(tree).find((node) => (node.props as { text?: string }).text === 'to 2\u00a0people')
+      ?.props,
+  ).toMatchObject({ color: lightTokens.textSecondary });
   vi.unstubAllGlobals();
 });
 

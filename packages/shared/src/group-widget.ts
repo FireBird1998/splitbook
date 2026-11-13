@@ -11,6 +11,8 @@ import { toMajorAmount } from './exact-money';
 import { counted, SEPARATOR } from './separator';
 import { widgetSavedTime, type WidgetSession } from './balances-widget';
 import type { GroupCategory } from './types';
+import { dayCount } from './trip-summary';
+import { toDateParam } from './date';
 export interface GroupWidgetSetup {
   kind: 'group';
   hideAmounts?: boolean;
@@ -26,6 +28,8 @@ export interface WidgetGroupPart {
   mainCurrency: string;
   verifiedAt: number;
   balancesVerifiedAt: number;
+  /** Calendar days from the Group read. Absent in copies saved before Trip day support. */
+  tripDates?: { start: string | null; end: string | null };
   currencies: {
     currency: string;
     balanceMinor: number;
@@ -40,6 +44,18 @@ export interface WidgetGroupPart {
     }[];
   }[];
 }
+function tripDay(part: WidgetGroupPart, now: number): string | null {
+  const start = part.tripDates?.start;
+  const end = part.tripDates?.end;
+  const today = toDateParam(new Date(now));
+  if (part.theme !== 'trip' || !start || !end || today < start || today > end) return null;
+  try {
+    return `Day ${dayCount(start, today)} of ${dayCount(start, end)}`;
+  } catch {
+    return null;
+  }
+}
+
 function groupWidgetView(
   part: WidgetGroupPart | null | undefined,
   setup: GroupWidgetSetup,
@@ -50,6 +66,7 @@ function groupWidgetView(
     state: 'no-copy',
     hidden: null as string | null,
     name: null as string | null,
+    tripDay: null as string | null,
     theme: null as GroupCategory | null,
     balance: '',
     compactLabel: null as string | null,
@@ -178,6 +195,7 @@ function groupWidgetView(
     ...empty,
     state: part.archived ? 'archived' : allSquare ? 'all-square' : 'normal',
     name: part.name,
+    tripDay: tripDay(part, now),
     hidden: setup.hideAmounts ? 'Amounts and names hidden' : null,
     theme: part.theme,
     compactLabel:
@@ -329,11 +347,23 @@ function groupLayout(
         : [];
       const descriptionFont = compact ? 10 : 12;
       const descriptionLines = text.words(view.description, descriptionFont);
+      const showTripDay =
+        optional &&
+        level === 0 &&
+        !compact &&
+        !!view.tripDay &&
+        width -
+          (showTile ? 40 : 0) -
+          (showSaved && view.saved ? text.width(view.saved, 9) + 8 : 0) -
+          text.width(view.tripDay, 9) -
+          20 >=
+          100;
       const nameRoom =
         width -
         (showTile ? 40 : 0) -
         (!compact && showSaved && view.saved ? text.width(view.saved, 9) + 8 : 0) -
-        (showArchivedTag && !stackHeader ? text.width('Archived', 9) + 12 : 0);
+        (showArchivedTag && !stackHeader ? text.width('Archived', 9) + 12 : 0) -
+        (showTripDay ? text.width(view.tripDay!, 9) + 20 : 0);
       const name = view.name ?? '';
       const nameFont = text.fit(
         name.split(/\s+/).sort((a, b) => text.width(b, 13) - text.width(a, 13))[0] ?? '',
@@ -493,6 +523,7 @@ function groupLayout(
           paymentAmount: text.font(13),
         },
         showSaved,
+        tripDay: showTripDay ? view.tripDay : null,
         showTile,
         showStateTile,
         showArchivedTag,
@@ -596,6 +627,7 @@ function projectGroupWidget(
       'Group',
       full.state === 'loading' ? 'Loading' : null,
       full.name,
+      full.tripDay,
       full.title,
       full.balance,
       size.width < 280 && full.currencyOverflow

@@ -108,6 +108,13 @@ export function drawGroup(
               />
             ))}
           </FlexWidget>
+          {l.tripDay ? (
+            <FlexWidget
+              style={{ backgroundColor: color(t.surfaceMuted), borderRadius: 6, padding: 3 }}
+            >
+              {text(l.tripDay, t.textSecondary, l.fontSizes.caption, true)}
+            </FlexWidget>
+          ) : null}
           {l.showArchivedTag ? (
             <FlexWidget
               style={{ backgroundColor: color(t.surfaceMuted), borderRadius: 6, padding: 3 }}
@@ -214,7 +221,7 @@ export function drawGroup(
       ))}
       {l.showMore && !l.moreInFooter && view.more ? (
         <FlexWidget style={{ height: payments?.moreHeight, justifyContent: 'center' }}>
-          {lines(l.moreLines, t.brand.main, l.fontSizes.small, true)}
+          {lines(l.moreLines, t.textSecondary, l.fontSizes.small, true)}
         </FlexWidget>
       ) : null}
     </FlexWidget>

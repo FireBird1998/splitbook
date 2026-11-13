@@ -94,6 +94,42 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
         'android:enabled': String(enabled),
       },
     });
+    app.service = app.service.filter((item) => item.$['android:name'] !== '.widget.DateChangeJob');
+    app.service.push({
+      $: {
+        'android:name': '.widget.DateChangeJob',
+        'android:permission': 'android.permission.BIND_JOB_SERVICE',
+        'android:exported': 'true',
+        'android:enabled': String(enabled),
+      },
+    });
+    app.receiver = app.receiver.filter(
+      (item) => item.$['android:name'] !== '.widget.ClockChangeReceiver',
+    );
+    app.receiver.push({
+      $: {
+        'android:name': '.widget.ClockChangeReceiver',
+        'android:exported': 'false',
+        'android:enabled': String(enabled),
+      },
+      'intent-filter': [
+        {
+          action: ['TIME_SET', 'TIMEZONE_CHANGED', 'BOOT_COMPLETED'].map((name) => ({
+            $: { 'android:name': `android.intent.action.${name}` },
+          })),
+        },
+      ],
+    });
+    const manifest = mod.modResults.manifest;
+    manifest['uses-permission'] ??= [];
+    if (
+      !manifest['uses-permission'].some(
+        (item) => item.$['android:name'] === 'android.permission.RECEIVE_BOOT_COMPLETED',
+      )
+    )
+      manifest['uses-permission'].push({
+        $: { 'android:name': 'android.permission.RECEIVE_BOOT_COMPLETED' },
+      });
     app.activity = (app.activity ?? []).filter(
       (item) =>
         ![
@@ -139,6 +175,14 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
           .readFileSync(path.join(__dirname, 'android-widgets/FontScaleJob.java'), 'utf8')
           .replaceAll('__WIDGET_PACKAGE__', `${config.android.package}.widget`),
       );
+      for (const name of ['DateChangeJob', 'ClockChangeReceiver']) {
+        fs.writeFileSync(
+          path.join(javaDir, `${name}.java`),
+          fs
+            .readFileSync(path.join(__dirname, `android-widgets/${name}.java`), 'utf8')
+            .replaceAll('__WIDGET_PACKAGE__', `${config.android.package}.widget`),
+        );
+      }
       fs.writeFileSync(
         path.join(javaDir, 'Balances.java'),
         `package ${config.android.package}.widget;
@@ -151,6 +195,7 @@ import android.os.Bundle;
 public class Balances extends com.reactnativeandroidwidget.RNWidgetProvider {
   @Override public void onReceive(Context context, Intent intent) {
     FontScaleJob.watch(context);
+    DateChangeJob.watch(context);
     if ((context.getPackageName() + ".WIDGET_CLICK").equals(intent.getAction())
         && "OPEN_URI".equals(intent.getStringExtra("clickAction"))) {
       Bundle data = intent.getBundleExtra("clickActionData");

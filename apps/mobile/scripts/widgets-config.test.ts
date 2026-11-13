@@ -76,3 +76,30 @@ it('keeps the Group receiver home-screen only, private and behind the unchanged 
     });
   }
 }, 30_000);
+
+it('enables the midnight job and clock/zone/boot receiver with the widget switch', () => {
+  for (const enabled of ['true', 'false']) {
+    const app = application(enabled);
+    expect(
+      app.service.find(
+        (s: { $: Record<string, string> }) => s.$['android:name'] === '.widget.DateChangeJob',
+      ).$,
+    ).toMatchObject({
+      'android:permission': 'android.permission.BIND_JOB_SERVICE',
+      'android:enabled': enabled,
+    });
+    const receiver = app.receiver.find(
+      (r: { $: Record<string, string> }) => r.$['android:name'] === '.widget.ClockChangeReceiver',
+    );
+    expect(receiver.$).toMatchObject({ 'android:enabled': enabled, 'android:exported': 'false' });
+    expect(
+      receiver['intent-filter'][0].action.map(
+        (a: { $: Record<string, string> }) => a.$['android:name'],
+      ),
+    ).toEqual([
+      'android.intent.action.TIME_SET',
+      'android.intent.action.TIMEZONE_CHANGED',
+      'android.intent.action.BOOT_COMPLETED',
+    ]);
+  }
+}, 30_000);

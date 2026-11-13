@@ -470,3 +470,55 @@ it('uses people without a payment row on a narrow tall widget', () => {
   expect(view.payments).toHaveLength(0);
   expect(view.more).toBe('to 12\u00a0people');
 });
+
+it.each([
+  ['2026-11-07T18:29:59Z', null],
+  ['2026-11-07T18:30:00Z', 'Day 1 of 3'],
+  ['2026-11-08T18:30:00Z', 'Day 2 of 3'],
+  ['2026-11-09T18:30:00Z', 'Day 3 of 3'],
+  ['2026-11-10T18:30:00Z', null],
+])('uses the phone calendar day in Asia/Kolkata at %s', (instant, day) => {
+  const copy = {
+    ...part,
+    theme: 'trip' as const,
+    tripDates: { start: '2026-11-08', end: '2026-11-10' },
+  };
+  const time = Date.parse(instant);
+  const view = groupWidget(copy, setup, { width: 360, height: 224 }, auth, time);
+  expect(view.tripDay).toBe(day);
+  expect(view.layout.tripDay).toBe(day);
+  if (day) expect(view.summary).toContain(day);
+  else expect(view.summary).not.toContain('Day ');
+});
+
+it('keeps the Group name and omits the optional Trip badge at large text and compact widths', () => {
+  const copy = {
+    ...part,
+    theme: 'trip' as const,
+    name: 'Goa Friends Trip',
+    tripDates: { start: '2026-11-13', end: '2026-11-15' },
+  };
+  for (const scale of [1.3, 2]) {
+    const view = groupWidget(copy, setup, { width: 360, height: 344 }, auth, now, scale);
+    expect(view.layout.tripDay).toBeNull();
+    expect(view.layout.nameLines.join(' ')).toBe(copy.name);
+    expect(view.summary).toContain('Day 1 of 3');
+    expect(view.layout.textFactor).toBe(1);
+  }
+  expect(
+    groupWidget(copy, setup, { width: 172, height: 224 }, auth, now).layout.tripDay,
+  ).toBeNull();
+});
+
+it('omits Trip day for other Themes, older copies, incomplete and invalid dates', () => {
+  for (const copy of [
+    part,
+    { ...part, tripDates: { start: '2026-11-13', end: '2026-11-15' } },
+    { ...part, theme: 'trip' as const, tripDates: { start: '2026-11-13', end: null } },
+    { ...part, theme: 'trip' as const, tripDates: { start: '2026-11-00', end: '2026-11-15' } },
+  ]) {
+    const view = groupWidget(copy, setup, { width: 360, height: 224 }, auth, now);
+    expect(view.tripDay).toBeNull();
+    expect(view.name).toBe(part.name);
+  }
+});

@@ -1,3 +1,4 @@
+import { expenseDay } from '@splitbook/shared/expense-day';
 import { initials } from '../initials';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { WidgetGroupPart } from '@splitbook/shared/group-widget';
@@ -19,6 +20,10 @@ export function widgetGroupCopy(
     mainCurrency: group.defaultCurrency,
     verifiedAt,
     balancesVerifiedAt,
+    tripDates: {
+      start: group.startDate ? expenseDay(group.startDate) : null,
+      end: group.endDate ? expenseDay(group.endDate) : null,
+    },
     currencies: balances.map((bucket) => ({
       currency: bucket.currency,
       balanceMinor:
