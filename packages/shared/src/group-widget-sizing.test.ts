@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { groupWidget, type WidgetGroupPart } from './group-widget';
+import type { WidgetSession } from './balances-widget';
 beforeAll(() => {
   vi.stubEnv('TZ', 'Asia/Kolkata');
 });
@@ -90,7 +91,13 @@ it.each([
   else expect(view.people).toBe('to 12\u00a0people');
 });
 
-const states = [
+const states: [
+  string,
+  WidgetGroupPart | null | undefined,
+  typeof setup & { hideAmounts?: boolean },
+  WidgetSession,
+  number,
+][] = [
   ['normal', part, setup, auth, now],
   ['all-square', { ...part, currencies: [] }, setup, auth, now],
   ['archived', { ...part, archived: true }, setup, auth, now],
@@ -112,7 +119,7 @@ const states = [
     auth,
     now,
   ],
-] as const;
+];
 it.each(
   states.flatMap(([state, copy, setup, session, time], index) =>
     [dimensions[0]!, dimensions[5]!].flatMap((size) =>
