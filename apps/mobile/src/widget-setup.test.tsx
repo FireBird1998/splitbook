@@ -384,6 +384,9 @@ it('prefills the first four active Tags, lets a member swap one, and keeps their
       .filter((n) => n.props.accessibilityState.checked)
       .map((n) => n.props.accessibilityLabel),
   ).toEqual(['Groceries', 'Rent', 'Bills', 'Dining']);
+  expect(
+    chips().find((n) => n.props.accessibilityLabel === 'Travel')!.props.accessibilityState.disabled,
+  ).toBe(true);
   await act(async () =>
     chips()
       .find((n) => n.props.accessibilityLabel === 'Travel')!

@@ -448,7 +448,11 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                         key={tag.id}
                         accessibilityRole="checkbox"
                         accessibilityLabel={tag.name}
-                        accessibilityState={{ checked }}
+                        accessibilityState={{
+                          checked,
+                          disabled: !checked && chosenTags.length >= 4,
+                        }}
+                        disabled={!checked && chosenTags.length >= 4}
                         onPress={() => {
                           if (!checked && chosenTags.length >= 4) return;
                           const next = checked
