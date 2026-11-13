@@ -1,6 +1,10 @@
 /** Portable generated vector data. Web SVG and react-native-svg share these primitives. */
 export type SceneLayer = 'far' | 'clouds' | 'main' | 'front' | 'glow';
 export type SceneMotion =
+  | 'animals'
+  | 'petals'
+  | 'boat'
+  | 'birds'
   | 'sway'
   | 'water'
   | 'people'
@@ -30,10 +34,12 @@ export interface SceneVector {
   classes?: string[];
   motion?: SceneMotion;
   delaySeconds?: number;
+  /** Set where one element runs its motion at its own pace. */
+  durationSeconds?: number;
   children?: SceneVector[];
 }
 export interface HeaderSceneArt {
-  id: 'eco-city' | 'mountain-village';
+  id: 'beach' | 'sakura' | 'eco-city' | 'mountain-village';
   name: string;
   description: string;
   viewBox: [number, number, number, number];

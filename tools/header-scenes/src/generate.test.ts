@@ -1,11 +1,16 @@
 import { expect, it } from 'vitest';
-import { buildScenes, staleOutputs } from './generate';
+import { buildScenes, generatedFiles, staleOutputs } from './generate';
 import { vectorTree, vectorSvg } from './vectors';
 import type { SceneVector } from '@splitbook/shared/header-scene-art';
 
-it('ships both scenes with portable layers and independent motion and night-light groups', () => {
+it('ships all four scenes with portable layers and independent motion and night-light groups', () => {
   const scenes = buildScenes();
-  expect(scenes.map(({ name }) => name)).toEqual(['Eco city', 'Mountain village']);
+  expect(scenes.map(({ name }) => name)).toEqual([
+    'Eco city',
+    'Mountain village',
+    'Beach',
+    'Sakura',
+  ]);
   const motions = (node: SceneVector): string[] => [
     ...(node.motion ? [node.motion] : []),
     ...(node.children ?? []).flatMap(motions),
@@ -58,4 +63,43 @@ it.each([
   '<svg>text</svg>',
 ])('refuses unsupported vector input', (svg) => {
   expect(() => vectorTree(svg)).toThrow();
+});
+
+it.each([
+  ['beach', ['boat', 'animals', 'birds']],
+  ['sakura', ['animals', 'petals']],
+] as const)(
+  '%s retains its characteristic moving details separately from the night lights',
+  (id, expected) => {
+    const scene = buildScenes().find((scene) => scene.id === id)!;
+    const nodes = (node: SceneVector): SceneVector[] => [
+      node,
+      ...(node.children ?? []).flatMap(nodes),
+    ];
+    const main = nodes(scene.layers.main);
+    const glow = nodes(scene.layers.glow);
+    expect(main.map((node) => node.motion)).toEqual(
+      expect.arrayContaining([...expected, 'people', 'sway', 'water']),
+    );
+    expect(glow.map((node) => node.motion)).toEqual(
+      expect.arrayContaining(['windows', 'lanterns', 'halo']),
+    );
+    expect(
+      glow
+        .filter((node) => node.motion === 'windows' || node.motion === 'lanterns')
+        .every((node) => (node.children?.length ?? 0) > 0),
+    ).toBe(true);
+    expect(main.some((node) => node.motion === 'windows')).toBe(false);
+  },
+);
+it('covers the four scene modules and common styles in a repeatable fresh build', () => {
+  const first = generatedFiles();
+  expect([...first.keys()].sort()).toEqual([
+    'beach.ts',
+    'eco-city.ts',
+    'mountain-village.ts',
+    'sakura.ts',
+    'styles.ts',
+  ]);
+  expect(staleOutputs(first, generatedFiles())).toEqual([]);
 });

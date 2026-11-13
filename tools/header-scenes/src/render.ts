@@ -3,6 +3,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium } from '@playwright/test';
 import { Data, Effect } from 'effect';
+import beach from '@splitbook/shared/header-scenes/beach';
+import sakura from '@splitbook/shared/header-scenes/sakura';
 import ecoCity from '@splitbook/shared/header-scenes/eco-city';
 import mountainVillage from '@splitbook/shared/header-scenes/mountain-village';
 import { headerSceneCss } from '@splitbook/shared/header-scenes/styles';
@@ -24,7 +26,7 @@ const render = Effect.acquireUseRelease(
           deviceScaleFactor: 2,
         });
         page.setDefaultTimeout(15_000);
-        for (const scene of [ecoCity, mountainVillage])
+        for (const scene of [ecoCity, mountainVillage, beach, sakura])
           for (const time of ['day', 'night'] as const) {
             const name = `${scene.id}-${time}`;
             const html = previewPage(scene, headerSceneCss, time);
