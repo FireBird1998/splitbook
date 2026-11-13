@@ -211,21 +211,22 @@ export function fitWidgetLayout<T extends { sections: readonly WidgetSection[] }
     const measurement = createWidgetText(size.width, scale, factor, size.pixelRatio);
     const { sections, ...settings } = make(measurement.text, optional);
     return {
-      ...settings,
-      ...fitWidgetSections(size.height, sections, gap, size.pixelRatio),
-      textFactor: factor,
+      layout: {
+        ...settings,
+        ...fitWidgetSections(size.height, sections, gap, size.pixelRatio),
+        textFactor: factor,
+      },
       narrowing: measurement.narrowing(),
     };
   };
   let result = attempt(true, 1);
-  if (!result.fits || result.narrowing > 0) {
+  if (!result.layout.fits || result.narrowing > 0) {
     const essential = attempt(false, 1);
-    if (!result.fits || essential.narrowing < result.narrowing - 1e-9) result = essential;
+    if (!result.layout.fits || essential.narrowing < result.narrowing - 1e-9) result = essential;
   }
   for (const factor of [0.95, 0.9, 0.85, 0.8]) {
-    if (result.fits) break;
+    if (result.layout.fits) break;
     result = attempt(false, factor);
   }
-  const { narrowing: _narrowing, ...layout } = result;
-  return layout;
+  return result.layout;
 }
