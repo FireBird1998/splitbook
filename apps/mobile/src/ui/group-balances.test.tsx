@@ -2003,3 +2003,29 @@ it('an empty Record payment entry offers payments without selecting one, or says
   );
   expect(text(square)).toContain('Nothing to pay');
 });
+
+it('does not replace a withdrawn chosen payment with the blank Quick actions selector', () => {
+  const root = render(
+    <RecordPaymentSheet
+      visible
+      currentUserId={you}
+      today="Today"
+      now={at}
+      state={{
+        ...emptySettlement(),
+        status: 'ready',
+        group: group(),
+        balances: [inr],
+        chosen: { paidBy: you, paidTo: sam, currency: 'INR', shown: 1060 },
+      }}
+      onChange={vi.fn()}
+      onLeaveField={vi.fn()}
+      onAcknowledge={vi.fn()}
+      onRecord={vi.fn()}
+      onRetry={vi.fn()}
+      onClose={vi.fn()}
+      onSelect={vi.fn()}
+    />,
+  );
+  expect(text(root)).not.toContain('Choose a payment');
+});
