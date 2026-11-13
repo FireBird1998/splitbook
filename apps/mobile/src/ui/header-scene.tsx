@@ -1,3 +1,4 @@
+import { SEPARATOR } from '@splitbook/shared/separator';
 import { createElement, memo, useEffect, useState, type ComponentType } from 'react';
 import { Animated, AppState, StyleSheet, View } from 'react-native';
 import Svg, {
@@ -120,7 +121,7 @@ export function HeaderSceneCard({ group, today }: { group: MobileGroup; today: s
               : null,
           ],
           ['Members', String(facts.members)],
-          ['Currency', facts.currencies.join(' · ')],
+          ['Currency', facts.currencies.join(SEPARATOR)],
         ].map(([label, value]) =>
           value ? (
             <View key={label} style={{ gap: 2, flexShrink: 1 }}>
@@ -254,7 +255,7 @@ export default function HeaderScene({
           }}
         >
           <CompactText style={{ color: '#151828' }}>
-            {header.time === 'auto' ? `Auto · ${time}` : time}
+            {header.time === 'auto' ? `Auto${SEPARATOR}${time}` : time}
           </CompactText>
         </View>
       </View>

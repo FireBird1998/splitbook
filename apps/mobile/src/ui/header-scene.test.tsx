@@ -37,7 +37,7 @@ it.each(['trip', 'home'] as const)(
       rendered = create(<HeaderSceneCard group={{ ...group, category }} today="2026-09-18" />);
     });
     const markup = JSON.stringify(rendered.toJSON());
-    expect(markup).toContain('INR · EUR');
+    expect(markup).toContain('INR\u00a0· EUR');
     expect(markup).toContain('Members');
     if (category === 'trip') {
       expect(markup).toContain('GOA');
