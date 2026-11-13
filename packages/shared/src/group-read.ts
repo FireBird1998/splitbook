@@ -1,3 +1,4 @@
+import { readStoredGroupHeader } from './group-header';
 /** The Group HTTP read contract. Persistence documents and write validation stay separate. */
 import { z } from 'zod';
 import { getCurrency } from './currency';
@@ -43,6 +44,7 @@ const group = z.looseObject({
     .string()
     .nullish()
     .transform((value) => value ?? null),
+  header: z.unknown().transform(readStoredGroupHeader).optional(),
   category: z.enum(['trip', 'home', 'couple', 'work', 'other']).optional().default('other'),
   startDate: timestamp.nullish().transform((value) => value ?? null),
   endDate: timestamp.nullish().transform((value) => value ?? null),

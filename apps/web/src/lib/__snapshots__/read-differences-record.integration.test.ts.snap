@@ -6741,6 +6741,11 @@ exports[`Group / a member reads a Not allowed Group 1`] = `
         "currencyLocked": true,
         "defaultCurrency": "INR",
         "endDate": null,
+        "header": {
+          "scene": "beach",
+          "style": "classic",
+          "time": "auto",
+        },
         "inviteCode": "READS1120",
         "inviteCodeExpiresAt": "<invite-expiry>",
         "isArchived": false,

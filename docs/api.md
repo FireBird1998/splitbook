@@ -94,6 +94,7 @@ A test compares every code and all of its statuses with the vocabulary.
 | `GROUP_DELETION_CONFIRMATION_REQUIRED` | 409         |
 | `GROUP_DELETION_NOT_REQUESTED`         | 409         |
 | `GROUP_DELETION_UNAVAILABLE`           | 409         |
+| `HEADER_SCENES_DISABLED`               | 404         |
 | `IDEMPOTENCY_CONFLICT`                 | 409         |
 | `INVALID_AMOUNT_RANGE`                 | 422         |
 | `INVALID_COMPARE`                      | 400         |
@@ -785,6 +786,39 @@ member hasn't left this Group out. The list is empty when the Group is Not allow
 covers both routes.
 
 ---
+
+### Group header (#1201)
+
+Group reads include `header: { style, scene, time }`. Style is `classic` or `scene`;
+scene is `beach`, `sakura`, `eco-city` or `mountain-village`; time is `auto`,
+`morning`, `day`, `sunset` or `night`. A Group with no stored header reads as
+`{ "style": "classic", "scene": "beach", "time": "auto" }`. Switching to Classic
+keeps the scene and time. Older Saved copies without the field are still accepted.
+An unknown or malformed header is read as absent, so a newer scene or time never
+prevents a Group, its list or a Saved copy from opening; the shared rule supplies
+the Classic default. Stored headers are preserved during unrelated admin edits.
+
+`PATCH /api/groups/[id]/header` accepts that three-field object directly and returns
+`200 { "data": { "header": { "style": "scene", "scene": "sakura", "time": "sunset" } }, "status": 200 }`.
+The app session is required (401 without one); any current member may save, and a
+non-member, including one who left or was removed, is refused (403). The ordinary
+Group PATCH stays admin-only. Invalid choices answer 422 `VALIDATION_ERROR`.
+This is a preference write: no revision header, ledger revision or currency lock.
+It uses the existing Group mutation fence and records a `group_updated` Activity
+with `changes.header.old` and `.new` together. A no-op records nothing. Activity
+names the actor and the choice, for example “Sam changed the header to Sakura, at
+Sunset”, with the previous header in its detail.
+
+The off-by-default environment switch is `NEXT_PUBLIC_HEADER_SCENES_ENABLED`
+(web and server), and `EXPO_PUBLIC_HEADER_SCENES_ENABLED` in the Android build.
+Only the literal `true` enables it. While off, header writes answer **404**
+`HEADER_SCENES_DISABLED` (“Header scenes are not enabled”), as disabled Drafts
+do: nothing is stored and no Activity is recorded. Earlier settings remain stored.
+Group reads mask the style as
+`classic` while off and keep the stored choice; settings/renderers use the same switch.
+Android keeps the wire header in the existing Saved copy, without a migration.
+`auto` follows the viewer's local hour when opening or returning: Morning [5,10),
+Day [10,17), Sunset [17,20), Night otherwise. It runs on no timer.
 
 ## Members
 

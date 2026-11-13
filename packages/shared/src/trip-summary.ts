@@ -83,6 +83,17 @@ export function dayCount(from: DayKey, to: DayKey): number {
   return Math.max(0, dayIndex(to) - dayIndex(from) + 1);
 }
 
+/** The day's number in the Trip: 1 for its first day; null before it or without one. */
+export function tripDayNumber(day: DayKey, firstDay: DayKey | null): number | null {
+  if (!firstDay || day < firstDay) return null;
+  return dayCount(firstDay, day);
+}
+
+/** Old stored dates may be reversed; every Trip surface reads them as one ordered span. */
+export function orderedTripDays(start: DayKey | null, end: DayKey | null) {
+  return start && end && end < start ? { start: end, end: start } : { start, end };
+}
+
 /** Every calendar day from `from` to `to`, both included, oldest first. */
 export function daysBetween(from: DayKey, to: DayKey): DayKey[] {
   const first = dayIndex(from);
@@ -314,8 +325,7 @@ export function tripSummary({
   const startDay = startDate === null ? null : expenseDay(startDate);
   const endDay = endDate === null ? null : expenseDay(endDate);
   // The forms never save a start after the end; were one stored, it is read as one span.
-  const [start, end] =
-    startDay && endDay && endDay < startDay ? [endDay, startDay] : [startDay, endDay];
+  const { start, end } = orderedTripDays(startDay, endDay);
 
   const counted: Counted[] = [];
   const others = new Map<string, OtherCurrencySpending>();

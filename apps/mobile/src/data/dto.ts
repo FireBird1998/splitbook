@@ -1,3 +1,4 @@
+import { readGroupHeader } from '@splitbook/shared/group-header';
 import {
   parseGroupListResponse,
   parseGroupResponse,
@@ -38,6 +39,7 @@ export function toMobileGroup(value: GroupRead): MobileGroup {
     name: value.name,
     description: value.description,
     category: value.category,
+    header: readGroupHeader(value.header),
     defaultCurrency: value.defaultCurrency,
     alternateCurrencies: normaliseExtraCurrencies(value.defaultCurrency, value.alternateCurrencies),
     latestExpenseCurrency: value.latestExpenseCurrency ?? null,

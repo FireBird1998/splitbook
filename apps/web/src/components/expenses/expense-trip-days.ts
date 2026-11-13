@@ -1,3 +1,4 @@
+import { orderedTripDays } from '@splitbook/shared/trip-summary';
 /**
  * A Trip's Expenses by trip day (#316): the heading over each day's rows in the Expenses table
  * ("Day 2 · Fri 18 Sep") and the day's total. Pure, so the table and the phone's cards head the
@@ -69,8 +70,7 @@ export function tripDayHeadings(
   const start = startDate ? expenseDay(startDate) : null;
   const end = endDate ? expenseDay(endDate) : null;
   const dates = {
-    start: start && end && end < start ? end : start,
-    end: start && end && end < start ? start : end,
+    ...orderedTripDays(start, end),
     thisYear: Number(dayKeyInZone(now, timeZone).slice(0, 4)),
   };
 

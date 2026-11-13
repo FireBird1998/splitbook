@@ -12,6 +12,12 @@ _Avoid_: ledger entry (an entry is what a member typed)
 A group's shape and identity, chosen once at creation and derived from the stored `Group.category` field. Drives chrome, copy nouns, default tags, and date semantics.
 _Avoid_: group category, group type, vibe
 
+**Header scene**:
+The animated scene a Group can show in place of its Classic header. The choice is saved for everyone in the Group; Motion and tilt are each member's device choices.
+
+**Classic header**:
+The boarding-pass strip on a Trip and the neutral header on every other Theme.
+
 **Category**:
 The fixed, global classification of an expense (`Expense.category`: food, transport, stay, …). Belongs to expenses, never to groups.
 _Avoid_: expense type, kind

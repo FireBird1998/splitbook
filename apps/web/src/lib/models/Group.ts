@@ -33,6 +33,7 @@ export interface IGroupDocument {
   defaultCurrency: string;
   currencyLocked: boolean;
   alternateCurrencies: string[];
+  header?: unknown;
   category: 'trip' | 'home' | 'couple' | 'work' | 'other';
   startDate?: Date | null;
   endDate?: Date | null;
@@ -99,6 +100,9 @@ const GroupSchema = new Schema<IGroupDocument>(
       enum: ['trip', 'home', 'couple', 'work', 'other'],
       default: 'other',
     },
+    // The write boundary validates Header scenes. Preserve unfamiliar stored values when
+    // another field is saved; older clients read them through the defensive projection.
+    header: { type: Schema.Types.Mixed, default: undefined },
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
     assistantRule: { type: String, enum: ASSISTANT_RULES, default: 'allowed' },

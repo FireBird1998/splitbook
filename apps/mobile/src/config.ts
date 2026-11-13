@@ -120,3 +120,8 @@ export function mobileConfig(
     googleWebClientId: env.googleWebClientId,
   };
 }
+
+/** Off by default, including when viewing a Saved copy from an earlier enabled build. */
+export function headerScenesEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_HEADER_SCENES_ENABLED === 'true';
+}

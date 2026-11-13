@@ -3,6 +3,14 @@ import type { AllowedReadSite } from './read-contract.ts';
 // Reviewed sites, not path-wide exemptions. A missing, changed or duplicated site fails.
 export const readExceptions = [
   {
+    path: 'apps/web/src/lib/services/group-header.service.ts',
+    within: 'FunctionDeclaration saveGroupHeader#1/ArrowFunction <callback>#1',
+    operation: 'membership',
+    site: "Group.findOne({_id:groupId,'members.user':actorId})",
+    reason:
+      'Current membership admission inside the member-started header mutation. This preference changes no ledger fields; Group reads still use the admitted read module.',
+  },
+  {
     path: 'apps/web/src/app/api/groups/[id]/expenses/[expenseId]/route.ts',
     within: 'FunctionDeclaration PATCH#1',
     operation: 'membership',

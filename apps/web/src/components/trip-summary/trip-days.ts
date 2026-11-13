@@ -5,7 +5,7 @@
  * isn't this year's), so the Insights tab and the Expenses table name a day the same way.
  */
 import { format } from 'date-fns';
-import { dayCount } from '@splitbook/shared/trip-summary';
+import { tripDayNumber } from '@splitbook/shared/trip-summary';
 import type { DayKey } from '@splitbook/shared/zoned-calendar';
 import { SEPARATOR } from '@splitbook/shared/separator';
 
@@ -37,11 +37,7 @@ export function tripDayShort(day: DayKey): string {
   return format(localNoon(day), 'EEE d');
 }
 
-/** The day's number in the Trip: 1 for its first day; null before it or without one. */
-export function tripDayNumber(day: DayKey, firstDay: DayKey | null): number | null {
-  if (!firstDay || day < firstDay) return null;
-  return dayCount(firstDay, day);
-}
+export { tripDayNumber } from '@splitbook/shared/trip-summary';
 
 /**
  * "Day 2 · Fri 18 Sep" for a day of the Trip, "Fri 18 Sep" without a first day. Outside the

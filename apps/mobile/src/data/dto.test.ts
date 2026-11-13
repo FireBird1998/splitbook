@@ -51,3 +51,55 @@ describe('an archived Group read on Android (#578)', () => {
     expect('isArchived' in read({ isArchived: false })).toBe(false);
   });
 });
+
+it('reads old and new Group Saved copies and retains the header choice', () => {
+  const data = {
+    _id: 'b00000000000000000000001',
+    name: 'Maple House',
+    createdBy: alex._id,
+    defaultCurrency: 'INR',
+    members: [{ user: alex, role: 'admin', joinedAt: at }],
+    createdAt: at,
+    updatedAt: at,
+  };
+  const header = { style: 'scene', scene: 'eco-city', time: 'night' } as const;
+  expect(parseGroup({ status: 200, data }).header).toEqual({
+    style: 'classic',
+    scene: 'beach',
+    time: 'auto',
+  });
+  expect(
+    parseGroup(JSON.parse(JSON.stringify({ status: 200, data: { ...data, header } }))).header,
+  ).toEqual(header);
+});
+
+it.each([
+  { style: 'scene', scene: 'forest', time: 'night' },
+  { style: 'scene', scene: 'sakura', time: 'dawn' },
+  { style: 'panorama', scene: 'sakura', time: 'day' },
+  {},
+  null,
+  'sakura',
+  [],
+  42,
+])('reads a Saved copy with an unfamiliar header as Classic: %j', (header) => {
+  const wire = JSON.parse(
+    JSON.stringify({
+      status: 200,
+      data: {
+        _id: 'b00000000000000000000001',
+        name: 'Maple House',
+        createdBy: alex._id,
+        defaultCurrency: 'INR',
+        members: [{ user: alex, role: 'admin', joinedAt: at }],
+        createdAt: at,
+        updatedAt: at,
+        header,
+      },
+    }),
+  );
+  expect(parseGroup(wire)).toMatchObject({
+    name: 'Maple House',
+    header: { style: 'classic', scene: 'beach', time: 'auto' },
+  });
+});

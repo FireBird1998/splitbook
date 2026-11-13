@@ -134,6 +134,11 @@ export const refusalVocabulary = {
     variants: {},
   },
   FORBIDDEN: { status: 403, words: 'Forbidden', variants: {} },
+  HEADER_SCENES_DISABLED: {
+    status: 404,
+    words: 'Header scenes are not enabled',
+    variants: {},
+  },
   GROUP_ARCHIVED: { status: 409, words: GROUP_ARCHIVED_MESSAGE, variants: {} },
   GROUP_DELETION_CHANGED: {
     status: 409,

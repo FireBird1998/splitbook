@@ -1,3 +1,4 @@
+import type { GroupHeader } from '@splitbook/shared/group-header';
 import type { TagManagerState } from './tag-manager';
 import type { AssistantsState } from './assistants';
 import type { ToReviewState } from './to-review';
@@ -34,6 +35,7 @@ export interface GroupMemberUser {
 }
 
 export interface MobileGroup {
+  header?: GroupHeader;
   id: string;
   name: string;
   description: string;

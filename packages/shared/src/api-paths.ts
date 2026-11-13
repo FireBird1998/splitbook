@@ -232,3 +232,6 @@ export const assistantGroupsPath = () => '/api/user/assistant-groups';
 
 /** Shared web/app-link destination for a Group's To review. */
 export const toReviewHref = (groupId: string) => `/groups/${segment(groupId)}/review`;
+
+/** Member-level Group header preference (#1201). */
+export const groupHeaderPath = (groupId: string) => `${groupPath(groupId)}/header`;
