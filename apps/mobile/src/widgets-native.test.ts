@@ -1,3 +1,4 @@
+import { widgetDimensions } from './test-utils/widget-size';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
 import type { WidgetCopy } from '@splitbook/shared/balances-widget';
@@ -184,7 +185,7 @@ async function drawn(store: ReturnType<typeof createWidgetsStore>) {
       session,
       drawTime,
     ),
-    group: groupWidget(part, placedGroup, '4x2', session, drawTime),
+    group: groupWidget(part, placedGroup, widgetDimensions('4x2'), session, drawTime),
     quick: quickWidget(copy, placedQuick, '2x1', session),
   };
 }
@@ -296,7 +297,7 @@ it('draws no previous account’s final balance, people or To review count after
     const samView = groupWidget(
       record.copy?.groups?.maple,
       { ...placedGroup, accountId: 'sam' },
-      '4x2',
+      widgetDimensions('4x2'),
       record.session,
       drawTime,
     );

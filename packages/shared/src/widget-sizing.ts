@@ -18,9 +18,12 @@ export interface WidgetSection {
 export function fitWidgetSections(height: number, sections: readonly WidgetSection[], gap = 8) {
   const chosen = sections.map((section) => (section.required ? section.rows : 0));
   const cost = (index: number) => {
-    const section = sections[index], rows = chosen[index];
+    const section = sections[index],
+      rows = chosen[index];
     return rows
-      ? rows * section.rowHeight + (section.inset ?? 0) + (rows < section.rows ? section.moreHeight ?? 0 : 0)
+      ? rows * section.rowHeight +
+          (section.inset ?? 0) +
+          (rows < section.rows ? (section.moreHeight ?? 0) : 0)
       : 0;
   };
   const used = () => {
@@ -30,26 +33,49 @@ export function fitWidgetSections(height: number, sections: readonly WidgetSecti
   for (const [index, section] of sections.entries()) {
     if (section.required || !section.rows) continue;
     chosen[index] = 1;
-    if (used() > height) chosen[index] = 0;
+    if (used() > height) {
+      chosen[index] = 0;
+      break;
+    }
   }
   for (const [index, section] of sections.entries()) {
     if (section.required || !chosen[index]) continue;
     while (chosen[index] < section.rows) {
       chosen[index]++;
-      if (used() > height) { chosen[index]--; break; }
+      if (used() > height) {
+        chosen[index]--;
+        break;
+      }
     }
   }
   const spare = Math.max(0, height - used());
-  const growing = sections.reduce((sum, section, index) => sum + (section.grow ? chosen[index] : 0), 0);
-  const last = chosen.findLastIndex((rows) => rows > 0);
+  const growing = sections.reduce(
+    (sum, section, index) => sum + (section.grow ? chosen[index] : 0),
+    0,
+  );
+  const last = chosen.reduce((last, rows, index) => (rows > 0 ? index : last), -1);
   return {
     gap,
-    sections: sections.flatMap((section, index) => chosen[index] ? [{
-      id: section.id,
-      rows: chosen[index],
-      more: section.rows - chosen[index],
-      height: cost(index) + (growing ? section.grow ? spare * chosen[index] / growing : 0 : index === last ? spare : 0),
-      rowHeight: section.rowHeight + (section.grow && growing ? spare / growing : 0),
-    }] : []),
+    sections: sections.flatMap((section, index) =>
+      chosen[index]
+        ? [
+            {
+              id: section.id,
+              rows: chosen[index],
+              more: section.rows - chosen[index],
+              height:
+                cost(index) +
+                (growing
+                  ? section.grow
+                    ? (spare * chosen[index]) / growing
+                    : 0
+                  : index === last
+                    ? spare
+                    : 0),
+              rowHeight: section.rowHeight + (section.grow && growing ? spare / growing : 0),
+            },
+          ]
+        : [],
+    ),
   };
 }

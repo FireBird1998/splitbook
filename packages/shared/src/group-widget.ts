@@ -1,4 +1,5 @@
-import { groupLayout } from './widget-layout';
+import { fitWidgetSections, type WidgetDimensions, type WidgetSection } from './widget-sizing';
+import { widgetTextLevel } from './widget-layout';
 import { widgetSummary } from './widget-accessibility';
 import { formatCurrency, getCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
@@ -34,14 +35,11 @@ export interface WidgetGroupPart {
     }[];
   }[];
 }
-export type GroupWidgetSize = '2x2' | '4x2' | '4x3';
 function groupWidgetView(
   part: WidgetGroupPart | null | undefined,
   setup: GroupWidgetSetup,
-  size: GroupWidgetSize,
   session: WidgetSession,
   now: number,
-  fontScale = 1,
 ) {
   const empty = {
     state: 'no-copy',
@@ -55,6 +53,7 @@ function groupWidgetView(
     payments: [] as {
       label: string;
       amount: string;
+      currency: string;
       firstName: string;
       initials: string;
       incoming: boolean;
@@ -159,8 +158,7 @@ function groupWidgetView(
         };
       }),
   );
-  const bucket = currencies[0],
-    limit = groupLayout(size, fontScale).paymentLines;
+  const bucket = currencies[0];
   const allSquare = currencies.every((bucket) => bucket.balanceMinor === 0);
   const age = Math.min(part.verifiedAt, part.balancesVerifiedAt),
     muted = now - age > 86400000;
@@ -206,20 +204,16 @@ function groupWidgetView(
         ? 'Nothing more can be saved here.'
         : '',
     balance: balanceText + (part.archived ? `${SEPARATOR}final` : ''),
-    payments: own
-      .slice(0, limit)
-      .map(({ label, amount, firstName, initials, incoming, payment }) => ({
-        label,
-        amount,
-        firstName,
-        initials,
-        incoming,
-        payment,
-      })),
-    more:
-      size !== '2x2' && own.length > limit
-        ? `+${counted(own.length - limit, 'more', 'more')}${SEPARATOR}${[...new Set(own.slice(limit).map((p) => getCurrency(p.currency)?.symbol ?? p.currency))].join(', ')}`
-        : null,
+    payments: own.map(({ label, amount, currency, firstName, initials, incoming, payment }) => ({
+      label,
+      amount,
+      currency,
+      firstName,
+      initials,
+      incoming,
+      payment,
+    })),
+    more: null as string | null,
     people: own.length
       ? `${bucket?.balanceMinor && bucket.balanceMinor < 0 ? 'to' : 'from'} ${counted(new Set(own.map((p) => p.person)).size, 'person', 'people')}`
       : null,
@@ -251,24 +245,268 @@ function spokenPayments(payments: ReturnType<typeof groupWidgetView>['payments']
   });
 }
 
-function groupWidgetProjection(...args: Parameters<typeof groupWidgetView>) {
-  const view = groupWidgetView(...args);
-  const full = args[5] ? groupWidgetView(args[0], args[1], args[2], args[3], args[4]) : view;
+/** Dimensions are dp; text grows with Android while spacing stays fixed. */
+function groupLayout(
+  view: ReturnType<typeof groupWidgetView>,
+  size: WidgetDimensions,
+  scale: number,
+) {
+  const level = widgetTextLevel(scale),
+    padding = 14,
+    gap = 8;
+  const width = Math.max(1, size.width - padding * 2),
+    height = Math.max(1, size.height - padding * 2);
+  const compact = size.width / Math.max(1, scale) < 240;
+  let factor = 1;
+  const line = (font: number) => Math.ceil(font * factor * scale * 1.3);
+  const words = (value: string, font: number, room = width) => {
+    const result: string[] = [];
+    for (const word of value.split(/\s+/)) {
+      const previous = result.at(-1);
+      if (previous && (previous.length + word.length + 1) * font * factor * scale * 0.62 <= room)
+        result[result.length - 1] = previous + ' ' + word;
+      else result.push(word);
+    }
+    return result;
+  };
+  const make = (optional: boolean) => {
+    const showSaved = optional && level === 0,
+      showTile = optional && level < 2;
+    const money = Math.min(
+      18,
+      width / Math.max(1, (view.compactAmount?.length ?? 1) * scale * 0.64),
+    );
+    const actionFont = compact && level === 2 ? 10 : 12;
+    const actionLabel =
+      view.target === 'setup'
+        ? view.action
+        : view.target === 'sign-in'
+          ? 'Sign in'
+          : view.addExpense
+            ? compact && level === 2
+              ? 'Add expense'
+              : '＋ Add expense'
+            : null;
+    const actionLines = actionLabel
+      ? words(actionLabel, actionFont, width - (compact && level === 2 ? 12 : 24))
+      : [];
+    const showStateTile = showTile && ['lost-access', 'expired', 'signed-out'].includes(view.state);
+    const titleLines = view.title
+      ? words(view.title, compact ? 13 : 15, width - (showStateTile ? 60 : 0))
+      : [];
+    const descriptionLines = words(view.description, compact ? 10 : 12);
+    const headerHeight = view.name
+      ? line(13) + (compact ? (showSaved ? line(9) + 3 : 0) : line(11) + 3)
+      : 0;
+    const balanceLabelLines = words(
+      (view.compactLabel ?? '') + (view.final ? SEPARATOR + 'final' : ''),
+      11,
+    );
+    const balanceLines = words(view.balance, 14);
+    const showCurrencyOverflow = optional && level === 0 && !!view.currencyOverflow;
+    const balanceHeight =
+      view.name && compact
+        ? view.compactAmount
+          ? balanceLabelLines.length * line(11) +
+            line(money) +
+            4 +
+            (showCurrencyOverflow ? line(10) + 4 : 0)
+          : balanceLines.length * line(14)
+        : 0;
+    const rowHeight = level === 1 ? line(12) + line(13) + 16 : Math.max(38, line(13) + 14);
+    const sections: WidgetSection[] = [
+      ...(view.name ? [{ id: 'header', rows: 1, rowHeight: headerHeight, required: true }] : []),
+      ...(balanceHeight
+        ? [
+            {
+              id: 'balance',
+              rows: 1,
+              rowHeight: balanceHeight,
+              required: true,
+              grow: !view.payments.length,
+            },
+          ]
+        : []),
+      ...(view.title
+        ? [
+            {
+              id: 'title',
+              rows: 1,
+              rowHeight: Math.max(
+                titleLines.length * line(compact ? 13 : 15),
+                showStateTile ? 48 : 0,
+              ),
+              required: true,
+              grow: true,
+            },
+          ]
+        : []),
+      ...(view.state === 'loading' ? [{ id: 'loading', rows: 3, rowHeight: 24, grow: true }] : []),
+      ...(view.payments.length &&
+      view.payments.every((p) => p.amount.length * 13 * scale * 0.64 < width - (compact ? 40 : 100))
+        ? [{ id: 'payments', rows: view.payments.length, rowHeight, inset: 8, grow: true }]
+        : []),
+      ...(view.hidden && level < 2
+        ? [{ id: 'hidden', rows: 1, rowHeight: line(10) + 6, grow: true }]
+        : []),
+      ...(view.description && optional && level < 2
+        ? [
+            {
+              id: 'description',
+              rows: 1,
+              rowHeight: descriptionLines.length * line(compact ? 10 : 12),
+              grow: true,
+            },
+          ]
+        : []),
+      ...(actionLabel
+        ? [
+            {
+              id: 'action',
+              rows: 1,
+              rowHeight: actionLines.length * line(actionFont) + 18,
+              required: true,
+            },
+          ]
+        : []),
+    ];
+    return {
+      showSaved,
+      showTile,
+      showStateTile,
+      money,
+      actionFont,
+      actionLines,
+      titleLines,
+      descriptionLines,
+      balanceLabelLines,
+      balanceLines,
+      showCurrencyOverflow,
+      sections,
+    };
+  };
+  let settings = make(true);
+  const required = () => {
+    const rows = settings.sections.filter((s) => s.required);
+    return rows.reduce((sum, s) => sum + s.rowHeight, 0) + Math.max(0, rows.length - 1) * gap;
+  };
+  // Optional content is removed before the last resort of fitting indispensable text.
+  if (required() > height) settings = make(false);
+  while (required() > height && factor > 0.25) {
+    factor *= 0.9;
+    settings = make(false);
+  }
+  let plan = fitWidgetSections(height, settings.sections, gap);
+  let paymentLines = plan.sections.find((s) => s.id === 'payments')?.rows ?? 0;
+  if (paymentLines && paymentLines < view.payments.length) {
+    const action = settings.sections.find((s) => s.id === 'action');
+    const extra = compact ? line(10) + 4 : 0;
+    if (action) action.rowHeight += extra;
+    if (!action)
+      settings.sections.push({ id: 'more', rows: 1, rowHeight: line(10), required: true });
+    plan = fitWidgetSections(height, settings.sections, gap);
+    paymentLines = plan.sections.find((s) => s.id === 'payments')?.rows ?? 0;
+    if (!paymentLines && action) action.rowHeight -= extra;
+  }
+  if (compact && !paymentLines && view.people && level < 2) {
+    settings.sections.splice(settings.sections.length - 1, 0, {
+      id: 'people',
+      rows: 1,
+      rowHeight: line(11),
+      grow: true,
+    });
+    plan = fitWidgetSections(
+      height,
+      settings.sections.filter((s) => s.id !== 'payments'),
+      gap,
+    );
+  }
+  const present = (id: string) => plan.sections.some((s) => s.id === id);
   return {
-    ...view,
-    layout: groupLayout(args[2], args[5] ?? 1),
+    ...plan,
+    padding,
+    compact,
+    width,
+    scale,
+    paymentLines,
+    showTile: settings.showTile,
+    showStateTile: settings.showStateTile,
+    showSaved: settings.showSaved,
+    showDescription: level < 2 && (!compact || level === 0),
+    showPeople: present('people'),
+    showPrivacyLabel: present('hidden'),
+    showMore: paymentLines > 0 && paymentLines < view.payments.length,
+    stackPayments: level === 1,
+    stackHeader: level > 0,
+    actionFontSize: settings.actionFont * factor,
+    actionPaddingHorizontal: compact && level === 2 ? 6 : 12,
+    showCurrencyOverflow: settings.showCurrencyOverflow,
+    balanceLabelLines: settings.balanceLabelLines,
+    balanceLines: settings.balanceLines,
+    moneyFontSize: settings.money * factor,
+    nameFontSize: 13 * factor,
+    textFactor: factor,
+    actionLines: settings.actionLines,
+    titleLines: settings.titleLines,
+    descriptionLines: settings.descriptionLines,
+  };
+}
+
+function projectGroupWidget(
+  part: WidgetGroupPart | null | undefined,
+  setup: GroupWidgetSetup,
+  size: WidgetDimensions,
+  session: WidgetSession,
+  now: number,
+  fontScale = 1,
+) {
+  let full: ReturnType<typeof groupWidgetView>;
+  try {
+    full = groupWidgetView(part, setup, session, now);
+  } catch {
+    // Damaged saved data must not prevent Android drawing the widget or erase its setup.
+    full = groupWidgetView(undefined, setup, session, now);
+  }
+  const layout = groupLayout(full, size, fontScale);
+  const limit = layout.paymentLines;
+  const omitted = full.payments.slice(limit);
+  const more =
+    omitted.length && (size.width >= 280 || limit > 0)
+      ? `+${counted(omitted.length, 'more', 'more')}${SEPARATOR}${[
+          ...new Set(
+            omitted
+              .map((p) => p.currency)
+              .filter(Boolean)
+              .map((code) => getCurrency(code!)?.symbol ?? code),
+          ),
+        ].join(', ')}`
+      : null;
+  return {
+    ...full,
+    layout,
+    more,
+    payments: full.payments
+      .slice(0, limit)
+      .map((p) => ({
+        ...p,
+        displayLabel: layout.compact
+          ? p.incoming
+            ? `${p.firstName} pays you`
+            : `Pay ${p.firstName}`
+          : p.label,
+      })),
     summary: widgetSummary([
       'Group',
       full.state === 'loading' ? 'Loading' : null,
       full.name,
       full.title,
       full.balance,
-      args[2] === '2x2' && full.currencyOverflow
+      size.width < 280 && full.currencyOverflow
         ? `${full.compactLabel} ${full.compactAmount}`
         : null,
-      args[2] === '2x2' ? full.people : null,
+      size.width < 280 ? full.people : null,
+      // Speech keeps every saved payment, including rows omitted at this size (Large text board).
       ...spokenPayments(full.payments),
-      full.more,
       full.hidden ? null : full.description,
       full.saved,
       full.hidden,
@@ -277,11 +515,10 @@ function groupWidgetProjection(...args: Parameters<typeof groupWidgetView>) {
   };
 }
 
-export function groupWidget(...args: Parameters<typeof groupWidgetView>) {
+export function groupWidget(...args: Parameters<typeof projectGroupWidget>) {
   try {
-    return groupWidgetProjection(...args);
+    return projectGroupWidget(...args);
   } catch {
-    // Damaged saved data must not prevent Android drawing the widget or erase its setup.
-    return groupWidgetProjection(undefined, args[1], args[2], args[3], args[4], args[5]);
+    return projectGroupWidget(undefined, args[1], args[2], args[3], args[4], args[5]);
   }
 }

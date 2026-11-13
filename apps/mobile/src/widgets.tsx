@@ -53,7 +53,7 @@ async function representation(info: WidgetInfo) {
             groupId: '',
             accountId: '',
           };
-    const size = info.width < 280 ? '2x2' : info.height >= 260 ? '4x3' : '4x2';
+    const size = { width: info.width, height: info.height };
     return {
       light: drawGroup(
         record.copy,

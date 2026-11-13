@@ -239,7 +239,7 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
         `<?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
  android:minWidth="250dp" android:minHeight="110dp" android:targetCellWidth="4" android:targetCellHeight="2"
- android:minResizeWidth="110dp" android:minResizeHeight="110dp" android:maxResizeWidth="640dp" android:maxResizeHeight="420dp"
+ android:minResizeWidth="110dp" android:minResizeHeight="110dp" android:maxResizeWidth="640dp" android:maxResizeHeight="640dp"
  android:resizeMode="horizontal|vertical" android:description="@string/widget_group_description"
  android:initialLayout="@layout/rn_widget" android:previewImage="@drawable/widget_group_preview"
  android:configure="${config.android.package}.widget.GroupConfiguration" android:widgetFeatures="reconfigurable"

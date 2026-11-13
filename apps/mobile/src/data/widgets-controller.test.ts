@@ -1,3 +1,4 @@
+import { widgetDimensions } from '../test-utils/widget-size';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MobileController } from './mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
@@ -708,7 +709,13 @@ it('keeps the last Group balance as final when an authoritative read says it is 
   const session = { status: 'authenticated' as const, accountId: alex.id, loading: false };
   const setup = { widgetId: 7, accountId: alex.id, groupId };
   expect(
-    groupWidget(copy.groups![groupId], { ...setup, kind: 'group' }, '4x2', session, verified),
+    groupWidget(
+      copy.groups![groupId],
+      { ...setup, kind: 'group' },
+      widgetDimensions('4x2'),
+      session,
+      verified,
+    ),
   ).toMatchObject({ state: 'archived', final: true, addExpense: false });
   expect(quickWidget(copy, { ...setup, kind: 'quick' }, '2x1', session)).toMatchObject({
     state: 'archived',
@@ -752,7 +759,9 @@ it('stores first names and two initials so members with the same first name rema
   expect(JSON.stringify(part)).not.toMatch(/Rivera|Shah|Kapoor/);
   const session = { status: 'authenticated' as const, accountId: alex.id, loading: false };
   const setup = { kind: 'group' as const, widgetId: 7, accountId: alex.id, groupId };
-  expect(groupWidget(part, setup, '4x2', session, verified).payments).toMatchObject([
+  expect(
+    groupWidget(part, setup, widgetDimensions('4x2'), session, verified).payments,
+  ).toMatchObject([
     { firstName: 'Priya', initials: 'PS' },
     { firstName: 'Priya', initials: 'PK' },
   ]);
