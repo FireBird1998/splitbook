@@ -1293,11 +1293,13 @@ it.each(['sign out', 'account change', '401'] as const)(
 );
 
 it('a fresh Group read replaces active Tags, removing archived and deleted Tags', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(verified);
   const f = fixture(),
     c = f.make();
   await c.signIn('alex');
   await c.openGroup(groupId, false);
   await vi.waitFor(() => expect(f.storedCopy()?.tags?.[groupId]?.rows).toHaveLength(1));
+  clock.mockReturnValue(verified + 1000);
   f.groupTags([
     { _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: true },
   ]);
