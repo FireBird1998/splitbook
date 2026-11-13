@@ -218,7 +218,7 @@ export function drawGroup(
         height: 'match_parent',
         flexDirection: l.compact ? 'column' : 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: l.compact ? 'flex-start' : 'space-between',
         flexGap: 4,
       }}
     >
@@ -229,9 +229,9 @@ export function drawGroup(
         >
           {text(view.more, t.brand.main, 10, true)}
         </FlexWidget>
-      ) : (
+      ) : !l.compact ? (
         <FlexWidget style={{ flex: 1 }} />
-      )}
+      ) : null}
       <FlexWidget
         clickAction="OPEN_URI"
         clickActionData={action(buttonTarget)}
