@@ -22,7 +22,7 @@ async function representation(info: WidgetInfo) {
       setup?.kind === 'quick'
         ? setup
         : { kind: 'quick' as const, widgetId: info.widgetId, groupId: null, accountId: '' };
-    const size = info.width < 160 ? '1x1' : '2x1';
+    const size = { width: info.width, height: info.height, pixelRatio: info.screenInfo.density };
     return {
       light: drawQuick(
         record.copy,
@@ -134,12 +134,13 @@ export function registerAndroidWidgets() {
         }
       }
       // WorkManager captures bounds before queuing an event. A later resize can overtake
-      // it, while native drawing already uses the current bounds: project Group from those
-      // same current dimensions, not the earlier event's. Fixed-size widgets stay unchanged.
+      // it, while native drawing already uses the current bounds: project resizable widgets from those
+      // same current dimensions, not the earlier event's.
       const currentInfo =
-        widgetInfo.widgetName === 'Group'
-          ? ((await getWidgetInfo('Group')).find((info) => info.widgetId === widgetInfo.widgetId) ??
-            widgetInfo)
+        widgetInfo.widgetName === 'Group' || widgetInfo.widgetName === 'Quick'
+          ? ((await getWidgetInfo(widgetInfo.widgetName)).find(
+              (info) => info.widgetId === widgetInfo.widgetId,
+            ) ?? widgetInfo)
           : widgetInfo;
       if (currentInfo) renderWidget(await representation(currentInfo));
     });

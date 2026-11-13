@@ -2738,7 +2738,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 ? snapshot.screen === 'create'
                 : typeof target !== 'string' && target.kind === 'expense'
                   ? snapshot.screen === 'expense' && snapshot.expense.groupId === target.groupId
-                  : typeof target !== 'string' && target.kind === 'settle'
+                  : typeof target !== 'string' &&
+                      (target.kind === 'settle' || target.kind === 'record-payment')
                     ? snapshot.screen === 'settlement' &&
                       snapshot.settlement.groupId === target.groupId
                     : false;
@@ -8239,6 +8240,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       else {
         await openGroup(target.groupId, false, 'balances');
         if (!owns() || heldTaskProtected()) return;
+        if (
+          target.kind === 'record-payment' &&
+          snapshot.detail.status === 'ready' &&
+          snapshot.detail.data?.id === target.groupId &&
+          !snapshot.detail.data.isArchived
+        )
+          await openSettlements(target.groupId);
         if (
           target.kind === 'settle' &&
           target.payment &&

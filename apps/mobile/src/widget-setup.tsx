@@ -35,7 +35,12 @@ import { redrawBalances } from './widgets';
 
 const pendingChoices = new Map<
   number,
-  { accountId: string | null; groupId: string | null; hideAmounts: boolean }
+  {
+    accountId: string | null;
+    groupId: string | null;
+    hideAmounts: boolean;
+    mode?: 'expense' | 'payment';
+  }
 >();
 const store = createWidgetsStore(widgetKey(mobileBuildSettings, __DEV__));
 /** Android configuration is deliberately independent of runtime.ts and its session/network reads. */
@@ -54,6 +59,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
   );
   const [selected, setSelected] = useState<string | null>(null),
     [hideAmounts, setHideAmounts] = useState(false),
+    [mode, setMode] = useState<'expense' | 'payment'>('expense'),
     [error, setError] = useState(''),
     [buttonLabel, setButtonLabel] = useState<'Save' | 'Add widget'>('Add widget');
   const cancel = () => {
@@ -84,6 +90,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                 );
           setSelected(quick ? (restored.groupId ?? 'ask') : restored.groupId);
           setHideAmounts(restored.hideAmounts);
+          setMode(restored.mode ?? 'expense');
         }
       })
       .catch(() => setError('Could not read saved Groups. Open Splitbook and try again.'));
@@ -101,7 +108,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
     record?.session.status === 'authenticated' &&
     record.copy?.accountId === record.session.accountId;
   const groups = signedIn ? (record.copy?.savedGroups?.rows.filter((g) => !g.archived) ?? []) : [];
-  const blocked = !balances && (!signedIn || (!quick && !groups.length));
+  const blocked = !balances && (!signedIn || ((!quick || mode === 'payment') && !groups.length));
   const copy = (value: string, bold = false, size = 14, color = t.text) => (
     <Text
       style={{
@@ -121,7 +128,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
         (latest.session.status !== 'authenticated' ||
           latest.copy?.accountId !== latest.session.accountId ||
           latest.session.accountId !== record?.copy?.accountId ||
-          (!(quick && selected === 'ask') &&
+          (!(quick && mode !== 'payment' && selected === 'ask') &&
             !latest.copy.savedGroups?.rows.some((g) => g.id === selected && !g.archived)))
       ) {
         setRecord(latest);
@@ -138,6 +145,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                 accountId:
                   latest.session.status === 'authenticated' ? latest.session.accountId : '',
                 groupId: selected === 'ask' ? null : selected!,
+                ...(mode === 'payment' ? { mode } : {}),
               }
             : {
                 kind: 'group',
@@ -169,7 +177,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
           </Pressable>
           <View style={{ flex: 1 }}>
             {copy(
-              balances ? 'Balances widget' : quick ? 'Add expense widget' : 'Group widget',
+              balances ? 'Balances widget' : quick ? 'Quick actions widget' : 'Group widget',
               true,
               22,
             )}
@@ -222,16 +230,83 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
               balances
                 ? 'What you owe and are owed across your Groups.'
                 : quick
-                  ? 'Choose where this widget starts an Expense.'
+                  ? 'Choose what this widget does, and where.'
                   : 'Choose the Group this widget shows.',
               false,
               16,
               t.textSecondary,
             )}
+            {quick ? (
+              <>
+                {copy('WHAT IT DOES', true, 12, t.textSecondary)}
+                <View
+                  style={{
+                    backgroundColor: t.surface,
+                    borderRadius: 18,
+                    borderWidth: 1,
+                    borderColor: t.border,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {(['expense', 'payment'] as const).map((value) => (
+                    <Pressable
+                      key={value}
+                      accessibilityRole="radio"
+                      accessibilityLabel={value === 'expense' ? 'Add expense' : 'Record payment'}
+                      accessibilityState={{ checked: mode === value }}
+                      onPress={() => {
+                        const groupId =
+                          value === 'payment' && (!selected || selected === 'ask')
+                            ? (groups[0]?.id ?? null)
+                            : selected;
+                        setMode(value);
+                        setSelected(value === 'expense' ? (groupId ?? 'ask') : groupId);
+                        pendingChoices.set(widgetInfo.widgetId, {
+                          accountId: record!.copy!.accountId,
+                          groupId,
+                          hideAmounts: false,
+                          mode: value,
+                        });
+                      }}
+                      style={{
+                        padding: 16,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 14,
+                        borderBottomWidth: 1,
+                        borderBottomColor: t.border,
+                      }}
+                    >
+                      <Ionicons
+                        name={value === 'expense' ? 'add-outline' : 'swap-horizontal-outline'}
+                        size={24}
+                        color={t.brand.main}
+                      />
+                      <View style={{ flex: 1, gap: 4 }}>
+                        {copy(value === 'expense' ? 'Add expense' : 'Record payment', true, 16)}
+                        {copy(
+                          value === 'expense'
+                            ? 'Opens the Expense form'
+                            : 'Opens Settle up, on Record payment',
+                          false,
+                          12,
+                          t.textSecondary,
+                        )}
+                      </View>
+                      <Ionicons
+                        name={mode === value ? 'radio-button-on' : 'radio-button-off'}
+                        size={24}
+                        color={t.brand.main}
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            ) : null}
             {!balances ? (
               <>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  {copy('YOUR GROUPS', true, 12, t.textSecondary)}
+                  {copy(quick ? 'WHERE' : 'YOUR GROUPS', true, 12, t.textSecondary)}
                   {copy(
                     record!.copy!.savedGroups
                       ? widgetSavedTime(record!.copy!.savedGroups.verifiedAt, Date.now())
@@ -250,7 +325,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                     overflow: 'hidden',
                   }}
                 >
-                  {quick ? (
+                  {quick && mode === 'expense' ? (
                     <Pressable
                       accessibilityRole="radio"
                       accessibilityState={{ checked: selected === 'ask' }}
@@ -259,6 +334,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                         setSelected('ask');
                         pendingChoices.set(widgetInfo.widgetId, {
                           groupId: 'ask',
+                          mode,
                           accountId: record!.copy!.accountId,
                           hideAmounts: false,
                         });
@@ -298,6 +374,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                         setSelected(group.id);
                         pendingChoices.set(widgetInfo.widgetId, {
                           groupId: group.id,
+                          mode,
                           accountId: record!.copy!.accountId,
                           hideAmounts,
                         });

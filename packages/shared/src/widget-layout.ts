@@ -31,13 +31,3 @@ export function balancesLayout(
     stateTitleSize: small ? (level === 2 ? 10 : 12) : 14,
   };
 }
-export function quickLayout(size: '1x1' | '2x1', scale: number, normal: boolean) {
-  const level = widgetTextLevel(scale),
-    small = size === '1x1';
-  return {
-    showTitle: small ? !normal && !level : normal ? level < 2 : true,
-    showSubtitle: !small && (normal || !level),
-    showTile: small || normal || level < 2,
-    subtitleMaxLines: 2,
-  };
-}

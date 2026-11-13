@@ -86,9 +86,9 @@ it.each(['signed-out', 'expired'] as const)(
   },
 );
 it('names the Group in the icon-only Add expense summary', () => {
-  expect(quickWidget(copy, { ...setup, kind: 'quick' }, '1x1', auth).summary).toBe(
-    'Add expense in Maple House',
-  );
+  expect(
+    quickWidget(copy, { ...setup, kind: 'quick' }, { width: 78, height: 104 }, auth).summary,
+  ).toBe('Add expense in Maple House');
 });
 
 it.each(['2x1', '2x2', '4x2'] as const)(
@@ -161,22 +161,46 @@ it.each(['1x1', '2x1'] as const)(
   (size) => {
     const quick = { ...setup, kind: 'quick' as const };
     for (const status of ['signed-out', 'expired'] as const) {
-      const v = quickWidget(copy, quick, size, { status });
+      const v = quickWidget(
+        copy,
+        quick,
+        size === '1x1' ? { width: 78, height: 104 } : { width: 172, height: 104 },
+        { status },
+      );
       expect(v.summary).toContain('Sign in');
       expect(v.summary).not.toContain('Maple');
     }
-    expect(quickWidget(copy, { ...quick, groupId: null }, size, auth).summary).toContain(
-      'Choose a Group',
-    );
-    expect(quickWidget(copy, quick, size, { ...auth, accountId: 'sam' }).summary).toBe(
-      'Set up again. Another account',
-    );
-    expect(quickWidget({ ...copy, lostGroupIds: ['maple'] }, quick, size, auth).summary).toBe(
-      'Not in this Group. Choose a Group',
-    );
     expect(
-      quickWidget({ ...copy, groups: { maple: { ...part, archived: true } } }, quick, size, auth)
-        .summary,
+      quickWidget(
+        copy,
+        { ...quick, groupId: null },
+        size === '1x1' ? { width: 78, height: 104 } : { width: 172, height: 104 },
+        auth,
+      ).summary,
+    ).toContain('Choose a Group');
+    expect(
+      quickWidget(
+        copy,
+        quick,
+        size === '1x1' ? { width: 78, height: 104 } : { width: 172, height: 104 },
+        { ...auth, accountId: 'sam' },
+      ).summary,
+    ).toBe('Set up again. Another account');
+    expect(
+      quickWidget(
+        { ...copy, lostGroupIds: ['maple'] },
+        quick,
+        size === '1x1' ? { width: 78, height: 104 } : { width: 172, height: 104 },
+        auth,
+      ).summary,
+    ).toBe('Not in this Group. Choose a Group');
+    expect(
+      quickWidget(
+        { ...copy, groups: { maple: { ...part, archived: true } } },
+        quick,
+        size === '1x1' ? { width: 78, height: 104 } : { width: 172, height: 104 },
+        auth,
+      ).summary,
     ).toBe('Group archived. Choose another');
   },
 );

@@ -1,9 +1,9 @@
+import type { QuickWidgetSetup } from './quick-widget';
 import type { GroupWidgetSetup } from './group-widget';
 export type WidgetSetupRecord =
   | GroupWidgetSetup
   | { kind: 'balances'; widgetId: number; hideAmounts?: boolean }
-  // The Add expense provider lands separately. Keep its current target at this setup seam.
-  | { kind: 'quick'; widgetId: number; accountId: string; groupId: string | null };
+  | QuickWidgetSetup;
 export function widgetSetupChoices(
   kind: WidgetSetupRecord['kind'],
   saved: WidgetSetupRecord | null,
@@ -20,6 +20,9 @@ export function widgetSetupChoices(
           : kind === 'quick'
             ? null
             : firstGroupId,
+    ...(current?.kind === 'quick' && current.accountId === accountId && current.mode === 'payment'
+      ? { mode: 'payment' as const }
+      : {}),
     hideAmounts: current && 'hideAmounts' in current ? current.hideAmounts === true : false,
   };
 }

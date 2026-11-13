@@ -1549,6 +1549,7 @@ function GroupScreen() {
           onChange={controller.updateSettlement}
           onLeaveField={controller.touchSettlementField}
           onAcknowledge={controller.acknowledgeSettlement}
+          onSelect={controller.selectSettlement}
           onRecord={() => void controller.recordSettlement()}
           onRetry={() => void controller.retrySettlementCheck()}
           onChoosePaidCurrency={(currency) => void controller.choosePaidCurrency(currency)}

@@ -1968,3 +1968,38 @@ describe('a Suggested payment to a name wider than its row (#921)', () => {
     },
   );
 });
+
+it('an empty Record payment entry offers payments without selecting one, or says there is nothing to pay', () => {
+  const select = vi.fn();
+  const props = {
+    visible: true,
+    currentUserId: you,
+    today: 'Today',
+    now: at,
+    onChange: vi.fn(),
+    onLeaveField: vi.fn(),
+    onAcknowledge: vi.fn(),
+    onRecord: vi.fn(),
+    onRetry: vi.fn(),
+    onClose: vi.fn(),
+    onSelect: select,
+  };
+  const root = render(
+    <RecordPaymentSheet
+      {...props}
+      state={{ ...emptySettlement(), status: 'ready', group: group(), balances: [inr] }}
+    />,
+  );
+  const choice = labelled(root, 'You pay Sam Chen ₹1,060.00')[0];
+  expect(choice).toBeDefined();
+  expect(select).not.toHaveBeenCalled();
+  act(() => choice.props.onPress());
+  expect(select).toHaveBeenCalledExactlyOnceWith(you, sam, 'INR');
+  const square = render(
+    <RecordPaymentSheet
+      {...props}
+      state={{ ...emptySettlement(), status: 'ready', group: group(), balances: [] }}
+    />,
+  );
+  expect(text(square)).toContain('Nothing to pay');
+});

@@ -43,8 +43,14 @@ export function widgetLinkTarget(url: string): WidgetTarget | null {
         groupId: payment[1],
         payment: { from: payment[2], to: payment[3], currency: payment[4] },
       };
-    const group = /^\/group\/([a-f0-9]{24})\/(group|settle|expense)$/.exec(parsed.pathname);
-    if (group) return { kind: group[2] as 'group' | 'settle' | 'expense', groupId: group[1] };
+    const group = /^\/group\/([a-f0-9]{24})\/(group|settle|expense|record-payment)$/.exec(
+      parsed.pathname,
+    );
+    if (group)
+      return {
+        kind: group[2] as 'group' | 'settle' | 'expense' | 'record-payment',
+        groupId: group[1],
+      };
     const setup = /^\/setup\/([1-9][0-9]*)$/.exec(parsed.pathname);
     if (setup && Number.isSafeInteger(Number(setup[1])))
       return { kind: 'setup', widgetId: Number(setup[1]) };

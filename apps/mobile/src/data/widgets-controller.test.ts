@@ -601,89 +601,98 @@ it('holds a widget tap during Add expense and offers it after close without chan
   });
 });
 
-it.each([
-  'Add expense',
-  'edit',
-  'payment',
-  'To review',
-  'Group form',
-  'Tags',
-  'Currencies',
-  'Leave Group',
-] as const)('holds a widget tap with the entire protected %s task unchanged', async (task) => {
-  vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
-  const f = fixture(),
-    c = f.make();
-  await c.signIn('alex');
-  await c.openGroup(groupId);
-  if (task === 'Add expense') {
-    await c.openExpense(groupId);
-    await c.updateExpenseDraft({ description: 'Unfinished', amount: '123', tagId });
-  }
-  if (task === 'edit') {
-    await c.openExpense(groupId, 'c00000000000000000000001');
-    await c.editExpense();
-    await c.updateExpenseDraft({ description: 'Unfinished edit' });
-    expect(c.getSnapshot().expense.status, c.getSnapshot().expense.message ?? '').toBe('editing');
-  }
-  if (task === 'payment') {
-    f.groupBalances({
-      byCurrency: [
-        {
-          currency: 'INR',
-          balances: [
-            { user: { _id: alex.id, name: alex.name }, balance: -100 },
-            { user: { _id: sam.id, name: sam.name }, balance: 100 },
-          ],
-          debts: [
-            {
-              from: { _id: alex.id, name: alex.name },
-              to: { _id: sam.id, name: sam.name },
-              amount: 100,
-            },
-          ],
-        },
-      ],
-    });
-    await c.selectDestination('balances');
-    await c.openRecordPayment(alex.id, sam.id, 'INR');
-    expect(c.getSnapshot().screen).toBe('settlement');
-  }
-  if (task === 'To review') await c.openToReview(groupId);
-  if (task === 'Group form') {
-    c.startCreate();
-    c.updateCreation({ name: 'Unfinished Group' });
-  }
-  if (task === 'Tags') c.openTags(groupId);
-  if (task === 'Currencies') await c.openCurrencies(groupId);
-  if (task === 'Leave Group') {
-    c.openMembers();
-    await c.reviewLeaveGroup();
-  }
-  const before = c.getSnapshot();
-  expect(notificationTaskProtected(before)).toBe(true);
-  const count = f.requests.length;
-  await c.openWidget('home');
-  const after = c.getSnapshot();
-  expect(after.screen).toBe(before.screen);
-  expect(after.detail).toBe(before.detail);
-  for (const key of [
-    'expense',
-    'settlement',
-    'creation',
-    'toReview',
-    'tagManager',
-    'groupCurrencies',
-    'leave',
-  ] as const)
-    expect(after[key]).toBe(before[key]);
-  expect(after.tagsOpenFor).toBe(before.tagsOpenFor);
-  expect(after.currenciesOpenFor).toBe(before.currenciesOpenFor);
-  expect(after.notificationOpening.status).toBe('held');
-  expect(after.heldNotificationNotice).toBe(after.heldNotification);
-  expect(after.heldNotification).not.toBeNull();
-  expect(f.requests.slice(count)).toEqual([]);
-});
+it.each(
+  (
+    [
+      'Add expense',
+      'edit',
+      'payment',
+      'To review',
+      'Group form',
+      'Tags',
+      'Currencies',
+      'Leave Group',
+    ] as const
+  ).flatMap((task) =>
+    (['home', 'record-payment'] as const).map((destination) => ({ task, destination })),
+  ),
+)(
+  'holds $destination with the entire protected $task task unchanged',
+  async ({ task, destination }) => {
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    if (task === 'Add expense') {
+      await c.openExpense(groupId);
+      await c.updateExpenseDraft({ description: 'Unfinished', amount: '123', tagId });
+    }
+    if (task === 'edit') {
+      await c.openExpense(groupId, 'c00000000000000000000001');
+      await c.editExpense();
+      await c.updateExpenseDraft({ description: 'Unfinished edit' });
+      expect(c.getSnapshot().expense.status, c.getSnapshot().expense.message ?? '').toBe('editing');
+    }
+    if (task === 'payment') {
+      f.groupBalances({
+        byCurrency: [
+          {
+            currency: 'INR',
+            balances: [
+              { user: { _id: alex.id, name: alex.name }, balance: -100 },
+              { user: { _id: sam.id, name: sam.name }, balance: 100 },
+            ],
+            debts: [
+              {
+                from: { _id: alex.id, name: alex.name },
+                to: { _id: sam.id, name: sam.name },
+                amount: 100,
+              },
+            ],
+          },
+        ],
+      });
+      await c.selectDestination('balances');
+      await c.openRecordPayment(alex.id, sam.id, 'INR');
+      expect(c.getSnapshot().screen).toBe('settlement');
+    }
+    if (task === 'To review') await c.openToReview(groupId);
+    if (task === 'Group form') {
+      c.startCreate();
+      c.updateCreation({ name: 'Unfinished Group' });
+    }
+    if (task === 'Tags') c.openTags(groupId);
+    if (task === 'Currencies') await c.openCurrencies(groupId);
+    if (task === 'Leave Group') {
+      c.openMembers();
+      await c.reviewLeaveGroup();
+    }
+    const before = c.getSnapshot();
+    expect(notificationTaskProtected(before)).toBe(true);
+    const count = f.requests.length;
+    await c.openWidget(destination === 'home' ? 'home' : { kind: 'record-payment', groupId });
+    const after = c.getSnapshot();
+    expect(after.screen).toBe(before.screen);
+    expect(after.detail).toBe(before.detail);
+    for (const key of [
+      'expense',
+      'settlement',
+      'creation',
+      'toReview',
+      'tagManager',
+      'groupCurrencies',
+      'leave',
+    ] as const)
+      expect(after[key]).toBe(before[key]);
+    expect(after.tagsOpenFor).toBe(before.tagsOpenFor);
+    expect(after.currenciesOpenFor).toBe(before.currenciesOpenFor);
+    expect(after.notificationOpening.status).toBe('held');
+    expect(after.heldNotificationNotice).toBe(after.heldNotification);
+    expect(after.heldNotification).not.toBeNull();
+    expect(f.requests.slice(count)).toEqual([]);
+  },
+);
 it.each(['sign out', 'account change'] as const)(
   'drops a held widget tap on %s',
   async (action) => {
@@ -750,7 +759,9 @@ it('keeps the last Group balance as final when an authoritative read says it is 
       verified,
     ),
   ).toMatchObject({ state: 'archived', final: true, addExpense: false });
-  expect(quickWidget(copy, { ...setup, kind: 'quick' }, '2x1', session)).toMatchObject({
+  expect(
+    quickWidget(copy, { ...setup, kind: 'quick' }, { width: 172, height: 104 }, session),
+  ).toMatchObject({
     state: 'archived',
     title: 'Group archived',
     subtitle: 'Choose another',
@@ -1145,4 +1156,16 @@ it('uses the newly reported phone zone for the app Month read and the saved Widg
   await c.openGroup(groupId);
   await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]?.month).toBe('2026-10'));
   expect(f.requests.some((r) => r.query?.includes('dateFrom=2026-10-01'))).toBe(true);
+});
+
+it('Quick actions Record payment opens Settle up with nothing filled, including when all square', async () => {
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openWidget({ kind: 'record-payment', groupId });
+  expect(c.getSnapshot().screen).toBe('settlement');
+  expect(c.getSnapshot().settlement).toMatchObject({ status: 'ready', chosen: null, draft: null });
+  expect(
+    f.requests.filter((r) => r.method !== 'GET' && r.path !== '/api/auth/demo-persona/sign-in'),
+  ).toEqual([]);
 });

@@ -151,6 +151,7 @@ function SinglePaymentSheet({
   onEditCrossCurrency = () => undefined,
   onUseSuggestedRate = () => undefined,
   onOpenLink = () => undefined,
+  onSelect,
 }: {
   visible: boolean;
   state: SettlementState;
@@ -161,6 +162,8 @@ function SinglePaymentSheet({
   onLeaveField: (field: SettlementField) => void;
   onAcknowledge: (acknowledged: boolean) => void;
   onRecord: () => void;
+  /** Blank Quick actions entry: choose a payment only after the member taps it. */
+  onSelect?: (paidBy: string, paidTo: string, currency: string) => void;
   /** Try again, after the sheet couldn't check the latest balances: it checks them again. */
   onRetry: () => void;
   onClose: () => void;
@@ -404,6 +407,40 @@ function SinglePaymentSheet({
       {!figures ? (
         checking ? (
           <CompactText tone="secondary">{checkingBalances}</CompactText>
+        ) : status === 'ready' && onSelect ? (
+          <View style={{ gap: 12 }}>
+            {state.balances.flatMap((bucket) =>
+              bucket.debts.filter(
+                (debt) => debt.from.id === currentUserId || debt.to.id === currentUserId,
+              ),
+            ).length ? (
+              <>
+                <CompactText tone="secondary">Choose a payment</CompactText>
+                {state.balances.flatMap((bucket) =>
+                  bucket.debts
+                    .filter(
+                      (debt) => debt.from.id === currentUserId || debt.to.id === currentUserId,
+                    )
+                    .map((debt) => {
+                      const label = `${debt.from.id === currentUserId ? 'You' : debt.from.name} ${debt.from.id === currentUserId ? 'pay' : 'pays'} ${debt.to.id === currentUserId ? 'you' : debt.to.name} ${formatCurrency(debt.amount, bucket.currency)}`;
+                      return (
+                        <CompactButton
+                          key={`${bucket.currency}/${debt.from.id}/${debt.to.id}`}
+                          label={label}
+                          variant="tonal"
+                          onPress={() => {
+                            if (debt.from.id && debt.to.id)
+                              onSelect(debt.from.id, debt.to.id, bucket.currency);
+                          }}
+                        />
+                      );
+                    }),
+                )}
+              </>
+            ) : (
+              <CompactText tone="secondary">Nothing to pay</CompactText>
+            )}
+          </View>
         ) : null
       ) : (
         <>
