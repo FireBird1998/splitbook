@@ -34,25 +34,28 @@ const group = (
     },
   ],
 });
+const maple = group('maple', 'INR', false, 42000);
+const goa = group('goa', 'JPY', false, 42000);
+const outgoing = group('goa', 'INR', false, 106000).currencies[0];
+outgoing.payments[0].to = 'priya';
+outgoing.payments[0].toName = 'Priya';
+outgoing.payments[0].toInitials = 'PS';
+outgoing.payments.push(...group('goa', 'INR', true, 145000).currencies[0].payments);
+outgoing.balanceMinor = 39000;
+goa.currencies.push(outgoing, ...group('goa', 'EUR', false, 4000).currencies);
 const copy: WidgetCopy = {
   version: 1,
   accountId: 'alex',
   home: {
     verifiedAt: now - 5000,
-    groupCount: 5,
+    groupCount: 2,
     currencies: [
-      { currency: 'INR', owedMinor: 140000, oweMinor: 106000 },
+      { currency: 'INR', owedMinor: 39000, oweMinor: 42000 },
       { currency: 'EUR', owedMinor: 0, oweMinor: 4000 },
       { currency: 'JPY', owedMinor: 0, oweMinor: 42000 },
     ],
   },
-  groups: {
-    a: group('maple', 'INR', false, 42000),
-    b: group('goa', 'JPY', false, 42000),
-    c: group('goa', 'INR', true, 145000),
-    d: group('goa', 'INR', false, 106000),
-    e: group('goa', 'EUR', false, 4000),
-  },
+  groups: { maple, goa },
 };
 it('orders pay before paid, then Home currencies, and amounts only within their currency', () => {
   const rows = widgetPayments(copy, 'alex');
@@ -90,7 +93,7 @@ it('leaves out archived, refused and other-account parts and payments between ot
 it('keeps a Group read time independently of Home and never nets opposite directions', () => {
   const c = {
     ...copy,
-    groups: { a: group('maple', 'INR', false, 10000), b: group('goa', 'INR', true, 10000) },
+    groups: { maple: group('maple', 'INR', false, 10000), goa: group('goa', 'INR', true, 10000) },
   };
   const rows = widgetPayments(c, 'alex');
   expect(rows).toHaveLength(2);

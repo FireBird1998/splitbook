@@ -333,11 +333,11 @@ const paymentCopy: WidgetCopy = {
           balanceMinor: -148000,
           payments: Array.from({ length: 5 }, (_, i) => ({
             from: i === 4 ? 'sam' : 'alex',
-            to: i === 4 ? 'alex' : 'sam',
+            to: i === 4 ? 'alex' : ['sam', 'priya', 'ravi', 'kai'][i]!,
             fromName: i === 4 ? 'Sam Chen' : 'Alex Rao',
-            toName: i === 4 ? 'Alex Rao' : 'Sam Chen',
+            toName: i === 4 ? 'Alex Rao' : ['Sam Chen', 'Priya Shah', 'Ravi Kapoor', 'Kai Tan'][i]!,
             fromInitials: i === 4 ? 'SC' : 'AR',
-            toInitials: i === 4 ? 'AR' : 'SC',
+            toInitials: i === 4 ? 'AR' : ['SC', 'PS', 'RK', 'KT'][i]!,
             amountMinor: (5 - i) * 10000,
           })),
         },
@@ -384,7 +384,7 @@ it('shortens narrow payments and replaces hidden rows with counts without names 
     now,
   );
   expect(h.payments).toEqual([]);
-  expect(h.layout.paymentCountsLines).toEqual(['You pay 1 person', '1 person pays you']);
+  expect(h.layout.paymentCountsLines).toEqual(['You pay 4 people', '1 person pays you']);
   expect(JSON.stringify(h)).not.toMatch(/Sam|Maple|500/);
   const incoming = structuredClone(paymentCopy);
   incoming.groups!.maple!.currencies[0]!.payments =
@@ -432,4 +432,19 @@ it('keeps payments out of small and all-square layouts and asks for an unread Gr
   expect(
     overviewWidget(copy, setup, { width: 360, height: 344 }, auth, now).layout.paymentMessageLines,
   ).toEqual(['Open the Group to update']);
+});
+
+it('uses the Group spoken-name rule when two people share initials and another differs', () => {
+  const c = structuredClone(paymentCopy);
+  const rows = c.groups!.maple!.currencies[0]!.payments;
+  rows.splice(3);
+  for (const [i, row] of rows.entries()) {
+    row.toName = 'Priya';
+    row.toInitials = i === 2 ? 'PK' : 'PS';
+  }
+  const v = overviewWidget(c, setup, { width: 360, height: 584 }, auth, now);
+  expect(v.summary).toContain('You pay Priya ₹500.00 in Maple House');
+  expect(v.summary).toContain('You pay Priya ₹400.00 in Maple House');
+  expect(v.summary).toContain('You pay Priya K ₹300.00 in Maple House');
+  expect(v.summary).not.toContain('Priya S');
 });

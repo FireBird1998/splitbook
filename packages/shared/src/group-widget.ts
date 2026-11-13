@@ -1,4 +1,4 @@
-import { groupWidgetPayments } from './widget-payments';
+import { groupWidgetPayments, spokenWidgetPayments } from './widget-payments';
 import {
   fitWidgetLayout,
   fitWidgetSections,
@@ -293,26 +293,6 @@ function groupWidgetView(
     final: part.archived,
     action: muted ? 'Open to update' : null,
   };
-}
-
-/**
- * TalkBack labels for the visible payment rows. When two rows share a first name and their
- * stored initials differ, each name gains its second initial ("You pay Priya S"), so speech
- * tells them apart the way the avatars do. Old copies without initials keep first names only.
- */
-function spokenPayments(payments: ReturnType<typeof groupWidgetView>['payments']) {
-  const byName = new Map<string, string[]>();
-  for (const p of payments)
-    byName.set(p.firstName, [...(byName.get(p.firstName) ?? []), p.initials]);
-  return payments.map((p) => {
-    const shared = byName.get(p.firstName)!;
-    const distinct =
-      shared.length > 1 &&
-      p.initials.length > 1 &&
-      shared.filter((initials) => initials === p.initials).length === 1;
-    const name = distinct ? `${p.firstName} ${p.initials.slice(1, 2)}` : p.firstName;
-    return `${p.incoming ? `${name} pays you` : `You pay ${name}`} ${p.amount}`;
-  });
 }
 
 function paymentOverflow(payments: ReturnType<typeof groupWidgetView>['payments']) {
@@ -815,7 +795,7 @@ function projectGroupWidget(
         : null,
       size.width < 280 ? full.people : null,
       // Speech keeps every saved payment, including rows omitted at this size (Large text board).
-      ...spokenPayments(full.payments),
+      ...spokenWidgetPayments(full.payments),
       full.hidden ? null : full.description,
       full.month ? 'This Month' : null,
       ...(full.month?.totals.length ? ['Group spent', ...full.month.totals] : []),

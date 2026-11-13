@@ -1,4 +1,4 @@
-import { widgetPayments } from './widget-payments';
+import { widgetPayments, spokenWidgetPayments } from './widget-payments';
 import {
   readWidgetBalances,
   type WidgetCopy,
@@ -443,12 +443,21 @@ export function overviewWidget(
     },
     gap,
   );
-  const { owed, owe, owedOverflow, oweOverflow, review, action, actionTarget, ...geometry } =
-    layout;
+  const {
+    owed,
+    owe,
+    owedOverflow,
+    oweOverflow,
+    review,
+    action,
+    actionTarget,
+    measuredPayments,
+    ...geometry
+  } = layout;
   const paymentSection = layout.sections.find((s) => s.id === 'payments');
   const visiblePayments = availablePayments.slice(0, paymentSection?.rows ?? 0).map((row, i) => ({
     ...row,
-    ...layout.measuredPayments[i],
+    ...measuredPayments[i],
     muted: now - row.verifiedAt > 86400000,
     rowHeight: paymentSection!.rowHeight,
     dividerHeight: i ? Math.ceil(ratio) / ratio : 0,
@@ -461,19 +470,9 @@ export function overviewWidget(
   const paymentCount =
     paymentSection && !paymentSection.rows ? counted(availablePayments.length, 'payment') : null;
   const footerVisible = layout.sections.some((s) => s.id === 'footer');
-  const sameNames = new Map<string, Set<string>>();
-  for (const row of suggested)
-    sameNames.set(row.firstName, new Set([...(sameNames.get(row.firstName) ?? []), row.initials]));
   const spokenPayments = hidden
     ? hiddenPayments
-    : suggested.map((row) => {
-        const name =
-          row.firstName +
-          ((sameNames.get(row.firstName)?.size ?? 0) > 1 && row.initials.length > 1
-            ? ' ' + row.initials.slice(1, 2)
-            : '');
-        return `${row.incoming ? name + ' pays you' : 'You pay ' + name} ${row.amount} in ${row.groupName}`;
-      });
+    : spokenWidgetPayments(suggested).map((line, i) => `${line} in ${suggested[i].groupName}`);
   const summary = widgetSummary([
     heading,
     state === 'loading' ? 'Loading' : null,
