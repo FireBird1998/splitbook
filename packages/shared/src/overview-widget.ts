@@ -246,7 +246,8 @@ export function overviewWidget(
         !small || !action || titleLines.length * text.line(10) + footer + gap * 2 + 1 <= height;
       const centerMessage = tall && !!title && state !== 'all-square';
       const compactPayments = size.width / Math.max(1, scale) < 240;
-      const paymentHeaderHeight = text.line(10) + 4;
+      const paymentDetails = optional && !level;
+      const paymentHeaderHeight = paymentDetails ? text.line(10) + 4 : 0;
       const paymentFont = compactPayments ? 13 : 12;
       const paymentAvatarSize = Math.max(24, text.line(10));
       const paymentWidth = width - (compactPayments ? 0 : 24 + paymentAvatarSize);
@@ -259,6 +260,7 @@ export function overviewWidget(
         const amountWidth = text.width(row.amount, 13, true);
         const stack = text.width(label, paymentFont) + amountWidth + 8 > paymentWidth;
         const captionBelow =
+          paymentDetails &&
           !compactPayments &&
           (stack ||
             text.width(label + SEPARATOR + row.groupName, paymentFont) + amountWidth + 8 >
@@ -267,12 +269,12 @@ export function overviewWidget(
           label,
           stack,
           captionBelow,
-          inlineCaption: SEPARATOR + row.groupName,
+          inlineCaption: paymentDetails ? SEPARATOR + row.groupName : '',
           textHeight: stack
             ? text.line(paymentFont) +
               text.line(13) +
               2 +
-              (!compactPayments ? text.line(10) + 2 : 0)
+              (paymentDetails && !compactPayments ? text.line(10) + 2 : 0)
             : captionBelow
               ? text.line(paymentFont) + text.line(10) + 2
               : Math.max(text.line(paymentFont), text.line(13)),
@@ -307,7 +309,7 @@ export function overviewWidget(
                 rowHeight: paymentRowHeight,
                 headingHeight: paymentHeaderHeight,
                 inset: compactPayments ? 0 : 8,
-                moreHeight: 0,
+                moreHeight: paymentDetails ? 0 : undefined,
                 grow: true,
               },
             ]

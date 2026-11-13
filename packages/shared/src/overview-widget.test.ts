@@ -489,10 +489,11 @@ it('uses a count without a link or padded rows when no full-style payment row fi
       toName: 'Ananthapadmanabhan',
       fromInitials: 'AR',
       toInitials: 'AS',
-      amountMinor: 100000,
+      amountMinor: 9007199254740991,
     },
   ];
-  const v = overviewWidget(c, setup, { width: 480, height: 280, pixelRatio: 2.625 }, auth, now, 2);
+  g.currencies[0].currency = 'JPY';
+  const v = overviewWidget(c, setup, { width: 240, height: 280, pixelRatio: 2.625 }, auth, now);
   expect(v.payments).toEqual([]);
   expect(v.paymentMore).toBeNull();
   expect(v.paymentCount).toBe('1\u00a0payment');
@@ -534,3 +535,17 @@ it('keeps full-row initials readable at 200 percent on the maximum width', () =>
   expect(view.layout.compactPayments).toBe(false);
   expect(view.layout.paymentAvatarSize).toBeGreaterThanOrEqual(26);
 });
+it.each([1.3, 2])(
+  'gives up the Payments heading, more link and Group captions before type at %s text',
+  (scale) => {
+    const v = overviewWidget(paymentCopy, setup, { width: 360, height: 344 }, auth, now, scale);
+    expect(v.payments.length).toBeGreaterThan(0);
+    expect(v.layout.paymentHeaderHeight).toBe(0);
+    expect(v.paymentMore).toBeNull();
+    for (const row of v.payments) {
+      expect(row.inlineCaption).toBe('');
+      expect(row.captionBelow).toBe(false);
+    }
+    expect(v.summary).toContain('in Maple House');
+  },
+);

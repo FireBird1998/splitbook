@@ -217,7 +217,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       {[leading, action].filter(Boolean)}
     </FlexWidget>
   );
-  const paymentHeader = (
+  const paymentHeader = l.paymentHeaderHeight ? (
     <FlexWidget
       style={{
         width: 'match_parent',
@@ -236,7 +236,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
         text(view.paymentCount, t.textSecondary, f.small)
       ) : null}
     </FlexWidget>
-  );
+  ) : null;
   const payments = (
     <FlexWidget style={{ width: 'match_parent' }}>
       {paymentHeader}
@@ -303,7 +303,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
                     }}
                   >
                     {text(row.label, t.text, l.paymentLabelFont, true)}
-                    {!l.compactPayments && !row.captionBelow
+                    {!l.compactPayments && row.inlineCaption && !row.captionBelow
                       ? text(row.inlineCaption, t.textSecondary, f.small)
                       : null}
                   </FlexWidget>
