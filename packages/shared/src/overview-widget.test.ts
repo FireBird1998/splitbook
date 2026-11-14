@@ -929,15 +929,16 @@ it('does not invent a square balance on an older copy without per-Group figures,
   const v = overviewWidget(c, setup, { width: 360, height: 584 }, auth, now);
   expect(v.groups[0]).toMatchObject({
     name: 'Sunday Football',
-    labels: ['Open the Group to update'],
+    labels: [],
     amounts: [],
-    verifiedAt: null,
   });
+  expect(v.layout.footerNote).toBe('Open to update');
+  expect(v.summary).not.toContain('Open the Group to update');
   const old = clone(groupsCopy);
   old.home!.verifiedAt = now - 86400001;
-  expect(
-    overviewWidget(old, setup, { width: 360, height: 584 }, auth, now).groups[0],
-  ).toMatchObject({ muted: true, verifiedAt: now - 86400001 });
+  const aged = overviewWidget(old, setup, { width: 360, height: 584 }, auth, now);
+  expect(aged.groups[0]).toMatchObject({ muted: true });
+  expect(aged.saved).toBe('Saved Thu');
 });
 it('moves square Groups up as one message block with a bottom action and speaks sections in drawn order', () => {
   const c = clone(groupsCopy);

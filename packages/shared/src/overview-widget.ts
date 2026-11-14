@@ -69,6 +69,8 @@ export function overviewWidget(
   const wide = size.width >= 280;
   const heading = tall ? 'Overview' : 'Balances';
   const level = widgetTextLevel(scale);
+  const showGroups = tall && groupRows.length > 0 && (state === 'all-square' || size.height >= 400);
+  const homeFiguresMissing = !!copy?.home && copy.home.byGroup === undefined;
   const allOwed = read.owed,
     allOwe = read.owe;
   const hidden = read.hidden;
@@ -240,7 +242,7 @@ export function overviewWidget(
               ? Math.max(colHeight(owed, owedOverflow), colHeight(owe, oweOverflow))
               : colHeight(owed, owedOverflow) + colHeight(owe, oweOverflow) + 6;
       const footerNote =
-        !small && read.muted
+        !small && (read.muted || (showGroups && homeFiguresMissing))
           ? 'Open to update'
           : !action && !small && showSaved && !finishLater && (!review || wide)
             ? acrossGroups
@@ -348,7 +350,9 @@ export function overviewWidget(
         const visible = group.balances?.slice(0, groupLimit) ?? [];
         const labels =
           group.balances === null
-            ? ['Open the Group to update']
+            ? homeFiguresMissing
+              ? []
+              : ['Open the Group to update']
             : !group.balances.length
               ? ['All square']
               : visible.map((row) => (row.balanceMinor > 0 ? 'You’re owed' : 'You owe'));
@@ -409,8 +413,6 @@ export function overviewWidget(
         (compactGroups ? 36 : 42) * scale * text.factor,
         ...measuredGroups.map((row) => row.textHeight + Math.ceil(ratio) / ratio),
       );
-      const showGroups =
-        tall && groupRows.length > 0 && (state === 'all-square' || size.height >= 400);
       const sections: WidgetSection[] = [
         ...(showHeader
           ? [{ id: 'header', rows: 1, rowHeight: text.line(small ? 10 : 13), required: true }]
@@ -622,7 +624,6 @@ export function overviewWidget(
     name: group.name,
     theme: group.theme,
     target: group.target,
-    verifiedAt: group.verifiedAt,
     ...measuredGroups[i],
     muted: group.verifiedAt !== null && now - group.verifiedAt > 86400000,
     rowHeight: groupSection!.rowHeight,
@@ -634,12 +635,12 @@ export function overviewWidget(
       ? `+${counted(groupSection.more, 'more', 'more')}`
       : null;
   const groupCount = groupSection && !groupSection.rows ? counted(groupRows.length, 'Group') : null;
-  const spokenGroups = groupRows.map(
-    (group) =>
-      group.name +
-      '. ' +
-      (group.balances === null
-        ? 'Open the Group to update'
+  const spokenGroups = groupRows.map((group) => {
+    const figures =
+      group.balances === null
+        ? homeFiguresMissing
+          ? null
+          : 'Open the Group to update'
         : !group.balances.length
           ? 'All square'
           : group.balances
@@ -654,8 +655,9 @@ export function overviewWidget(
                         row.currency,
                       )),
               )
-              .join(' and ')),
-  );
+              .join(' and ');
+    return [group.name, figures].filter(Boolean).join('. ');
+  });
   const paymentMore =
     paymentSection?.rows && paymentSection.more && layout.showOverflow
       ? `+${counted(paymentSection.more, 'more', 'more')}`
@@ -679,7 +681,7 @@ export function overviewWidget(
     unfinished ? `Finish later in ${unfinished.groupName}` : null,
     read.saved,
     hidden,
-    read.muted ? 'Open to update' : null,
+    read.muted || (homeFiguresMissing && groupRows.length) ? 'Open to update' : null,
     normal && wide && tall ? 'Add expense' : null,
   ]);
   return {

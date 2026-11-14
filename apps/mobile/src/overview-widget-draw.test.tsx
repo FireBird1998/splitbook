@@ -388,3 +388,35 @@ it('draws admitted Group names, theme icons and Home amounts with their Group ta
   expect(labels(tree)).toContain('You owe');
   expect(labels(tree)).toContain('₹1,480.00');
 });
+
+it('draws one Home update prompt for an older copy without per-Group figures', () => {
+  vi.stubGlobal('__DEV__', false);
+  const c: WidgetCopy = {
+    ...withPayments,
+    savedGroups: {
+      verifiedAt: now,
+      rows: [
+        {
+          id: 'maple',
+          name: 'Maple House',
+          theme: 'home',
+          archived: false,
+          members: 3,
+          currencies: 1,
+        },
+      ],
+    },
+  };
+  const v = overviewWidget(
+    c,
+    { kind: 'balances', widgetId: 7 },
+    { width: 360, height: 584 },
+    auth,
+    now,
+  );
+  const tree = buildWidgetTree(drawOverview(v, lightTokens));
+  const groupSection = tree.children![v.layout.sections.findIndex((s) => s.id === 'groups')];
+  expect(labels(groupSection)).toContain('Maple House');
+  expect(labels(groupSection)).not.toContain('Open the Group to update');
+  expect(labels(tree).filter((label) => label === 'Open to update')).toHaveLength(1);
+});
