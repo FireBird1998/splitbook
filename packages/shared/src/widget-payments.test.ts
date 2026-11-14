@@ -113,3 +113,65 @@ it.each(['Group', 'Balances'] as const)(
     );
   },
 );
+
+it('retires omitted Groups from every payment and Quick action without waiting for a refusal', async () => {
+  const { quickWidget } = await import('./quick-widget');
+  const { widgetGroups } = await import('./widget-groups');
+  const c: WidgetCopy = {
+    ...copy,
+    savedGroups: { verifiedAt: now, rows: [] },
+    tags: { maple: { verifiedAt: now, rows: [{ id: 'food', name: 'Food' }] } },
+  };
+  expect(widgetPayments(c, 'alex')).toEqual([]);
+  expect(widgetGroups(c, 'alex')).toEqual([]);
+  const quick = quickWidget(
+    c,
+    { kind: 'quick', widgetId: 8, accountId: 'alex', groupId: 'maple', tagIds: ['food'] },
+    { width: 360, height: 224 },
+    { status: 'authenticated', accountId: 'alex', loading: false },
+  );
+  expect(quick.state).toBe('lost-access');
+  expect(quick.shortcuts).toBeNull();
+  expect(quick.summary).not.toMatch(/Maple|Food/);
+});
+
+it('keeps newer own parts against an older omitted list and preserves archived final Group reads', async () => {
+  const { readWidgetGroup } = await import('./widget-membership');
+  const { quickWidget } = await import('./quick-widget');
+  for (const newer of [
+    { groups: { maple: { ...maple, verifiedAt: now + 1 } } },
+    { groups: { maple: { ...maple, balancesVerifiedAt: now + 1 } } },
+    { tags: { maple: { verifiedAt: now + 1, rows: [] } } },
+    { recents: { maple: { verifiedAt: now + 1, rows: [] } } },
+    {
+      months: {
+        maple: {
+          verifiedAt: now + 1,
+          month: '2026-11',
+          count: 0,
+          mainCurrency: 'INR',
+          mainCurrencyOnly: true,
+          totals: [],
+        },
+      },
+    },
+  ]) {
+    const c = { ...copy, savedGroups: { verifiedAt: now, rows: [] }, ...newer };
+    expect(widgetPayments(c, 'alex').some((p) => p.groupId === 'maple')).toBe(true);
+    expect(readWidgetGroup(c, 'alex', 'maple')?.name).toBe('Maple House');
+  }
+  const c: WidgetCopy = {
+    ...copy,
+    groups: { maple: { ...maple, archived: true } },
+    savedGroups: { verifiedAt: now + 1, rows: [] },
+  };
+  expect(readWidgetGroup(c, 'alex', 'maple')?.archived).toBe(true);
+  expect(
+    quickWidget(
+      c,
+      { kind: 'quick', widgetId: 8, accountId: 'alex', groupId: 'maple' },
+      { width: 360, height: 224 },
+      { status: 'authenticated', accountId: 'alex', loading: false },
+    ).state,
+  ).toBe('archived');
+});

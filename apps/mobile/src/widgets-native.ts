@@ -1,3 +1,4 @@
+import { widgetGroupWasDropped } from '@splitbook/shared/widget-membership';
 import { widgetPeople } from '@splitbook/shared/widget-people';
 import { openDatabaseAsync, defaultDatabaseDirectory, type SQLiteDatabase } from 'expo-sqlite';
 import { readWidgetTagIds, type WidgetSetupRecord } from '@splitbook/shared/widget-setup';
@@ -182,7 +183,14 @@ export function createWidgetsStore(environment: string) {
           months: { ...finalMonths, ...copy.months },
           tags: Object.fromEntries(
             [...new Set([...Object.keys(previous.tags ?? {}), ...Object.keys(copy.tags ?? {})])]
-              .filter((id) => !copy.lostGroupIds?.includes(id))
+              .filter(
+                (id) =>
+                  !copy.lostGroupIds?.includes(id) &&
+                  !widgetGroupWasDropped(
+                    { ...previous, ...copy, tags: { ...previous.tags, ...copy.tags } },
+                    id,
+                  ),
+              )
               .map((id) => {
                 const old = previous.tags?.[id],
                   fresh = copy.tags?.[id];

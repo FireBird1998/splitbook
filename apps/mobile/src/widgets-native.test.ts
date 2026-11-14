@@ -1331,6 +1331,10 @@ it('does not restore refused Person membership from the old saved list on an off
   const server = fakeSplitbook(),
     environment = 'person-refused';
   const groupId = server.world.groups[0]._id;
+  server.world.home = {
+    buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0, net: -30 }],
+    groups: [{ groupId, balances: [{ currency: 'INR', balance: -30 }] }],
+  };
   const store = createWidgetsStore(environment),
     adapter = createWidgetsNative(environment);
   let redraws = 0;
@@ -1357,6 +1361,15 @@ it('does not restore refused Person membership from the old saved list on an off
       server.world.people.alex.id,
       '/api/groups',
     );
+    await vi.waitFor(async () =>
+      expect((await store.read()).copy?.home?.byGroup?.[groupId]).toEqual([
+        { currency: 'INR', balanceMinor: -3000 },
+      ]),
+    );
+    const savedHome = await phone.stores.savedQueries.load(
+      server.world.people.alex.id,
+      '/api/user/balances',
+    );
     await first.openGroup(groupId);
     await vi.waitFor(async () =>
       expect((await store.read()).copy?.groupPeople?.[groupId]).toBeDefined(),
@@ -1372,12 +1385,21 @@ it('does not restore refused Person membership from the old saved list on an off
     first.dispose();
     // Surviving disk state when the process ends before a replacement list is saved.
     await phone.stores.savedQueries.save(server.world.people.alex.id, '/api/groups', savedList);
+    await phone.stores.savedQueries.save(
+      server.world.people.alex.id,
+      '/api/user/balances',
+      savedHome,
+    );
     server.online = false;
     const restarted = phone.open();
     await restarted.restore();
     await vi.waitFor(async () =>
       expect((await store.read()).copy?.savedGroups?.rows.some((g) => g.id === groupId)).toBe(true),
     );
+    expect((await store.read()).copy?.home?.byGroup?.[groupId]).toBeUndefined();
+    expect((await store.read()).copy?.groups?.[groupId]).toBeUndefined();
+    expect((await store.read()).copy?.tags?.[groupId]).toBeUndefined();
+    expect((await store.read()).copy?.lostGroupIds).toContain(groupId);
     expect((await store.read()).copy?.groupPeople?.[groupId]).toBeUndefined();
     expect(widgetPeople((await store.read()).copy, server.world.people.alex.id)).toEqual([]);
     const before = redraws;
