@@ -633,10 +633,12 @@ it.each(
       'Leave Group',
     ] as const
   ).flatMap((task) =>
-    (['home', 'review', 'choose-group', 'record-payment', 'expense-tag'] as const).map((destination) => ({
-      task,
-      destination,
-    })),
+    (['home', 'review', 'choose-group', 'record-payment', 'expense-tag'] as const).map(
+      (destination) => ({
+        task,
+        destination,
+      }),
+    ),
   ),
 )(
   'holds $destination with the entire protected $task task unchanged',
