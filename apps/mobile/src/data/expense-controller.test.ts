@@ -4084,7 +4084,7 @@ it.each(['create', 'edit', 'delete'] as const)(
     denied = true;
     const before = requests.length;
     await controller.refresh('pull');
-    expect(records.size).toBe(0);
+    await vi.waitFor(() => expect(records.size).toBe(0));
     expect(
       requests.slice(before).filter((request) => request === `GET /api/groups/${groupId}`),
     ).toHaveLength(1);

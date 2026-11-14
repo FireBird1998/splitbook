@@ -2075,7 +2075,7 @@ it('cleans the unlisted Group’s payment attempt after its own refusal on Home'
   denied = true;
   const before = sent.length;
   await controller.refresh('pull');
-  expect(records.size).toBe(0);
+  await vi.waitFor(() => expect(records.size).toBe(0));
   expect(
     sent.slice(before).filter((request) => request === `GET /api/groups/${groupId}`),
   ).toHaveLength(1);

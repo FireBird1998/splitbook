@@ -1396,7 +1396,9 @@ it('does not restore refused Person membership from the old saved list on an off
     const restarted = phone.open();
     await restarted.restore();
     await vi.waitFor(async () =>
-      expect((await store.read()).copy?.savedGroups?.rows.some((g) => g.id === groupId)).toBe(false),
+      expect((await store.read()).copy?.savedGroups?.rows.some((g) => g.id === groupId)).toBe(
+        false,
+      ),
     );
     expect((await store.read()).copy?.home).toBeNull();
     expect((await store.read()).copy?.groups?.[groupId]).toBeUndefined();
@@ -1502,9 +1504,11 @@ it.each([
       await restoring;
       if (outcome === '500') {
         await restarted.refresh('pull');
-        expect(
-          server.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`),
-        ).toHaveLength(2);
+        await vi.waitFor(() =>
+          expect(
+            server.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`),
+          ).toHaveLength(2),
+        );
       }
       if (part === 'Finish later')
         await vi.waitFor(async () =>

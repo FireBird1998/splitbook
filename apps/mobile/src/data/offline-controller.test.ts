@@ -311,13 +311,15 @@ describe('account-scoped offline financial views', () => {
     f.revoke();
     const before = f.requests().length;
     await controller.refresh('pull');
-    expect(
-      f
-        .requests()
-        .slice(before)
-        .filter((request) => request === `GET /api/groups/${groupId}`),
-    ).toHaveLength(1);
-    expect(f.drafts.size).toBe(0);
+    await vi.waitFor(() =>
+      expect(
+        f
+          .requests()
+          .slice(before)
+          .filter((request) => request === `GET /api/groups/${groupId}`),
+      ).toHaveLength(1),
+    );
+    await vi.waitFor(() => expect(f.drafts.size).toBe(0));
     expect(
       f
         .requests()
@@ -1456,12 +1458,14 @@ it('retains an archived Group’s financial records after a verified list omits 
   f.archive();
   const before = f.requests().length;
   await controller.refresh('pull');
-  expect(
-    f
-      .requests()
-      .slice(before)
-      .filter((request) => request === `GET /api/groups/${groupId}`),
-  ).toHaveLength(1);
+  await vi.waitFor(() =>
+    expect(
+      f
+        .requests()
+        .slice(before)
+        .filter((request) => request === `GET /api/groups/${groupId}`),
+    ).toHaveLength(1),
+  );
   expect(f.drafts.size).toBe(1);
 });
 it('retains a refused draft and reports a failed Discard without signing out', async () => {

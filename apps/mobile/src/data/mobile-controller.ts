@@ -809,6 +809,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     confirmation = null;
     lostGroups.clear();
     unlistedChecks.clear();
+    unlistedTail = Promise.resolve();
     toReviewQueries.reset();
     tagOwners.clear();
     tagFlights.clear();
@@ -2315,6 +2316,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
   const unlistedChecks = new Map<string, { owner: number; reading: Promise<void> }>();
+  let unlistedTail: Promise<void> = Promise.resolve();
   const checkUnlistedRecords = async (listed: Set<string>, owner: number) => {
     const lease = accountStorage();
     if (!lease || !current(owner)) return;
@@ -2343,16 +2345,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     for (const id of ids) {
       if (!current(owner)) return;
-      if (lostGroups.has(id)) {
-        if (!onLostForm(id)) await clearLostRecords(id, owner);
-        continue;
-      }
-      const running = unlistedChecks.get(id);
-      if (running?.owner === owner) {
-        await running.reading;
-        continue;
-      }
-      const reading = (async () => {
+      if (unlistedChecks.get(id)?.owner === owner) continue;
+      const reading = unlistedTail.then(async () => {
+        if (!current(owner)) return;
+        if (lostGroups.has(id)) {
+          if (!onLostForm(id)) await clearLostRecords(id, owner);
+          return;
+        }
         try {
           const group = parseGroup(await request('/api/groups/' + id, owner));
           if (current(owner)) widgets.confirmedGroup(id);
@@ -2363,14 +2362,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           )
             await forgetGroup(id, 403, owner);
         } catch {
-          // Only the transport's authoritative refusal changes saved parts. Try on the next list.
+          // Only an authoritative refusal changes parts; another list may try again.
         }
-      })();
+      });
       unlistedChecks.set(id, { owner, reading });
-      await reading;
-      if (unlistedChecks.get(id)?.reading === reading) unlistedChecks.delete(id);
+      unlistedTail = reading.catch(() => undefined);
+      void reading
+        .finally(() => {
+          if (unlistedChecks.get(id)?.reading === reading) unlistedChecks.delete(id);
+        })
+        .catch(() => undefined);
     }
   };
+
   const onLostForm = (groupId: string) =>
     (snapshot.screen === 'expense' && snapshot.expense.groupId === groupId) ||
     (snapshot.screen === 'settlement' && snapshot.settlement.groupId === groupId);

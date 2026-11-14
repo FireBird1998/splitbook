@@ -3120,9 +3120,11 @@ it.each(['success', '500'] as const)(
         f.record().session,
       ).state,
     ).toBe('normal');
-    expect(
-      f.backend.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`),
-    ).toHaveLength(1);
+    await vi.waitFor(() =>
+      expect(
+        f.backend.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`),
+      ).toHaveLength(1),
+    );
   },
 );
 
@@ -3229,7 +3231,13 @@ it('keeps a Group included by the next trusted list when the phone clock moved b
   await c.back();
   clock.mockReturnValue(verified + 1000);
   f.listGroups([]);
+  const omittedAt = f.backend.requests.length;
   await c.refresh('pull');
+  await vi.waitFor(() =>
+    expect(
+      f.backend.requests.slice(omittedAt).filter((r) => r.path === `/api/groups/${groupId}`),
+    ).toHaveLength(1),
+  );
   clock.mockReturnValue(verified - 1000);
   f.listGroups([groupId]);
   const start = f.backend.requests.length;
@@ -3271,9 +3279,11 @@ it('confirms omitted Groups sequentially, once each, sharing a confirmation whil
   expect(
     f.backend.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`),
   ).toHaveLength(1);
-  expect(
-    f.backend.requests.slice(start).filter((r) => r.path === `/api/groups/${second}`),
-  ).toHaveLength(1);
+  await vi.waitFor(() =>
+    expect(
+      f.backend.requests.slice(start).filter((r) => r.path === `/api/groups/${second}`),
+    ).toHaveLength(1),
+  );
 });
 
 it('ignores an old native restore arriving after account invalidation, before the new account copy is written', async () => {
@@ -3426,5 +3436,64 @@ it.each(['archived', 'pending'] as const)(
     await vi.waitFor(() =>
       expect(f.record().copy?.savedGroups?.verifiedAt).toBe(verified + 120_000),
     );
+  },
+);
+
+it.each(['403', 'archived'] as const)(
+  'publishes and saves lists without waiting for a held %s confirmation, and keeps checks sequential across lists',
+  async (outcome) => {
+    const second = 'b00000000000000000000002',
+      f = fixture(),
+      c = f.make();
+    f.addOverviewGroup(second, 'Cabin Weekend');
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await c.back();
+    await vi.waitFor(() => expect(f.record().copy?.groupPeople?.[second]).toBeDefined());
+    f.listGroups([second]);
+    f.backend.reply('GET', `/api/groups/${groupId}`, () =>
+      outcome === '403'
+        ? Response.json({ error: 'Not a member' }, { status: 403 })
+        : Response.json({ status: 200, data: { ...f.backend.world.groups[0], isArchived: true } }),
+    );
+    const held = f.backend.hold('GET', `/api/groups/${groupId}`),
+      start = f.backend.requests.length;
+    let firstDone = false,
+      secondDone = false;
+    const first = c.refresh('pull').then(() => {
+      firstDone = true;
+    });
+    let next: Promise<void> | undefined;
+    try {
+      await held.arrived;
+      await vi.waitFor(() => expect(firstDone).toBe(true));
+      expect(c.getSnapshot().groups.data.map((g) => g.id)).toEqual([second]);
+      expect(await f.phone.stores.savedQueries.load(alex.id, '/api/groups')).toMatchObject({
+        value: { data: [{ _id: second }] },
+      });
+      f.listGroups([]);
+      next = c.refresh('pull').then(() => {
+        secondDone = true;
+      });
+      await vi.waitFor(() => expect(secondDone).toBe(true));
+      expect(c.getSnapshot().groups.data).toEqual([]);
+      expect(
+        f.backend.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`),
+      ).toHaveLength(1);
+      expect(
+        f.backend.requests.slice(start).filter((r) => r.path === `/api/groups/${second}`),
+      ).toHaveLength(0);
+      held.release();
+      await vi.waitFor(() => {
+        if (outcome === '403') expect(f.record().copy?.lostGroupIds).toContain(groupId);
+        else expect(f.record().copy?.groups?.[groupId]?.archived).toBe(true);
+        expect(
+          f.backend.requests.slice(start).filter((r) => r.path === `/api/groups/${second}`),
+        ).toHaveLength(1);
+      });
+    } finally {
+      held.release();
+      await Promise.all([first, next]);
+    }
   },
 );

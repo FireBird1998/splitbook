@@ -548,7 +548,6 @@ export function createHomeQueries(session: HomeSession) {
         'home',
       ]);
     }
-    if (session.current(owner)) await session.checkUnlisted?.(listed, owner);
   };
   const options = (): QueryObserverOptions<Envelope, Error, Envelope, Envelope, QueryKey>[] => [
     {
@@ -852,6 +851,21 @@ export function createHomeQueries(session: HomeSession) {
           )
             session.homeVerified?.();
           if (project(session.snapshot()) !== session.snapshot()) session.publish({});
+          if (scope === 'groups' && event.action.type === 'success' && !event.action.manual) {
+            const answer = query.state.data as Envelope | undefined;
+            if (answer?.source === 'network') {
+              const owner = session.generation(),
+                listed = new Set(listOf(answer.value).map((g) => g.id));
+              // Publication above and the saved list land before access checks. Their network
+              // work never joins the list query, a refresh, or the next list read.
+              void engine
+                .idle()
+                .then(() => {
+                  if (session.current(owner)) return session.checkUnlisted?.(listed, owner);
+                })
+                .catch(() => undefined);
+            }
+          }
         }),
         focus.subscribe((focused) => focused && client.getQueryCache().onFocus()),
         online.subscribe((connected) => connected && client.getQueryCache().onOnline()),
