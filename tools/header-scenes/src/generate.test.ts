@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { sceneThumbnails } from '../../../packages/shared/src/header-scenes/thumbnails';
 import {
   buildScenes,
@@ -9,6 +9,9 @@ import {
 } from './generate';
 import { vectorTree, vectorSvg } from './vectors';
 import type { SceneVector } from '@splitbook/shared/header-scene-art';
+
+// Drawing and re-encoding the thumbnails takes several seconds on a shared CI runner.
+vi.setConfig({ testTimeout: 30_000 });
 
 it('ships all four scenes with portable layers and independent motion and night-light groups', () => {
   const scenes = buildScenes();
