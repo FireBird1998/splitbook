@@ -2272,3 +2272,43 @@ it('does not let a delayed eviction overwrite a newer ordinary copy', async () =
     held.release();
   }
 });
+
+it('does not reconfirm an archived eviction with only Tags after a restart and three live lists', async () => {
+  const server = fakeSplitbook(),
+    environment = 'archived-tags',
+    accountId = server.world.people.alex.id,
+    id = server.world.groups[0]._id,
+    store = createWidgetsStore(environment),
+    adapter = createWidgetsNative(environment),
+    phone = testPhone(server, {
+      now: homeTime,
+      parts: { widgets: { ...adapter, redraw: async () => {} } },
+    });
+  try {
+    const first = phone.open();
+    await first.signIn('alex');
+    first.dispose();
+    await phone.stores.savedQueries.clear();
+    await store.write({
+      version: 1,
+      accountId,
+      home: null,
+      tags: { [id]: { verifiedAt: homeTime, rows: [] } },
+    });
+    await store.evictGroup(accountId, id, { kind: 'archived', at: homeTime });
+    server.reply('GET', '/api/groups', () => Response.json({ status: 200, data: [] }));
+    server.reply('GET', `/api/groups/${id}`, () =>
+      Response.json({ status: 200, data: { ...server.world.groups[0], isArchived: true } }),
+    );
+    const start = server.requests.length,
+      c = phone.open();
+    await c.restore();
+    for (let i = 0; i < 3; i++) await c.refresh('pull');
+    expect(server.requests.slice(start).filter((r) => r.path === `/api/groups/${id}`)).toHaveLength(
+      0,
+    );
+    expect(c.getSnapshot().groups.message ?? '').not.toMatch(/archived/i);
+  } finally {
+    phone.dispose();
+  }
+});

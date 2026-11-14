@@ -215,6 +215,7 @@ export function createWidgetsStore(environment: string) {
             peopleRefusedAt: { ...copy.peopleRefusedAt },
           };
           const lost = new Set(copy.lostGroupIds ?? []);
+          const archived = new Set(copy.archivedGroupIds ?? []);
           try {
             for (const row of records) {
               const id = row.group_id,
@@ -223,11 +224,13 @@ export function createWidgetsStore(environment: string) {
                 throw new Error('Unreadable widget eviction');
               if (row.home_pending) copy.home = null;
               if (row.restored) {
+                archived.delete(id);
                 lost.delete(id);
                 delete copy.peopleRefusedAt![id];
                 continue;
               }
               if (eviction.kind === 'lost') {
+                archived.delete(id);
                 lost.add(id);
                 copy.peopleRefusedAt![id] = eviction.at;
                 delete copy.groups![id];
@@ -241,6 +244,7 @@ export function createWidgetsStore(environment: string) {
                     rows: copy.savedGroups.rows.filter((g) => g.id !== id),
                   };
               } else {
+                archived.add(id);
                 lost.delete(id);
                 delete copy.peopleRefusedAt![id];
                 const final = eviction.group ?? copy.groups![id];
@@ -259,6 +263,7 @@ export function createWidgetsStore(environment: string) {
               if (copy.finishLater?.groupId === id) delete copy.finishLater;
             }
             copy.lostGroupIds = [...lost];
+            copy.archivedGroupIds = [...archived];
           } catch {
             // An unreadable access record must not expose a provisional copy.
             copy = null;

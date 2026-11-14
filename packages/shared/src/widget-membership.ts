@@ -31,6 +31,7 @@ export function widgetGroupsToConfirm(copy: WidgetCopy | null, listed: ReadonlyS
   return [...ids].filter(
     (id) =>
       !listed.has(id) &&
+      !copy.archivedGroupIds?.includes(id) &&
       !copy.groups?.[id]?.archived &&
       !copy.groupPeople?.[id]?.archived &&
       !copy.lostGroupIds?.includes(id) &&

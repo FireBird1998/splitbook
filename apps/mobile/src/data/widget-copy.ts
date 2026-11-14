@@ -192,6 +192,9 @@ export function createWidgetCopy(
     const previous = await native?.readCopy?.();
     assertCurrent();
     if (previous?.accountId === accountId) {
+      for (const id of previous.archivedGroupIds ?? [])
+        if (!releasedGroups.has(id)) archived.add(id);
+        else retired.add(id);
       homeRefusedAt = Math.max(homeRefusedAt, ...Object.values(previous.peopleRefusedAt ?? {}));
       if (!homeAnswered) initialHome = previous.home;
       for (const id of widgetGroupsToConfirm(previous, new Set())) pendingNativeGroups.add(id);
@@ -223,7 +226,8 @@ export function createWidgetCopy(
           releasedGroups.has(id) &&
           (previous.lostGroupIds?.includes(id) ||
             previous.peopleRefusedAt?.[id] !== undefined ||
-            previous.groups?.[id]?.archived)
+            previous.groups?.[id]?.archived ||
+            previous.archivedGroupIds?.includes(id))
         ) &&
         !lost.has(id) &&
         !retired.has(id) &&
@@ -435,6 +439,7 @@ export function createWidgetCopy(
       const copy: WidgetCopy = {
         version: 1,
         accountId: held.accountId,
+        archivedGroupIds: [...archived],
         groups: { ...groups },
         months: { ...months },
         tags: { ...tags },

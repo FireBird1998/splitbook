@@ -24,6 +24,7 @@ export interface WidgetCopy {
   /** Refusal fences restored from older saved reads. Legacy field name retained for existing copies. */
   peopleRefusedAt?: Record<string, number>;
   lostGroupIds?: string[];
+  archivedGroupIds?: string[];
   savedGroups?: {
     verifiedAt: number;
     rows: {
