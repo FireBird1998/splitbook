@@ -500,3 +500,22 @@ it('ages Person figures by the older Group read even when membership and Balance
   };
   expect(view(olderGroup)).toMatchObject({ muted: true, update: 'Open to update' });
 });
+
+it('admits the next all-square line at 4x3 and 130 percent before stretching the two payments', () => {
+  const c: WidgetCopy = {
+    ...copy,
+    groups: {
+      ...copy.groups,
+      football: { ...maple, id: 'football', name: 'Sunday Football', currencies: [] },
+    },
+    groupPeople: {
+      ...copy.groupPeople,
+      football: { name: 'Sunday Football', archived: false, verifiedAt: now, people: [person] },
+    },
+  };
+  const result = view(c, { width: 360, height: 344 }, 1.3);
+  expect(result.rows.map((r) => r.kind)).toEqual(['payment', 'payment', 'square']);
+  expect(result.rows[2].groupName).toBe('Sunday Football');
+  expect(result.more).toBeNull();
+  expect(result.layout.fits).toBe(true);
+});
