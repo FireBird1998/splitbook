@@ -183,7 +183,7 @@ export default function HeaderScene({
   today?: string;
 }) {
   const [art, setArt] = useState<HeaderSceneArt | null>(null);
-  const [hour, setHour] = useState(() => new Date().getHours());
+  const [, setHour] = useState(() => new Date().getHours());
   const translateY = useSceneFloat(motion && headerSceneMotionAvailable);
   useEffect(() => {
     let active = true;
@@ -200,7 +200,7 @@ export default function HeaderScene({
     });
     return () => sub.remove();
   }, []);
-  const time = headerTimeOfDay(header.time, hour);
+  const time = headerTimeOfDay(header.time, new Date().getHours());
   return (
     <View style={{ borderRadius: 16, overflow: 'hidden' }}>
       <View

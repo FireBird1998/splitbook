@@ -70,3 +70,35 @@ it('speaks the generated scene description', async () => {
   expect(JSON.stringify(renderer.toJSON())).toContain(beach.description);
   act(() => renderer.unmount());
 });
+
+it('re-reads Auto when returning to the header across a local-hour boundary', async () => {
+  const { default: HeaderScene } = await import('./header-scene');
+  const hour = vi.spyOn(Date.prototype, 'getHours').mockReturnValue(9);
+  let renderer!: ReturnType<typeof create>;
+  try {
+    await act(async () => {
+      renderer = create(
+        <HeaderScene
+          group={group}
+          header={{ style: 'scene', scene: 'beach', time: 'auto' }}
+          motion={false}
+        />,
+      );
+    });
+    expect(JSON.stringify(renderer.toJSON())).toContain('Auto\u00a0· morning');
+    hour.mockReturnValue(10);
+    act(() =>
+      renderer.update(
+        <HeaderScene
+          group={group}
+          header={{ style: 'scene', scene: 'beach', time: 'auto' }}
+          motion={false}
+        />,
+      ),
+    );
+    expect(JSON.stringify(renderer.toJSON())).toContain('Auto\u00a0· day');
+  } finally {
+    act(() => renderer?.unmount());
+    hour.mockRestore();
+  }
+});
