@@ -530,3 +530,18 @@ it.each([1, 1.3, 2])(
     expect(view(c, { width: 360, height: 224 }, scale).layout.showStateTile).toBe(scale < 2);
   },
 );
+
+it('centres the all-square title in the free 4x2 space and anchors its sentence at the bottom', () => {
+  const c: WidgetCopy = {
+    ...copy,
+    groups: { maple: { ...maple, currencies: [] }, lisbon: { ...lisbon, currencies: [] } },
+  };
+  const result = view(c),
+    sections = result.layout.sections;
+  expect(sections.at(-1)?.id).toBe('description');
+  const before = sections.find((s) => s.id === 'message-before')!,
+    after = sections.find((s) => s.id === 'space')!;
+  expect(before.height).toBeGreaterThan(0);
+  expect(Math.abs(before.height - after.height)).toBeLessThanOrEqual(1);
+  expect(result.layout.fits).toBe(true);
+});
