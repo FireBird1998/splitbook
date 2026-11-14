@@ -7,6 +7,7 @@ import {
   leaveTransitions,
   notificationTransitions,
   notificationOpeningTransitions,
+  headerSettingsTransitions,
 } from '../data/flow-transitions';
 
 const tables = {
@@ -47,6 +48,15 @@ export function monitorFlows(controller: MobileController) {
       }
     };
   }
+  const saveHeader = controller.saveHeader;
+  controller.saveHeader = async () => {
+    saves++;
+    try {
+      return await saveHeader();
+    } finally {
+      saves--;
+    }
+  };
   const stop = controller.subscribe(() => {
     const next = controller.getSnapshot();
     for (const flow of [
@@ -65,6 +75,15 @@ export function monitorFlows(controller: MobileController) {
       if (to === 'saving' && !saves)
         violations.push(`${flow}: saving without an explicit save command`);
       if (to === 'leaving' && !leaves) violations.push('leave: leaving without leaveGroup');
+    }
+    const headerFrom = previous.headerSettings?.status,
+      headerTo = next.headerSettings?.status;
+    if (headerFrom && headerTo && headerFrom !== headerTo) {
+      const table: Readonly<Record<string, readonly string[]>> = headerSettingsTransitions;
+      if (!table[headerFrom]?.includes(headerTo))
+        violations.push(`headerSettings: undeclared ${headerFrom} → ${headerTo}`);
+      if (headerTo === 'saving' && !saves)
+        violations.push('headerSettings: saving without an explicit save command');
     }
     previous = next;
   });

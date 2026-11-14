@@ -38,6 +38,7 @@ interface GroupShellProps {
   progress?: string | null;
   invite: { onPress: () => void; disabled: boolean; offline: boolean };
   /** Opens Members and Group details. */
+  onHeaderSettings?: () => void;
   onMembers: () => void;
   /** Available to the currently known admin, verified again when opened. */
   onManageTags?: () => void;
@@ -84,6 +85,7 @@ export function GroupShell({
   back,
   progress,
   invite,
+  onHeaderSettings,
   onMembers,
   onManageTags,
   onViewTags,
@@ -187,6 +189,20 @@ export function GroupShell({
         >
           {options ? (
             <Card>
+              {onHeaderSettings && (
+                <>
+                  <ListRow
+                    leading={<IconTile icon="image-outline" />}
+                    title="Header scene"
+                    meta="Choose a scene or the Classic header"
+                    onPress={() => {
+                      close();
+                      onHeaderSettings();
+                    }}
+                  />
+                  <Divider inset={66} />
+                </>
+              )}
               {onManageTags && (
                 <>
                   <ListRow

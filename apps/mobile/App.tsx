@@ -1,3 +1,6 @@
+import { HeaderScenePlaceholder } from './src/ui/header-scene-card';
+import { HeaderSettings } from './src/ui/header-settings';
+import { sceneMotion } from './src/data/scene-motion';
 import {
   HeldUpdateSurfaceContext,
   useHeldUpdateSurfaces,
@@ -1001,6 +1004,7 @@ const unlistedGroup = (id: string): MobileGroup => ({
 
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen() {
+  const motion = useSyncExternalStore(sceneMotion.subscribe, sceneMotion.getSnapshot);
   const native = useHeldUpdateNativeOverlays();
   const shareInvite = useShareInvite();
   const heldUpdate = useHeldUpdateBanner();
@@ -1022,6 +1026,7 @@ function GroupScreen() {
       snackbar: snapshot.snackbar,
       pendingPayment: snapshot.pendingPayment,
       tagsOpenFor: snapshot.tagsOpenFor,
+      headerSettings: snapshot.headerSettings,
       currenciesOpenFor: snapshot.currenciesOpenFor,
       groupCurrencies: snapshot.groupCurrencies,
       currencyAdd: snapshot.currencyAdd,
@@ -1355,6 +1360,9 @@ function GroupScreen() {
             }
           : undefined
       }
+      onHeaderSettings={
+        headerScenesEnabled() && group ? () => controller.openHeaderSettings() : undefined
+      }
       onMembers={() => controller.openMembers(origin())}
       onRefresh={() => void controller.refresh()}
       pull={{ refreshing: feedback.pull, onRefresh: () => void controller.refresh('pull') }}
@@ -1424,6 +1432,20 @@ function GroupScreen() {
             controller.closeTags();
             void controller.refresh();
           }}
+        />
+      )}
+      {group && state.headerSettings && (
+        <HeaderSettings
+          group={group}
+          state={state.headerSettings}
+          offline={state.offline.active}
+          motion={motion.enabled}
+          motionMessage={motion.message}
+          onMotion={(value) => void sceneMotion.select(value)}
+          onChoose={controller.chooseHeader}
+          onSave={() => void controller.saveHeader()}
+          onRetry={() => void controller.refresh()}
+          onClose={controller.closeHeaderSettings}
         />
       )}
       {group && state.currenciesOpenFor === group.id && (
@@ -1509,7 +1531,11 @@ function GroupScreen() {
           ) : (
             <>
               {readGroupHeader(shown.header, headerScenesEnabled()).style === 'scene' ? (
-                <GroupHeader group={shown} />
+                state.headerSettings ? (
+                  <HeaderScenePlaceholder group={shown} />
+                ) : (
+                  <GroupHeader group={shown} motion={motion.enabled} />
+                )
               ) : getGroupTheme(shown.category).header === 'strip' ? (
                 <TripStrip group={shown} />
               ) : null}

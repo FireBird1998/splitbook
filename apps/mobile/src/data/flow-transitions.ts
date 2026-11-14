@@ -99,3 +99,9 @@ export const notificationOpeningTransitions = {
   opening: ['held', 'error', 'idle'],
   error: ['opening', 'held', 'idle'],
 } as const satisfies Transitions<import('./notification-alerts').NotificationOpening['status']>;
+
+export const headerSettingsTransitions = {
+  editing: ['saving', 'error'],
+  saving: ['editing', 'error'],
+  error: ['editing', 'saving', 'error'],
+} as const;

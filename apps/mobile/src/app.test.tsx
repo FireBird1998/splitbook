@@ -3853,3 +3853,53 @@ describe('source-specific held copy', () => {
     });
   });
 });
+
+it('mounts one selected preview and releases the Group SVG while Header settings are open', async () => {
+  vi.stubEnv('EXPO_PUBLIC_HEADER_SCENES_ENABLED', 'true');
+  try {
+    const app = await renderApp((path) =>
+      path === `/api/groups/${groupId}`
+        ? json({
+            status: 200,
+            data: { ...group, header: { style: 'scene', scene: 'beach', time: 'day' } },
+          })
+        : undefined,
+    );
+    await app.press('Open Maple House');
+    const scenes = () => app.root().findAll((node) => (node.type as unknown) === 'default');
+    await vi.waitFor(
+      async () => {
+        await settle();
+        expect(scenes()).toHaveLength(1);
+      },
+      { timeout: 5000 },
+    );
+    await app.press('Group options');
+    await app.press('Header scene');
+    await vi.waitFor(
+      async () => {
+        await settle();
+        expect(scenes()).toHaveLength(1);
+      },
+      { timeout: 5000 },
+    );
+    await vi.waitFor(
+      async () => {
+        await settle();
+        expect(app.root().findAll((node) => (node.type as unknown) === 'Image')).toHaveLength(4);
+      },
+      { timeout: 5000 },
+    );
+    await app.press('Back to Group');
+    await vi.waitFor(
+      async () => {
+        await settle();
+        expect(scenes()).toHaveLength(1);
+      },
+      { timeout: 5000 },
+    );
+    expect(app.root().findAll((node) => (node.type as unknown) === 'Image')).toHaveLength(0);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

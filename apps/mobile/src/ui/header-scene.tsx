@@ -18,7 +18,12 @@ import type { MobileGroup } from '../data/types';
 import { useSceneFloat } from './compact/motion';
 import { headerSceneMotionAvailable } from '../config';
 import { currentDayKey } from './list-day-header';
-import { HeaderSceneCard, HeaderScenePlaceholder, ClassicGroupHeader } from './header-scene-card';
+import {
+  HeaderSceneCard,
+  HeaderScenePreviewCaption,
+  HeaderScenePlaceholder,
+  ClassicGroupHeader,
+} from './header-scene-card';
 export { HeaderSceneCard } from './header-scene-card';
 
 const loaders = {
@@ -84,12 +89,14 @@ export default function HeaderScene({
   group,
   header,
   motion = true,
+  preview = false,
   today = currentDayKey(),
 }: {
   group: MobileGroup;
   header: GroupHeader;
   motion?: boolean;
   today?: string;
+  preview?: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   const [art, setArt] = useState<HeaderSceneArt | null>(null);
@@ -116,7 +123,14 @@ export default function HeaderScene({
   }, []);
   const time = headerTimeOfDay(header.time, new Date().getHours());
   if (failed === header.scene) return <ClassicGroupHeader group={group} />;
-  if (art?.id !== header.scene) return <HeaderScenePlaceholder group={group} header={header} />;
+  if (art?.id !== header.scene)
+    return (
+      <HeaderScenePlaceholder
+        group={group}
+        header={header}
+        preview={preview ? header : undefined}
+      />
+    );
   return (
     <View style={{ borderRadius: 16, overflow: 'hidden' }}>
       <View
@@ -161,7 +175,11 @@ export default function HeaderScene({
           {art?.id === header.scene ? <Art art={art} time={time} /> : null}
         </Animated.View>
       </View>
-      <HeaderSceneCard group={group} today={today} time={time} />
+      {preview ? (
+        <HeaderScenePreviewCaption scene={header.scene} time={time} />
+      ) : (
+        <HeaderSceneCard group={group} today={today} time={time} />
+      )}
     </View>
   );
 }

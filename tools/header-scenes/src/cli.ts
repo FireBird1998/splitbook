@@ -7,7 +7,7 @@ const directory = resolve(root, OUTPUT);
 const command = process.argv[2];
 if (!['build', 'check'].includes(command))
   throw new Error('Usage: pnpm --filter @splitbook/header-scenes <build|check>');
-const expected = generatedFiles();
+const expected = await generatedFiles(command === 'build');
 const actual = new Map(
   (existsSync(directory) ? readdirSync(directory, { withFileTypes: true }) : [])
     .filter((file) => file.isFile())
@@ -16,7 +16,7 @@ const actual = new Map(
 const stale = staleOutputs(expected, actual);
 if (command === 'build') {
   mkdirSync(directory, { recursive: true });
-  for (const path of stale) {
+  for (const path of new Set([...stale, 'thumbnails.ts'])) {
     const text = expected.get(path);
     if (text === undefined) rmSync(resolve(directory, path));
     else writeFileSync(resolve(directory, path), text);

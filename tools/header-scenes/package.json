@@ -20,13 +20,14 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^22.20.1",
+    "effect": "^4.0.0",
     "eslint": "^9.39.2",
+    "sharp": "0.34.5",
     "tsx": "^4.23.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.55.0",
-    "vitest": "^4.1.10",
-    "@playwright/test": "^1.62.1",
-    "effect": "^4.0.0"
+    "vitest": "^4.1.10"
   }
 }

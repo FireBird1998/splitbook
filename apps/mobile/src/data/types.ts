@@ -469,6 +469,7 @@ export interface MobileSnapshot {
   tagManager: TagManagerState;
   currencyAdd: CurrencyAddState;
   /** The Group whose Currencies show over its view (#722); they close with it. */
+  headerSettings: import('./header-settings').HeaderSettings | null;
   currenciesOpenFor: string | null;
   groupCurrencies: GroupCurrenciesState;
   /**

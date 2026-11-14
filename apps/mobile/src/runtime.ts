@@ -1,3 +1,4 @@
+import { configureSceneMotionStorage } from './data/scene-motion';
 import { androidWidgetsEnabled } from './widgets-flag';
 import { createWidgetsNative, createWidgetsStore } from './widgets-native';
 import { createNotificationNative, readNotificationInstallation } from './notifications-native';
@@ -61,6 +62,10 @@ export const environment = {
 export const appearance = createAppearanceController({
   load: () => SecureStore.getItemAsync('splitbook.appearance'),
   save: (mode) => SecureStore.setItemAsync('splitbook.appearance', mode),
+});
+void configureSceneMotionStorage({
+  load: () => SecureStore.getItemAsync('splitbook.header-motion'),
+  save: (value) => SecureStore.setItemAsync('splitbook.header-motion', value),
 });
 const tagRequests = createAccountGroupRecordStore(controllerConfig.apiBaseUrl, 'tag-request');
 const draftRequests = createAccountGroupRecordStore(controllerConfig.apiBaseUrl, 'draft-request');
