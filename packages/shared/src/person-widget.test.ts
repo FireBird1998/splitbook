@@ -249,3 +249,26 @@ it('keeps setup usable when a saved membership row is damaged', () => {
   expect(widgetPeople(partial, 'alex').map((person) => person.name)).toEqual(['Sam']);
   expect(widgetPeople(partial, 'other')).toEqual([]);
 });
+
+it('uses anonymous copy when a purged Person choice has no saved name', () => {
+  const unnamed = { ...setup, person: { id: person.id } };
+  const result = personWidget(null, unnamed, { width: 360, height: 224 }, auth, now);
+  expect(result).toMatchObject({
+    name: null,
+    initials: null,
+    description: 'This phone has no saved copy of your shared Groups. Open Splitbook to load them.',
+  });
+  expect(result.summary).not.toMatch(/undefined|Sam/);
+});
+
+it('takes the chosen name and initials from the copy when setup keeps only the id', () => {
+  const result = personWidget(
+    copy,
+    { ...setup, person: { id: person.id } },
+    { width: 360, height: 224 },
+    auth,
+    now,
+  );
+  expect(result).toMatchObject({ name: 'Sam', initials: 'SC' });
+  expect(result.payments[0].label).toBe('You pay Sam');
+});

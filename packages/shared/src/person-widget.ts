@@ -20,7 +20,7 @@ export interface PersonWidgetSetup {
   kind: 'person';
   widgetId: number;
   accountId: string;
-  person: WidgetPerson;
+  person: Pick<WidgetPerson, 'id'> & Partial<Pick<WidgetPerson, 'firstName' | 'initials'>>;
   hideAmounts?: boolean;
 }
 interface PersonReading {
@@ -81,7 +81,7 @@ function readPerson(
   const selected = widgetPeople(copy, session.accountId).find(
     (person) => person.id === setup.person.id,
   );
-  const name = selected?.name ?? setup.person.firstName;
+  const name = selected?.name ?? setup.person.firstName ?? null;
   const shared = new Set(selected?.groups.map((group) => group.id) ?? []);
   const payments = widgetPayments(copy, session.accountId)
     .filter((row) => row.person === setup.person.id && shared.has(row.groupId))
@@ -101,7 +101,7 @@ function readPerson(
     state:
       session.loading && !hasRead ? 'loading' : hasRead && payments.length ? 'normal' : 'no-copy',
     name,
-    initials: selected?.initials ?? setup.person.initials,
+    initials: selected?.initials ?? setup.person.initials ?? null,
     groupsLabel: shared.size ? `${counted(shared.size, 'Group')} together` : null,
     saved: hasRead && age !== null ? widgetSavedTime(age, now) : null,
     muted: age !== null && now - age > 86400000,
@@ -109,7 +109,9 @@ function readPerson(
     description:
       (session.loading && !hasRead) || (hasRead && payments.length)
         ? null
-        : `This phone has no saved copy of your Groups with ${name}. Open Splitbook to load them.`,
+        : name
+          ? `This phone has no saved copy of your Groups with ${name}. Open Splitbook to load them.`
+          : 'This phone has no saved copy of your shared Groups. Open Splitbook to load them.',
     payments,
     squareGroups,
   };

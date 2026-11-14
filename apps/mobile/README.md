@@ -447,8 +447,10 @@ first name and initials. Membership is independent of the saved Balances part,
 so setup can offer anyone in a shared active Group without another request. Old
 copies without this optional field need an app read; there is no migration.
 
-A Person setup keeps the chosen id, first name and initials for its account, so a
-missing-copy widget can still name its person. Another account must choose again.
+A Person setup keeps the chosen id for its account. It may keep the first name and
+initials while signed in; sign-out and account change strip those labels before the
+signed-out redraw, retaining ids and switches. A 401 hides without stripping them.
+A trusted membership write for the same account restores them. Another account must choose again.
 Setup stays through sign-out; the Widget copy is purged before signed-out redraw,
 removed for a refused Group and hidden without deletion on a 401.
 

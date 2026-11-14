@@ -22,6 +22,8 @@ vi.mock('expo-sqlite', async () => {
         execAsync: async (sql: string) => db.exec(sql),
         runAsync: async (sql: string, ...values: (number | string)[]) =>
           db.prepare(sql).run(...values),
+        getAllAsync: async (sql: string, ...values: (number | string)[]) =>
+          db.prepare(sql).all(...values),
         getFirstAsync: async (sql: string, ...values: (number | string)[]) =>
           db.prepare(sql).get(...values),
       };

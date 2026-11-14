@@ -1,3 +1,4 @@
+import { personWidget } from '@splitbook/shared/person-widget';
 import { overviewAt } from './test-utils/overview-widget';
 import { widgetDimensions } from './test-utils/widget-size';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -55,6 +56,20 @@ vi.mock('expo-sqlite', async () => {
           const result = db.prepare(sql).run(...values);
           held?.complete();
           return result;
+        },
+        withExclusiveTransactionAsync: async (
+          task: (transaction: {
+            runAsync(sql: string, ...values: (string | number | null)[]): Promise<unknown>;
+          }) => Promise<void>,
+        ) => {
+          db.exec('BEGIN IMMEDIATE');
+          try {
+            await task({ runAsync: async (sql, ...values) => db.prepare(sql).run(...values) });
+            db.exec('COMMIT');
+          } catch (error) {
+            db.exec('ROLLBACK');
+            throw error;
+          }
         },
         getFirstAsync: async (sql: string, ...values: (string | number | null)[]) =>
           db.prepare(sql).get(...values),
@@ -1146,4 +1161,167 @@ it('rolls back a failed trigger migration and retries it on the next store open'
   ).toBeDefined();
   await upgrading.read();
   expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 1 });
+});
+
+it.each(['sign-out', 'account-change'] as const)(
+  'strips names from every stored Person setup before the signed-out redraw on %s',
+  async (action) => {
+    const server = fakeSplitbook();
+    const accountId = server.world.people.alex.id;
+    const store = createWidgetsStore('person-current');
+    const other = createWidgetsStore('person-other');
+    const signedOutRows: unknown[][] = [];
+    const storedRows = () =>
+      native.databases
+        .get('splitbook-widgets.db')!
+        .prepare('SELECT setup FROM widget_setup ORDER BY widget_id')
+        .all()
+        .map((row) => JSON.parse(String(row.setup)));
+    const adapter = createWidgetsNative('person-current');
+    const phone = testPhone(server, {
+      now: homeTime,
+      parts: {
+        widgets: {
+          ...adapter,
+          redraw: async () => {
+            if ((await store.read()).session.status === 'signed-out')
+              signedOutRows.push(storedRows());
+          },
+        },
+      },
+    });
+    try {
+      const c = phone.open();
+      await c.signIn('alex');
+      await store.saveSetup({
+        kind: 'person',
+        widgetId: 81,
+        accountId,
+        person: { id: server.world.people.sam.id, firstName: 'Sam', initials: 'SC' },
+        hideAmounts: true,
+      });
+      await other.setSession({
+        status: 'authenticated',
+        accountId: 'older-account',
+        loading: false,
+      });
+      await other.saveSetup({
+        kind: 'person',
+        widgetId: 82,
+        accountId: 'older-account',
+        person: { id: 'priya', firstName: 'Priya', initials: 'PS' },
+        hideAmounts: false,
+      });
+      expect(JSON.stringify(storedRows())).toMatch(/firstName.*Sam/);
+      expect(JSON.stringify(storedRows())).toMatch(/firstName.*Priya/);
+      signedOutRows.length = 0;
+      if (action === 'sign-out') await c.signOut();
+      else await c.signIn('sam');
+      const expected = [
+        {
+          kind: 'person',
+          widgetId: 81,
+          accountId,
+          person: { id: server.world.people.sam.id },
+          hideAmounts: true,
+        },
+        {
+          kind: 'person',
+          widgetId: 82,
+          accountId: 'older-account',
+          person: { id: 'priya' },
+          hideAmounts: false,
+        },
+      ];
+      expect(storedRows()).toEqual(expected);
+      expect(signedOutRows.length).toBeGreaterThan(0);
+      for (const rows of signedOutRows) expect(rows).toEqual(expected);
+    } finally {
+      phone.dispose();
+    }
+  },
+);
+
+it('restores a stripped Person label from a trusted read after the same account signs in again', async () => {
+  const server = fakeSplitbook(),
+    environment = 'person-restored';
+  const store = createWidgetsStore(environment);
+  const adapter = createWidgetsNative(environment);
+  const phone = testPhone(server, {
+    now: homeTime,
+    parts: { widgets: { ...adapter, redraw: async () => undefined } },
+  });
+  const setup = {
+    kind: 'person' as const,
+    widgetId: 83,
+    accountId: server.world.people.alex.id,
+    person: { id: server.world.people.sam.id, firstName: 'Sam', initials: 'SC' },
+    hideAmounts: true,
+  };
+  try {
+    const c = phone.open();
+    await c.signIn('alex');
+    await store.saveSetup(setup);
+    await c.signOut();
+    expect((await store.setup(83))?.kind).toBe('person');
+    await c.signIn('alex');
+    await c.openGroup(server.world.groups[0]._id);
+    await vi.waitFor(async () => expect(await store.setup(83)).toEqual(setup));
+  } finally {
+    phone.dispose();
+  }
+});
+
+it('cannot put a Person label back from a stale setup confirmation after the purge', async () => {
+  const store = createWidgetsStore('person-late');
+  const setup = {
+    kind: 'person' as const,
+    widgetId: 84,
+    accountId: 'alex',
+    person: { id: 'sam', firstName: 'Sam', initials: 'SC' },
+    hideAmounts: true,
+  };
+  await store.setSession({ status: 'authenticated', accountId: 'alex', loading: false });
+  await store.saveSetup(setup);
+  await store.clear();
+  await store.saveSetup(setup);
+  expect(await store.setup(84)).toEqual({ ...setup, person: { id: 'sam' } });
+});
+
+it('keeps stored Person labels on a 401 while the widget reveals no person', async () => {
+  const server = fakeSplitbook(),
+    environment = 'person-expired';
+  const store = createWidgetsStore(environment),
+    adapter = createWidgetsNative(environment);
+  const phone = testPhone(server, {
+    now: homeTime,
+    parts: { widgets: { ...adapter, redraw: async () => undefined } },
+  });
+  const setup = {
+    kind: 'person' as const,
+    widgetId: 85,
+    accountId: server.world.people.alex.id,
+    person: { id: server.world.people.sam.id, firstName: 'Sam', initials: 'SC' },
+    hideAmounts: false,
+  };
+  try {
+    const c = phone.open();
+    await c.signIn('alex');
+    await vi.waitFor(async () => expect((await store.read()).session.status).toBe('authenticated'));
+    await store.saveSetup(setup);
+    server.auth.expired = true;
+    await c.refreshHome();
+    await vi.waitFor(async () => expect((await store.read()).session.status).toBe('expired'));
+    const row = native.databases
+      .get('splitbook-widgets.db')!
+      .prepare('SELECT setup FROM widget_setup WHERE widget_id = 85')
+      .get()!;
+    expect(JSON.parse(String(row.setup))).toEqual(setup);
+    const { copy, session } = await store.read();
+    expect(personWidget(copy, setup, { width: 360, height: 224 }, session, homeTime)).toMatchObject(
+      { state: 'expired', name: null, initials: null, payments: [] },
+    );
+  } finally {
+    phone.dispose();
+  }
 });

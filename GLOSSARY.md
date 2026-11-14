@@ -55,7 +55,7 @@ The Saved copy a home-screen widget draws from. It holds what the widgets show, 
 _Avoid_: widget cache, widget data
 
 **Widget setup**:
-A member's choices for one placed widget, including its Group (or Ask each time, for Add expense), or its person (id, first name and initials), Hide amounts and Show recent Expenses for a Group widget, which is off by default. Hide amounts also hides descriptions. It belongs to the device: it is kept through sign-out and removed when the widget is removed. Another account must set the widget up again.
+A member's choices for one placed widget, including its Group (or Ask each time, for Add expense), or its person id, Hide amounts and Show recent Expenses for a Group widget, which is off by default. Hide amounts also hides descriptions. It belongs to the device: it is kept through sign-out and removed when the widget is removed. The Person choice may keep its first name and initials while signed in; sign-out and account change strip them while keeping the id, switches and setup account. A 401 keeps the labels hidden. Another account must set the widget up again.
 _Avoid_: widget settings, widget configuration
 
 **Expense entry**:
