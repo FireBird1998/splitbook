@@ -553,7 +553,7 @@ it.each([1.3, 2])(
 it.each(['tall row', 'amount too wide'] as const)(
   'keeps both 130-percent footer actions when the payment has a %s',
   (reason) => {
-    const c = structuredClone(paymentCopy);
+    const c = clone(paymentCopy);
     c.groups!.maple!.currencies[0]!.payments[0]!.toName = 'Ananthapadmanabhan Balakrishnan';
     if (reason === 'amount too wide')
       c.groups!.maple!.currencies[0]!.payments[0]!.amountMinor = 99999999999999;
@@ -572,7 +572,7 @@ it.each(['tall row', 'amount too wide'] as const)(
   },
 );
 it('keeps short incoming labels beside their amounts when the amount fits', () => {
-  const c = structuredClone(paymentCopy);
+  const c = clone(paymentCopy);
   c.groups = { maple: c.groups!.maple! };
   c.groups!.maple!.currencies = [
     {
