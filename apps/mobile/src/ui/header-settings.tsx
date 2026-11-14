@@ -177,8 +177,8 @@ export function HeaderSettings({
                   <View style={{ flex: 1 }}>
                     <CompactText>Tilt with the phone</CompactText>
                     <CompactText variant="small" tone="secondary">
-                      The scene shifts a little as you move it. Scenes stay still on Android for
-                      now.
+                      The scene shifts a little as you move the phone. Scenes stay still on Android
+                      for now.
                     </CompactText>
                   </View>
                   <Switch
