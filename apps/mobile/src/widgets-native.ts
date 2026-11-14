@@ -2,7 +2,7 @@ import { widgetPeople } from '@splitbook/shared/widget-people';
 import { openDatabaseAsync, defaultDatabaseDirectory, type SQLiteDatabase } from 'expo-sqlite';
 import { readWidgetTagIds, type WidgetSetupRecord } from '@splitbook/shared/widget-setup';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
-import type { WidgetsNative } from './data/widget-copy';
+import type { WidgetsNative, WidgetCopyDiscard } from './data/widget-copy';
 
 // SQLite checks the current setup in the same statement that stores a copy. A delayed app
 // write cannot put descriptions back after setup was switched off or its widget removed.
@@ -162,7 +162,7 @@ export function createWidgetsStore(environment: string) {
         session: row?.session ? JSON.parse(row.session) : { status: 'signed-out' },
       };
     },
-    async write(copy: WidgetCopy) {
+    async write(copy: WidgetCopy, discard: WidgetCopyDiscard = {}) {
       const db = await ensure();
       const previous = (await this.read()).copy;
       if (previous?.accountId === copy.accountId) {
@@ -170,21 +170,27 @@ export function createWidgetsStore(environment: string) {
         // survives that eviction and a restart, until access is genuinely lost or the copy purged.
         const finalGroups = Object.fromEntries(
           Object.entries(previous.groups ?? {}).filter(
-            ([id, group]) => group.archived && !copy.lostGroupIds?.includes(id),
+            ([id, group]) =>
+              group.archived && !copy.lostGroupIds?.includes(id) && !discard.groups?.includes(id),
           ),
         );
         const finalMonths = Object.fromEntries(
-          Object.entries(previous.months ?? {}).filter(([id]) => finalGroups[id]),
+          Object.entries(previous.months ?? {}).filter(
+            ([id]) => finalGroups[id] && !discard.months?.includes(id),
+          ),
+        );
+        const retainedTags = Object.fromEntries(
+          Object.entries(previous.tags ?? {}).filter(([id]) => !discard.tags?.includes(id)),
         );
         copy = {
           ...copy,
           groups: { ...finalGroups, ...copy.groups },
           months: { ...finalMonths, ...copy.months },
           tags: Object.fromEntries(
-            [...new Set([...Object.keys(previous.tags ?? {}), ...Object.keys(copy.tags ?? {})])]
+            [...new Set([...Object.keys(retainedTags), ...Object.keys(copy.tags ?? {})])]
               .filter((id) => !copy.lostGroupIds?.includes(id))
               .map((id) => {
-                const old = previous.tags?.[id],
+                const old = retainedTags[id],
                   fresh = copy.tags?.[id];
                 return [id, old && (!fresh || old.verifiedAt > fresh.verifiedAt) ? old : fresh!];
               }),
@@ -289,7 +295,7 @@ export function createWidgetsNative(environment: string): WidgetsNative {
         { key: 'appWidgetId', value: widgetId },
       ]);
     },
-    write: (copy) => store.write(copy),
+    write: (copy, discard) => store.write(copy, discard),
     clear: () => store.clear(),
     setSession: (state) => {
       const next = sessions.catch(() => undefined).then(() => store.setSession(state));

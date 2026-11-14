@@ -45,6 +45,8 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false, time
   let theme = 'home';
   let monthStatus = 0;
   let hold: Promise<void> | undefined;
+  let holdRead: Promise<void> | undefined;
+  let readArrived: (() => void) | undefined;
   let groupTags = [
     { _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: false },
   ];
@@ -191,7 +193,12 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false, time
       groupCreations: undefined,
       netInfo: undefined,
       widgets: {
-        readCopy: async () => nativeCopy,
+        readCopy: async () => {
+          const copy = structuredClone(nativeCopy);
+          readArrived?.();
+          await holdRead;
+          return copy;
+        },
         ...(recentAdapter
           ? {
               recentSelections: async (
@@ -249,6 +256,24 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false, time
       if (!count && nativeCopy?.recents) delete nativeCopy.recents[groupId];
     },
     currentCopy: () => nativeCopy,
+    blockRead: () => {
+      let release!: () => void, arrive!: () => void;
+      holdRead = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const arrived = new Promise<void>((resolve) => {
+        arrive = resolve;
+      });
+      readArrived = arrive;
+      return {
+        arrived,
+        release: () => {
+          readArrived = undefined;
+          holdRead = undefined;
+          release();
+        },
+      };
+    },
     failRecentSelection: (failed: boolean) => {
       recentSelectionFailure = failed;
     },
@@ -1209,6 +1234,7 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
         expect.objectContaining({ from: alex.id, to: sam.id, amountMinor: 10000 }),
       ]);
       expect(f.storedCopy()?.finishLater).toEqual({ groupId, groupName: 'Maple House' });
+      expect(f.storedCopy()?.review?.count).toBe(1);
       expect(overview(f).payments).toHaveLength(1);
       expect(overview(f).finishLater?.groupName).toBe('Maple House');
       expect(f.storedCopy()?.recents?.[groupId]?.rows[0]?.description).toBe('Private beach lunch');
@@ -2744,11 +2770,13 @@ describe('combined Widget copy account and Group rules', () => {
         if (reason === 'sign-out') expect(f.record().copy).toBeNull();
         else {
           await vi.waitFor(() => expect(f.record().copy?.accountId).toBe(sam.id));
-          expect(f.record().copy?.groupPeople?.[groupId]?.people).toEqual([
-            { id: sam.id, firstName: 'Sam', initials: 'SC' },
-            { id: alex.id, firstName: 'Alex', initials: 'AR' },
-            { id: 'a00000000000000000000003', firstName: 'Priya', initials: 'PS' },
-          ]);
+          await vi.waitFor(() =>
+            expect(f.record().copy?.groupPeople?.[groupId]?.people).toEqual([
+              { id: sam.id, firstName: 'Sam', initials: 'SC' },
+              { id: alex.id, firstName: 'Alex', initials: 'AR' },
+              { id: 'a00000000000000000000003', firstName: 'Priya', initials: 'PS' },
+            ]),
+          );
           expect(
             personWidget(
               f.record().copy,
@@ -3143,7 +3171,12 @@ it.each(['sign-out', 'account-change'] as const)(
     await vi.waitFor(() => expect(f.record().copy?.groups?.[groupId]).toBeDefined());
     await c.back();
     f.listGroups([]);
-    f.refuse(403);
+    f.backend.reply(
+      'GET',
+      `/api/groups/${groupId}`,
+      () => Response.json({ error: 'Not a member' }, { status: 403 }),
+      { once: true },
+    );
     const held = f.backend.hold('GET', `/api/groups/${groupId}`);
     const refresh = c.refresh('pull');
     await vi.waitFor(() =>
@@ -3224,4 +3257,24 @@ it('confirms omitted Groups sequentially, once each, sharing a confirmation whil
   expect(
     f.backend.requests.slice(start).filter((r) => r.path === `/api/groups/${second}`),
   ).toHaveLength(1);
+});
+
+it('ignores an old native restore arriving after account invalidation, before the new account copy is written', async () => {
+  const f = fixture(),
+    c = f.make();
+  f.groupBalances(paymentBalances);
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.record().copy?.groups?.[groupId]).toBeDefined());
+  c.dispose();
+  const held = f.blockRead(),
+    restarted = f.make();
+  const restoring = restarted.restore();
+  await held.arrived;
+  const changed = restarted.signIn('sam');
+  expect(restarted.getSnapshot().auth.status).toBe('signing-in');
+  held.release();
+  await Promise.all([restoring, changed]);
+  await vi.waitFor(() => expect(f.record().copy?.accountId).toBe(sam.id));
+  expect(f.record().copy?.groups?.[groupId]).toBeUndefined();
 });
