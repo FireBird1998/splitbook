@@ -118,7 +118,7 @@ it.each(
   if (['signed-out', 'expired', 'other-account', 'no-copy', 'loading'].includes(state))
     expect(JSON.stringify(v)).not.toMatch(/2,400|1,480|40\.00|42000/);
   if (state === 'hidden') {
-    expect(v.hidden).toBe('Amounts hidden');
+    expect(v.hidden).toBe('Amounts and names hidden');
     expect(JSON.stringify(v)).not.toMatch(/₹|€|¥|2,400/);
   }
   if (state === 'old') {

@@ -140,9 +140,9 @@ it('keeps the compact Group action on one readable line at 200% without losing s
 
 it('drops optional privacy captions in tight large-text layouts but keeps them in speech', () => {
   const b = overviewAt(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
-  expect(b.layout).toMatchObject({ showHeader: false, fonts: { privacy: 8 } });
+  expect(b.layout).toMatchObject({ showHeader: false, fonts: { privacy: 7 } });
   expect(b.layout.sections.some((section) => section.id === 'privacy')).toBe(true);
-  expect(b.summary).toContain('Amounts hidden');
+  expect(b.summary).toContain('Amounts and names hidden');
   const g = groupWidget(
     part,
     { ...setup, hideAmounts: true },
@@ -191,8 +191,10 @@ it.each([1.3, 2])('uses whole, single-line labels in compact hidden Balances at 
   ).toBe(true);
 });
 
-it('keeps the compact privacy caption on one line at 200% text', () => {
+it('fits the complete compact privacy caption on two lines at 200% text', () => {
   const v = overviewAt(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
-  expect(v.layout.fonts.privacy).toBe(8);
+  expect(v.layout.fonts.privacy).toBe(7);
+  expect(v.layout.privacyLines).toEqual(['Amounts and names', 'hidden']);
+  expect(v.layout.fits).toBe(true);
   expect(v.layout.sections.some((section) => section.id === 'privacy')).toBe(true);
 });

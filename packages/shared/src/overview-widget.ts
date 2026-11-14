@@ -73,7 +73,7 @@ export function overviewWidget(
   const homeFiguresMissing = !!copy?.home && copy.home.byGroup === undefined;
   const allOwed = read.owed,
     allOwe = read.owe;
-  const hidden = read.hidden;
+  const hidden = read.hidden ? 'Amounts and names hidden' : null;
   const suggested =
     normal && session.status === 'authenticated' ? widgetPayments(copy, session.accountId) : [];
   const personCount = (incoming: boolean) =>
@@ -98,7 +98,7 @@ export function overviewWidget(
   const padding = Math.ceil((small ? 8 : 14) * ratio) / ratio;
   const width = Math.max(1, Math.floor(size.width * ratio) / ratio - padding * 2);
   const height = Math.max(0, Math.floor(size.height * ratio) / ratio - padding * 2);
-  const gap = small ? 4 : 8;
+  const gap = small ? (hidden && level === 2 ? 2 : 4) : 8;
   const layout = fitWidgetLayout(
     { ...size, width, height },
     scale,
@@ -180,7 +180,7 @@ export function overviewWidget(
         ? text.words(action, actionFont, width - actionPaddingHorizontal * 2)
         : [];
       const privacyLines = hidden
-        ? text.words(hidden, small && level === 2 ? 8 : 10, width - 18)
+        ? text.words(hidden, small && level === 2 ? 7 : 10, width - 18)
         : [];
       const showStateTile =
         !normal &&
@@ -215,7 +215,7 @@ export function overviewWidget(
           : [];
       const compactFont = text.fit(
         compactLines.reduce((a, b) => (a.length > b.length ? a : b), ''),
-        small && level === 2 ? 9 : 10,
+        small && level === 2 ? (hidden ? 8 : 9) : 10,
         width,
       );
       const compactFallback =
@@ -341,10 +341,12 @@ export function overviewWidget(
       const paymentMessage =
         normal && tall && !suggested.length && !hasReadGroup ? 'Open the Group to update' : null;
       const paymentMessageLines = paymentMessage ? text.words(paymentMessage, 11) : [];
-      const paymentCountsLines = hiddenPayments.map((label) => text.words(label, 12, width - 24));
+      const measuredPaymentCounts = hiddenPayments.map((label) =>
+        text.words(label, 12, width - 24),
+      );
       const paymentCountHeight = Math.max(
         36 * scale * text.factor,
-        ...paymentCountsLines.map(
+        ...measuredPaymentCounts.map(
           (lines) => lines.length * text.line(12) + 8 + Math.ceil(ratio) / ratio,
         ),
       );
@@ -438,11 +440,11 @@ export function overviewWidget(
               },
             ]
           : []),
-        ...(normal && tall && paymentCountsLines.length
+        ...(normal && tall && measuredPaymentCounts.length
           ? [
               {
                 id: 'payment-counts',
-                rows: paymentCountsLines.length,
+                rows: measuredPaymentCounts.length,
                 rowHeight: paymentCountHeight,
                 headingHeight: paymentHeaderHeight,
                 inset: 8,
@@ -511,7 +513,7 @@ export function overviewWidget(
                 rows: 1,
                 rowHeight: Math.max(
                   14,
-                  privacyLines.length * text.line(small && level === 2 ? 8 : 10),
+                  privacyLines.length * text.line(small && level === 2 ? 7 : 10),
                 ),
                 required: true,
               },
@@ -555,7 +557,8 @@ export function overviewWidget(
         paymentHeaderHeight,
         paymentAvatarSize,
         paymentMessageLines,
-        paymentCountsLines,
+        paymentCountsLines: measuredPaymentCounts.flat(),
+        measuredPaymentCounts,
         paymentLabelFont: text.font(paymentFont),
         paymentAmountFont: text.font(13),
         primary,
@@ -604,7 +607,7 @@ export function overviewWidget(
           action: text.font(actionFont),
           review: text.font(11),
           small: text.font(10),
-          privacy: text.font(small && level === 2 ? 8 : 10),
+          privacy: text.font(small && level === 2 ? 7 : 10),
           secondary: text.font(secondaryFont),
           compact: text.font(compactFont),
         },
@@ -623,6 +626,7 @@ export function overviewWidget(
     finishLater,
     measuredPayments,
     measuredGroups,
+    measuredPaymentCounts,
     ...geometry
   } = layout;
   const paymentSection = layout.sections.find((s) => s.id === 'payments');
@@ -635,14 +639,12 @@ export function overviewWidget(
     contentHeight: paymentSection!.rowHeight - (i ? Math.ceil(ratio) / ratio : 0),
   }));
   const countSection = layout.sections.find((s) => s.id === 'payment-counts');
-  const paymentCounts = layout.paymentCountsLines
-    .slice(0, countSection?.rows ?? 0)
-    .map((lines, i) => ({
-      lines,
-      rowHeight: countSection!.rowHeight,
-      dividerHeight: i ? Math.ceil(ratio) / ratio : 0,
-      contentHeight: countSection!.rowHeight - (i ? Math.ceil(ratio) / ratio : 0),
-    }));
+  const paymentCounts = measuredPaymentCounts.slice(0, countSection?.rows ?? 0).map((lines, i) => ({
+    lines,
+    rowHeight: countSection!.rowHeight,
+    dividerHeight: i ? Math.ceil(ratio) / ratio : 0,
+    contentHeight: countSection!.rowHeight - (i ? Math.ceil(ratio) / ratio : 0),
+  }));
   const groupSection = layout.sections.find((s) => s.id === 'groups');
   const visibleGroups = groupRows.slice(0, groupSection?.rows ?? 0).map((group, i) => ({
     id: group.id,

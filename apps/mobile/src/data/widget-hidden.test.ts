@@ -85,7 +85,7 @@ it.each(['2x1', '2x2', '4x2'] as const)(
     expect(v).toMatchObject({
       owed: ['in 2\u00a0currencies'],
       owe: ['in 1\u00a0currency'],
-      hidden: 'Amounts hidden',
+      hidden: 'Amounts and names hidden',
       saved: 'Saved 9:41',
       owedOverflow: null,
       oweOverflow: null,
@@ -127,7 +127,7 @@ it.each(['2x1', '2x2', '4x2'] as const)(
       muted: true,
       layout: { footerNote: size === '2x1' ? null : 'Open to update' },
       summary: expect.stringContaining('Open to update'),
-      hidden: 'Amounts hidden',
+      hidden: 'Amounts and names hidden',
     });
   },
 );
