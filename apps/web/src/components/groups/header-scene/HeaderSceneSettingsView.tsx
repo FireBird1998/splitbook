@@ -100,6 +100,7 @@ export default function HeaderSceneSettingsView({
               data-scene-preview-card={dimmed ? 'theme' : previewTone}
               sx={{
                 flex: '1 1 280px',
+                alignSelf: 'flex-start',
                 minWidth: 0,
                 ...(!dimmed &&
                   previewTone === 'dark' && {
