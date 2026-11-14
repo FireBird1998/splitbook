@@ -205,7 +205,9 @@ function GroupSettingsContent({
               {group.name}
             </Typography>
             <Typography color="text.secondary" sx={{ mb: 2 }}>
-              Only admins can change the Group’s name, Theme, dates and member roles.
+              {headerScenesEnabled()
+                ? 'Only admins can change the Group’s name, Theme, dates and member roles.'
+                : 'Only admins can change this Group’s settings.'}
             </Typography>
             <Button component={Link} href={`/groups/${groupId}`} variant="outlined">
               Back to Group
