@@ -101,7 +101,26 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       {column('You owe', view.owe, view.oweOverflow, t.status.negative)}
     </FlexWidget>
   );
-  const message = (
+  const message = l.quietBalance ? (
+    <FlexWidget
+      style={{
+        width: 'match_parent',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        flexGap: 8,
+        backgroundColor: color(t.surfaceMuted),
+        borderRadius: 14,
+      }}
+    >
+      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 8, flex: 1 }}>
+        {text('✓', t.status.positive, f.title, true)}
+        <FlexWidget style={{ flex: 1 }}>{lines(l.titleLines, t.text, f.title, true)}</FlexWidget>
+      </FlexWidget>
+      {l.quietNote ? text(l.quietNote, t.textSecondary, l.quietNoteFont) : null}
+    </FlexWidget>
+  ) : (
     <FlexWidget style={{ width: 'match_parent', flexGap: 8 }}>
       <FlexWidget
         style={{

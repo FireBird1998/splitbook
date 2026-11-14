@@ -190,16 +190,12 @@ it('fits the whole ordinary native footer with To review and Add expense at 130 
   );
 });
 
-it.each(['all-square', 'no-copy', 'other-account'] as const)(
+it.each(['no-copy', 'other-account'] as const)(
   'keeps the existing sentence position for %s',
   (state) => {
     vi.stubGlobal('__DEV__', false);
     const saved =
-      state === 'no-copy'
-        ? null
-        : state === 'other-account'
-          ? { ...copy, accountId: 'sam' }
-          : { ...copy, home: { ...copy.home!, currencies: [] } };
+      state === 'no-copy' ? null : state === 'other-account' ? { ...copy, accountId: 'sam' } : copy;
     const v = overviewWidget(
       saved,
       { kind: 'balances', widgetId: 7 },
@@ -523,3 +519,27 @@ it.each([172, 360])(
     expect(v.summary).toContain('1 Expense to finish');
   },
 );
+
+it('keeps the quiet balance in one measured panel line with the note at the right', () => {
+  vi.stubGlobal('__DEV__', false);
+  const v = overviewWidget(
+    { ...copy, home: { ...copy.home!, currencies: [] } },
+    { kind: 'balances', widgetId: 7 },
+    { width: 360, height: 464 },
+    auth,
+    now,
+  );
+  const tree = buildWidgetTree(drawOverview(v, lightTokens));
+  const section = v.layout.sections.find((s) => s.id === 'message')!;
+  const message = tree.children![v.layout.sections.indexOf(section)];
+  const panel = nodes(message).find(
+    (n) => (n.props as { backgroundColor?: string }).backgroundColor === lightTokens.surfaceMuted,
+  );
+  expect(panel).toBeDefined();
+  expect(labels(panel!)).toContain('You’re all square');
+  expect(labels(panel!)).toContain('in every currency');
+  expect(labels(panel!)).toContain('✓');
+  expect((panel!.props as { orientation: string }).orientation).toBe('HORIZONTAL');
+  expect(minimumHeight(message)).toBeLessThanOrEqual(section.height);
+  expect(section.height).toBeLessThan(50);
+});

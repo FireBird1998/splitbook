@@ -46,7 +46,7 @@ export function overviewWidget(
       ? widgetGroups(copy, session.accountId)
       : [];
   const description =
-    state === 'all-square' && groupRows.length
+    state === 'all-square' && tall
       ? 'in every currency'
       : otherAccount
         ? 'This phone is signed in to another account.'
@@ -184,28 +184,40 @@ export function overviewWidget(
       const privacyLines = hidden
         ? text.words(hidden, small && level === 2 ? 7 : 10, width - 18)
         : [];
+      const quietBalance = state === 'all-square' && tall;
+      const quietNote =
+        quietBalance &&
+        optional &&
+        text.width(title ?? '', 14) + text.width('in every currency', 11) + 60 <= width
+          ? 'in every currency'
+          : null;
       const showStateTile =
         !normal &&
         !['loading', 'no-groups', 'no-copy'].includes(state) &&
-        !(state === 'all-square' && groupRows.length) &&
+        !quietBalance &&
         optional &&
         !level &&
         !small;
       const messageBesideTile = state === 'signed-out' || state === 'expired';
-      const messageWidth = width - (showStateTile ? 60 : 0);
-      const titleLines = title ? text.words(title, small ? 10 : 15, messageWidth) : [];
+      const messageWidth = quietBalance
+        ? width - 52 - (quietNote ? text.width(quietNote, 11) + 8 : 0)
+        : width - (showStateTile ? 60 : 0);
+      const titleFont = quietBalance ? 14 : small ? 10 : 15;
+      const titleLines = title ? text.words(title, titleFont, messageWidth) : [];
       const descriptionLines =
-        description && optional && level < 2
+        !quietBalance && description && optional && level < 2
           ? text.words(description, bodyFont, messageBesideTile ? messageWidth : width)
           : [];
-      const titleHeight = titleLines.length * text.line(small ? 10 : 15);
+      const titleHeight = titleLines.length * text.line(titleFont);
       const descriptionHeight = descriptionLines.length
         ? 8 + descriptionLines.length * text.line(bodyFont)
         : 0;
       const tileHeight = showStateTile ? 48 : 0;
-      const messageHeight = messageBesideTile
-        ? Math.max(titleHeight + descriptionHeight, tileHeight)
-        : Math.max(titleHeight, tileHeight) + descriptionHeight;
+      const messageHeight = quietBalance
+        ? Math.max(20, titleHeight, quietNote ? text.line(11) : 0) + 20
+        : messageBesideTile
+          ? Math.max(titleHeight + descriptionHeight, tileHeight)
+          : Math.max(titleHeight, tileHeight) + descriptionHeight;
       const secondary =
         small && normal && !hidden && owed.length && owe.length ? `You owe ${owe[0]}` : null;
       const secondaryFont = text.fit(secondary ?? '', level ? 9 : 12, width);
@@ -585,6 +597,9 @@ export function overviewWidget(
         showSaved,
         showStateTile,
         messageBesideTile,
+        quietBalance,
+        quietNote,
+        quietNoteFont: text.font(11),
         review,
         action,
         actionTarget,
@@ -612,7 +627,7 @@ export function overviewWidget(
           label: text.font(labelFont),
           money: text.font(moneyFont),
           body: text.font(bodyFont),
-          title: text.font(small ? 10 : 15),
+          title: text.font(titleFont),
           action: text.font(actionFont),
           review: text.font(11),
           small: text.font(10),
