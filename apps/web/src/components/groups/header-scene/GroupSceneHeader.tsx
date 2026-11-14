@@ -8,6 +8,7 @@ import type { GroupRead } from '@splitbook/shared/group-read';
 import HeaderSceneView from './HeaderSceneView';
 import { useSceneArt } from './use-scene-art';
 import { useHeaderClock } from './use-header-clock';
+import { useScenePreferences } from './scene-preferences';
 
 export default function GroupSceneHeader({
   group,
@@ -18,7 +19,7 @@ export default function GroupSceneHeader({
 }) {
   const clock = useHeaderClock();
   const { picture, failed, retry } = useSceneArt(header.scene);
-
+  const preferences = useScenePreferences();
   return (
     <Box aria-busy={!picture && !failed}>
       {picture && <style>{picture.css}</style>}
@@ -26,6 +27,8 @@ export default function GroupSceneHeader({
         card={headerCard(group, clock?.today ?? '')}
         art={picture?.art ?? null}
         time={headerTimeOfDay(header.time, clock?.hour ?? 12)}
+        motion={preferences.motion}
+        followPointer={preferences.followPointer}
       />
       {failed && (
         <Typography role="status" variant="body2" color="text.secondary">

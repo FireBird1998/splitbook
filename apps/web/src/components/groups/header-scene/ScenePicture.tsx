@@ -79,6 +79,8 @@ export default function ScenePicture({
         position: 'absolute',
         inset: 0,
         overflow: 'hidden',
+        // The compact preview keeps the sun or moon beside the island, as on its board.
+        '& .vq-sun': cropped ? { left: '84%' } : {},
         '& .vq-world': {
           transform:
             motion && followPointer
@@ -98,6 +100,8 @@ export default function ScenePicture({
         },
         '@media (prefers-reduced-motion: reduce)': {
           '&, & *': { animation: 'none !important', transition: 'none !important' },
+          // The compact preview keeps the sun or moon beside the island, as on its board.
+          '& .vq-sun': cropped ? { left: '84%' } : {},
           '& .vq-world': { transform: 'none !important' },
         },
       }}

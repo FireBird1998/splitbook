@@ -112,3 +112,24 @@ describe('the Group settings page’s Assistants section (#621)', () => {
     expect(assistants(MEMBER, false).section).toBe(false);
   });
 });
+
+it('offers Header scene to a non-admin member while enabled and hides it while off', () => {
+  read.category = 'trip';
+  const render = () =>
+    renderToStaticMarkup(
+      createElement(GroupSettingsView, {
+        groupId: GROUP,
+        userId: MEMBER,
+        recurringExpensesEnabled: false,
+        assistantsAvailable: false,
+      }),
+    );
+  vi.stubEnv('NEXT_PUBLIC_HEADER_SCENES_ENABLED', 'true');
+  try {
+    expect(render()).toContain('Header scene');
+    vi.stubEnv('NEXT_PUBLIC_HEADER_SCENES_ENABLED', 'false');
+    expect(render()).not.toContain('Header scene');
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
