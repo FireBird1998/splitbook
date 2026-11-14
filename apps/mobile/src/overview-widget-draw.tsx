@@ -1,3 +1,4 @@
+import { widgetThemeIcon } from './widget-theme-icon';
 import { FlexWidget } from 'react-native-android-widget/src/widgets/FlexWidget';
 import { TextWidget } from 'react-native-android-widget/src/widgets/TextWidget';
 import { SvgWidget } from 'react-native-android-widget/src/widgets/SvgWidget';
@@ -350,6 +351,139 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       </FlexWidget>
     </FlexWidget>
   );
+  const groups = (
+    <FlexWidget style={{ width: 'match_parent' }}>
+      {l.groupHeaderHeight ? (
+        <FlexWidget
+          style={{
+            width: 'match_parent',
+            height: l.groupHeaderHeight,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          {text('Groups', t.textSecondary, f.small, true)}
+          {view.groupMore ? (
+            <FlexWidget clickAction="OPEN_URI" clickActionData={link(view.groupMoreTarget)}>
+              {text(view.groupMore, t.brand.main, f.small)}
+            </FlexWidget>
+          ) : view.groupCount ? (
+            text(view.groupCount, t.textSecondary, f.small)
+          ) : null}
+        </FlexWidget>
+      ) : null}
+      <FlexWidget
+        style={{
+          width: 'match_parent',
+          ...(l.compactGroups || !view.groups.length
+            ? {}
+            : { backgroundColor: color(t.surfaceMuted), borderRadius: 14, paddingVertical: 4 }),
+        }}
+      >
+        {view.groups.map((row) => (
+          <FlexWidget key={row.id} style={{ width: 'match_parent', height: row.rowHeight }}>
+            {row.dividerHeight ? (
+              <FlexWidget
+                style={{
+                  width: 'match_parent',
+                  height: row.dividerHeight,
+                  backgroundColor: color(t.border),
+                }}
+              />
+            ) : null}
+            <FlexWidget
+              clickAction="OPEN_URI"
+              clickActionData={link(row.target)}
+              style={{
+                width: 'match_parent',
+                height: row.contentHeight,
+                justifyContent: 'center',
+                ...(l.compactGroups ? {} : { paddingHorizontal: 8 }),
+              }}
+            >
+              <FlexWidget
+                style={{
+                  width: 'match_parent',
+                  flexDirection: row.stack ? 'column' : 'row',
+                  alignItems: row.stack ? 'flex-start' : 'center',
+                  flexGap: row.stack ? 2 : 8,
+                }}
+              >
+                <FlexWidget
+                  style={{
+                    ...(row.stack ? { width: 'match_parent' } : { flex: 1 }),
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    flexGap: 8,
+                  }}
+                >
+                  {!l.compactGroups ? (
+                    <FlexWidget
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 8,
+                        backgroundColor: color(t.brand.bg),
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {widgetThemeIcon(row.theme, t.brand.main)}
+                    </FlexWidget>
+                  ) : null}
+                  <FlexWidget style={{ flex: 1 }}>
+                    {text(row.name, t.text, l.groupNameFont, true)}
+                  </FlexWidget>
+                </FlexWidget>
+                <FlexWidget
+                  style={{
+                    ...(row.stack ? { width: 'match_parent' } : { width: row.balanceWidth }),
+                  }}
+                >
+                  {row.labels.map((label, i) => (
+                    <FlexWidget
+                      key={i}
+                      style={{
+                        flexDirection: row.amountStack ? 'column' : 'row',
+                        alignItems: row.amountStack ? 'flex-start' : 'center',
+                        flexGap: row.amountStack ? 0 : 6,
+                      }}
+                    >
+                      {text(
+                        label,
+                        row.muted
+                          ? t.textMuted
+                          : row.positive[i] === undefined
+                            ? t.textSecondary
+                            : row.positive[i]
+                              ? t.status.positive
+                              : t.status.negative,
+                        l.groupLabelFont,
+                        true,
+                      )}
+                      {row.amounts[i]
+                        ? text(
+                            row.amounts[i],
+                            row.muted ? t.textMuted : t.text,
+                            l.groupAmountFont,
+                            true,
+                            true,
+                          )
+                        : null}
+                    </FlexWidget>
+                  ))}
+                  {row.moreCurrencies
+                    ? text(row.moreCurrencies, t.textSecondary, l.groupLabelFont)
+                    : null}
+                </FlexWidget>
+              </FlexWidget>
+            </FlexWidget>
+          </FlexWidget>
+        ))}
+      </FlexWidget>
+    </FlexWidget>
+  );
   const content: Record<string, React.ReactNode> = {
     header: (
       <FlexWidget
@@ -375,6 +509,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
     ),
     balance,
     payments,
+    groups,
     'payments-message': (
       <FlexWidget style={{ width: 'match_parent' }}>
         {paymentHeader}

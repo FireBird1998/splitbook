@@ -1,3 +1,6 @@
+import { widgetGroups } from './widget-groups';
+import { formatCurrency } from './currency';
+import { toMajorAmount } from './exact-money';
 import { widgetPayments, spokenWidgetPayments } from './widget-payments';
 import {
   readWidgetBalances,
@@ -38,11 +41,18 @@ export function overviewWidget(
     'no-copy': 'Open Splitbook to load your balances, payments and Groups.',
     'no-groups': 'Share costs with a Group, and it shows here.',
   };
-  const description = otherAccount
-    ? 'This phone is signed in to another account.'
-    : tall
-      ? (tallDescriptions[state] ?? read.description)
-      : read.description;
+  const groupRows =
+    session.status === 'authenticated' && (state === 'normal' || state === 'all-square')
+      ? widgetGroups(copy, session.accountId)
+      : [];
+  const description =
+    state === 'all-square' && groupRows.length
+      ? 'in every currency'
+      : otherAccount
+        ? 'This phone is signed in to another account.'
+        : tall
+          ? (tallDescriptions[state] ?? read.description)
+          : read.description;
   const target: WidgetTarget = otherAccount
     ? { kind: 'setup', widgetId: setup.widgetId }
     : read.target;
@@ -171,7 +181,12 @@ export function overviewWidget(
         ? text.words(hidden, small && level === 2 ? 8 : 10, width - 18)
         : [];
       const showStateTile =
-        !normal && !['loading', 'no-groups'].includes(state) && optional && !level && !small;
+        !normal &&
+        !['loading', 'no-groups'].includes(state) &&
+        !(state === 'all-square' && groupRows.length) &&
+        optional &&
+        !level &&
+        !small;
       const messageBesideTile = state === 'signed-out' || state === 'expired';
       const messageWidth = width - (showStateTile ? 60 : 0);
       const titleLines = title ? text.words(title, small ? 10 : 15, messageWidth) : [];
@@ -325,6 +340,74 @@ export function overviewWidget(
         normal && tall && !suggested.length && !hasReadGroup ? 'Open the Group to update' : null;
       const paymentMessageLines = paymentMessage ? text.words(paymentMessage, 11) : [];
       const paymentCountsLines = hiddenPayments.flatMap((label) => text.words(label, 12));
+      const groupDetails = optional && !level;
+      const groupHeaderHeight = groupDetails ? text.line(10) + 4 : 0;
+      const compactGroups = size.width / Math.max(1, scale) < 240;
+      const groupLimit = !level && size.height >= 584 ? 2 : 1;
+      const measuredGroups = groupRows.map((group) => {
+        const visible = group.balances?.slice(0, groupLimit) ?? [];
+        const labels =
+          group.balances === null
+            ? ['Open to update']
+            : !group.balances.length
+              ? ['All square']
+              : visible.map((row) => (row.balanceMinor > 0 ? 'You’re owed' : 'You owe'));
+        const amounts = hidden
+          ? []
+          : visible.map((row) =>
+              formatCurrency(toMajorAmount(Math.abs(row.balanceMinor), row.currency), row.currency),
+            );
+        const moreCurrencies =
+          !hidden && group.balances && group.balances.length > groupLimit
+            ? `+${counted(group.balances.length - groupLimit, 'currency', 'currencies')}`
+            : null;
+        const contentWidth = width - (compactGroups ? 0 : 16);
+        const balanceWidth = Math.max(
+          ...labels.map(
+            (label, i) =>
+              text.width(label, 9) + (amounts[i] ? text.width(amounts[i], 12, true) + 6 : 0),
+          ),
+          0,
+        );
+        const stack =
+          compactGroups || text.width(group.name, 12) + balanceWidth + 44 > contentWidth;
+        const amountStack =
+          stack &&
+          amounts.some(
+            (amount, i) =>
+              text.width(amount, 12, true) + text.width(labels[i], 9) + 8 > contentWidth,
+          );
+        const valueHeight =
+          labels.reduce(
+            (n, _, i) =>
+              n +
+              (amounts[i]
+                ? amountStack
+                  ? text.line(9) + text.line(12)
+                  : Math.max(text.line(9), text.line(12))
+                : text.line(9)),
+            0,
+          ) + (moreCurrencies ? text.line(9) : 0);
+        const nameHeight = compactGroups ? text.line(12) : Math.max(24, text.line(12));
+        const textHeight = stack ? nameHeight + valueHeight + 2 : Math.max(nameHeight, valueHeight);
+        return {
+          labels,
+          amounts,
+          moreCurrencies,
+          stack,
+          amountStack,
+          textHeight,
+          balanceWidth: Math.max(balanceWidth, moreCurrencies ? text.width(moreCurrencies, 9) : 0),
+          positive: visible.map((row) => row.balanceMinor > 0),
+          fits: amounts.every((amount) => text.width(amount, 12, true) <= contentWidth),
+        };
+      });
+      const groupRowHeight = Math.max(
+        (compactGroups ? 36 : 42) * scale * text.factor,
+        ...measuredGroups.map((row) => row.textHeight + Math.ceil(ratio) / ratio),
+      );
+      const showGroups =
+        tall && groupRows.length > 0 && (state === 'all-square' || size.height >= 400);
       const sections: WidgetSection[] = [
         ...(showHeader
           ? [{ id: 'header', rows: 1, rowHeight: text.line(small ? 10 : 13), required: true }]
@@ -367,6 +450,26 @@ export function overviewWidget(
                 rows: 1,
                 rowHeight: messageHeight,
                 required: true,
+              },
+            ]
+          : []),
+        ...(showGroups
+          ? [
+              {
+                id: 'groups',
+                rows: groupRows.length,
+                maxRows: measuredGroups.every((row) => row.fits)
+                  ? level
+                    ? 1
+                    : state === 'all-square' && size.height < 400
+                      ? 3
+                      : 2 + Math.floor(Math.max(0, size.height - 464) / 120) * 2
+                  : 0,
+                rowHeight: groupRowHeight,
+                headingHeight: groupHeaderHeight,
+                inset: compactGroups ? 0 : 8,
+                moreHeight: groupDetails ? 0 : undefined,
+                grow: true,
               },
             ]
           : []),
@@ -424,6 +527,12 @@ export function overviewWidget(
         sections,
         compactPayments,
         measuredPayments,
+        measuredGroups,
+        compactGroups,
+        groupHeaderHeight,
+        groupNameFont: text.font(12),
+        groupAmountFont: text.font(12),
+        groupLabelFont: text.font(9),
         paymentHeaderHeight,
         paymentAvatarSize,
         paymentMessageLines,
@@ -492,6 +601,7 @@ export function overviewWidget(
     actionTarget,
     finishLater,
     measuredPayments,
+    measuredGroups,
     ...geometry
   } = layout;
   const paymentSection = layout.sections.find((s) => s.id === 'payments');
@@ -503,6 +613,46 @@ export function overviewWidget(
     dividerHeight: i ? Math.ceil(ratio) / ratio : 0,
     contentHeight: paymentSection!.rowHeight - (i ? Math.ceil(ratio) / ratio : 0),
   }));
+  const groupSection = layout.sections.find((s) => s.id === 'groups');
+  const visibleGroups = groupRows.slice(0, groupSection?.rows ?? 0).map((group, i) => ({
+    id: group.id,
+    name: group.name,
+    theme: group.theme,
+    target: group.target,
+    verifiedAt: group.verifiedAt,
+    ...measuredGroups[i],
+    muted: group.verifiedAt !== null && now - group.verifiedAt > 86400000,
+    rowHeight: groupSection!.rowHeight,
+    dividerHeight: i ? Math.ceil(ratio) / ratio : 0,
+    contentHeight: groupSection!.rowHeight - (i ? Math.ceil(ratio) / ratio : 0),
+  }));
+  const groupMore =
+    groupSection?.rows && groupSection.more && layout.showOverflow
+      ? `+${counted(groupSection.more, 'more', 'more')}`
+      : null;
+  const groupCount = groupSection && !groupSection.rows ? counted(groupRows.length, 'Group') : null;
+  const spokenGroups = groupRows.map(
+    (group) =>
+      group.name +
+      '. ' +
+      (group.balances === null
+        ? 'Open to update'
+        : !group.balances.length
+          ? 'All square'
+          : group.balances
+              .map(
+                (row) =>
+                  (row.balanceMinor > 0 ? 'You’re owed' : 'You owe') +
+                  (hidden
+                    ? ''
+                    : ' ' +
+                      formatCurrency(
+                        toMajorAmount(Math.abs(row.balanceMinor), row.currency),
+                        row.currency,
+                      )),
+              )
+              .join(' and ')),
+  );
   const paymentMore =
     paymentSection?.rows && paymentSection.more && layout.showOverflow
       ? `+${counted(paymentSection.more, 'more', 'more')}`
@@ -521,6 +671,7 @@ export function overviewWidget(
     normal && allOwed.length ? 'You’re owed ' + allOwed.join(' and ') : null,
     normal && allOwe.length ? 'You owe ' + allOwe.join(' and ') : null,
     ...spokenPayments,
+    ...spokenGroups,
     read.review?.replace(SEPARATOR, ' '),
     unfinished ? `Finish later in ${unfinished.groupName}` : null,
     read.saved,
@@ -547,6 +698,10 @@ export function overviewWidget(
     action: footerVisible ? action : null,
     actionTarget,
     payments: visiblePayments,
+    groups: visibleGroups,
+    groupMore,
+    groupCount,
+    groupMoreTarget: 'home' as const,
     paymentMore,
     paymentCount,
     paymentMoreTarget: 'home' as const,
