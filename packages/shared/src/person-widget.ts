@@ -277,17 +277,21 @@ function projectPerson(
         (read.state === 'all-square' || (!level && !compact));
       const stateTileSize = read.state === 'all-square' ? 22 : 48;
       const messageGap = read.state === 'all-square' ? 8 : 12;
+      const separateDescription = read.state === 'all-square' && size.height < 300;
       const messageWidth = width - (showStateTile ? stateTileSize + messageGap : 0);
       const titleLines = read.title ? text.words(read.title, titleFont, messageWidth) : [];
       const descriptionLines =
         read.description && optional && level < 2
-          ? text.words(read.description, bodyFont, messageWidth)
+          ? text.words(read.description, bodyFont, separateDescription ? width : messageWidth)
           : [];
       const actionLines = read.action ? text.words(read.action, actionFont, width - 24) : [];
       const showPrivacy = !!read.hidden && optional && level < 2;
       const privacyLines = showPrivacy ? text.words(read.hidden!, 10, width - 18) : [];
       const sections: WidgetSection[] = [
         ...(read.name ? [{ id: 'header', rows: 1, rowHeight: headerHeight, required: true }] : []),
+        ...(separateDescription
+          ? [{ id: 'message-before', rows: 1, rowHeight: 0, required: true, grow: true }]
+          : []),
         ...(read.title || descriptionLines.length
           ? [
               {
@@ -298,7 +302,7 @@ function projectPerson(
                     showStateTile ? stateTileSize : 0,
                     titleLines.length * text.line(titleFont),
                   ) +
-                  (descriptionLines.length
+                  (!separateDescription && descriptionLines.length
                     ? (titleLines.length ? 8 : 0) + descriptionLines.length * text.line(bodyFont)
                     : 0),
                 required: true,
@@ -325,7 +329,24 @@ function projectPerson(
               },
             ]
           : []),
-        { id: 'space', rows: 1, rowHeight: 0, required: true, fallbackGrow: true },
+        {
+          id: 'space',
+          rows: 1,
+          rowHeight: 0,
+          required: true,
+          grow: separateDescription,
+          fallbackGrow: !separateDescription,
+        },
+        ...(separateDescription && descriptionLines.length
+          ? [
+              {
+                id: 'description',
+                rows: 1,
+                rowHeight: descriptionLines.length * text.line(bodyFont),
+                required: true,
+              },
+            ]
+          : []),
         ...(read.update
           ? [{ id: 'update', rows: 1, rowHeight: text.line(10), required: true }]
           : []),
@@ -363,6 +384,7 @@ function projectPerson(
         measured,
         titleLines,
         descriptionLines,
+        separateDescription,
         actionLines,
         showStateTile,
         stateTileSize,

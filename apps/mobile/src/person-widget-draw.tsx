@@ -216,7 +216,7 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
             {lines(l.titleLines, t.text, f.title, true)}
           </FlexWidget>
         ) : null}
-        {l.descriptionLines.length ? (
+        {!l.separateDescription && l.descriptionLines.length ? (
           <FlexWidget style={{ width: 'match_parent' }}>
             {lines(l.descriptionLines, t.textSecondary, f.body)}
           </FlexWidget>
@@ -228,6 +228,12 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
     header,
     payments: list,
     message,
+    'message-before': <FlexWidget />,
+    description: (
+      <FlexWidget style={{ width: 'match_parent' }}>
+        {lines(l.descriptionLines, t.textSecondary, f.body)}
+      </FlexWidget>
+    ),
     space: <FlexWidget />,
     privacy: hiddenLabel(l.privacyLines.join('\n'), t, f.small),
     update: text(view.update ?? '', t.textSecondary, f.small),
