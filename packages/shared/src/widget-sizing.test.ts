@@ -303,3 +303,7 @@ it('stretches a list only after every row is drawn when growth requires completi
   const complete = fitWidgetSections(150, sections, 0);
   expect(complete.sections[0]).toMatchObject({ rows: 4, more: 0, rowHeight: 37, height: 149 });
 });
+
+it('keeps a count joined to its noun when wrapping large-text widget messages', () => {
+  expect(widgetText(85).words('You pay in 1\u00a0Group', 12)).toEqual(['You pay in', '1 Group']);
+});

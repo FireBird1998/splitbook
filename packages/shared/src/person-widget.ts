@@ -11,7 +11,7 @@ import {
   type WidgetSection,
 } from './widget-sizing';
 import { widgetTextLevel } from './widget-layout';
-import { widgetPayments, type WidgetPayment } from './widget-payments';
+import { widgetPayments, widgetPaymentVerifiedAt, type WidgetPayment } from './widget-payments';
 import { widgetPeople, type WidgetPerson } from './widget-people';
 import { counted } from './separator';
 import { widgetSummary } from './widget-accessibility';
@@ -24,7 +24,15 @@ export interface PersonWidgetSetup {
   hideAmounts?: boolean;
 }
 interface PersonReading {
-  state: 'normal' | 'loading' | 'no-copy' | 'signed-out' | 'expired' | 'other-account';
+  state:
+    | 'normal'
+    | 'loading'
+    | 'no-copy'
+    | 'signed-out'
+    | 'expired'
+    | 'other-account'
+    | 'all-square'
+    | 'no-shared-group';
   name: string | null;
   initials: string | null;
   groupsLabel: string | null;
@@ -36,6 +44,9 @@ interface PersonReading {
   target: WidgetTarget;
   payments: WidgetPayment[];
   squareGroups: { id: string; name: string }[];
+  hidden: string | null;
+  hiddenCounts: string[];
+  update: string | null;
 }
 function readPerson(
   copy: WidgetCopy | null,
@@ -56,6 +67,9 @@ function readPerson(
     target: 'home',
     payments: [],
     squareGroups: [],
+    hidden: null,
+    hiddenCounts: [],
+    update: null,
   };
   if (session.status !== 'authenticated')
     return {
@@ -78,10 +92,16 @@ function readPerson(
       action: 'Set up',
       target: { kind: 'setup', widgetId: setup.widgetId },
     };
-  const selected = widgetPeople(copy, session.accountId).find(
-    (person) => person.id === setup.person.id,
+  const catalogue = widgetPeople(copy, session.accountId);
+  const selected = catalogue.find((person) => person.id === setup.person.id);
+  const duplicate = catalogue.some(
+    (person) => person.id !== setup.person.id && person.firstName === setup.person.firstName,
   );
-  const name = selected?.name ?? setup.person.firstName ?? null;
+  const savedName = setup.person.firstName ?? null;
+  const secondInitial = setup.person.initials?.slice(1, 2);
+  const name =
+    selected?.name ??
+    (duplicate && savedName && secondInitial ? `${savedName} ${secondInitial}` : savedName);
   const shared = new Set(selected?.groups.map((group) => group.id) ?? []);
   const payments = widgetPayments(copy, session.accountId)
     .filter((row) => row.person === setup.person.id && shared.has(row.groupId))
@@ -92,28 +112,65 @@ function readPerson(
     .map(({ id, name }) => ({ id, name }));
   const times = [
     ...(selected?.groups.map((group) => group.verifiedAt) ?? []),
-    ...payments.map((row) => row.verifiedAt),
+    ...(selected?.groups.flatMap((group) =>
+      parts[group.id] ? [widgetPaymentVerifiedAt(parts[group.id])] : [],
+    ) ?? []),
   ];
   const age = times.length ? Math.min(...times) : null;
   const hasRead = !!selected?.groups.some((group) => !!parts[group.id]);
+  const complete = !!selected?.groups.length && selected.groups.every((group) => !!parts[group.id]);
+  const membershipKnown =
+    copy?.accountId === session.accountId && copy.groupPeople !== undefined && !!copy.savedGroups;
+  const noShared = membershipKnown && !shared.size;
+  const state: PersonReading['state'] = noShared
+    ? 'no-shared-group'
+    : session.loading && !hasRead
+      ? 'loading'
+      : payments.length
+        ? 'normal'
+        : complete
+          ? 'all-square'
+          : 'no-copy';
+  const hidden = setup.hideAmounts === true;
+  const groupCount = (incoming: boolean) =>
+    new Set(payments.filter((row) => row.incoming === incoming).map((row) => row.groupId)).size;
+  const payCount = groupCount(false),
+    paidCount = groupCount(true);
+  const hiddenCounts = hidden
+    ? [
+        payCount ? `You pay in ${counted(payCount, 'Group')}` : null,
+        paidCount ? `Pays you in ${counted(paidCount, 'Group')}` : null,
+      ].filter((value): value is string => !!value)
+    : [];
   return {
     ...empty,
-    state:
-      session.loading && !hasRead ? 'loading' : hasRead && payments.length ? 'normal' : 'no-copy',
-    name,
-    initials: selected?.initials ?? setup.person.initials ?? null,
+    state,
+    name: noShared ? null : hidden ? 'One person' : name,
+    initials: noShared || hidden ? null : (selected?.initials ?? setup.person.initials ?? null),
     groupsLabel: shared.size ? `${counted(shared.size, 'Group')} together` : null,
     saved: hasRead && age !== null ? widgetSavedTime(age, now) : null,
     muted: age !== null && now - age > 86400000,
-    title: null,
-    description:
-      (session.loading && !hasRead) || (hasRead && payments.length)
-        ? null
-        : name
-          ? `This phone has no saved copy of your Groups with ${name}. Open Splitbook to load them.`
-          : 'This phone has no saved copy of your shared Groups. Open Splitbook to load them.',
-    payments,
-    squareGroups,
+    title: noShared
+      ? `No shared Group${hidden || !name ? '' : ` with ${name}`}`
+      : state === 'all-square'
+        ? `All square${hidden || !name ? '' : ` with ${name}`}`
+        : null,
+    description: noShared
+      ? 'Their lines were removed from this phone.'
+      : state === 'all-square'
+        ? 'Nothing is suggested either way, in any Group.'
+        : state === 'no-copy'
+          ? hidden || !name
+            ? 'This phone has no saved copy of your shared Groups. Open Splitbook to load them.'
+            : `This phone has no saved copy of your Groups with ${name}. Open Splitbook to load them.`
+          : null,
+    action: noShared ? 'Choose another' : null,
+    target: noShared ? { kind: 'setup', widgetId: setup.widgetId } : 'home',
+    payments: hidden ? [] : payments,
+    squareGroups: hidden ? [] : squareGroups,
+    hidden: hidden ? 'Amounts and names hidden' : null,
+    hiddenCounts,
+    update: hasRead && age !== null && now - age > 86400000 ? 'Open to update' : null,
   };
 }
 function projectPerson(
@@ -137,6 +194,7 @@ function projectPerson(
     width = Math.max(1, Math.floor(size.width * ratio) / ratio - padding * 2),
     height = Math.max(0, Math.floor(size.height * ratio) / ratio - padding * 2);
   const rows = [
+    ...read.hiddenCounts.map((label) => ({ kind: 'count' as const, groupName: '', label })),
     ...read.payments.map((payment) => ({
       kind: 'payment' as const,
       payment,
@@ -154,7 +212,7 @@ function projectPerson(
       const showGroups =
         read.state === 'no-copy' || (optional && !compact && level < 2 && !!read.groupsLabel);
       const avatarSize = Math.max(28, text.line(10) + 8);
-      const showAvatar = optional && width > 100;
+      const showAvatar = optional && width > 100 && !(read.hidden && level === 2);
       const nameFont = 13,
         captionFont = compact ? 12 : 10;
       const savedBeside = showSaved && !compact && width > 280;
@@ -175,14 +233,19 @@ function projectPerson(
         : 0;
       const measured = rows.map((row) => {
         const payment = row.kind === 'payment' ? row.payment : null;
-        const label = compact
-          ? payment
-            ? payment.incoming
-              ? 'Pays you'
-              : 'You pay'
-            : 'All square'
-          : (payment?.label ?? 'All square');
-        const base = compact ? 12 : 12;
+        const label =
+          row.kind === 'count'
+            ? row.label
+            : compact
+              ? payment
+                ? payment.incoming
+                  ? 'Pays you'
+                  : 'You pay'
+                : 'All square'
+              : (payment?.label ?? 'All square');
+        const base = 12;
+        const labelLines =
+          row.kind === 'count' ? text.words(label, base, width - (compact ? 0 : 16)) : [label];
         const amountFont = payment
           ? text.fit(payment.amount, 13, width - (compact ? 0 : 16), true)
           : 13;
@@ -191,12 +254,14 @@ function projectPerson(
           text.width(label, base) + text.width(payment.amount, amountFont, true) + 8 >
             width - (compact ? 0 : 16);
         const minimumHeight =
-          (compact ? text.line(captionFont) + 3 : 0) +
-          Math.max(text.line(base), text.line(amountFont)) +
-          (stack ? text.line(amountFont) + 2 : 0) +
-          (!compact ? text.line(captionFont) + 3 + 12 : 4) +
-          pixel(1);
-        return { label, amountFont: text.font(amountFont), stack, minimumHeight };
+          row.kind === 'count'
+            ? labelLines.length * text.line(12) + 12 + pixel(1)
+            : (compact ? text.line(captionFont) + 3 : 0) +
+              Math.max(text.line(base), text.line(amountFont)) +
+              (stack ? text.line(amountFont) + 2 : 0) +
+              (!compact ? text.line(captionFont) + 3 + 12 : 4) +
+              pixel(1);
+        return { label, labelLines, amountFont: text.font(amountFont), stack, minimumHeight };
       });
       const rowHeight = Math.max(1, ...measured.map((row) => row.minimumHeight));
       const paymentFits = read.payments.every(
@@ -206,13 +271,17 @@ function projectPerson(
         bodyFont = 12,
         actionFont = 12;
       const showStateTile = !!read.title && optional && !level && !compact;
-      const messageWidth = width - (showStateTile ? 60 : 0);
+      const stateTileSize = read.state === 'all-square' ? 22 : 48;
+      const messageGap = read.state === 'all-square' ? 8 : 12;
+      const messageWidth = width - (showStateTile ? stateTileSize + messageGap : 0);
       const titleLines = read.title ? text.words(read.title, titleFont, messageWidth) : [];
       const descriptionLines =
         read.description && optional && level < 2
           ? text.words(read.description, bodyFont, messageWidth)
           : [];
       const actionLines = read.action ? text.words(read.action, actionFont, width - 24) : [];
+      const showPrivacy = !!read.hidden && optional && level < 2;
+      const privacyLines = showPrivacy ? text.words(read.hidden!, 10, width - 18) : [];
       const sections: WidgetSection[] = [
         ...(read.name ? [{ id: 'header', rows: 1, rowHeight: headerHeight, required: true }] : []),
         ...(read.title || descriptionLines.length
@@ -221,7 +290,10 @@ function projectPerson(
                 id: 'message',
                 rows: 1,
                 rowHeight:
-                  Math.max(showStateTile ? 48 : 0, titleLines.length * text.line(titleFont)) +
+                  Math.max(
+                    showStateTile ? stateTileSize : 0,
+                    titleLines.length * text.line(titleFont),
+                  ) +
                   (descriptionLines.length
                     ? (titleLines.length ? 8 : 0) + descriptionLines.length * text.line(bodyFont)
                     : 0),
@@ -238,7 +310,7 @@ function projectPerson(
                 id: 'payments',
                 rows: rows.length,
                 maxRows: paymentFits
-                  ? level === 2
+                  ? level === 2 && !read.hidden
                     ? 1 + Math.floor(Math.max(0, size.height - 224) / 120)
                     : rows.length
                   : 0,
@@ -250,6 +322,19 @@ function projectPerson(
             ]
           : []),
         { id: 'space', rows: 1, rowHeight: 0, required: true, fallbackGrow: true },
+        ...(read.update
+          ? [{ id: 'update', rows: 1, rowHeight: text.line(10), required: true }]
+          : []),
+        ...(showPrivacy
+          ? [
+              {
+                id: 'privacy',
+                rows: 1,
+                rowHeight: Math.max(14, privacyLines.length * text.line(10)),
+                required: true,
+              },
+            ]
+          : []),
         ...(actionLines.length
           ? [
               {
@@ -263,6 +348,7 @@ function projectPerson(
       ];
       return {
         sections,
+        privacyLines,
         showSaved,
         showGroups,
         subtitleLines,
@@ -275,6 +361,9 @@ function projectPerson(
         descriptionLines,
         actionLines,
         showStateTile,
+        stateTileSize,
+        stateIconSize: read.state === 'all-square' ? 22 : 28,
+        messageGap,
         fonts: {
           name: text.font(nameFont),
           caption: text.font(captionFont),
@@ -302,7 +391,10 @@ function projectPerson(
   const more = section?.more
     ? section.rows
       ? `+${section.more} more`
-      : counted(rows.length, read.squareGroups.length ? 'line' : 'payment')
+      : counted(
+          rows.length,
+          read.hidden ? 'direction' : read.squareGroups.length ? 'line' : 'payment',
+        )
     : null;
   return {
     ...read,
@@ -331,12 +423,16 @@ function projectPerson(
       'Person',
       read.state === 'loading' ? 'Loading' : null,
       read.name,
+      read.initials ? `Initials ${[...read.initials].join(' ')}` : null,
       read.groupsLabel,
       read.title,
       read.description,
       ...read.payments.map((row) => `${row.label} ${row.amount} in ${row.groupName}`),
       ...read.squareGroups.map((group) => `All square in ${group.name}`),
+      ...read.hiddenCounts,
       read.saved,
+      read.hidden,
+      read.update,
       read.action,
     ]),
   };

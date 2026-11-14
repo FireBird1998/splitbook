@@ -5,6 +5,7 @@ import Constants from 'expo-constants';
 import type { PersonWidgetView } from '@splitbook/shared/person-widget';
 import type { SemanticTokens } from '@splitbook/shared/design-tokens';
 import type { WidgetTarget } from '@splitbook/shared/balances-widget';
+import { hiddenLabel } from './widget-hidden-label';
 import { widgetLink } from './widget-links';
 import lightMark from '../assets/widgets/mark-light.svg';
 import darkMark from '../assets/widgets/mark-dark.svg';
@@ -52,12 +53,19 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
             width: l.avatarSize,
             height: l.avatarSize,
             borderRadius: 10,
-            backgroundColor: color(t.brand.bg),
+            backgroundColor: color(view.hidden ? t.surfaceMuted : t.brand.bg),
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          {text(view.initials ?? '', t.brand.main, f.avatar, true)}
+          {view.hidden ? (
+            <SvgWidget
+              svg={`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="${t.textSecondary}" stroke-width="1.8"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.7-3.8 3.4-6 7-6s6.3 2.2 7 6"/></g></svg>`}
+              style={{ width: 20, height: 20 }}
+            />
+          ) : (
+            text(view.initials ?? '', t.brand.main, f.avatar, true)
+          )}
         </FlexWidget>
       ) : null}
       <FlexWidget style={{ flex: 1, flexGap: 3 }}>
@@ -127,7 +135,7 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
                 flexGap: 3,
               }}
             >
-              {l.compact ? text(row.groupName, t.textSecondary, f.caption) : null}
+              {l.compact && row.groupName ? text(row.groupName, t.textSecondary, f.caption) : null}
               <FlexWidget
                 style={{
                   width: 'match_parent',
@@ -137,22 +145,24 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
                 }}
               >
                 <FlexWidget style={{ flex: 1 }}>
-                  {text(
-                    row.label,
-                    l.compact
-                      ? payment?.incoming
-                        ? t.status.positive
-                        : payment
-                          ? t.status.negative
-                          : t.status.positive
-                      : t.text,
-                    f.label,
-                  )}
+                  {row.kind === 'count'
+                    ? lines(row.labelLines, t.textSecondary, f.label)
+                    : text(
+                        row.label,
+                        l.compact
+                          ? payment?.incoming
+                            ? t.status.positive
+                            : payment
+                              ? t.status.negative
+                              : t.status.positive
+                          : t.text,
+                        f.label,
+                      )}
                 </FlexWidget>
                 {!row.stack ? amount : null}
               </FlexWidget>
               {row.stack ? amount : null}
-              {!l.compact ? text(row.groupName, t.textSecondary, f.caption) : null}
+              {!l.compact && row.groupName ? text(row.groupName, t.textSecondary, f.caption) : null}
             </FlexWidget>
           </FlexWidget>
         );
@@ -176,23 +186,28 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
       ? t.mode === 'dark'
         ? darkMark
         : lightMark
-      : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="${t.textSecondary}" stroke-width="1.8">${view.state === 'expired' ? '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>' : '<circle cx="12" cy="8" r="3.6"/><path d="M5 20c.7-3.8 3.4-6 7-6s6.3 2.2 7 6"/>'}</g></svg>`;
+      : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="${view.state === 'all-square' ? t.status.positive : t.textSecondary}" stroke-width="1.8">${view.state === 'all-square' ? '<circle cx="12" cy="12" r="8.5"/><path d="M8 12l3 3 5-6"/>' : view.state === 'no-shared-group' ? '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v6M12 7v1"/>' : view.state === 'expired' ? '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>' : '<circle cx="12" cy="8" r="3.6"/><path d="M5 20c.7-3.8 3.4-6 7-6s6.3 2.2 7 6"/>'}</g></svg>`;
   const message = (
     <FlexWidget
-      style={{ width: 'match_parent', flexDirection: 'row', flexGap: 12, alignItems: 'flex-start' }}
+      style={{
+        width: 'match_parent',
+        flexDirection: 'row',
+        flexGap: l.messageGap,
+        alignItems: 'flex-start',
+      }}
     >
       {l.showStateTile ? (
         <FlexWidget
           style={{
-            width: 48,
-            height: 48,
+            width: l.stateTileSize,
+            height: l.stateTileSize,
             borderRadius: 14,
             backgroundColor: color(t.surfaceMuted),
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <SvgWidget svg={icon} style={{ width: 28, height: 28 }} />
+          <SvgWidget svg={icon} style={{ width: l.stateIconSize, height: l.stateIconSize }} />
         </FlexWidget>
       ) : null}
       <FlexWidget style={{ flex: 1, flexGap: 8 }}>
@@ -214,6 +229,8 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
     payments: list,
     message,
     space: <FlexWidget />,
+    privacy: hiddenLabel(l.privacyLines.join('\n'), t, f.small),
+    update: text(view.update ?? '', t.textSecondary, f.small),
     loading: (
       <FlexWidget style={{ height: 'match_parent', width: 'match_parent' }}>
         {l.loadingRows.map((row, i) => (

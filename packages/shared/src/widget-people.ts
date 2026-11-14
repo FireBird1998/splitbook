@@ -44,6 +44,7 @@ export function widgetPeople(copy: WidgetCopy | null, accountId: string) {
       !group ||
       group.archived ||
       personGroupWasDropped(copy, id) ||
+      copy.groups?.[id]?.archived ||
       copy.lostGroupIds?.includes(id) ||
       !Array.isArray(group.people) ||
       typeof group.name !== 'string' ||

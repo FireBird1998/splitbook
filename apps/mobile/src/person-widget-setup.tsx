@@ -5,6 +5,7 @@ import {
   Linking,
   Pressable,
   ScrollView,
+  Switch,
   Text,
   View,
   useColorScheme,
@@ -32,7 +33,10 @@ import lightMark from '../assets/widgets/setup-mark-light.png';
 import darkMark from '../assets/widgets/setup-mark-dark.png';
 
 const store = createWidgetsStore(widgetKey(mobileBuildSettings, __DEV__));
-const pending = new Map<number, { accountId: string; personId: string | null }>();
+const pending = new Map<
+  number,
+  { accountId: string; personId: string | null; hideAmounts: boolean }
+>();
 const sharedNames = (names: string[]) =>
   names.length > 2
     ? `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
@@ -47,7 +51,8 @@ export function PersonWidgetSetupScreen({ widgetInfo, setResult }: WidgetConfigu
   const [selected, setSelected] = useState<string | null>(null),
     [error, setError] = useState(''),
     [buttonLabel, setButtonLabel] = useState<'Save' | 'Add widget'>('Add widget'),
-    [anotherAccount, setAnotherAccount] = useState(false);
+    [anotherAccount, setAnotherAccount] = useState(false),
+    [hideAmounts, setHideAmounts] = useState(false);
   const cancel = () => {
     pending.delete(widgetInfo.widgetId);
     setResult('cancel');
@@ -64,15 +69,22 @@ export function PersonWidgetSetupScreen({ widgetInfo, setResult }: WidgetConfigu
         const other = saved?.kind === 'person' && saved.accountId !== accountId;
         setAnotherAccount(other);
         const held = pending.get(widgetInfo.widgetId);
-        setSelected(
+        setHideAmounts(
+          held?.accountId === accountId
+            ? held.hideAmounts
+            : saved?.kind === 'person' && saved.accountId === accountId
+              ? saved.hideAmounts === true
+              : false,
+        );
+        const preferred =
           held?.accountId === accountId
             ? held.personId
             : saved?.kind === 'person' && saved.accountId === accountId
               ? saved.person.id
               : other
                 ? null
-                : (choices[0]?.id ?? null),
-        );
+                : (choices[0]?.id ?? null);
+        setSelected(choices.some((person) => person.id === preferred) ? preferred : null);
       })
       .catch(() => {
         if (alive) setError('Could not read saved people. Open Splitbook and try again.');
@@ -123,7 +135,7 @@ export function PersonWidgetSetupScreen({ widgetInfo, setResult }: WidgetConfigu
         widgetId: widgetInfo.widgetId,
         accountId: owner!,
         person: { id: person.id, firstName: person.firstName, initials: person.initials },
-        hideAmounts: false,
+        hideAmounts,
       });
       await redrawBalances();
       pending.delete(widgetInfo.widgetId);
@@ -218,6 +230,7 @@ export function PersonWidgetSetupScreen({ widgetInfo, setResult }: WidgetConfigu
                     pending.set(widgetInfo.widgetId, {
                       accountId: accountId!,
                       personId: person.id,
+                      hideAmounts,
                     });
                   }}
                   style={{
@@ -257,6 +270,43 @@ export function PersonWidgetSetupScreen({ widgetInfo, setResult }: WidgetConfigu
                   />
                 </Pressable>
               ))}
+            </View>
+            {copy('On the widget', true, 12, t.textSecondary)}
+            <View
+              style={{
+                backgroundColor: t.surface,
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: t.border,
+                padding: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 14,
+              }}
+            >
+              <View style={{ padding: 12, backgroundColor: t.brand.bg, borderRadius: 12 }}>
+                <Ionicons name="eye-off-outline" size={22} color={t.brand.main} />
+              </View>
+              <View style={{ flex: 1, gap: 4 }}>
+                {copy('Hide amounts', true, 16)}
+                {copy('Counts only: no name or amounts', false, 12, t.textSecondary)}
+              </View>
+              <Switch
+                accessibilityLabel="Hide amounts"
+                value={hideAmounts}
+                thumbColor={
+                  hideAmounts ? t.brand.main : t.mode === 'light' ? t.surface : t.textSecondary
+                }
+                trackColor={{ false: t.borderStrong, true: `${t.brand.main}80` }}
+                onValueChange={(value) => {
+                  setHideAmounts(value);
+                  pending.set(widgetInfo.widgetId, {
+                    accountId: accountId!,
+                    personId: selected,
+                    hideAmounts: value,
+                  });
+                }}
+              />
             </View>
             {copy(
               'Anyone who sees your unlocked phone can read this widget.',

@@ -67,3 +67,28 @@ is cleared, and font 1.0, light mode, IST, automatic time/zone, size and density
 match the baseline. The original 4572 adb tunnel was retained; the added Metro
 tunnel was removed. The local backend/database and Metro were stopped. The
 exclusive device lock was released after restoration.
+
+## Person states follow-up (#1189)
+
+A saved person who no longer appeared in the Widget copy left every setup radio
+unselected while Save remained enabled. Setup now requires an available person;
+a component regression pins disabled Save, selecting Priya and saving her ID.
+
+The isolated backend also removed Sam from all five shared Groups, then the real
+controller refreshed. The copy still held two earlier Suggested payments, but
+Person showed no shared Group and no payment lines. Choose another opened its
+own configuration with Save disabled; selecting Priya saved only this placement.
+The five original membership arrays were then restored exactly.
+
+The real session-expiry journey kept the copy and hid its contents. Switching
+from Alex to Priya showed the another-account state for Alex's placement. Signing
+out cleared Priya's current copy before the signed-out drawing. Both themes
+were captured. Fixture-only cases cover all square, loading, no saved copy,
+older-than-a-day and Hide amounts at the launcher sizes and enlarged text.
+
+Two shared visual follow-ups remain for QA's planned Overview rebase: the
+current stale drawing fades only amounts, and the minimum dark 130% hidden
+case drops the quiet privacy footer although the shared plan admits it. No
+Person-specific duplicate of the incoming footer or fading helper was added.
+The protected-task tap check passed; the archived settle-tap guard belongs to
+the same upstream fix round and was not cherry-picked here.

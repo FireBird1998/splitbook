@@ -467,3 +467,17 @@ Names that collide gain their second initial in setup, the header and TalkBack.
 
 The Person picker preview is generated with
 `pnpm web exec tsx ../mobile/scripts/generate-widget-assets.ts --person-only`.
+
+Person states (#1189) distinguish a verified absence of Suggested payments from
+a missing Balances read. “All square” requires saved Balances for every shared
+active Group. A complete saved Groups index with no shared membership instead
+offers “Choose another”, even if an older Balances part still names that person.
+The verification age includes the membership and every shared Balances read;
+after a day the widget is muted and offers “Open to update”.
+
+Hide amounts is a per-widget setup choice. It replaces the name and initials with
+“One person” and shows the number of distinct Groups in each payment direction,
+without adding currencies. Neither the visible view nor its TalkBack summary
+contains the hidden identity or amounts. Account changes still require setup.
+Compact widths and 200% text use plain rows with dividers; optional saved-time
+and Group-caption lines disappear before the payment text becomes smaller.

@@ -33,6 +33,8 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
   let listedGroupIds: string[] | null = null;
   let groupBalances: unknown = { byCurrency: [] };
   let refused = 0;
+  let removedPerson: string | null = null;
+  const setups: number[] = [];
   let offlineAfterSave = false;
   let noGroups = false;
   let archived = false;
@@ -66,7 +68,7 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
         { id: 'a00000000000000000000003', name: 'Priya Shah', email: 'priya@example.test' },
         ...extraMembers,
       ]
-        .filter((person) => person.id !== user.id)
+        .filter((person) => person.id !== user.id && person.id !== removedPerson)
         .map((person) => ({
           user: { ...person, _id: person.id },
           role: 'member',
@@ -197,6 +199,9 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
               },
             }
           : {}),
+        openSetup: async (id) => {
+          setups.push(id);
+        },
         write: async (copy) => {
           await hold;
           nativeCopy = structuredClone(copy);
@@ -351,6 +356,10 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
     },
     home: (value: { buckets: unknown[]; groups?: unknown[] }) => {
       homeOverride = value;
+    },
+    setups,
+    removePerson: (id: string) => {
+      removedPerson = id;
     },
     archive: () => {
       archived = true;
@@ -2887,4 +2896,39 @@ it('prunes Person membership when a newer trusted list drops its only shared Gro
   await vi.waitFor(() => expect(f.record().copy?.savedGroups?.rows).toEqual([]));
   expect(f.record().copy?.groupPeople?.[groupId]).toBeUndefined();
   expect(widgetPeople(f.record().copy, alex.id)).toEqual([]);
+});
+
+it('retires a departed person’s lines from a fresh Group read even when the older Groups list and Balances still name them, and Choose another opens setup', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    c = f.make();
+  f.groupBalances(paymentBalances);
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.record().copy?.groups?.[groupId]).toBeDefined());
+  f.removePerson(sam.id);
+  await c.openGroup(groupId, false);
+  await c.back();
+  await vi.waitFor(() =>
+    expect(f.record().copy?.groupPeople?.[groupId].people.some((p) => p.id === sam.id)).toBe(false),
+  );
+  const result = personWidget(
+    f.record().copy,
+    {
+      kind: 'person',
+      widgetId: 88,
+      accountId: alex.id,
+      person: { id: sam.id, firstName: 'Sam', initials: 'SC' },
+    },
+    { width: 360, height: 224 },
+    f.record().session,
+    verified,
+  );
+  expect(result.state).toBe('no-shared-group');
+  expect(result.payments).toEqual([]);
+  await c.openWidget(result.target);
+  expect(f.setups).toEqual([88]);
+  expect(f.requests.filter((r) => r.method === 'POST' && r.path.includes('/settlements'))).toEqual(
+    [],
+  );
 });
