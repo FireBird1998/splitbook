@@ -1377,7 +1377,9 @@ description, stored money/currency, calendar date, creation time and payer alloc
 Populated people contain only identity, name and image. Settlement rows contain payer, recipient, saved
 amounts and currencies, and creation time. The ordinary filtered list, pagination
 and summary retain their selected window. Android asks for this addition on an
-existing Expense read only while a placed Group widget has Recent enabled. The
+existing Expense read only while a placed Group widget has Recent enabled: the
+unfiltered All time first page, or the current-Month first page for a Household
+using its Month lens. Load-more, search, other filters and historical Months omit it. The
 addition uses the same Group access check and adds database work within that request.
 
 **A currency Splitbook no longer supports (#810).** Stored money outlives today's

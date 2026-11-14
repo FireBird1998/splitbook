@@ -307,11 +307,13 @@ it('never trades a baseline payment row for a Month section', () => {
       },
     ],
   };
-  for (const height of [224, 270, 344, 464, 584]) {
-    const baseline = groupWidget(many, setup, { width: 360, height }, auth, now, 1.3);
-    const withMonth = groupWidget(many, setup, { width: 360, height }, auth, now, 1.3, month);
-    expect(withMonth.payments).toHaveLength(baseline.payments.length);
-  }
+  for (const width of [172, 360])
+    for (const height of [224, 270, 344, 464, 584]) {
+      const baseline = groupWidget(many, setup, { width, height }, auth, now, 1.3);
+      const withMonth = groupWidget(many, setup, { width, height }, auth, now, 1.3, month);
+      if (width === 172 && height === 584) expect(baseline.payments.length).toBeGreaterThan(0);
+      expect(withMonth.payments).toHaveLength(baseline.payments.length);
+    }
 });
 it('places the all-square balance sentence before the missing Month prompt', () => {
   const square = { ...group, currencies: [] };

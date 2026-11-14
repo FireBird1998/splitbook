@@ -8,6 +8,7 @@ import { headerChanged } from './header-settings';
 import { createHeldUpdate, type HeldAdmission } from './held-update';
 import type { WidgetTarget } from '@splitbook/shared/balances-widget';
 import { createWidgetCopy } from './widget-copy';
+import { widgetRecentGroup } from './widget-recent-request';
 import {
   parseNotificationEnvelope,
   notificationAuthorized,
@@ -1345,11 +1346,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const groupQueries = createGroupQueries({
     ...session,
     read: async (path, owner, signal) => {
-      const expense = /^\/api\/groups\/([^/]+)\/expenses\?/.exec(path);
+      const expense = dependencies.widgets?.recentSelections
+        ? widgetRecentGroup(
+            path,
+            monthKeyInZone(now(), Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
+            snapshot.financial.month === null ? null : snapshot.financial.groupId,
+          )
+        : null;
       if (expense && dependencies.widgets?.recentSelections) {
         try {
           const selected = await dependencies.widgets.recentSelections(account().accountId);
-          if (Object.hasOwn(selected, expense[1])) path += '&includeRecent=1';
+          if (Object.hasOwn(selected, expense)) path += '&includeRecent=1';
         } catch {
           // A widget preference cannot prevent the member reading the Group's ledger.
         }

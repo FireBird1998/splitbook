@@ -10,6 +10,7 @@ import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widge
 import { groupWidget, type WidgetRecentPart } from '@splitbook/shared/group-widget';
 import { createWidgetCopy } from './widget-copy';
 import { quickWidget } from '@splitbook/shared/quick-widget';
+import { parseExpensePageResponse } from '@splitbook/shared/expense-page-read';
 
 const alex = { id: 'a00000000000000000000001', name: 'Alex Rivera', email: 'alex@example.test' };
 const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
@@ -2014,6 +2015,110 @@ it('writes Recent only for a placed opt-in, with no extra request, full name or 
     expect(JSON.stringify(f.currentCopy())).not.toContain(secret);
 });
 
+it.each(['trip', 'other'])(
+  'enriches only the All time first page for a %s Group, not its Month summary',
+  async (theme) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture([], true);
+    f.theme(theme);
+    f.expenses();
+    f.recentPlacements(1);
+    const c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    const pages = f.requests.filter((r) => r.path.endsWith('/expenses'));
+    expect(pages).toHaveLength(2);
+    expect(pages.filter((r) => r.query?.includes('includeRecent=1'))).toHaveLength(1);
+    expect(pages.find((r) => r.query?.includes('dateFrom='))?.query).not.toContain(
+      'includeRecent=1',
+    );
+    await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(1));
+  },
+);
+
+it('does not repeat Recent on load-more pages or a historical Month', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture([], true);
+  f.expenses();
+  f.recentPlacements(1);
+  const data = parseExpensePageResponse({ status: 200, data: f.backend.world.expenses[groupId] });
+  f.backend.reply('GET', `/api/groups/${groupId}/expenses`, ({ url }) => {
+    const page = structuredClone(data);
+    page.pagination = {
+      page: Number(url.searchParams.get('page')),
+      limit: 20,
+      total: 21,
+      totalPages: 2,
+    };
+    page.summary.count = 21;
+    if (!url.searchParams.has('includeRecent')) delete page.recent;
+    return Response.json({ status: 200, data: page });
+  });
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  expect(c.getSnapshot().financial.expenses).toMatchObject({
+    status: 'ready',
+    pagination: { page: 1, totalPages: 2 },
+  });
+  await c.loadMoreExpenses();
+  await c.selectMonth('2026-10');
+  const pages = f.backend.requests.filter((r) => r.url.pathname.endsWith('/expenses'));
+  expect(pages.map((r) => r.url.searchParams.get('page'))).toEqual(['1', '2', '1']);
+  expect(pages.map((r) => r.url.searchParams.get('includeRecent'))).toEqual(['1', null, null]);
+});
+
+it('a newly opted-in Household reads the canonical Month while a historical Month stays shown', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture([], true);
+  f.expenses();
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await c.selectMonth('2026-10');
+  f.recentPlacements(1);
+  const before = f.requests.length;
+  await c.openGroup(groupId);
+  expect(c.getSnapshot().financial.month).toBe('2026-10');
+  const pages = f.requests.slice(before).filter((r) => r.path.endsWith('/expenses'));
+  expect(pages).toHaveLength(1);
+  expect(pages[0]?.query).toContain('dateFrom=2026-11-01');
+  expect(pages[0]?.query).toContain('includeRecent=1');
+  await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(1));
+});
+
+it('requests Recent again after opting out, restarting with a saved enriched page and opting in', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture([], true);
+  f.expenses();
+  f.recentPlacements(1);
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await c.selectMonth(null);
+  await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(1));
+  f.recentPlacements(0);
+  await c.openSettings();
+  await vi.waitFor(() => expect(f.currentCopy()?.recents).toEqual({}));
+  c.dispose();
+  const restarted = f.make();
+  await restarted.restore();
+  // A saved enriched All time page remains beside a warm ordinary current-Month page.
+  f.backend.online = false;
+  await restarted.openGroup(groupId);
+  await restarted.selectMonth(null);
+  f.backend.online = true;
+  await restarted.selectMonth('2026-11');
+  await restarted.back();
+  f.recentPlacements(1);
+  const before = f.requests.length;
+  await restarted.openGroup(groupId);
+  expect(f.requests.slice(before).filter((r) => r.query?.includes('includeRecent=1'))).toHaveLength(
+    1,
+  );
+  await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(1));
+});
+
 it.each(['off', 'removed'] as const)(
   'removes descriptions when the last Recent widget is %s, retaining them while another opts in',
   async () => {
@@ -2129,7 +2234,7 @@ it('an unfinished Expense never enters Recent', async () => {
 });
 
 it.each([60_000, -60_000])(
-  'a newly read historical Month replaces an older All time Recent list after a %s ms clock change',
+  'only a canonical Month replaces an older All time Recent list after a %s ms clock change',
   async (delta) => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(verified);
     const f = fixture([], true);
@@ -2148,6 +2253,12 @@ it.each([60_000, -60_000])(
       recent: { expenses: [], settlements: [] },
     };
     await c.selectMonth('2026-10');
+    expect(
+      f.requests.findLast((r) => r.query?.includes('dateFrom=2026-10-01'))?.query,
+    ).not.toContain('includeRecent=1');
+    expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(2);
+    await c.selectMonth('2026-11');
+    await c.refreshExpenses();
     await vi.waitFor(() =>
       expect(f.currentCopy()?.recents?.[groupId]).toEqual({
         verifiedAt: verified + delta,

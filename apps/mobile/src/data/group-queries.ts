@@ -889,7 +889,10 @@ export function createGroupQueries(session: GroupSession) {
     const order = (read: Envelope & { widgetRecentOrder?: number }) => read.widgetRecentOrder ?? 0;
     return (
       candidates
-        .filter((read) => parseExpensePageResponse(read.value).recent !== undefined)
+        .filter(
+          (read) =>
+            read.source === 'network' && parseExpensePageResponse(read.value).recent !== undefined,
+        )
         .sort((a, b) => order(b) - order(a) || b.refreshedAt - a.refreshedAt)[0] ?? null
     );
   };
@@ -910,6 +913,13 @@ export function createGroupQueries(session: GroupSession) {
       }
       if (!still() || !session.current(owner)) return false;
     }
+    const recentPage = (key: QueryKey) =>
+      recentMissing &&
+      (!queryKeyPath(key).includes('&dateFrom=') ||
+        hashKey(key) ===
+          hashKey(
+            listKey(opened.groupId, true, monthKeyInZone(session.now(), session.timeZone())),
+          ));
     /** A Month changed meanwhile reads its own list: this one isn't read again. */
     const sameMonth = (list: QueryKey) => () =>
       still() && hashKey(shownList() ?? []) === hashKey(list);
@@ -921,7 +931,7 @@ export function createGroupQueries(session: GroupSession) {
     let early: { hash: string; reading: Promise<Pages> } | null = null;
     const readList = (list: QueryKey) => {
       const read = () =>
-        readNow<Pages>(listOptions(list, fresh || recentMissing), owner, sameMonth(list));
+        readNow<Pages>(listOptions(list, fresh || recentPage(list)), owner, sameMonth(list));
       if (early?.hash !== hashKey(list)) return read();
       return early.reading.catch((error: unknown) => {
         if (error instanceof Superseded && opened.checked && sameMonth(list)()) return read();
@@ -975,7 +985,7 @@ export function createGroupQueries(session: GroupSession) {
           shown = onScreen();
         if (!list || !shown || shown.destination === 'activity') return null;
         const listing = readNow<Pages>(
-          listOptions(list, fresh || recentMissing),
+          listOptions(list, fresh || recentPage(list)),
           owner,
           () => opened.checked && sameMonth(list)(),
         );
@@ -1033,13 +1043,19 @@ export function createGroupQueries(session: GroupSession) {
     // already showing it reuses its ordinary list. Other views keep their existing lens.
     const month = monthKeyInZone(session.now(), session.timeZone());
     const currentMonth = listKey(opened.groupId, true, month);
+    const recentMonth =
+      recentMissing && opened.household && session.snapshot().financial.month !== null;
     if (
       from === 'group' &&
       hashKey(currentMonth) !== hashKey(list ?? []) &&
-      (fresh || !hasFreshRead(currentMonth))
+      (fresh || recentMonth || !hasFreshRead(currentMonth))
     ) {
       try {
-        await readNow<Envelope>(monthOptions(opened.groupId, month, fresh), owner, still);
+        await readNow<Envelope>(
+          monthOptions(opened.groupId, month, fresh || recentMonth),
+          owner,
+          still,
+        );
       } catch (error) {
         if (engine.refuses(error) || error instanceof Superseded) throw error;
       }
