@@ -30,9 +30,15 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
       }}
     />
   );
-  const lines = (values: string[], ink = t.text, size = f.body, bold = false) =>
+  const lines = (
+    values: string[],
+    ink = t.text,
+    size = f.body,
+    bold = false,
+    align: 'flex-start' | 'center' = 'flex-start',
+  ) =>
     values.map((value, i) => (
-      <FlexWidget key={i} style={{ width: 'match_parent' }}>
+      <FlexWidget key={i} style={{ width: 'match_parent', alignItems: align }}>
         {text(value, ink, size, bold)}
       </FlexWidget>
     ));
@@ -240,7 +246,7 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
             alignItems: 'center',
           }}
         >
-          {lines(l.actionLines, t.brand.main, f.action, true)}
+          {lines(l.actionLines, t.brand.main, f.action, true, 'center')}
         </FlexWidget>
       </FlexWidget>
     ),
