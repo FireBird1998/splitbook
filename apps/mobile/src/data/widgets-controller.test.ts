@@ -1,11 +1,10 @@
-import { createWidgetCopy } from './widget-copy';
 import { widgetDimensions } from '../test-utils/widget-size';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MobileController } from './mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import { notificationTaskProtected } from './notification-alerts';
-import type { WidgetCopy } from '@splitbook/shared/balances-widget';
+import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
 import { groupWidget } from '@splitbook/shared/group-widget';
 import { createWidgetCopy } from './widget-copy';
 import { quickWidget } from '@splitbook/shared/quick-widget';
@@ -36,6 +35,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
   const requests: { path: string; method: string; query?: string }[] = [];
   const copies: WidgetCopy[] = [];
   const events: string[] = [];
+  const sessionCopies: { status: WidgetSession['status']; copy: WidgetCopy | null }[] = [];
   const group = () => ({
     _id: groupId,
     name: 'Maple House',
@@ -170,6 +170,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
           storedCopy = null;
         },
         setSession: async (state) => {
+          sessionCopies.push({ status: state.status, copy: structuredClone(storedCopy) });
           events.push(state.status);
         },
         redraw: async () => {
@@ -249,6 +250,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     },
     requests,
     events,
+    sessionCopies,
     offline: () => {
       backend.online = false;
     },
@@ -995,6 +997,59 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
       await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeUndefined());
       expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined();
       expect(f.copies.at(-1)?.lostGroupIds).toContain(groupId);
+    }
+  },
+);
+
+it.each(['sign out', 'account change', '403', '404', '401'] as const)(
+  'keeps Tags, Trip dates and Month parts under the same purge rule on %s',
+  async (action) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture();
+    f.trip();
+    f.month();
+    const c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await vi.waitFor(() => {
+      expect(f.storedCopy()?.tags?.[groupId]?.rows).toEqual([{ id: tagId, name: 'Groceries' }]);
+      expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toEqual({
+        start: '2026-11-08',
+        end: '2026-11-10',
+      });
+      expect(f.storedCopy()?.months?.[groupId]?.shareMinor).toBe(785000);
+    });
+    const saved = structuredClone(f.storedCopy());
+    f.events.length = 0;
+    f.sessionCopies.length = 0;
+    if (action === 'sign out' || action === 'account change') {
+      if (action === 'sign out') await c.signOut();
+      else await c.signIn('sam');
+      expect(f.sessionCopies.find((event) => event.status === 'signed-out')?.copy).toBeNull();
+      expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+      expect(f.events.lastIndexOf('redraw')).toBeGreaterThan(f.events.indexOf('signed-out'));
+      if (action === 'sign out') expect(f.storedCopy()).toBeNull();
+      else {
+        await vi.waitFor(() => expect(f.storedCopy()?.accountId).toBe(sam.id));
+        expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toBeUndefined();
+        expect(f.storedCopy()?.months?.[groupId]).toBeUndefined();
+      }
+    } else if (action === '401') {
+      f.expire();
+      await c.openGroup(groupId, false);
+      await vi.waitFor(() => expect(f.events).toContain('expired'));
+      expect(f.events).not.toContain('clear');
+      expect(f.storedCopy()).toEqual(saved);
+      expect(f.sessionCopies.find((event) => event.status === 'expired')?.copy).toEqual(saved);
+    } else {
+      f.refuse(Number(action));
+      await c.openGroup(groupId, false);
+      await vi.waitFor(() => {
+        expect(f.storedCopy()?.lostGroupIds).toContain(groupId);
+        expect(f.storedCopy()?.tags?.[groupId]).toBeUndefined();
+        expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toBeUndefined();
+        expect(f.storedCopy()?.months?.[groupId]).toBeUndefined();
+      });
     }
   },
 );
