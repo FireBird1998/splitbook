@@ -1092,3 +1092,23 @@ it('scales the footer chip icons and their measured footprint with 200-percent t
     28.19047619047619 + 10,
   );
 });
+
+it('gives both wrapped Group rows even breathing room above and below their content at natural height', () => {
+  const c = clone(groupsCopy);
+  for (const row of c.savedGroups!.rows) {
+    row.name += ' and friends sharing costs';
+    c.home!.byGroup![row.id] = [
+      { currency: 'INR', balanceMinor: -148000 },
+      { currency: 'EUR', balanceMinor: 4000 },
+    ];
+  }
+  const v = overviewWidget(c, setup, { width: 360, height: 464, pixelRatio: 2.625 }, auth, now);
+  expect(v.groups).toHaveLength(2);
+  expect(v.layout.fits).toBe(true);
+  expect(v.action).toBe('＋ Add expense');
+  for (const row of v.groups) {
+    expect(row.stack).toBe(true);
+    expect(row.contentHeight - row.textHeight).toBeGreaterThanOrEqual(12);
+  }
+  expect(Math.abs(v.groups[0].contentHeight - v.groups[1].contentHeight)).toBeLessThanOrEqual(1.2);
+});
