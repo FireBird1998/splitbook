@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { testPhone, notificationNative } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import { notificationHint, notificationPreferences } from '../test-utils/notification';
-import { manualTimer } from '../test-utils/transport-faults';
+import { manualTimer, within } from '../test-utils/transport-faults';
 
 const now = Date.parse('2026-11-14T06:30:00Z');
 const path = '/api/notifications/device';
@@ -13,12 +13,16 @@ const failures = [
   ['invalid body', 'error', 'Couldn’t confirm notification settings. Retry.'],
 ] as const;
 type Failure = (typeof failures)[number][0];
-async function enabledPhone() {
+async function enabledPhone(options: { monitor?: false } = {}) {
   const server = fakeSplitbook();
   server.world.notifications = { ...notificationPreferences };
   const timer = manualTimer();
   const native = notificationNative();
-  const phone = testPhone(server, { now, parts: { notifications: native, timer: timer.timer } });
+  const phone = testPhone(server, {
+    ...options,
+    now,
+    parts: { notifications: native, timer: timer.timer },
+  });
   const app = phone.open();
   await app.signIn('alex');
   await app.refreshNotifications();
@@ -49,7 +53,7 @@ async function enabledPhone() {
   }
   const holdRead = () =>
     server.hold('GET', path + '?installationId=00000000-0000-4000-8000-000000000001');
-  return { app, server, phone, native, envelope, fail, holdRead };
+  return { app, server, phone, native, envelope, fail, holdRead, reads };
 }
 it.each(failures)(
   'withholds a background alert after %s without disabling confirmed settings, and Retry recovers (%s)',
@@ -101,16 +105,20 @@ it.each(failures)(
     });
   },
 );
-it('does not borrow a newer successful Settings read to authorize a superseded receipt', async () => {
-  const { app, envelope, holdRead } = await enabledPhone();
+it('an earlier receipt joins a newer successful Settings read in the same session', async () => {
+  const { app, envelope, holdRead, reads } = await enabledPhone();
+  const before = reads().length;
   const held = holdRead();
   const receipt = app.receiveNotification(envelope, { visible: false });
   await held.arrived;
-  await app.refreshNotifications();
-  expect(app.getSnapshot().notifications.status).toBe('ready');
-  held.release();
-  expect(await receipt).toBe(false);
-  expect(await app.receiveNotification(envelope, { visible: false })).toBe(true);
+  try {
+    await app.refreshNotifications();
+    // The older network request need not finish before its caller gets the fresh answer.
+    expect(await within(receipt)).toBe(true);
+  } finally {
+    held.release();
+  }
+  expect(reads()).toHaveLength(before + 2);
 });
 it('a failed older notification check preserves a newer held widget update', async () => {
   const { app, server, envelope, holdRead } = await enabledPhone();
@@ -280,3 +288,218 @@ it('a fresh disabled answer replaces earlier enabled values and rejects both ale
     notifications: { status: 'ready', confirmed: { enabled: false, revision: 2 } },
   });
 });
+
+it.each([2, 3])(
+  'allows every envelope in a %s-notification burst without extra device GETs',
+  async (count) => {
+    const { app, envelope, holdRead, reads } = await enabledPhone();
+    const before = reads().length;
+    const pending: Promise<boolean>[] = [];
+    const holds: ReturnType<typeof holdRead>[] = [];
+    for (let i = 0; i < count; i++) {
+      const held = holdRead();
+      holds.push(held);
+      pending.push(
+        app.receiveNotification(
+          { ...envelope, eventId: 'd0000000000000000000000' + (i + 1) },
+          { visible: false },
+        ),
+      );
+      await held.arrived;
+    }
+    holds.at(-1)!.release();
+    expect(await pending.at(-1)).toBe(true);
+    for (const held of holds) held.release();
+    expect(await Promise.all(pending)).toEqual(Array(count).fill(true));
+    expect(reads()).toHaveLength(before + count);
+  },
+);
+it('allows simultaneous envelopes even when only the last read reaches the network', async () => {
+  const { app, envelope, reads } = await enabledPhone();
+  const before = reads().length;
+  const results = await Promise.all(
+    [1, 2, 3].map((i) =>
+      app.receiveNotification(
+        { ...envelope, eventId: 'd0000000000000000000000' + i },
+        { visible: false },
+      ),
+    ),
+  );
+  expect(results).toEqual([true, true, true]);
+  expect(reads()).toHaveLength(before + 1);
+});
+it.each(['HTTP 500', 'disabled'] as const)(
+  'withholds both concurrent envelopes when the newer read answers %s',
+  async (outcome) => {
+    const { app, server, envelope, holdRead, reads } = await enabledPhone();
+    const before = reads().length;
+    const older = holdRead();
+    const first = app.receiveNotification(envelope, { visible: false });
+    await older.arrived;
+    if (outcome === 'HTTP 500')
+      server.reply(
+        'GET',
+        path,
+        () => Response.json({ error: 'Fictional failure' }, { status: 500 }),
+        { once: true },
+      );
+    else
+      server.world.notifications = {
+        ...notificationPreferences,
+        enabled: false,
+        expenseUpdates: false,
+        payments: false,
+        revision: 2,
+      };
+    const newer = holdRead();
+    const second = app.receiveNotification(
+      { ...envelope, eventId: 'd00000000000000000000002' },
+      { visible: false },
+    );
+    await newer.arrived;
+    newer.release();
+    try {
+      expect(await within(Promise.all([first, second]))).toEqual([false, false]);
+    } finally {
+      older.release();
+    }
+    expect(reads()).toHaveLength(before + 2);
+    expect(app.getSnapshot().notifications).toMatchObject(
+      outcome === 'HTTP 500'
+        ? { status: 'error', confirmed: notificationPreferences }
+        : { status: 'ready', confirmed: { enabled: false, revision: 2 } },
+    );
+  },
+);
+it.each(['receipt', 'tap'] as const)(
+  'retires an in-flight %s when a disable is pending instead of joining a skipped read',
+  async (kind) => {
+    // The existing controller allows loading → pending; the flow table omits that transition.
+    const { app, server, envelope, holdRead, reads } = await enabledPhone({ monitor: false });
+    server.reply('POST', path, () =>
+      Response.json({
+        data: {
+          ...notificationPreferences,
+          enabled: false,
+          expenseUpdates: false,
+          payments: false,
+          revision: 2,
+        },
+      }),
+    );
+    app.startCreate();
+    const before = reads().length;
+    const held = holdRead();
+    const pending =
+      kind === 'receipt'
+        ? app.receiveNotification(envelope, { visible: false })
+        : app.tapNotification(envelope);
+    await held.arrived;
+    const write = server.hold('POST', path);
+    const disabling = app.disableNotifications();
+    await write.arrived;
+    try {
+      await app.refreshNotifications();
+      const answer = await within(pending);
+      if (kind === 'receipt') expect(answer).toBe(false);
+      expect(app.getSnapshot()).toMatchObject({
+        screen: 'create',
+        heldNotification: null,
+        notifications: { status: 'pending' },
+      });
+      expect(reads()).toHaveLength(before + 1);
+    } finally {
+      held.release();
+      write.release();
+      await disabling;
+    }
+  },
+);
+it('a category change retires an earlier check even if a later same-session read succeeds', async () => {
+  // The existing controller allows loading → pending; the flow table omits that transition.
+  const { app, server, envelope, holdRead } = await enabledPhone({ monitor: false });
+  const held = holdRead();
+  const receipt = app.receiveNotification(envelope, { visible: false });
+  await held.arrived;
+  server.world.notifications = { ...notificationPreferences, payments: false, revision: 2 };
+  server.reply('POST', path, () => Response.json({ data: server.world.notifications }));
+  try {
+    await app.setNotificationCategory('payments', false);
+    await app.refreshNotifications();
+    expect(await within(receipt)).toBe(false);
+    expect(app.getSnapshot().notifications).toMatchObject({
+      status: 'ready',
+      confirmed: { payments: false, expenseUpdates: true },
+    });
+  } finally {
+    held.release();
+  }
+});
+it('does not join the next account’s notification check when the account changes between receipts', async () => {
+  const { app, server, envelope, holdRead } = await enabledPhone();
+  const held = holdRead();
+  const oldReceipt = app.receiveNotification(envelope, { visible: false });
+  await held.arrived;
+  try {
+    await app.signOut();
+    await app.signIn('sam');
+    const nextEnvelope = notificationHint(server.world.people.sam.id, envelope.groupId, now);
+    expect(await app.receiveNotification(nextEnvelope, { visible: false })).toBe(true);
+    expect(await within(oldReceipt)).toBe(false);
+    expect(app.getSnapshot().auth).toMatchObject({
+      status: 'authenticated',
+      user: { id: server.world.people.sam.id },
+    });
+  } finally {
+    held.release();
+  }
+});
+it.each(['enabled', 'HTTP 500', 'disabled'] as const)(
+  'a notification tap joins a newer Settings read that answers %s',
+  async (outcome) => {
+    const { app, server, envelope, holdRead, reads } = await enabledPhone();
+    app.startCreate();
+    const before = reads().length;
+    const held = holdRead();
+    const tap = app.tapNotification(envelope);
+    await held.arrived;
+    if (outcome === 'HTTP 500')
+      server.reply(
+        'GET',
+        path,
+        () => Response.json({ error: 'Fictional failure' }, { status: 500 }),
+        { once: true },
+      );
+    else if (outcome === 'disabled')
+      server.world.notifications = {
+        ...notificationPreferences,
+        enabled: false,
+        expenseUpdates: false,
+        payments: false,
+        revision: 2,
+      };
+    try {
+      await app.refreshNotifications();
+      await within(tap);
+      expect(app.getSnapshot()).toMatchObject({
+        screen: 'create',
+        notificationOpening: { status: outcome === 'enabled' ? 'held' : 'idle' },
+        ...(outcome === 'enabled'
+          ? { heldNotificationSource: 'notification' }
+          : { heldNotification: null }),
+      });
+      expect(reads()).toHaveLength(before + 2);
+      if (outcome === 'enabled') {
+        app.back();
+        await app.openPendingNotification();
+        expect(app.getSnapshot()).toMatchObject({
+          screen: 'group',
+          destination: 'activity',
+          detail: { id: envelope.groupId },
+        });
+      }
+    } finally {
+      held.release();
+    }
+  },
+);
