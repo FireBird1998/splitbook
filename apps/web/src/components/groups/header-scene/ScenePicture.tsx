@@ -79,16 +79,22 @@ export default function ScenePicture({
         position: 'absolute',
         inset: 0,
         overflow: 'hidden',
-        '@container headerScene (max-width: 720px)': { position: 'relative', height: 210 },
         '& .vq-world': {
           transform:
             motion && followPointer
               ? 'perspective(900px) rotateX(var(--scene-y, 0deg)) rotateY(var(--scene-x, 0deg))'
               : 'none',
-          '@container headerScene (max-width: 720px)': {
-            left: cropped ? 0 : -64,
-            right: cropped ? 0 : 64,
-          },
+          // A phone-width header keeps the art at the height's scale (210 of 240) and puts the
+          // main island, drawn around x = 300 of 1100, in the middle instead of slicing it.
+          '@container headerScene (max-width: 720px)': cropped
+            ? { left: 0, right: 0 }
+            : { left: 'calc(50% - 262.5px)', right: 'auto', width: 962.5 },
+        },
+        // The time-of-day tint must still cover the whole picture when the art is narrower.
+        '@container headerScene (max-width: 720px)': {
+          position: 'relative',
+          height: 210,
+          '& .vq-tint': { left: -500, right: -500 },
         },
         '@media (prefers-reduced-motion: reduce)': {
           '&, & *': { animation: 'none !important', transition: 'none !important' },

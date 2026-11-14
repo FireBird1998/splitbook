@@ -5,6 +5,7 @@ import {
   headerTimeOfDay,
   headerCard,
   todayTripDay,
+  tripDayCaption,
 } from './group-header';
 
 describe('a Group header', () => {
@@ -74,8 +75,29 @@ it('gives a Trip its route, calendar dates and numbered days', () => {
       end: '2026-11-16',
       days: ['2026-11-14', '2026-11-15', '2026-11-16'],
       today: 2,
+      caption: 'Day 2 of 3',
     },
   });
+});
+it.each([
+  ['2026-11-11', 'Starts in 3\u00a0days'],
+  ['2026-11-13', 'Starts tomorrow'],
+  ['2026-11-14', 'Day 1 of 3'],
+  ['2026-11-16', 'Day 3 of 3'],
+  ['2026-11-17', 'Trip over\u00a0· 3\u00a0days'],
+  ['2027-01-01', 'Trip over\u00a0· 3\u00a0days'],
+] as const)('on %s the day squares are captioned “%s”', (today, caption) => {
+  expect(tripDayCaption(trip, today)).toBe(caption);
+  expect(headerCard(trip, today).trip?.caption).toBe(caption);
+});
+it('says a one-day Trip is over in the singular, and nothing without both dates', () => {
+  const oneDay = { ...trip, endDate: trip.startDate };
+  expect(tripDayCaption(oneDay, '2026-11-20')).toBe('Trip over\u00a0· 1\u00a0day');
+  expect(tripDayCaption({ ...trip, endDate: null }, '2026-11-15')).toBeNull();
+});
+it('says nothing about the days before the viewer’s own day is known', () => {
+  expect(tripDayCaption(trip, '')).toBeNull();
+  expect(headerCard(trip, '').trip).toMatchObject({ today: null, caption: null });
 });
 it.each([
   ['2026-11-13', null],

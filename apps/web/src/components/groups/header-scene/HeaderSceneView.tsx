@@ -148,7 +148,9 @@ export default function HeaderSceneView({
             )}
             <Box>
               <Typography component="dt">Members</Typography>
-              <Typography component="dd">{counted(card.members, 'member')}</Typography>
+              <Typography component="dd" aria-label={counted(card.members, 'member')}>
+                {card.members}
+              </Typography>
             </Box>
             <Box>
               <Typography component="dt">Currencies</Typography>
@@ -207,9 +209,9 @@ export default function HeaderSceneView({
                   );
                 })}
               </Box>
-              {card.trip.today !== null && (
+              {card.trip.caption && (
                 <Typography variant="caption" color="text.secondary">
-                  Day {card.trip.today} of {card.trip.days.length}
+                  {card.trip.caption}
                 </Typography>
               )}
             </Box>
