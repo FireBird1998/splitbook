@@ -224,3 +224,57 @@ it('groups hidden section counts into measured rows on a full widget', () => {
   ).toBe(false);
   expect(JSON.stringify(result)).not.toContain('Beach shack lunch');
 });
+
+it('shares name disambiguation between Payments and Recent', () => {
+  const result = groupWidget(
+    {
+      ...group,
+      currencies: [
+        {
+          ...group.currencies[0],
+          payments: [
+            {
+              from: 'alex',
+              to: 'priya-k',
+              fromName: 'Alex',
+              toName: 'Priya',
+              toInitials: 'PK',
+              amountMinor: 10000,
+            },
+          ],
+        },
+      ],
+    },
+    setup,
+    { width: 360, height: 584 },
+    auth,
+    now,
+    1,
+    month,
+    {
+      verifiedAt: now,
+      rows: [{ ...recent.rows[0], payer: 'Priya', payerId: 'priya-s', payerInitials: 'PS' }],
+    },
+  );
+  expect(result.summary).toContain('You pay Priya K');
+  expect(result.summary).toContain('Priya S paid');
+});
+
+it.each([{ currencies: [] }, { currencies: [{ currency: 'INR', balanceMinor: 0, payments: [] }] }])(
+  'keeps an all-square Group with Recent and Hide amounts enabled',
+  ({ currencies }) => {
+    const result = groupWidget(
+      { ...group, currencies },
+      { ...setup, hideAmounts: true },
+      { width: 360, height: 344 },
+      auth,
+      now,
+      1,
+      month,
+      recent,
+    );
+    expect(result.state).toBe('all-square');
+    expect(result.layout.hiddenHeaderBalance).toBe('You’re all square');
+    expect(result.summary).toContain('Maple House');
+  },
+);

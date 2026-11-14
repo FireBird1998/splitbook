@@ -1600,18 +1600,26 @@ export function createGroupQueries(session: GroupSession) {
         (a, b) =>
           Number(hashKey(b) === hashKey(shown ?? [])) - Number(hashKey(a) === hashKey(shown ?? [])),
       );
+      const fresh = new Set<Envelope>();
       const candidates: Envelope[] = keys.flatMap((key) => {
         const state = stateOf<Pages>(key);
         const pages = state?.data?.pages ?? [];
         const ordered =
           state?.fetchMeta?.fetchMore?.direction === 'forward' ? [...pages].reverse() : pages;
-        return ordered.filter((page) => page.source !== 'failed');
+        const successful = ordered.filter((page) => page.source !== 'failed');
+        if (hasFreshRead(key)) successful.forEach((page) => fresh.add(page));
+        return successful;
       });
       const separate = stateOf<Envelope>(monthPageKey(groupId, month))?.data;
-      if (separate) candidates.push(separate);
+      if (separate) {
+        candidates.push(separate);
+        if (hasFreshRead(monthPageKey(groupId, month))) fresh.add(separate);
+      }
       const enriched = candidates
         .filter((read) => parseExpensePageResponse(read.value).recent !== undefined)
-        .sort((a, b) => b.refreshedAt - a.refreshedAt)[0];
+        .sort(
+          (a, b) => Number(fresh.has(b)) - Number(fresh.has(a)) || b.refreshedAt - a.refreshedAt,
+        )[0];
       if (enriched) return enriched;
       const allTime = stateOf<Pages>(listKey(groupId, false, null))?.data?.pages.find(
         (page) => page.page === 1 && page.source !== 'failed',

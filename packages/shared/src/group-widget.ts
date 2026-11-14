@@ -1,7 +1,6 @@
 import {
   widgetPaymentVerifiedAt,
   groupWidgetPayments,
-  spokenWidgetPayments,
 } from './widget-payments';
 import {
   fitWidgetLayout,
@@ -45,34 +44,45 @@ export interface WidgetRecentPart {
   }[];
 }
 
+type WidgetPerson = { firstName: string; initials: string; id: string | null };
+function spokenWidgetName(firstName: string, initials: string, people: WidgetPerson[]) {
+  const identities = new Set(
+    people
+      .filter((person) => person.firstName === firstName)
+      .map((person) => person.id ?? person.initials),
+  );
+  return identities.size > 1 && initials.length > 1
+    ? `${firstName} ${initials.slice(1, 2)}`
+    : firstName;
+}
+
 function recentWidgetView(
   part: WidgetRecentPart | undefined,
   setup: GroupWidgetSetup,
   now: number,
+  paymentPeople: WidgetPerson[] = [],
 ) {
   if (setup.showRecentExpenses !== true) return null;
   const today = dayKeyInZone(now, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const rows = (part?.rows ?? [])
     .filter((row) => !row.isDeleted)
     .sort((a, b) => b.date.localeCompare(a.date));
-  const names = new Map<string, Set<string>>();
-  for (const row of rows) {
-    const people = [
-      { name: row.payer, id: row.payerId },
-      ...(row.payee ? [{ name: row.payee.firstName, id: row.payee.id }] : []),
-    ];
-    for (const person of people) {
-      if (!person.id) continue;
-      const ids = names.get(person.name) ?? new Set<string>();
-      ids.add(person.id);
-      names.set(person.name, ids);
-    }
-  }
-  const spokenName = (name: string, initials = '') =>
-    (names.get(name)?.size ?? 0) > 1 && initials.length > 1
-      ? `${name} ${initials.slice(1, 2)}`
-      : name;
+  const people: WidgetPerson[] = [
+    ...paymentPeople,
+    ...rows.flatMap((row) => [
+      {
+        firstName: row.payer === 'Former member' ? row.payer : row.payer.trim().split(/\s+/)[0],
+        id: row.payerId,
+        initials: row.payerInitials ?? '',
+      },
+      ...(row.payee
+        ? [{ firstName: row.payee.firstName, id: row.payee.id, initials: row.payee.initials }]
+        : []),
+    ]),
+  ];
+  const spokenName = (name: string, initials = '') => spokenWidgetName(name, initials, people);
   return {
+    people: setup.hideAmounts ? [] : people,
     rows: setup.hideAmounts
       ? []
       : rows.map((row) => {
@@ -306,7 +316,6 @@ function groupWidgetView(
       title: session.loading ? null : empty.title,
     };
   const monthView = monthWidgetView(month, setup, now);
-  const recentView = recentWidgetView(recent, setup, now);
   const currencies = [...part.currencies].sort(
     (a, b) => Number(b.currency === part.mainCurrency) - Number(a.currency === part.mainCurrency),
   );
@@ -315,6 +324,15 @@ function groupWidgetView(
       (payment) => payment.from === setup.accountId || payment.to === setup.accountId,
     ),
   );
+  const paymentPeople = ownPayments.map((payment) => {
+    const outgoing = payment.from === setup.accountId;
+    return {
+      firstName: (outgoing ? payment.toName : payment.fromName).trim().split(/\s+/)[0],
+      initials: (outgoing ? payment.toInitials : payment.fromInitials) ?? '',
+      id: outgoing ? payment.to : payment.from,
+    };
+  });
+  const recentView = recentWidgetView(recent, setup, now, paymentPeople);
   const hiddenSummary = () => {
     const owe = new Set(ownPayments.filter((p) => p.from === setup.accountId).map((p) => p.to))
       .size;
@@ -359,11 +377,13 @@ function groupWidgetView(
         : [],
     hiddenBalance:
       setup.hideAmounts && setup.showRecentExpenses
-        ? currencies.length > 1
-          ? 'Balances hidden'
-          : bucket!.balanceMinor < 0
-            ? 'You owe'
-            : 'You’re owed'
+        ? allSquare
+          ? 'You’re all square'
+          : currencies.length > 1
+            ? 'Balances hidden'
+            : bucket!.balanceMinor < 0
+              ? 'You owe'
+              : 'You’re owed'
         : null,
     tripDay: tripDay(part, now),
     hidden: setup.hideAmounts
@@ -420,6 +440,29 @@ function groupWidgetView(
     final: part.archived,
     action: muted ? 'Open to update' : null,
   };
+}
+
+/**
+ * TalkBack labels for the visible payment rows. When two rows share a first name and their
+ * stored initials differ, each name gains its second initial ("You pay Priya S"), so speech
+ * tells them apart the way the avatars do. Old copies without initials keep first names only.
+ */
+function spokenPayments(
+  payments: ReturnType<typeof groupWidgetView>['payments'],
+  recentPeople: WidgetPerson[] = [],
+) {
+  const people = [
+    ...recentPeople,
+    ...payments.map((payment) => ({
+      firstName: payment.firstName,
+      initials: payment.initials,
+      id: payment.payment ? (payment.incoming ? payment.payment.from : payment.payment.to) : null,
+    })),
+  ];
+  return payments.map((payment) => {
+    const name = spokenWidgetName(payment.firstName, payment.initials, people);
+    return `${payment.incoming ? `${name} pays you` : `You pay ${name}`} ${payment.amount}`;
+  });
 }
 
 function paymentOverflow(payments: ReturnType<typeof groupWidgetView>['payments']) {
@@ -1010,7 +1053,7 @@ function projectGroupWidget(
         : null,
       size.width < 280 ? full.people : null,
       // Speech keeps every saved payment, including rows omitted at this size (Large text board).
-      ...spokenWidgetPayments(full.payments),
+      ...spokenPayments(full.payments, full.recent?.people),
       full.hidden ? null : full.description,
       full.recent ? 'Recent' : null,
       ...(full.recent?.rows.flatMap((row) => [

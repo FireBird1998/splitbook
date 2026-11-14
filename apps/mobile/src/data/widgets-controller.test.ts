@@ -2101,32 +2101,35 @@ it('an unfinished Expense never enters Recent', async () => {
   expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(1);
 });
 
-it('a newer historical Month enrichment replaces an older All time Recent list', async () => {
-  const clock = vi.spyOn(Date, 'now').mockReturnValue(verified);
-  const f = fixture([], true);
-  f.expenses(true);
-  f.recentPlacements(1);
-  const c = f.make();
-  await c.signIn('alex');
-  await c.openGroup(groupId);
-  await c.selectMonth(null);
-  await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(2));
-  clock.mockReturnValue(verified + 60_000);
-  f.backend.world.expenses[groupId] = {
-    expenses: [],
-    pagination: { page: 1, limit: 20, total: 0, totalPages: 1 },
-    summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
-    recent: { expenses: [], settlements: [] },
-  };
-  await c.selectMonth('2026-10');
-  await vi.waitFor(() =>
-    expect(f.currentCopy()?.recents?.[groupId]).toEqual({
-      verifiedAt: verified + 60_000,
-      rows: [],
-    }),
-  );
-  expect(JSON.stringify(f.currentCopy())).not.toContain('Private beach lunch');
-});
+it.each([60_000, -60_000])(
+  'a newly read historical Month replaces an older All time Recent list after a %s ms clock change',
+  async (delta) => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture([], true);
+    f.expenses(true);
+    f.recentPlacements(1);
+    const c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await c.selectMonth(null);
+    await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(2));
+    clock.mockReturnValue(verified + delta);
+    f.backend.world.expenses[groupId] = {
+      expenses: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 1 },
+      summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
+      recent: { expenses: [], settlements: [] },
+    };
+    await c.selectMonth('2026-10');
+    await vi.waitFor(() =>
+      expect(f.currentCopy()?.recents?.[groupId]).toEqual({
+        verifiedAt: verified + delta,
+        rows: [],
+      }),
+    );
+    expect(JSON.stringify(f.currentCopy())).not.toContain('Private beach lunch');
+  },
+);
 
 it('unsaved To review descriptions never enter the opted-in Widget copy', async () => {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
