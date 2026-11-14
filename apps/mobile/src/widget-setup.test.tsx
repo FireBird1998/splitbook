@@ -591,7 +591,6 @@ it('Recent reconfiguration restores the opt-in only for its setup account', asyn
   ).toBe(false);
 });
 
-
 it.each([
   ['light', 'dark'],
   ['dark', 'light'],

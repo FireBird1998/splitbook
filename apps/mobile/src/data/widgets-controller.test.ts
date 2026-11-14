@@ -1808,7 +1808,7 @@ it('keeps Suggested payments when Balances is read by a payment check without op
   );
 });
 
-it.each(['Overview', 'Group'] as const)(
+it.each(['Overview', 'Group', 'Person'] as const)(
   'refuses an old %s payment tap after its Group was archived elsewhere',
   async (source) => {
     const f = fixture(),
@@ -1845,7 +1845,20 @@ it.each(['Overview', 'Group'] as const)(
     const target =
       source === 'Overview'
         ? overview(f).payments[0]!.target
-        : { kind: 'settle' as const, groupId, payment: groupPayment! };
+        : source === 'Person'
+          ? personWidget(
+              record.copy,
+              {
+                kind: 'person',
+                widgetId: 88,
+                accountId: alex.id,
+                person: { id: sam.id, firstName: 'Sam', initials: 'SC' },
+              },
+              { width: 360, height: 224 },
+              record.session,
+              verified,
+            ).payments[0]!.target
+          : { kind: 'settle' as const, groupId, payment: groupPayment! };
     await c.back();
     f.archive();
     const before = f.requests.length;
@@ -2568,7 +2581,7 @@ describe('combined Widget copy account and Group rules', () => {
     vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
   });
   it.each(['sign-out', 'account-change', '403', '404', '401'] as const)(
-    'keeps Tags, Recent, Trip dates, Month, payments, Finish later and Home figures together on %s',
+    'keeps people, Tags, Recent, Trip dates, Month, payments, Finish later and Home figures together on %s',
     async (reason) => {
       const f = fixture([], true);
       f.trip();
@@ -2599,6 +2612,16 @@ describe('combined Widget copy account and Group rules', () => {
       await vi.waitFor(() =>
         expect(f.record().copy).toMatchObject({
           accountId: alex.id,
+          groupPeople: {
+            [groupId]: {
+              verifiedAt: verified,
+              people: [
+                { id: alex.id, firstName: 'Alex', initials: 'AR' },
+                { id: sam.id, firstName: 'Sam', initials: 'SC' },
+                { id: 'a00000000000000000000003', firstName: 'Priya', initials: 'PS' },
+              ],
+            },
+          },
           tags: { [groupId]: { rows: [{ id: tagId, name: 'Groceries' }] } },
           recents: {
             [groupId]: { rows: [expect.objectContaining({ description: 'Private beach lunch' })] },
@@ -2644,6 +2667,20 @@ describe('combined Widget copy account and Group rules', () => {
         expect(f.events).not.toContain('clear');
         expect(f.sessionCopies.find((event) => event.status === 'expired')?.copy).toEqual(before);
         expect(f.record().copy).toEqual(before);
+        expect(
+          personWidget(
+            f.record().copy,
+            {
+              kind: 'person',
+              widgetId: 88,
+              accountId: alex.id,
+              person: { id: sam.id, firstName: 'Sam', initials: 'SC' },
+            },
+            { width: 360, height: 224 },
+            f.record().session,
+            verified,
+          ),
+        ).toMatchObject({ state: 'expired', name: null, payments: [] });
         expect(overview(f)).toMatchObject({
           state: 'expired',
           payments: [],
@@ -2674,6 +2711,7 @@ describe('combined Widget copy account and Group rules', () => {
         expect(f.record().copy?.groups?.[groupId]).toBeUndefined();
         expect(f.record().copy?.months?.[groupId]).toBeUndefined();
         expect(f.record().copy?.tags?.[groupId]).toBeUndefined();
+        expect(f.record().copy?.groupPeople?.[groupId]).toBeUndefined();
         expect(f.record().copy?.recents?.[groupId]).toBeUndefined();
         expect(f.record().copy?.finishLater).toBeUndefined();
         expect(f.record().copy?.home?.byGroup?.[groupId]).toBeUndefined();
@@ -2689,6 +2727,25 @@ describe('combined Widget copy account and Group rules', () => {
         if (reason === 'sign-out') expect(f.record().copy).toBeNull();
         else {
           await vi.waitFor(() => expect(f.record().copy?.accountId).toBe(sam.id));
+          expect(f.record().copy?.groupPeople?.[groupId]?.people).toEqual([
+            { id: sam.id, firstName: 'Sam', initials: 'SC' },
+            { id: alex.id, firstName: 'Alex', initials: 'AR' },
+            { id: 'a00000000000000000000003', firstName: 'Priya', initials: 'PS' },
+          ]);
+          expect(
+            personWidget(
+              f.record().copy,
+              {
+                kind: 'person',
+                widgetId: 88,
+                accountId: alex.id,
+                person: { id: sam.id, firstName: 'Sam', initials: 'SC' },
+              },
+              { width: 360, height: 224 },
+              f.record().session,
+              verified,
+            ),
+          ).toMatchObject({ state: 'other-account', name: null, payments: [] });
           expect(f.record().copy?.groups).toEqual({});
           expect(f.record().copy?.months).toEqual({});
           expect(f.record().copy?.recents?.[groupId]).toBeUndefined();
