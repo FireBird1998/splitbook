@@ -624,7 +624,7 @@ it.each([true, false])(
         target: { kind: 'expense', groupId: 'maple' },
       });
       expect(view.review).toBe(withReview ? 'To review\u00a0· 3' : null);
-      expect(view.summary).toContain('Finish later in Maple House');
+      expect(view.summary).toContain('1 Expense to finish');
       expect(view.layout.sections.find((s) => s.id === 'footer')!.height).toBeGreaterThanOrEqual(
         25,
       );
@@ -723,7 +723,7 @@ it.each([
     const c = { ...copy, finishLater: { groupId: 'maple', groupName: 'Maple House' } };
     const v = overviewWidget(c, setup, { width, height }, auth, now, scale);
     expect(v.finishLater).toBeNull();
-    expect(v.summary).toContain('Finish later in Maple House');
+    expect(v.summary).toContain('1 Expense to finish');
   },
 );
 
@@ -745,7 +745,7 @@ it.each([false, true])(
         label: 'Finish later',
         target: { kind: 'expense', groupId: 'maple' },
       });
-      expect(v.summary).toContain('Finish later in Maple House');
+      expect(v.summary).toContain('1 Expense to finish');
     }
   },
 );

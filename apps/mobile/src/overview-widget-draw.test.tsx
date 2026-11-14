@@ -491,3 +491,35 @@ it.each([344, 464])(
     expect(v.layout.sections.find((s) => s.id === 'space')!.height).toBeLessThanOrEqual(1);
   },
 );
+
+it.each([172, 360])(
+  'keeps the Finish later pencil and announces one Expense without its Group at %s dp',
+  (width) => {
+    vi.stubGlobal('__DEV__', false);
+    const v = overviewWidget(
+      {
+        ...copy,
+        review: { count: 3, verifiedAt: now },
+        finishLater: { groupId: 'maple', groupName: 'Maple House' },
+      },
+      { kind: 'balances', widgetId: 7 },
+      { width, height: 464 },
+      auth,
+      now,
+    );
+    const tree = buildWidgetTree(drawOverview(v, lightTokens));
+    expect(v.finishLater).not.toBeNull();
+    const chip = nodes(tree).find(
+      (n) =>
+        (n.props as { accessibilityLabel?: string }).accessibilityLabel === '1 Expense to finish',
+    );
+    expect(chip).toBeDefined();
+    expect(JSON.stringify(chip)).not.toContain('Maple House');
+    if (width === 360) {
+      expect(v.layout.footerAcross).toBe(true);
+      expect(labels(chip!)).toContain('Finish later');
+      expect(JSON.stringify(chip)).toContain('M4 20h4L19 9l-4-4L4 16z');
+    } else expect(labels(chip!)).toContain('✎');
+    expect(v.summary).toContain('1 Expense to finish');
+  },
+);

@@ -150,17 +150,27 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       ) : null}
     </FlexWidget>
   );
+  const chipIcon = (path: string, ink: string) => (
+    <SvgWidget
+      svg={`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path d="${path}" fill="none" stroke="${ink}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
+      style={{ width: 14, height: 14 }}
+    />
+  );
   const reviewChip = view.review ? (
     <FlexWidget
       clickAction="OPEN_URI"
       clickActionData={link(view.reviewTarget)}
       style={{
-        paddingHorizontal: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexGap: 4,
+        paddingHorizontal: l.chipPaddingHorizontal,
         paddingVertical: 5,
         backgroundColor: color(t.brand.bg),
         borderRadius: 16,
       }}
     >
+      {chipIcon('M4 13.5L6 5h12l2 8.5V19H4z M4 13.5h5l1 2h4l1-2h5', t.brand.main)}
       {text(view.review, t.brand.main, f.review, true)}
     </FlexWidget>
   ) : null;
@@ -168,14 +178,20 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
     <FlexWidget
       clickAction="OPEN_URI"
       clickActionData={link(view.finishLater.target)}
-      accessibilityLabel={`Finish later in ${view.finishLater.groupName}`}
+      accessibilityLabel={view.finishLater.accessibilityLabel}
       style={{
-        paddingHorizontal: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexGap: 4,
+        paddingHorizontal: l.chipPaddingHorizontal,
         paddingVertical: 5,
         backgroundColor: color(t.surfaceMuted),
         borderRadius: 16,
       }}
     >
+      {view.finishLater.icon
+        ? chipIcon('M4 20h4L19 9l-4-4L4 16z M13 7l4 4', t.textSecondary)
+        : null}
       {text(view.finishLater.label, t.textSecondary, f.review, true)}
     </FlexWidget>
   ) : null;

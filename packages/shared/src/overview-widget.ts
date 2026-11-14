@@ -155,6 +155,8 @@ export function overviewWidget(
         tall && optional && !level && unfinished
           ? {
               label: wide ? 'Finish later' : '✎',
+              icon: wide,
+              accessibilityLabel: '1 Expense to finish',
               groupName: unfinished.groupName,
               target: { kind: 'expense', groupId: unfinished.groupId } satisfies WidgetTarget,
             }
@@ -247,15 +249,21 @@ export function overviewWidget(
           : !action && !small && showSaved && !finishLater && (!review || wide)
             ? acrossGroups
             : null;
-      const reviewWidth = review ? text.width(review, 11) + 20 : 0;
-      const draftWidth = finishLater ? text.width(finishLater.label, 11) + 20 : 0;
+      const chipPaddingHorizontal = 8;
+      const reviewWidth = review ? text.width(review, 11) + chipPaddingHorizontal * 2 + 18 : 0;
+      const draftWidth = finishLater
+        ? text.width(finishLater.label, 11) +
+          chipPaddingHorizontal * 2 +
+          (finishLater.icon ? 18 : 0)
+        : 0;
       const waitingAcross = reviewWidth + draftWidth + (reviewWidth && draftWidth ? 6 : 0) <= width;
       const waitingWidth = waitingAcross
         ? reviewWidth + draftWidth + (reviewWidth && draftWidth ? 6 : 0)
         : Math.max(reviewWidth, draftWidth);
       const waitingHeight =
         review || finishLater
-          ? (text.line(11) + 10) * (waitingAcross || !review || !finishLater ? 1 : 2) +
+          ? (Math.max(text.line(11), 14) + 10) *
+              (waitingAcross || !review || !finishLater ? 1 : 2) +
             (waitingAcross ? 0 : 4)
           : 0;
       const noteWidth = footerNote ? text.width(footerNote, 10) : 0;
@@ -588,6 +596,7 @@ export function overviewWidget(
         footerActionAlign:
           !footerAcross && leadingHeight ? ('flex-start' as const) : ('flex-end' as const),
         waitingAcross,
+        chipPaddingHorizontal,
         finishLater,
         footerNote,
         privacyLines,
@@ -705,7 +714,7 @@ export function overviewWidget(
     ...spokenPayments,
     ...spokenGroups,
     read.review?.replace(SEPARATOR, ' '),
-    unfinished ? `Finish later in ${unfinished.groupName}` : null,
+    unfinished ? '1 Expense to finish' : null,
     read.saved,
     hidden,
     read.muted || (homeFiguresMissing && groupRows.length) ? 'Open to update' : null,
