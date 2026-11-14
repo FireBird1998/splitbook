@@ -943,3 +943,15 @@ it('retains Tags for every previously read Group across restarts, while fresh re
   await restarted.clear();
   expect((await restarted.read()).copy).toBeNull();
 });
+
+it('reads duplicate stored Tag ids once, keeping chosen order across store instances', async () => {
+  const store = createWidgetsStore('q5');
+  await store.saveSetup({
+    kind: 'quick',
+    widgetId: 5,
+    accountId: 'alex',
+    groupId: 'maple',
+    tagIds: ['a', 'a', 'b', 'c', 'b', 'd'],
+  });
+  expect(await createWidgetsStore('q5').setup(5)).toMatchObject({ tagIds: ['a', 'b', 'c', 'd'] });
+});

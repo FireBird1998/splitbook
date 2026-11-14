@@ -4,6 +4,12 @@ export type WidgetSetupRecord =
   | GroupWidgetSetup
   | { kind: 'balances'; widgetId: number; hideAmounts?: boolean }
   | QuickWidgetSetup;
+/** Stored choices keep first-chosen order; malformed entries supply no Tags. */
+export function readWidgetTagIds(value: unknown): string[] {
+  return Array.isArray(value)
+    ? [...new Set(value.filter((id): id is string => typeof id === 'string'))].slice(0, 4)
+    : [];
+}
 export function widgetSetupChoices(
   kind: WidgetSetupRecord['kind'],
   saved: WidgetSetupRecord | null,
@@ -25,9 +31,7 @@ export function widgetSetupChoices(
       : {}),
     ...(current?.kind === 'quick' && current.accountId === accountId && current.tagIds !== undefined
       ? {
-          tagIds: Array.isArray(current.tagIds)
-            ? current.tagIds.filter((id) => typeof id === 'string').slice(0, 4)
-            : [],
+          tagIds: readWidgetTagIds(current.tagIds),
         }
       : {}),
     hideAmounts: current && 'hideAmounts' in current ? current.hideAmounts === true : false,

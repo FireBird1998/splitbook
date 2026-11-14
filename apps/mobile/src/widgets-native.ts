@@ -1,5 +1,5 @@
 import { openDatabaseAsync, defaultDatabaseDirectory, type SQLiteDatabase } from 'expo-sqlite';
-import type { WidgetSetupRecord } from '@splitbook/shared/widget-setup';
+import { readWidgetTagIds, type WidgetSetupRecord } from '@splitbook/shared/widget-setup';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
 import type { WidgetsNative } from './data/widget-copy';
 
@@ -47,7 +47,11 @@ export function createWidgetsStore(environment: string) {
         environment,
         widgetId,
       );
-      return row ? JSON.parse(row.setup) : null;
+      if (!row) return null;
+      const setup: WidgetSetupRecord = JSON.parse(row.setup);
+      return setup.kind === 'quick' && setup.tagIds !== undefined
+        ? { ...setup, tagIds: readWidgetTagIds(setup.tagIds) }
+        : setup;
     },
     async saveSetup(setup: WidgetSetupRecord) {
       await (

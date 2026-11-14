@@ -403,10 +403,10 @@ it('uses one Tag column in a narrow tall cell and keeps the plain action as a pl
   const tagged = { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
     chosen = { ...setup, groupId: 'maple', tagIds: tags.map((tag) => tag.id) };
   const narrow = quickWidget(tagged, chosen, { width: 78, height: 224 }, session);
-  expect(narrow.shortcuts?.rows.map((row) => row.buttons.length)).toEqual([1, 1]);
+  expect(narrow.shortcuts?.rows.map((row) => row.buttons.length)).toEqual([1]);
   expect(
     narrow.shortcuts?.rows.flatMap((row) => row.buttons).map((button) => button.label),
-  ).toEqual(['＋', 'Groceries']);
+  ).toEqual(['＋']);
   expect(
     narrow.shortcuts?.rows.flatMap((row) => row.buttons).every((button) => button.width >= 44),
   ).toBe(true);
@@ -441,7 +441,7 @@ it.each([1, 1.3, 2])(
         const rows = view.shortcuts!.rows.slice(1);
         const visible = rows.flatMap((row) => row.buttons);
         if (widgetText(width, scale, 1, 2.625).width(names[0], 12) + 8 > width - 24)
-          expect(visible).toHaveLength(1);
+          expect(visible).toHaveLength(width === 78 ? 0 : 1);
         expect(visible.map((b) => b.label)).toEqual(names.slice(0, visible.length));
         for (const row of rows)
           for (const button of row.buttons) {
@@ -459,3 +459,58 @@ it.each([1, 1.3, 2])(
       }
   },
 );
+
+it('fills 1×2 with the plain action when the first Tag cannot fit, preserving speech', () => {
+  const tags = [
+    { id: 'long', name: 'Groceries' },
+    { id: 'short', name: 'Tea' },
+  ];
+  for (const scale of [1.3, 2]) {
+    const view = quickWidget(
+      { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
+      { ...setup, groupId: 'maple', tagIds: ['long', 'short'] },
+      { width: 78, height: 224, pixelRatio: 2.625 },
+      session,
+      scale,
+    );
+    expect(view.summary).toBe('Add expense in Maple House');
+    expect(view.shortcuts!.rows).toHaveLength(1);
+    expect(view.shortcuts!.rows[0].buttons.map((b) => b.label)).toEqual(['＋']);
+    expect(view.shortcuts!.rows[0].height + 2 * view.shortcuts!.padding).toBeCloseTo(224, 0);
+  }
+});
+it('balances four Tags into two equal rows when three columns would leave a single Tag', () => {
+  const tags = ['Groceries', 'Rent', 'Bills', 'Dining'].map((name, i) => ({ id: String(i), name }));
+  for (const scale of [1.3, 2]) {
+    const view = quickWidget(
+      { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
+      { ...setup, groupId: 'maple', tagIds: tags.map((t) => t.id) },
+      { width: 360, height: 224, pixelRatio: 2.625 },
+      session,
+      scale,
+    );
+    expect(view.shortcuts!.rows.map((row) => row.buttons.length)).toEqual([1, 2, 2]);
+    expect(
+      view
+        .shortcuts!.rows.slice(1)
+        .flatMap((row) => row.buttons)
+        .map((b) => b.label),
+    ).toEqual(tags.map((t) => t.name));
+  }
+});
+it('deduplicates stored Tag ids in first-chosen order before applying the limit', () => {
+  const tags = ['Groceries', 'Rent', 'Bills', 'Dining'].map((name, i) => ({ id: String(i), name }));
+  const chosen = { ...setup, groupId: 'maple', tagIds: ['0', '0', '1', '2', '1', '3'] };
+  expect(widgetSetupChoices('quick', chosen, 'alex', 'maple').tagIds).toEqual(['0', '1', '2', '3']);
+  expect(
+    quickWidget(
+      { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
+      chosen,
+      { width: 360, height: 224 },
+      session,
+    )
+      .shortcuts!.rows.flatMap((r) => r.buttons)
+      .slice(1)
+      .map((b) => b.id),
+  ).toEqual(['0', '1', '2', '3']);
+});

@@ -8261,6 +8261,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           !editor.attempt &&
           !editor.mutation &&
           !expenseDraftChanged(editor.draft, editor.blank) &&
+          !expenseTagPending(editor, snapshot.offline.active) &&
           editor.context?.tags.some(
             (tag) => tag.id === target.tagId && !tag.isArchived && !tag.isDeleted,
           )

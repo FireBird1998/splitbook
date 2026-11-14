@@ -1405,55 +1405,61 @@ it.each(['archived', 'another Group'])(
   },
 );
 
-it('a refused Group stays lost without Tags while an older trusted Group read remains', async () => {
-  const f = fixture(),
-    c = f.make();
-  await c.signIn('alex');
-  await c.openExpense(groupId);
-  let time = verified;
-  const envelope = {
-    source: 'network' as const,
-    refreshedAt: verified,
-    value: { status: 200, data: f.group() },
-  };
-  const copies: WidgetCopy[] = [];
-  const write = async <T>(operation: () => Promise<T>) => operation();
-  const projection = createWidgetCopy(
-    {
-      write: async (copy) => {
-        copies.push(copy);
+it.each(['older', 'equal'] as const)(
+  'a refused Group stays lost with an %s trusted read until a newer one arrives',
+  async (age) => {
+    let time = verified;
+    vi.spyOn(Date, 'now').mockImplementation(() => time);
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await c.openExpense(groupId);
+    const envelope = {
+      source: 'network' as const,
+      refreshedAt: time,
+      value: { status: 200, data: f.group() },
+    };
+    const copies: WidgetCopy[] = [];
+    const write = async <T>(operation: () => Promise<T>) => operation();
+    const projection = createWidgetCopy(
+      {
+        write: async (copy) => {
+          copies.push(copy);
+        },
+        clear: async () => {},
+        setSession: async () => {},
+        redraw: async () => {},
       },
-      clear: async () => {},
-      setSession: async () => {},
-      redraw: async () => {},
-    },
-    () => ({ accountId: alex.id, write, writeSavedCopy: write }),
-    () => undefined,
-    () => null,
-    undefined,
-    () => time,
-    () => ({
-      group: envelope,
-      balances: {
-        source: 'network',
-        refreshedAt: verified,
-        value: { status: 200, data: { byCurrency: [] } },
-      },
-    }),
-  );
-  projection.update(c.getSnapshot());
-  await projection.idle();
-  expect(copies.at(-1)?.tags?.[groupId]?.rows).toHaveLength(1);
-  time += 1000;
-  projection.forgetGroup(groupId, true);
-  projection.update(c.getSnapshot());
-  await projection.idle();
-  expect(copies.at(-1)?.lostGroupIds).toContain(groupId);
-  expect(copies.at(-1)?.tags?.[groupId]).toBeUndefined();
-  expect(copies.at(-1)?.groups?.[groupId]).toBeUndefined();
-  envelope.refreshedAt = time + 1;
-  projection.update(c.getSnapshot());
-  await projection.idle();
-  expect(copies.at(-1)?.lostGroupIds).not.toContain(groupId);
-  expect(copies.at(-1)?.tags?.[groupId]?.rows).toHaveLength(1);
-});
+      () => ({ accountId: alex.id, write, writeSavedCopy: write }),
+      () => undefined,
+      () => null,
+      undefined,
+      () => time,
+      () => ({
+        group: envelope,
+        balances: {
+          source: 'network',
+          refreshedAt: time,
+          value: { status: 200, data: { byCurrency: [] } },
+        },
+      }),
+    );
+    projection.update(c.getSnapshot());
+    await projection.idle();
+    expect(copies.at(-1)?.tags?.[groupId]?.rows).toHaveLength(1);
+    time += 1000;
+    projection.forgetGroup(groupId, true);
+    if (age === 'equal') envelope.refreshedAt = time;
+    projection.update(c.getSnapshot());
+    await projection.idle();
+    expect(copies.at(-1)?.lostGroupIds).toContain(groupId);
+    expect(copies.at(-1)?.tags?.[groupId]).toBeUndefined();
+    expect(copies.at(-1)?.groups?.[groupId]).toBeUndefined();
+    time += 1;
+    envelope.refreshedAt = time;
+    projection.update(c.getSnapshot());
+    await projection.idle();
+    expect(copies.at(-1)?.lostGroupIds).not.toContain(groupId);
+    expect(copies.at(-1)?.tags?.[groupId]?.rows).toHaveLength(1);
+  },
+);
