@@ -64,14 +64,15 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     createdAt: '2026-11-01T00:00:00Z',
     updatedAt: '2026-11-01T00:00:00Z',
   });
+  const additionalGroups: ReturnType<typeof group>[] = [];
   const backend = fakeSplitbook();
   backend.world.people.alex = { ...alex, image: null };
   backend.world.people.sam = { ...sam, image: null };
   backend.auth.cookie = () => 'better-auth.session_token=fictional.signature';
-  Object.defineProperty(backend.world, 'groups', { get: () => [group()] });
+  Object.defineProperty(backend.world, 'groups', { get: () => [group(), ...additionalGroups] });
   for (const id of [alex.id, sam.id])
     Object.defineProperty(backend.world.groupsByAccount, id, {
-      get: () => (noGroups || archived ? [] : [group()]),
+      get: () => (noGroups || archived ? [] : [group(), ...additionalGroups]),
     });
   Object.defineProperty(backend.world.balances, groupId, { get: () => groupBalances });
   Object.defineProperty(backend.world, 'home', {
@@ -217,6 +218,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
       trip = true;
     },
     group,
+    addGroup: (value: ReturnType<typeof group>) => additionalGroups.push(value),
     drafts: native.stores.expenseDrafts,
     archive: () => {
       archived = true;
@@ -1376,6 +1378,20 @@ it.each(['archived', 'another Group'])(
       f.groupTags([
         { _id: tagId, name: 'Old', isArchived: true, createdAt: '2026-11-01T00:00:00Z' },
       ]);
+    if (kind === 'another Group')
+      f.addGroup({
+        ...f.group(),
+        _id: 'b00000000000000000000002',
+        name: 'Another Group',
+        tags: [
+          {
+            _id: 'e00000000000000000000099',
+            name: 'Foreign Tag',
+            isArchived: false,
+            createdAt: '2026-11-01T00:00:00Z',
+          },
+        ],
+      });
     await c.signIn('alex');
     await c.openWidget({
       kind: 'expense-tag',
