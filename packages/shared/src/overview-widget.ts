@@ -130,9 +130,9 @@ export function overviewWidget(
       );
       const labelFont = small ? 10 : 11;
       const bodyFont = small ? 10 : 12;
-      const review = !small && optional && (!level || (tall && level === 1)) ? read.review : null;
+      const review = !small && optional && (!level || tall) ? read.review : null;
       const action =
-        (normal || state === 'all-square') && wide && tall && optional && level < 2
+        (normal || state === 'all-square') && wide && tall && optional
           ? '＋ Add expense'
           : state === 'no-groups'
             ? '＋ Create a Group'
@@ -209,13 +209,11 @@ export function overviewWidget(
               ? Math.max(colHeight(owed, owedOverflow), colHeight(owe, oweOverflow))
               : colHeight(owed, owedOverflow) + colHeight(owe, oweOverflow) + 6;
       const footerNote =
-        level === 2 && (normal || state === 'all-square')
-          ? null
-          : !small && read.muted
-            ? 'Open to update'
-            : !action && !small && showSaved && (!review || wide)
-              ? acrossGroups
-              : null;
+        !small && read.muted
+          ? 'Open to update'
+          : !action && !small && showSaved && (!review || wide)
+            ? acrossGroups
+            : null;
       const reviewWidth = review ? text.width(review, 11) + 20 : 0;
       const noteWidth = footerNote ? text.width(footerNote, 10) : 0;
       const leadingWidth = reviewWidth + noteWidth + (reviewWidth && noteWidth ? 8 : 0);
@@ -380,7 +378,10 @@ export function overviewWidget(
                 id: 'footer',
                 rows: 1,
                 rowHeight: footer,
-                required: true,
+                // At 200%, list rows get their natural height before a whole footer is tried.
+                ...(level === 2 && (normal || state === 'all-square')
+                  ? { whenComplete: normal ? 'balance' : 'message' }
+                  : { required: true }),
               },
             ]
           : []),

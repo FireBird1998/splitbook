@@ -201,12 +201,6 @@ it.each([1, 1.3, 2])(
   (scale) => {
     const v = overviewWidget(copy, setup, { width: 360, height: 584 }, auth, now + 86400001, scale),
       l = v.layout;
-    if (scale === 2) {
-      expect(v.action).toBeNull();
-      expect(l.footerNote).toBeNull();
-      expect(l.sections.some((s) => s.id === 'footer')).toBe(false);
-      return;
-    }
     expect(l.footerNote).toBe('Open to update');
     expect(v.action).toBe('＋ Add expense');
     const text = widgetText(l.width, scale);
@@ -279,12 +273,23 @@ it('keeps fitting compact balance amounts at 200 percent without testing an undr
   expect(v.layout.compactFallback).toBeNull();
 });
 
-it.each([344, 584])('has no ordinary footer at 200 percent, including height %s', (height) => {
-  const v = overviewWidget(copy, setup, { width: 360, height, pixelRatio: 2.625 }, auth, now, 2);
-  expect(v.action).toBeNull();
-  expect(v.review).toBeNull();
-  expect(v.layout.sections.some((s) => s.id === 'footer')).toBe(false);
-});
+it.each([
+  [344, false],
+  [584, true],
+] as const)(
+  'drops the 200-percent footer only when it does not fit whole at %s dp',
+  (height, shown) => {
+    const c = clone(paymentCopy);
+    c.groups = { maple: c.groups!.maple! };
+    c.groups.maple.currencies[0].payments = c.groups.maple.currencies[0].payments.slice(0, 2);
+    const v = overviewWidget(c, setup, { width: 360, height, pixelRatio: 2.625 }, auth, now, 2);
+    expect(v.payments).toHaveLength(2);
+    expect(v.action).toBe(shown ? '＋ Add expense' : null);
+    expect(v.review).toBe(shown ? 'To review\u00a0· 3' : null);
+    expect(v.layout.sections.some((s) => s.id === 'footer')).toBe(shown);
+    expect(v.layout.fits).toBe(true);
+  },
+);
 it('restores Across N Groups beside the review chip in the small wide layout', () => {
   const v = overviewWidget(copy, setup, { width: 360, height: 224, pixelRatio: 2.625 }, auth, now);
   expect(v.review).toBe('To review\u00a0· 3');

@@ -302,3 +302,31 @@ it('draws hidden payment counts without any initials names amounts or settle lin
   expect(labels(tree).join(' ')).not.toMatch(/Priya|Meera|Maple|Alex|PS|MI|AR|₹|1,060|2,000/);
   expect(JSON.stringify(tree)).not.toContain('/settle/');
 });
+
+it.each([
+  [344, false],
+  [584, true],
+] as const)(
+  'draws a whole 200-percent footer only after its payments fit at %s dp',
+  (height, shown) => {
+    vi.stubGlobal('__DEV__', false);
+    const v = overviewWidget(
+      { ...withPayments, review: { count: 3, verifiedAt: now } },
+      { kind: 'balances', widgetId: 7 },
+      { width: 360, height, pixelRatio: 2.625 },
+      auth,
+      now,
+      2,
+    );
+    const tree = buildWidgetTree(drawOverview(v, lightTokens));
+    expect(v.payments).toHaveLength(2);
+    expect(labels(tree).includes('＋ Add expense')).toBe(shown);
+    if (shown) {
+      const i = v.layout.sections.findIndex((s) => s.id === 'footer');
+      expect(labels(tree.children![i])).toContain('To review\u00a0· 3');
+      expect(minimumHeight(tree.children![i], 2, 2.625)).toBeLessThanOrEqual(
+        v.layout.sections[i].height,
+      );
+    }
+  },
+);
