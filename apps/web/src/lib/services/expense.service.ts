@@ -432,7 +432,6 @@ export class ExpenseService {
                 .sort({ createdAt: -1, _id: -1 })
                 .limit(20)
                 .populate('paidBy.user', PERSON_FIELDS)
-                .populate('splitBetween.user', PERSON_FIELDS)
                 .lean(),
           Settlement.find({ group: groupId })
             .select(

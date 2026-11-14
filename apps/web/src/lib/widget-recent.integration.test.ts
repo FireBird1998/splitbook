@@ -12,6 +12,8 @@ import { groupService } from './services/group.service';
 import { expenseService } from './services/expense.service';
 import { parseRecentLedgerRead } from '@splitbook/shared/recent-ledger-read';
 import { settlementService } from './services/settlement.service';
+import mongoose from 'mongoose';
+import Expense from './models/Expense';
 
 vi.mock('next/headers', async () => (await import('./test-utils/signed-in-route')).nextHeaders);
 vi.mock('next/server', async (original) =>
@@ -184,4 +186,67 @@ it('includes a newly saved backdated Expense beyond the visible first twenty row
   ).toBe(false);
   expect(answer.body.data.recent.expenses).toHaveLength(20);
   expect(answer.body.data.recent.expenses[0]._id).toBe(String(backdated._id));
+});
+
+it('reads only twenty projected Recent Expenses through the creation index, without a sort', async () => {
+  const first = await addExpense('Indexed meal');
+  const record = await Expense.collection.findOne({ _id: first._id });
+  if (!record) throw new Error('Missing fixture Expense');
+  await Expense.collection.insertMany(
+    Array.from({ length: 999 }, () => ({
+      ...record,
+      _id: new mongoose.Types.ObjectId(),
+      notes: 'Not needed by Recent',
+      editHistory: [{ description: 'Not needed by Recent' }],
+    })),
+  );
+  await Expense.init();
+  const database = mongoose.connection.db!;
+  await database.command({ profile: 2 });
+  try {
+    const answer = await page('&includeRecent=1');
+    expect(answer.status).toBe(200);
+    const observed = await database.collection('system.profile').findOne({
+      'command.find': 'expenses',
+      'command.sort.createdAt': -1,
+      'command.sort._id': -1,
+      'command.limit': 20,
+    });
+    if (!observed) throw new Error('Recent find was not observed');
+    expect(observed.command.sort).toEqual({ createdAt: -1, _id: -1 });
+    expect(Object.keys(observed.command.projection).sort()).toEqual(
+      'group description amount amountMinor moneyVersion currency date createdAt paidBy'
+        .split(' ')
+        .sort(),
+    );
+    const plan = await database.command({
+      explain: {
+        find: 'expenses',
+        filter: observed.command.filter,
+        projection: observed.command.projection,
+        sort: observed.command.sort,
+        limit: observed.command.limit,
+      },
+      verbosity: 'executionStats',
+    });
+    expect(plan.executionStats.nReturned).toBe(20);
+    expect(plan.executionStats.totalDocsExamined).toBe(20);
+    expect(plan.executionStats.totalKeysExamined).toBe(20);
+    const winning = JSON.stringify(plan.queryPlanner.winningPlan);
+    expect(winning).toContain('group_1_isDeleted_1_createdAt_-1__id_-1');
+    expect(winning).not.toMatch(/"stage":"(?:SORT|COLLSCAN)"/);
+    expect(answer.body.data.recent.expenses.map((row: { _id: string }) => row._id)).toEqual(
+      (
+        await Expense.collection
+          .find({ group: record.group, isDeleted: false })
+          .sort({ createdAt: -1, _id: -1 })
+          .limit(20)
+          .project({ _id: 1 })
+          .toArray()
+      ).map((row) => String(row._id)),
+    );
+  } finally {
+    await database.command({ profile: 0 });
+    await database.collection('system.profile').drop();
+  }
 });

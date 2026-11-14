@@ -32,6 +32,10 @@ export const MODEL_INDEXES = {
     { name: 'group_1_date_-1', key: { group: 1, date: -1 } },
     { name: 'group_1_isDeleted_1', key: { group: 1, isDeleted: 1 } },
     {
+      name: 'group_1_isDeleted_1_createdAt_-1__id_-1',
+      key: { group: 1, isDeleted: 1, createdAt: -1, _id: -1 },
+    },
+    {
       name: 'group_1_isDeleted_1_date_-1_createdAt_-1',
       key: { group: 1, isDeleted: 1, date: -1, createdAt: -1 },
     },
