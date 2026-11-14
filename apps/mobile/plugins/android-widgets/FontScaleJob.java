@@ -13,7 +13,7 @@ import com.reactnativeandroidwidget.RNWidgetJsCommunication;
 /** The system observes this URI even when the app process has died (API 24+). */
 public class FontScaleJob extends JobService {
   private static final int JOB_ID = 0x53425746;
-  private static final String[] KINDS = { "Balances", "Group", "Quick" };
+  private static final String[] KINDS = { "Balances", "Group", "Quick", "Person" };
 
   private static boolean placed(Context context, String kind) {
     return AppWidgetManager.getInstance(context).getAppWidgetIds(new ComponentName(

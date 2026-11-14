@@ -83,6 +83,31 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
         },
       ],
     });
+    app.receiver = app.receiver.filter((item) => item.$['android:name'] !== '.widget.Person');
+    app.receiver.push({
+      $: {
+        'android:name': '.widget.Person',
+        'android:label': 'Person',
+        'android:enabled': String(enabled),
+        'android:exported': 'false',
+      },
+      'intent-filter': [
+        {
+          action: [
+            { $: { 'android:name': 'android.appwidget.action.APPWIDGET_UPDATE' } },
+            { $: { 'android:name': `${config.android.package}.WIDGET_CLICK` } },
+          ],
+        },
+      ],
+      'meta-data': [
+        {
+          $: {
+            'android:name': 'android.appwidget.provider',
+            'android:resource': '@xml/widget_person',
+          },
+        },
+      ],
+    });
     app.service = (app.service ?? []).filter(
       (item) => item.$['android:name'] !== '.widget.FontScaleJob',
     );
@@ -254,7 +279,8 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
     if (info == null || !getPackageName().equals(info.provider.getPackageName())
         || !("${config.android.package}.widget.Group".equals(info.provider.getClassName())
           || "${config.android.package}.widget.Balances".equals(info.provider.getClassName())
-          || "${config.android.package}.widget.Quick".equals(info.provider.getClassName())))
+          || "${config.android.package}.widget.Quick".equals(info.provider.getClassName())
+          || "${config.android.package}.widget.Person".equals(info.provider.getClassName())))
       id = AppWidgetManager.INVALID_APPWIDGET_ID;
     getIntent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,id);
     super.onCreate(savedInstanceState);
@@ -265,6 +291,12 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
       fs.writeFileSync(
         path.join(javaDir, 'Quick.java'),
         `package ${config.android.package}.widget;\npublic class Quick extends Balances {}\n`,
+      );
+      fs.writeFileSync(
+        path.join(javaDir, 'Person.java'),
+        `package ${config.android.package}.widget;
+public class Person extends Balances {}
+`,
       );
       fs.mkdirSync(path.join(main, 'res/xml'), { recursive: true });
       fs.writeFileSync(
@@ -300,7 +332,24 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
         `<?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android" android:minWidth="110dp" android:minHeight="40dp" android:targetCellWidth="2" android:targetCellHeight="1" android:minResizeWidth="40dp" android:minResizeHeight="40dp" android:maxResizeWidth="640dp" android:maxResizeHeight="640dp" android:resizeMode="horizontal|vertical" android:description="@string/widget_quick_description" android:initialLayout="@layout/rn_widget" android:previewImage="@drawable/widget_quick_preview" android:configure="${config.android.package}.widget.GroupConfiguration" android:widgetFeatures="reconfigurable" android:updatePeriodMillis="0" android:widgetCategory="home_screen|not_keyguard" />`,
       );
+      fs.writeFileSync(
+        path.join(main, 'res/xml/widget_person.xml'),
+        `<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+ android:minWidth="250dp" android:minHeight="110dp" android:targetCellWidth="4" android:targetCellHeight="2"
+ android:minResizeWidth="110dp" android:minResizeHeight="110dp" android:maxResizeWidth="640dp" android:maxResizeHeight="640dp"
+ android:resizeMode="horizontal|vertical" android:description="@string/widget_person_description"
+ android:initialLayout="@layout/rn_widget" android:previewImage="@drawable/widget_person_preview"
+ android:configure="${config.android.package}.widget.GroupConfiguration" android:widgetFeatures="reconfigurable"
+ android:updatePeriodMillis="0" android:widgetCategory="home_screen|not_keyguard" />
+`,
+      );
       fs.mkdirSync(path.join(main, 'res/drawable'), { recursive: true });
+      fs.copyFileSync(
+        path.join(mod.modRequest.projectRoot, 'assets/widgets/person-preview.png'),
+        path.join(main, 'res/drawable/widget_person_preview.png'),
+      );
+
       fs.copyFileSync(
         path.join(mod.modRequest.projectRoot, 'assets/widgets/balances-preview.png'),
         path.join(main, 'res/drawable/widget_balances_preview.png'),
@@ -316,7 +365,7 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
       fs.mkdirSync(path.join(main, 'res/values'), { recursive: true });
       fs.writeFileSync(
         path.join(main, 'res/values/widget_balances.xml'),
-        '<resources><string name="widget_quick_description">Add an Expense or record a payment in one tap</string><string name="widget_group_description">Your balance and Suggested payments in one Group</string><string name="widget_balances_description">Your balances, payments and Groups</string></resources>\n',
+        '<resources><string name="widget_person_description">What’s between you and one person</string><string name="widget_quick_description">Add an Expense or record a payment in one tap</string><string name="widget_group_description">Your balance and Suggested payments in one Group</string><string name="widget_balances_description">Your balances, payments and Groups</string></resources>\n',
       );
       return mod;
     },

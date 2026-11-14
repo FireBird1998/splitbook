@@ -145,3 +145,23 @@ it('keeps broadcast redraws inside a one-shot job and lets placement restore the
   expect(job).toContain('PackageManager.COMPONENT_ENABLED_STATE_DISABLED');
   expect(job).not.toContain('COMPONENT_ENABLED_STATE_ENABLED');
 });
+
+it('offers Person as the fourth private receiver behind the same switch', () => {
+  for (const enabled of ['true', 'false']) {
+    const widgets = application(enabled).receiver.filter((entry: { $: Record<string, string> }) =>
+      ['.widget.Balances', '.widget.Group', '.widget.Quick', '.widget.Person'].includes(
+        entry.$['android:name'],
+      ),
+    );
+    expect(widgets).toHaveLength(4);
+    expect(
+      widgets.find(
+        (entry: { $: Record<string, string> }) => entry.$['android:name'] === '.widget.Person',
+      )?.$,
+    ).toMatchObject({
+      'android:label': 'Person',
+      'android:enabled': enabled,
+      'android:exported': 'false',
+    });
+  }
+}, 30000);

@@ -435,3 +435,29 @@ verification times so an older read cannot replace newer Tags. Copies survive a 
 refused Group reads remove that Group, and a 401 hides them without deletion. Existing reads
 provide no Tag usage ranking, so new selections prefill the first four active Tags in Group order.
 A Tag destination opens a fresh Expense with its Tag; an unfinished draft takes precedence.
+
+## Person widget (#1188)
+
+Person is the fourth home-screen widget type, behind
+`EXPO_PUBLIC_ANDROID_WIDGETS_ENABLED` (off by default). It starts at 4×2 and resizes
+both ways down to 2×2; the view takes actual launcher dp, not named size buckets.
+Its setup reads only the Widget copy. Group-list and Group reads populate
+`groupPeople`, keyed by Group, with a verification time and each member’s id,
+first name and initials. Membership is independent of the saved Balances part,
+so setup can offer anyone in a shared active Group without another request. Old
+copies without this optional field need an app read; there is no migration.
+
+A Person setup keeps the chosen id, first name and initials for its account, so a
+missing-copy widget can still name its person. Another account must choose again.
+Setup stays through sign-out; the Widget copy is purged before signed-out redraw,
+removed for a refused Group and hidden without deletion on a 401.
+
+Person filters `widgetPayments`; it neither stores payments a second way nor
+adds across Groups or currencies. Payment rows reuse the existing Settle up
+target with payer, recipient and currency; the controller checks the live Group
+before filling Record payment. A tap never records it and is held through
+protected tasks. Tall widgets also show informational all-square Group rows.
+Names that collide gain their second initial in setup, the header and TalkBack.
+
+The Person picker preview is generated with
+`pnpm web exec tsx ../mobile/scripts/generate-widget-assets.ts --person-only`.

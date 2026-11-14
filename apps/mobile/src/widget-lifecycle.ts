@@ -5,6 +5,6 @@ import { reconcileWidgetSetupsAcrossBuilds } from './widgets-native';
 export async function reconcileWidgetSetups() {
   if (Platform.OS !== 'android') return;
   const { getWidgetInfo } = await import('react-native-android-widget/src/api/get-widget-info');
-  const placed = await Promise.all(['Balances', 'Group', 'Quick'].map(getWidgetInfo));
+  const placed = await Promise.all(['Balances', 'Group', 'Quick', 'Person'].map(getWidgetInfo));
   await reconcileWidgetSetupsAcrossBuilds(placed.flat().map((widget) => widget.widgetId));
 }

@@ -1,3 +1,4 @@
+import { personWidget } from '@splitbook/shared/person-widget';
 import { overviewWidget } from '@splitbook/shared/overview-widget';
 import { widgetDimensions } from '../test-utils/widget-size';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -2697,5 +2698,121 @@ describe('combined Widget copy account and Group rules', () => {
         }
       }
     },
+  );
+});
+
+it('saves every shared Group’s people before Balances is opened, with no surnames or email', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() =>
+    expect(f.record().copy).toMatchObject({
+      groupPeople: {
+        [groupId]: {
+          name: 'Maple House',
+          archived: false,
+          verifiedAt: verified,
+          people: [
+            { id: alex.id, firstName: 'Alex', initials: 'AR' },
+            { id: sam.id, firstName: 'Sam', initials: 'SC' },
+            { id: 'a00000000000000000000003', firstName: 'Priya', initials: 'PS' },
+          ],
+        },
+      },
+    }),
+  );
+  const saved = (f.record().copy as WidgetCopy & { groupPeople: unknown }).groupPeople;
+  expect(JSON.stringify(saved)).not.toMatch(/Rivera|Chen|Shah|email|@/);
+  expect(f.requests.some((r) => r.path === `/api/groups/${groupId}/balances`)).toBe(false);
+});
+
+it.each(['sign-out', 'account-change', 'denied', '401'] as const)(
+  'guards saved people after %s',
+  async (reason) => {
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await vi.waitFor(() => expect(f.record().copy?.groupPeople?.[groupId]?.people).toHaveLength(3));
+    const before = f.record().copy!.groupPeople;
+    f.events.length = 0;
+    if (reason === 'sign-out') await c.signOut();
+    if (reason === 'account-change') await c.signIn('sam');
+    if (reason === 'denied') {
+      f.refuse(403);
+      await c.openGroup(groupId, false);
+    }
+    if (reason === '401') {
+      f.expire();
+      await c.refreshHome();
+    }
+    if (reason === '401') {
+      await vi.waitFor(() => expect(f.record().session.status).toBe('expired'));
+      expect(f.record().copy?.groupPeople).toEqual(before);
+      expect(f.events).not.toContain('clear');
+    } else if (reason === 'denied') {
+      await vi.waitFor(() => expect(f.record().copy?.groupPeople?.[groupId]).toBeUndefined());
+      expect(f.record().copy?.lostGroupIds).toContain(groupId);
+    } else {
+      expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+      if (reason === 'sign-out') expect(f.record().copy).toBeNull();
+      else {
+        expect(f.record().copy?.accountId).toBe(sam.id);
+        expect(f.events.indexOf('write:' + sam.id)).toBeGreaterThan(f.events.indexOf('clear'));
+      }
+    }
+  },
+);
+it('restores the people’s original verification time without needing a saved Balances read', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    first = f.make();
+  await first.signIn('alex');
+  await vi.waitFor(() => expect(f.record().copy?.groupPeople?.[groupId]).toBeDefined());
+  first.dispose();
+  f.offline();
+  vi.spyOn(Date, 'now').mockReturnValue(verified + 3600000);
+  const count = f.copies.length;
+  await f.make().restore();
+  await vi.waitFor(() => expect(f.copies.length).toBeGreaterThan(count));
+  expect(f.record().copy?.groupPeople?.[groupId]?.verifiedAt).toBe(verified);
+  expect(f.record().copy?.groupPeople?.[groupId]?.people.map((p) => p.firstName)).toEqual([
+    'Alex',
+    'Sam',
+    'Priya',
+  ]);
+});
+
+it('a Person line opens the matching Group payment, through the shared target, without recording it', async () => {
+  const f = fixture(),
+    c = f.make();
+  f.groupBalances(paymentBalances);
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.record().copy?.groups?.[groupId]).toBeDefined());
+  const line = personWidget(
+    f.record().copy,
+    {
+      kind: 'person',
+      widgetId: 88,
+      accountId: alex.id,
+      person: { id: sam.id, firstName: 'Sam', initials: 'SC' },
+    },
+    { width: 360, height: 224 },
+    f.record().session,
+    verified,
+  ).payments[0];
+  expect(line.amount).toBe('₹100.00');
+  await c.back();
+  await c.openWidget(line.target);
+  expect(c.getSnapshot().screen).toBe('settlement');
+  expect(c.getSnapshot().settlement.draft).toMatchObject({
+    paidBy: alex.id,
+    paidTo: sam.id,
+    currency: 'INR',
+    amount: '100',
+  });
+  expect(f.requests.filter((r) => r.method === 'POST' && r.path.includes('/settlements'))).toEqual(
+    [],
   );
 });

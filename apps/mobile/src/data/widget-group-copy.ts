@@ -3,6 +3,20 @@ import { initials } from '../initials';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { WidgetGroupPart } from '@splitbook/shared/group-widget';
 import type { MobileGroup, GroupCurrencyBalance } from './types';
+import type { WidgetGroupPeople } from '@splitbook/shared/widget-people';
+
+export function widgetGroupPeople(group: MobileGroup, verifiedAt: number): WidgetGroupPeople {
+  return {
+    name: group.name,
+    archived: !!group.isArchived,
+    verifiedAt,
+    people: group.members.map(({ user }) => ({
+      id: user.id,
+      firstName: user.name.trim().split(/\s+/)[0],
+      initials: initials(user.name),
+    })),
+  };
+}
 
 /** A projection of existing reads, never a balance computation or a new request. */
 export function widgetGroupCopy(

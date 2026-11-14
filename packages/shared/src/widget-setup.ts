@@ -1,6 +1,9 @@
 import type { QuickWidgetSetup } from './quick-widget';
+
+import type { PersonWidgetSetup } from './person-widget';
 import type { GroupWidgetSetup } from './group-widget';
 export type WidgetSetupRecord =
+  | PersonWidgetSetup
   | GroupWidgetSetup
   | { kind: 'balances'; widgetId: number; hideAmounts?: boolean }
   | QuickWidgetSetup;
@@ -22,7 +25,9 @@ export function widgetSetupChoices(
       kind === 'balances'
         ? null
         : current && 'accountId' in current && current.accountId === accountId
-          ? current.groupId
+          ? 'groupId' in current
+            ? current.groupId
+            : null
           : kind === 'quick'
             ? null
             : firstGroupId,
