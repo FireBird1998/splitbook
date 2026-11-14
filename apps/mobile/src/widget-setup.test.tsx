@@ -207,7 +207,7 @@ it.each(['light', 'dark'] as const)(
 it('Balances setup remains available without a signed-in account or saved Groups', async () => {
   store.read.mockResolvedValue({ copy: null, session: { status: 'signed-out' } });
   const result = await render('Balances');
-  expect(text()).toContain('Balances widget');
+  expect(text()).toContain('Overview widget');
   expect(host('Switch')).toHaveLength(1);
   expect(textOf(button())).toBe('Add widget');
   await act(async () => button().props.onPress());

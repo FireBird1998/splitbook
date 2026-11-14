@@ -198,7 +198,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
           </Pressable>
           <View style={{ flex: 1 }}>
             {copy(
-              balances ? 'Balances widget' : quick ? 'Quick actions widget' : 'Group widget',
+              balances ? 'Overview widget' : quick ? 'Quick actions widget' : 'Group widget',
               true,
               22,
             )}

@@ -1,5 +1,6 @@
+import { overviewAt } from '../test-utils/overview-widget';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { balancesWidget, type WidgetCopy } from '@splitbook/shared/balances-widget';
+import { type WidgetCopy } from '@splitbook/shared/balances-widget';
 
 const now = Date.parse('2026-11-08T04:11:00Z');
 export const copy: WidgetCopy = {
@@ -26,7 +27,7 @@ afterAll(() => {
 describe('Balances widget view', () => {
   it('keeps owed and owe separate, in Home currency order, and marks the saved time', () => {
     expect(
-      balancesWidget(
+      overviewAt(
         copy,
         { kind: 'balances' },
         '2x2',
@@ -37,22 +38,22 @@ describe('Balances widget view', () => {
       state: 'normal',
       saved: 'Saved 9:41',
       muted: false,
-      owed: ['₹2,400.00', '€40.00'],
-      owe: ['₹1,480.00', '€12.50'],
-      owedOverflow: '+1 currency',
-      review: 'To review · 3',
+      owed: ['₹2,400.00'],
+      owe: ['₹1,480.00'],
+      owedOverflow: '+2 currencies',
+      review: null,
       target: 'home',
     });
   });
 });
 const auth = { status: 'authenticated' as const, accountId: 'alex', loading: false };
 const view = (value: WidgetCopy | null = copy, size: '2x1' | '2x2' | '4x2' = '2x2', at = now) =>
-  balancesWidget(value, { kind: 'balances' }, size, auth, at);
+  overviewAt(value, { kind: 'balances' }, size, auth, at);
 it.each(['2x1', '2x2', '4x2'] as const)(
   'hides every amount in %s for signed-out and expired sessions',
   (size) => {
     for (const status of ['signed-out', 'expired'] as const) {
-      const shown = balancesWidget(copy, { kind: 'balances' }, size, { status }, now);
+      const shown = overviewAt(copy, { kind: 'balances' }, size, { status }, now);
       expect(shown).toMatchObject({
         state: status,
         owed: [],
@@ -70,10 +71,10 @@ it.each(['2x1', '2x2', '4x2'] as const)(
   (size) => {
     expect(view(null, size)).toMatchObject({ state: 'no-copy', title: 'Nothing saved yet' });
     expect(
-      balancesWidget(null, { kind: 'balances' }, size, { ...auth, loading: true }, now),
+      overviewAt(null, { kind: 'balances' }, size, { ...auth, loading: true }, now),
     ).toMatchObject({ state: 'loading', owed: [], owe: [], title: null });
     expect(view({ ...copy, accountId: 'sam' })).toMatchObject({
-      state: 'no-copy',
+      state: 'other-account',
       owed: [],
       owe: [],
       saved: null,
@@ -85,7 +86,7 @@ it('shows JPY without decimals at 4×2, with up to three currencies per column',
     owed: ['₹2,400.00', '€40.00', '¥3,000'],
     owe: ['₹1,480.00', '€12.50'],
     owedOverflow: null,
-    footer: 'Across 4 Groups',
+    layout: { footerNote: 'Across 4 Groups' },
     review: 'To review · 3',
   });
 });
@@ -135,7 +136,7 @@ it('counts every currency that does not fit, without converting or netting', () 
       ],
     },
   };
-  expect(view(multi)).toMatchObject({ owedOverflow: '+3 currencies' });
+  expect(view(multi)).toMatchObject({ owedOverflow: '+4 currencies' });
   expect(view(multi, '4x2')).toMatchObject({
     owedOverflow: '+2 currencies',
     owed: ['₹2,400.00', '€40.00', '¥3,000'],
@@ -161,7 +162,8 @@ it.each(['2x1', '2x2', '4x2'] as const)(
     expect(view(copy, size, now + 86_400_000)).toMatchObject({ muted: false });
     expect(view(copy, size, now + 86_400_001)).toMatchObject({
       muted: true,
-      footer: 'Open to update',
+      layout: { footerNote: size === '2x1' ? null : 'Open to update' },
+      summary: expect.stringContaining('Open to update'),
       review: null,
     });
   },
@@ -186,6 +188,6 @@ it.each(['2x1', '2x2', '4x2'] as const)('formats JPY without decimals at %s', (s
 });
 it('hides a persisted To review count when this build has Drafts off', () => {
   expect(
-    balancesWidget(copy, { kind: 'balances', reviewEnabled: false }, '2x2', auth, now).review,
+    overviewAt(copy, { kind: 'balances', reviewEnabled: false }, '2x2', auth, now).review,
   ).toBeNull();
 });

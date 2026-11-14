@@ -1,6 +1,4 @@
-import { balancesLayout, widgetTextLevel } from './widget-layout';
 import { dayKeyInZone } from './zoned-calendar';
-import { widgetSummary } from './widget-accessibility';
 import type { WidgetGroupPart, WidgetMonthPart } from './group-widget';
 import type { GroupCategory } from './types';
 /** Saved read available to the Android widget renderer, never a live balance. */
@@ -51,27 +49,14 @@ export type WidgetSession =
 import { SEPARATOR, counted } from './separator';
 import { formatCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
-export type BalancesWidgetSize = '2x1' | '2x2' | '4x2';
-export interface BalancesWidgetView {
-  layout: ReturnType<typeof balancesLayout>;
-  summary: string;
-  compactLines: string[];
-  compactFallback: string | null;
-  state: 'normal' | 'loading' | 'no-copy' | 'signed-out' | 'expired' | 'all-square' | 'no-groups';
-  size: BalancesWidgetSize;
-  hidden: string | null;
-  saved: string | null;
-  muted: boolean;
-  owed: string[];
-  owe: string[];
-  owedOverflow: string | null;
-  oweOverflow: string | null;
-  review: string | null;
-  footer: string | null;
-  title: string | null;
-  description: string | null;
-  target: WidgetTarget;
-}
+type WidgetBalancesState =
+  | 'normal'
+  | 'loading'
+  | 'no-copy'
+  | 'signed-out'
+  | 'expired'
+  | 'all-square'
+  | 'no-groups';
 
 /** Calendar boundaries use the phone's local zone; age uses elapsed time. */
 export function widgetSavedTime(verifiedAt: number, now: number) {
@@ -96,168 +81,80 @@ export function widgetSavedTime(verifiedAt: number, now: number) {
   return `Saved ${saved.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][saved.getUTCMonth()]}`;
 }
 
-function balancesWidgetView(
+/** Account, saved-time and balance reading for Overview. */
+export function readWidgetBalances(
   copy: WidgetCopy | null,
-  setup: { kind: 'balances'; reviewEnabled?: boolean; hideAmounts?: boolean },
-  size: BalancesWidgetSize,
+  setup: { reviewEnabled?: boolean; hideAmounts?: boolean },
   session: WidgetSession,
   now: number,
-  fontScale = 1,
-): BalancesWidgetView {
-  const view: BalancesWidgetView = {
-    summary: '',
-    compactLines: [],
-    compactFallback: null,
-    layout: balancesLayout(size, fontScale, false),
-    state: 'no-copy',
-    hidden: null,
-    size,
-    saved: null,
+) {
+  const empty = {
+    state: 'no-copy' as WidgetBalancesState,
+    title: 'Nothing saved yet' as string | null,
+    description: 'Open Splitbook to load your balances.' as string | null,
+    target: 'home' as WidgetTarget,
+    saved: null as string | null,
     muted: false,
-    owed: [],
-    owe: [],
-    owedOverflow: null,
-    oweOverflow: null,
-    review: null,
-    footer: null,
-    title: 'Nothing saved yet',
-    description: 'Open Splitbook to load your balances.',
-    target: 'home',
+    review: null as string | null,
+    hidden: null as string | null,
+    owed: [] as string[],
+    owe: [] as string[],
+    groupCount: 0,
   };
-  if (session.status === 'signed-out' || session.status === 'expired')
+  if (session.status !== 'authenticated')
     return {
-      ...view,
+      ...empty,
       state: session.status,
       title: session.status === 'expired' ? 'Sign in again' : 'Sign in to Splitbook',
       description: session.status === 'expired' ? 'to see balances' : 'to see your balances here',
-      target: 'sign-in',
+      target: 'sign-in' as const,
     };
   if (!copy || copy.accountId !== session.accountId || !copy.home)
-    return session.loading ? { ...view, state: 'loading', title: null, description: null } : view;
+    return session.loading
+      ? { ...empty, state: 'loading' as const, title: null, description: null }
+      : empty;
   const home = copy.home;
-  view.saved = widgetSavedTime(home.verifiedAt, now);
-  view.muted = now - home.verifiedAt > 86_400_000;
-  view.footer = view.muted
-    ? 'Open to update'
-    : size === '4x2'
-      ? `Across ${counted(home.groupCount, 'Group')}`
-      : null;
-  view.review =
-    setup.reviewEnabled !== false &&
-    !view.muted &&
-    size !== '2x1' &&
-    copy.review &&
-    copy.review.count > 0
-      ? `To review${SEPARATOR}${copy.review.count}`
-      : null;
+  const muted = now - home.verifiedAt > 86_400_000;
+  const base = {
+    ...empty,
+    saved: widgetSavedTime(home.verifiedAt, now),
+    muted,
+    groupCount: home.groupCount,
+    review:
+      setup.reviewEnabled !== false && !muted && copy.review && copy.review.count > 0
+        ? `To review${SEPARATOR}${copy.review.count}`
+        : null,
+  };
   if (!home.groupCount)
     return {
-      ...view,
-      state: 'no-groups',
+      ...base,
+      state: 'no-groups' as const,
       title: 'No Groups yet',
       description: 'Share costs with a Group.',
-      target: 'create-group',
+      target: 'create-group' as const,
     };
   if (home.currencies.every((row) => row.oweMinor === 0 && row.owedMinor === 0))
     return {
-      ...view,
-      state: 'all-square',
+      ...base,
+      state: 'all-square' as const,
       title: 'You’re all square',
       description: 'Nobody owes anybody, in any currency.',
     };
-  if (setup.hideAmounts) {
-    const summary = (field: 'oweMinor' | 'owedMinor') => {
-      const count = home.currencies.filter((row) => row[field] > 0).length;
-      return count ? [`in ${counted(count, 'currency', 'currencies')}`] : [];
-    };
-    return {
-      ...view,
-      state: 'normal',
-      title: null,
-      description: null,
-      hidden: 'Amounts hidden',
-      owed: summary('owedMinor'),
-      owe: summary('oweMinor'),
-    };
-  }
-  const limit = balancesLayout(size, fontScale, true).currencyLines;
-  const lines = (field: 'oweMinor' | 'owedMinor') => {
+  const lines = (field: 'owedMinor' | 'oweMinor') => {
     const rows = home.currencies.filter((row) => row[field] > 0);
-    const remaining = rows.length - limit;
-    return {
-      lines: rows
-        .slice(0, limit)
-        .map((row) => formatCurrency(toMajorAmount(row[field], row.currency), row.currency)),
-      overflow:
-        remaining > 0
-          ? size === '2x1'
-            ? `+${remaining}`
-            : `+${counted(remaining, 'currency', 'currencies')}`
-          : null,
-    };
+    return setup.hideAmounts
+      ? rows.length
+        ? [`in ${counted(rows.length, 'currency', 'currencies')}`]
+        : []
+      : rows.map((row) => formatCurrency(toMajorAmount(row[field], row.currency), row.currency));
   };
-  const owed = lines('owedMinor'),
-    owe = lines('oweMinor');
   return {
-    ...view,
-    state: 'normal',
+    ...base,
+    state: 'normal' as const,
     title: null,
     description: null,
-    owed: owed.lines,
-    owe: owe.lines,
-    owedOverflow: owed.overflow,
-    oweOverflow: owe.overflow,
-  };
-}
-
-/** One spoken description, kept independent of which lines fit visually. */
-export function balancesWidget(...args: Parameters<typeof balancesWidgetView>): BalancesWidgetView {
-  const view = balancesWidgetView(...args);
-  const full = args[5] ? balancesWidgetView(args[0], args[1], args[2], args[3], args[4]) : view;
-  const overflowSpeech = (overflow: string | null, direction: 'owed' | 'owing') => {
-    if (!overflow) return null;
-    const count = Number(overflow.match(/\d+/)?.[0] ?? 0);
-    return `${count} more ${count === 1 ? 'currency' : 'currencies'} ${direction}`;
-  };
-  const summary = widgetSummary([
-    'Balances',
-    full.state === 'loading' ? 'Loading' : null,
-    full.title,
-    full.description,
-    full.owed.length
-      ? 'You’re owed ' +
-        full.owed.join(' and ') +
-        (args[2] === '2x1' && full.owedOverflow
-          ? ' and ' + overflowSpeech(full.owedOverflow, 'owed')
-          : '')
-      : null,
-    full.owe.length
-      ? 'You owe ' +
-        full.owe.join(' and ') +
-        (args[2] === '2x1' && full.oweOverflow
-          ? ' and ' + overflowSpeech(full.oweOverflow, 'owing')
-          : '')
-      : null,
-    args[2] !== '2x1' ? overflowSpeech(full.owedOverflow, 'owed') : null,
-    args[2] !== '2x1' ? overflowSpeech(full.oweOverflow, 'owing') : null,
-    full.saved,
-    full.review?.replace(SEPARATOR, ' '),
-    full.hidden,
-    full.muted ? 'Open to update' : null,
-  ]);
-  const level = widgetTextLevel(args[5] ?? 1);
-  const compact = args[2] === '2x1' && level > 0 && view.state === 'normal';
-  const lines = compact
-    ? view.hidden
-      ? ['You’re owed', 'You owe']
-      : [`Owed ${view.owed[0] ?? '—'}`, `Owe ${view.owe[0] ?? '—'}`]
-    : [];
-  const tooWide = !view.hidden && lines.some((line) => line.length > (level === 2 ? 15 : 20));
-  return {
-    ...view,
-    summary,
-    compactLines: tooWide ? [] : lines,
-    compactFallback: tooWide ? 'Open to see balances' : null,
-    layout: balancesLayout(args[2], args[5] ?? 1, view.state === 'normal', Boolean(view.hidden)),
+    hidden: setup.hideAmounts ? 'Amounts hidden' : null,
+    owed: lines('owedMinor'),
+    owe: lines('oweMinor'),
   };
 }

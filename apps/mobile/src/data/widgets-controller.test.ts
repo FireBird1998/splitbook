@@ -633,10 +633,12 @@ it.each(
       'Leave Group',
     ] as const
   ).flatMap((task) =>
-    (['home', 'record-payment', 'expense-tag'] as const).map((destination) => ({
-      task,
-      destination,
-    })),
+    (['home', 'review', 'choose-group', 'record-payment', 'expense-tag'] as const).map(
+      (destination) => ({
+        task,
+        destination,
+      }),
+    ),
   ),
 )(
   'holds $destination with the entire protected $task task unchanged',
@@ -694,11 +696,11 @@ it.each(
     expect(notificationTaskProtected(before)).toBe(true);
     const count = f.requests.length;
     await c.openWidget(
-      destination === 'home'
-        ? 'home'
-        : destination === 'expense-tag'
-          ? { kind: 'expense-tag', groupId, tagId }
-          : { kind: 'record-payment', groupId },
+      destination === 'expense-tag'
+        ? { kind: 'expense-tag', groupId, tagId }
+        : destination === 'record-payment'
+          ? { kind: 'record-payment', groupId }
+          : destination,
     );
     const after = c.getSnapshot();
     expect(after.screen).toBe(before.screen);

@@ -1,5 +1,5 @@
 import { mobileBuildSettings, widgetKey } from './config';
-import { drawBalances } from './balances-widget-draw';
+import { drawOverview } from './overview-widget-draw';
 import { drawQuick } from './quick-widget-draw';
 import { legacyBalancesSetup } from '@splitbook/shared/widget-setup';
 import { drawGroup } from './group-widget-draw';
@@ -8,7 +8,7 @@ import { registerWidgetTaskHandler } from 'react-native-android-widget/src/api/r
 import { getWidgetInfo } from 'react-native-android-widget/src/api/get-widget-info';
 import { requestWidgetUpdateById } from 'react-native-android-widget/src/api/request-widget-update-by-id';
 import type { WidgetInfo } from 'react-native-android-widget/src/api/types';
-import { balancesWidget } from '@splitbook/shared/balances-widget';
+import { overviewWidget } from '@splitbook/shared/overview-widget';
 import { lightTokens, darkTokens } from '@splitbook/shared/design-tokens';
 import { createWidgetsStore } from './widgets-native';
 
@@ -76,11 +76,12 @@ async function representation(info: WidgetInfo) {
     };
   }
   const setup = await widgetStore.setup(info.widgetId);
-  const size = info.height < 130 ? '2x1' : info.width >= 280 ? '4x2' : '2x2';
-  const view = balancesWidget(
+  const size = { width: info.width, height: info.height, pixelRatio: info.screenInfo.density };
+  const view = overviewWidget(
     record.copy,
     {
       kind: 'balances',
+      widgetId: info.widgetId,
       hideAmounts: setup?.kind === 'balances' && setup.hideAmounts === true,
       reviewEnabled: process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true',
     },
@@ -89,7 +90,7 @@ async function representation(info: WidgetInfo) {
     Date.now(),
     info.screenInfo.fontScale,
   );
-  return { light: drawBalances(view, lightTokens), dark: drawBalances(view, darkTokens) };
+  return { light: drawOverview(view, lightTokens), dark: drawOverview(view, darkTokens) };
 }
 let drawing: Promise<void> = Promise.resolve();
 const serializeDraw = (run: () => Promise<void>) => {
@@ -134,14 +135,12 @@ export function registerAndroidWidgets() {
         }
       }
       // WorkManager captures bounds before queuing an event. A later resize can overtake
-      // it, while native drawing already uses the current bounds: project resizable widgets from those
-      // same current dimensions, not the earlier event's.
+      // it, while native drawing already uses the current bounds: project every resizable
+      // widget from those same dimensions, falling back to a just-added event's bounds.
       const currentInfo =
-        widgetInfo.widgetName === 'Group' || widgetInfo.widgetName === 'Quick'
-          ? ((await getWidgetInfo(widgetInfo.widgetName)).find(
-              (info) => info.widgetId === widgetInfo.widgetId,
-            ) ?? widgetInfo)
-          : widgetInfo;
+        (await getWidgetInfo(widgetInfo.widgetName)).find(
+          (info) => info.widgetId === widgetInfo.widgetId,
+        ) ?? widgetInfo;
       if (currentInfo) renderWidget(await representation(currentInfo));
     });
   });

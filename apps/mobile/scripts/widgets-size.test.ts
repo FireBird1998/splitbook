@@ -40,9 +40,15 @@ it('generates provider bounds that allow four columns and two rows on the device
       join(root, 'android/app/src/main/res/xml/widget_balances.xml'),
       'utf8',
     );
+    expect(xml).toContain('android:minWidth="250dp" android:minHeight="180dp"');
     expect(xml).toContain('android:maxResizeWidth="640dp"');
-    expect(xml).toContain('android:maxResizeHeight="220dp"');
-    expect(xml).toContain('android:targetCellWidth="2" android:targetCellHeight="2"');
+    expect(xml).toContain('android:maxResizeHeight="640dp"');
+    expect(xml).toContain('android:targetCellWidth="4" android:targetCellHeight="3"');
+    expect(xml).toContain('android:minResizeWidth="110dp" android:minResizeHeight="40dp"');
+    expect(xml).toContain('android:resizeMode="horizontal|vertical"');
+    expect(
+      readFileSync(join(root, 'android/app/src/main/res/values/widget_balances.xml'), 'utf8'),
+    ).toContain('Your balances, payments and Groups');
     expect(xml).toContain('android:updatePeriodMillis="0"');
     expect(xml).toContain('android:widgetFeatures="reconfigurable"');
     expect(xml).toContain('android:configure="com.splitbook.app.dev.widget.GroupConfiguration"');

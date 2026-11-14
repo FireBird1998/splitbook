@@ -41,7 +41,7 @@ describe('Android Balances widget discovery', () => {
   it('offers Balances only in builds explicitly enabling widgets', () => {
     expect(receiver('true')?.$).toMatchObject({
       'android:enabled': 'true',
-      'android:label': 'Balances',
+      'android:label': 'Overview',
     });
     expect(receiver()?.$['android:enabled']).toBe('false');
     expect(receiver('false')?.$['android:enabled']).toBe('false');

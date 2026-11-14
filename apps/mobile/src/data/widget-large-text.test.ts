@@ -1,6 +1,7 @@
+import { overviewAt } from '../test-utils/overview-widget';
 import { widgetDimensions } from '../test-utils/widget-size';
 import { expect, it } from 'vitest';
-import { balancesWidget, type WidgetCopy } from '@splitbook/shared/balances-widget';
+import { type WidgetCopy } from '@splitbook/shared/balances-widget';
 import { groupWidget, type WidgetGroupPart } from '@splitbook/shared/group-widget';
 import { quickWidget } from '@splitbook/shared/quick-widget';
 const now = Date.parse('2026-11-08T04:11:00Z');
@@ -45,17 +46,17 @@ it.each([
   ['2x1', 1, 1],
   ['2x1', 1.3, 1],
   ['2x1', 2, 1],
-  ['2x2', 1, 2],
+  ['2x2', 1, 1],
   ['2x2', 1.3, 1],
   ['2x2', 2, 1],
   ['4x2', 1, 3],
   ['4x2', 1.3, 2],
   ['4x2', 2, 1],
 ] as const)('limits Balances %s at %s text to %s currency lines per side', (size, scale, lines) => {
-  const v = balancesWidget(copy, { kind: 'balances' }, size, auth, now, scale);
+  const v = overviewAt(copy, { kind: 'balances' }, size, auth, now, scale);
   expect(v.owed).toHaveLength(lines);
   expect(v.owe).toHaveLength(lines);
-  expect(v.layout.showReview).toBe(scale === 1 && size !== '2x1');
+  expect(v.review !== null).toBe(scale === 1 && size === '4x2');
   if (scale > 1) expect(v.owedOverflow).toContain(String(3 - lines));
 });
 it.each([
@@ -77,8 +78,8 @@ it.each([
   } else if (scale > 1 && size !== '2x2') expect(v.more).toContain(String(6 - lines));
 });
 it.each([1, 1.3, 2])('keeps the entire spoken summary when visual lines drop at %s', (scale) => {
-  expect(balancesWidget(copy, { kind: 'balances' }, '2x2', auth, now, scale).summary).toBe(
-    balancesWidget(copy, { kind: 'balances' }, '2x2', auth, now).summary,
+  expect(overviewAt(copy, { kind: 'balances' }, '2x2', auth, now, scale).summary).toBe(
+    overviewAt(copy, { kind: 'balances' }, '2x2', auth, now).summary,
   );
   expect(groupWidget(part, setup, widgetDimensions('4x3'), auth, now, scale).summary).toBe(
     groupWidget(part, setup, widgetDimensions('4x3'), auth, now).summary,
@@ -101,8 +102,8 @@ it.each([1, 1.3, 2])('fits Quick actions at real launcher bounds at %s', (scale)
   expect(wide.summary).toBe('Add expense in Maple House');
 });
 it('keeps compact expired Balances to two text lines without a stacked lock tile', () => {
-  const v = balancesWidget(copy, { kind: 'balances' }, '2x1', { status: 'expired' }, now);
-  expect(v.layout.showTile).toBe(false);
+  const v = overviewAt(copy, { kind: 'balances' }, '2x1', { status: 'expired' }, now);
+  expect(v.layout.showStateTile).toBe(false);
   expect(v.layout.showHeader).toBe(false);
   expect(v.title).toBe('Sign in again');
   expect(v.description).toBe('to see balances');
@@ -110,9 +111,9 @@ it('keeps compact expired Balances to two text lines without a stacked lock tile
 
 it('treats Android’s float representation of 130% as large text', () => {
   const androidScale = 1.2999999523162842;
-  expect(
-    balancesWidget(copy, { kind: 'balances' }, '2x2', auth, now, androidScale).owed,
-  ).toHaveLength(1);
+  expect(overviewAt(copy, { kind: 'balances' }, '2x2', auth, now, androidScale).owed).toHaveLength(
+    1,
+  );
   expect(
     groupWidget(part, setup, widgetDimensions('4x2'), auth, now, androidScale).payments,
   ).toHaveLength(1);
@@ -138,8 +139,9 @@ it('keeps the compact Group action on one readable line at 200% without losing s
 });
 
 it('drops optional privacy captions in tight large-text layouts but keeps them in speech', () => {
-  const b = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
-  expect(b.layout).toMatchObject({ showHeader: false, showPrivacyLabel: true, hiddenFontSize: 8 });
+  const b = overviewAt(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
+  expect(b.layout).toMatchObject({ showHeader: false, fonts: { privacy: 8 } });
+  expect(b.layout.sections.some((section) => section.id === 'privacy')).toBe(true);
   expect(b.summary).toContain('Amounts hidden');
   const g = groupWidget(
     part,
@@ -154,17 +156,17 @@ it('drops optional privacy captions in tight large-text layouts but keeps them i
 });
 
 it('gives both hidden Balances columns equal room in the compact widget at 200%', () => {
-  const v = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
-  expect(v.layout.equalColumns).toBe(true);
+  const v = overviewAt(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
+  expect(v.layout.compactLines).toEqual(['You’re owed', 'You owe']);
 });
 
 it.each([1.3, 2])(
   'shows both compact balance sides at %s without a header or overflow',
   (scale) => {
-    const v = balancesWidget(copy, { kind: 'balances' }, '2x1', auth, now, scale);
+    const v = overviewAt(copy, { kind: 'balances' }, '2x1', auth, now, scale);
     expect(v.layout.showHeader).toBe(false);
-    expect(v.layout.showOverflow).toBe(false);
-    expect(v.compactLines).toEqual(['Owed ₹2,400.00', 'Owe ₹1,480.00']);
+    expect(v.layout.compactFallback).toBeNull();
+    expect(v.layout.compactLines).toEqual(['Owed ₹2,400.00', 'Owe ₹1,480.00']);
   },
 );
 it('replaces both compact amounts with an open prompt if either amount is too wide', () => {
@@ -175,23 +177,22 @@ it('replaces both compact amounts with an open prompt if either amount is too wi
       currencies: [{ currency: 'INR', owedMinor: 123456789012345, oweMinor: 148000 }],
     },
   };
-  const v = balancesWidget(large, { kind: 'balances' }, '2x1', auth, now, 2);
-  expect(v.compactLines).toEqual([]);
-  expect(v.compactFallback).toBe('Open to see balances');
+  const v = overviewAt(large, { kind: 'balances' }, '2x1', auth, now, 2);
+  expect(v.layout.compactFallback).toBe('Open to see balances');
 });
 it.each([1.3, 2])('uses whole, single-line labels in compact hidden Balances at %s', (scale) => {
-  const v = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, scale);
-  expect(v.compactLines).toEqual(['You’re owed', 'You owe']);
-  expect(v.layout.showPrivacyLabel).toBe(true);
+  const v = overviewAt(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, scale);
+  expect(v.layout.compactLines).toEqual(['You’re owed', 'You owe']);
+  expect(v.layout.sections.some((section) => section.id === 'privacy')).toBe(true);
   expect(
-    v.compactLines.every(
+    v.layout.compactLines.every(
       (line) => !line.includes('currency') && !line.includes('currencies') && !line.includes('\n'),
     ),
   ).toBe(true);
 });
 
 it('keeps the compact privacy caption on one line at 200% text', () => {
-  const v = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
-  expect(v.layout.privacyFontSize).toBe(8);
-  expect(v.layout.showPrivacyLabel).toBe(true);
+  const v = overviewAt(copy, { kind: 'balances', hideAmounts: true }, '2x1', auth, now, 2);
+  expect(v.layout.fonts.privacy).toBe(8);
+  expect(v.layout.sections.some((section) => section.id === 'privacy')).toBe(true);
 });
