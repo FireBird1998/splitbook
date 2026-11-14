@@ -17,6 +17,14 @@ const SCALE = 3;
 /** Drawn area in scene units: wide and tall enough that no cloud or island is cut by its edge. */
 const AREA = { x: -400, y: -80, width: 1900, height: 400 };
 const PAD = 2;
+/** Everything about how a picture is drawn that is not in its SVG; part of the freshness hash. */
+const RENDER = {
+  /** The web's CSS blur on the ground shadow, in scene units. */
+  shadowBlur: 4,
+  paletteColours: 256,
+  /** No picture is longer than this on either side: the texture limit of the oldest GPUs. */
+  maxSide: 2048,
+};
 /** Seconds of one web cloud crossing, by class; later classes override `cl` and `cf`. */
 const CLOUD_SECONDS: Record<string, number> = {
   cl: 140,
@@ -114,14 +122,14 @@ export function spritePlans(scene: HeaderSceneArt): SpritePlan[] {
 /** A hash of everything the pictures are drawn from. The check compares this, never PNG bytes. */
 export function spriteSource(scene: HeaderSceneArt): string {
   return createHash('sha256')
-    .update(JSON.stringify({ SCALE, AREA, PAD, plans: spritePlans(scene) }))
+    .update(JSON.stringify({ SCALE, AREA, PAD, RENDER, plans: spritePlans(scene) }))
     .digest('hex');
 }
 
 export async function renderSprite(plan: SpritePlan): Promise<Sprite> {
   let image = sharp(Buffer.from(plan.svg)).ensureAlpha();
   // The web blurs the ground shadow with CSS; the picture carries the same softness.
-  if (plan.kind === 'shadow') image = image.blur(4 * SCALE);
+  if (plan.kind === 'shadow') image = image.blur(RENDER.shadowBlur * SCALE);
   const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
   let left = info.width;
   let top = info.height;
@@ -142,13 +150,24 @@ export async function renderSprite(plan: SpritePlan): Promise<Sprite> {
   top -= PAD;
   const width = right - left + 1 + PAD;
   const height = bottom - top + 1 + PAD;
-  const cut = sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).extract(
-    { left, top, width, height },
-  );
+  const full = sharp(data, {
+    raw: { width: info.width, height: info.height, channels: 4 },
+  }).extract({ left, top, width, height });
+  // A wide layer is scaled down to the limit; it still covers the same scene units.
+  const cut =
+    Math.max(width, height) > RENDER.maxSide
+      ? sharp(await full.png().toBuffer()).resize({
+          width: RENDER.maxSide,
+          height: RENDER.maxSide,
+          fit: 'inside',
+        })
+      : full;
   const png =
     plan.layer === 'glow' || plan.kind === 'shadow'
       ? await cut.png({ compressionLevel: 9 }).toBuffer()
-      : await cut.png({ compressionLevel: 9, palette: true, colours: 256 }).toBuffer();
+      : await cut
+          .png({ compressionLevel: 9, palette: true, colours: RENDER.paletteColours })
+          .toBuffer();
   const unit = (pixels: number, origin = 0) => Math.round((pixels / SCALE + origin) * 100) / 100;
   return {
     file: plan.file,

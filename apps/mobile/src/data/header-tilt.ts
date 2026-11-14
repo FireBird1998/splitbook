@@ -47,3 +47,13 @@ export function startHeaderTilt(
     subscription?.remove();
   };
 }
+
+/**
+ * Tilt reads the accelerometer only on Android 12 (API 31) and later, where the sensor library
+ * samples at the normal native rate. On Android 7–11 it samples at the fastest rate and throttles
+ * afterwards, and that power cost has not been measured on a handset (ADR 0012).
+ */
+export const TILT_MIN_ANDROID_API = 31;
+export function tiltSupported(platform: { OS: string; Version: number | string }): boolean {
+  return platform.OS === 'android' && Number(platform.Version) >= TILT_MIN_ANDROID_API;
+}

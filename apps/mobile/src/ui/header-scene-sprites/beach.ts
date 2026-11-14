@@ -16,7 +16,7 @@ import s10 from '../../../assets/header-scenes/beach-glow-body.png';
 const scene: HeaderSceneSprites = {
   id: 'beach',
   description: "A floating beach island with a waterfall hill, palms, a thatched hut, a jetty, a sailboat, a lantern, a villager, a crab and a gull.",
-  source: 'b4241714f69a9cb499219ac301c225647a4a0720356fbd56bea8ce24cce87072',
+  source: 'ddcf44d251ae88bd1ac7aad4096e1356be47c60a2d5d2b53cf9a37183e196f67',
   sprites: [
     { layer: 'far', kind: 'body', seconds: 9, x: 86, y: 33.67, w: 580, h: 165, image: s0 },
     { layer: 'far', kind: 'cloud', seconds: 260, x: 380, y: 23.67, w: 78, h: 26, image: s1 },

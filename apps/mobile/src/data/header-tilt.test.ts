@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { startHeaderTilt, type TiltSensor } from './header-tilt';
+import { startHeaderTilt, tiltSupported, type TiltSensor } from './header-tilt';
 
 function sensor() {
   let callback: ((sample: { x: number; y: number }) => void) | undefined;
@@ -86,4 +86,13 @@ it('ignores tremor, and a held tilt settles back to rest', async () => {
   expect(Math.abs(move.mock.calls.at(-1)![0] as number)).toBeLessThan(0.05);
   expect(move.mock.calls.length).toBeLessThan(60);
   stop();
+});
+
+it.each([
+  [{ OS: 'android', Version: 30 }, false],
+  [{ OS: 'android', Version: 31 }, true],
+  [{ OS: 'android', Version: '35' }, true],
+  [{ OS: 'ios', Version: '18.2' }, false],
+])('reads the sensor only on Android 12 and later: %o', (platform, supported) => {
+  expect(tiltSupported(platform)).toBe(supported);
 });

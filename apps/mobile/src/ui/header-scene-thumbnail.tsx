@@ -17,6 +17,8 @@ export default function HeaderSceneThumbnail({ scene }: { scene: GroupHeader['sc
         accessible={false}
         importantForAccessibility="no-hide-descendants"
         fadeDuration={0}
+        // Decode at the tile's size, not the full island picture the scene uses.
+        resizeMethod="resize"
         source={sceneThumbnails[scene]}
         resizeMode="contain"
         style={{ flex: 1, width: '100%' }}

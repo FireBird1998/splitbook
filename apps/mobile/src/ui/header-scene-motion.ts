@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Animated, Easing } from 'react-native';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { Animated, AppState, Easing } from 'react-native';
 import { useReducedMotion } from './compact/motion';
 
 /** Scene units are drawn at this many dp: the 240-unit scene fills the 208 dp picture. */
@@ -92,4 +92,13 @@ export function useCloudDrift(
     };
   }, [enabled, reduced, offset, x, w, seconds, frameWidth]);
   return offset;
+}
+
+const watchAppState = (changed: () => void) => {
+  const subscription = AppState.addEventListener('change', changed);
+  return () => subscription.remove();
+};
+/** Whether the app is in front. A scene stops its own loops in the background; it does not rely on the system pausing them. */
+export function useForeground() {
+  return useSyncExternalStore(watchAppState, () => AppState.currentState === 'active');
 }

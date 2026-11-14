@@ -3885,6 +3885,8 @@ it('mounts one selected preview and releases the Group scene while Header settin
       async () => {
         await settle();
         expect(scenes()).toHaveLength(1);
+        // The one scene is the settings preview, not the Group's scene left mounted behind it.
+        expect(app.text()).toContain('Preview');
       },
       { timeout: 5000 },
     );

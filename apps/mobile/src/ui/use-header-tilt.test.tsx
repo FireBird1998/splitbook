@@ -1,4 +1,5 @@
 import { act, create } from 'react-test-renderer';
+import { Platform } from 'react-native';
 import { expect, it, vi } from 'vitest';
 import { useHeaderTilt } from './use-header-tilt';
 import { emitAppState, setReduceMotion, timing } from '../test-utils/native';
@@ -32,16 +33,6 @@ function Probe({ motion = true, tilt = true, visible = true, available = true })
   useHeaderTilt(motion && tilt && visible && available);
   return null;
 }
-it('an unavailable build never loads the sensor module', async () => {
-  const before = native.loaded;
-  let view!: ReturnType<typeof create>;
-  await act(async () => {
-    view = create(<Probe available={false} />);
-  });
-  expect(native.loaded).toBe(before);
-  expect(native.count).toBe(0);
-  act(() => view.unmount());
-});
 it('pins sensor cleanup for visibility, Motion, Tilt, foreground, reduced motion and unmount', async () => {
   let view!: ReturnType<typeof create>;
   await act(async () => {
@@ -112,5 +103,27 @@ it('eases bounded samples on the native driver without React state updates', asy
   const animations = timing.mock.results.map((result) => result.value);
   act(() => view.unmount());
   expect(animations.at(-1)?.stop).toHaveBeenCalled();
+  expect(native.count).toBe(0);
+});
+
+it.each([
+  [30, 0],
+  [31, 1],
+])('on Android API %s the hook holds %s sensor listeners', async (version, listeners) => {
+  const original = Platform.Version;
+  (Platform as { Version: number }).Version = version;
+  const loaded = native.loaded;
+  let view!: ReturnType<typeof create>;
+  try {
+    await act(async () => {
+      view = create(<Probe />);
+    });
+    expect(native.count).toBe(listeners);
+    // Below the gate the sensor module is not even loaded.
+    if (!listeners) expect(native.loaded).toBe(loaded);
+  } finally {
+    act(() => view.unmount());
+    (Platform as { Version: number | string }).Version = original;
+  }
   expect(native.count).toBe(0);
 });

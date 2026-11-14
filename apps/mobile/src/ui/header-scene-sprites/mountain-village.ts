@@ -17,7 +17,7 @@ import s11 from '../../../assets/header-scenes/mountain-village-glow-body.png';
 const scene: HeaderSceneSprites = {
   id: 'mountain-village',
   description: "A floating mountain village with snowy pines, A-frame cabins, chimney smoke, a stream and a campfire.",
-  source: '086787ed8bddabe0c889db84f3b3e83bfecab65dac3d8e6e70ecaddfe874ff30',
+  source: '6fdd1dff12c055b22ea6a43da70da7ce6785e51c4f9fa4c3ef02b120437f5fca',
   sprites: [
     { layer: 'far', kind: 'body', seconds: 9, x: -16.67, y: 41.33, w: 691.33, h: 156.33, image: s0 },
     { layer: 'far', kind: 'cloud', seconds: 260, x: 397.33, y: 24.33, w: 47.33, h: 28.33, image: s1 },

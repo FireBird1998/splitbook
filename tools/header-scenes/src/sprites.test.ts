@@ -91,3 +91,14 @@ it.each(scenes.map((scene) => [scene.id, scene] as const))(
     for (const shape of shapes) expect(shape).toContain('fill="#ffd98a"');
   },
 );
+
+it('keeps every committed picture within the oldest GPUs texture limit', async () => {
+  const { readdirSync } = await import('node:fs');
+  const directory = new URL('../../../apps/mobile/assets/header-scenes/', import.meta.url);
+  const files = readdirSync(directory).filter((file) => file.endsWith('.png'));
+  expect(files.length).toBe(scenes.flatMap(spritePlans).length);
+  for (const file of files) {
+    const { width, height } = await sharp(new URL(file, directory).pathname).metadata();
+    expect(Math.max(width!, height!), file).toBeLessThanOrEqual(2048);
+  }
+});

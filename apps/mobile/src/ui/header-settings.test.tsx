@@ -1,4 +1,5 @@
 import { act, create } from 'react-test-renderer';
+import { Platform } from 'react-native';
 import { afterEach, expect, it, vi } from 'vitest';
 import { HeaderSettings } from './header-settings';
 import type { MobileGroup } from '../data/types';
@@ -164,4 +165,43 @@ it.each([false, true])('renders the phone card only when motion is available=%s'
     expect(onTilt).toHaveBeenCalledWith(false);
   }
   act(() => view.unmount());
+});
+
+it.each([
+  [30, ['Motion'], 'Motion is kept on this phone only.'],
+  [31, ['Motion', 'Tilt with the phone'], 'Motion and Tilt are kept on this phone only.'],
+])('on Android API %s the phone card offers %j', (version, labels, sentence) => {
+  availability.enabled = true;
+  const original = Platform.Version;
+  (Platform as { Version: number }).Version = version;
+  let view!: ReturnType<typeof create>;
+  try {
+    act(() => {
+      view = create(
+        <HeaderSettings
+          group={{ name: 'Maple House', category: 'home' } as unknown as MobileGroup}
+          state={{ groupId: 'g', saved: header, draft: header, status: 'editing', message: null }}
+          offline={false}
+          motion
+          motionMessage={null}
+          tilt
+          tiltMessage={null}
+          onTilt={() => {}}
+          onMotion={() => {}}
+          onChoose={() => {}}
+          onSave={() => {}}
+          onRetry={() => {}}
+          onClose={() => {}}
+        />,
+      );
+    });
+    const switches = view.root.findAll((node) => (node.type as unknown) === 'Switch');
+    expect(switches.map((node) => node.props.accessibilityLabel)).toEqual(labels);
+    const text = JSON.stringify(view.toJSON());
+    expect(text.replace(/","/g, '')).toContain(sentence);
+    expect(text.includes('as you move the phone')).toBe(labels.length === 2);
+  } finally {
+    act(() => view.unmount());
+    (Platform as { Version: number | string }).Version = original;
+  }
 });

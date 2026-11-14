@@ -8,9 +8,11 @@ date: 2026-11-14
 The Group screen and the settings preview draw a Header scene from pictures that
 `tools/header-scenes` generates from the same traced art as the web's vectors:
 one picture per layer body (far, main, front, night glow), one for the ground
-shadow and one per cloud, each trimmed to its content. There are 46 PNG files,
-630 KB in all, under `apps/mobile/assets/header-scenes`, drawn at 3 pixels per
-scene unit so no supported density scales one up. A generated list per scene
+shadow and one per cloud, each trimmed to its content. There are 47 PNG files,
+641 KB in all, under `apps/mobile/assets/header-scenes`, drawn at 3 pixels per
+scene unit so no supported density scales one up; a picture longer than 2,048
+pixels is scaled down to that, the texture limit of the oldest GPUs (two wide far
+layers). A generated list per scene
 places them in scene units. The settings choices show each scene's main island
 picture. No native drawing library is needed; `react-native-svg` is removed.
 
@@ -77,15 +79,19 @@ Block it and `HIGH_SAMPLING_RATE_SENSORS` in app config: tilt only samples the
 accelerometer every 50 ms (at most 20 Hz), far below Android's 200 Hz permission boundary.
 Expo 58.0.4 uses normal native sampling without that permission on Android 12+
 (about 5 Hz on the spare emulator), then throttles forwarding to the requested
-interval. On Android 7–11 it uses fastest native sampling; verify handset power
-cost before enabling availability there. Verify the merged release manifest and
-APK, rather than trusting the source config.
+interval. On Android 7–11 it uses fastest native sampling, and that power cost
+has not been measured on a handset, so Tilt is gated to Android 12 (API 31) and
+later: below it the sensor module is never loaded, the Tilt row is not shown and
+scenes still float. Lift the gate only with a handset measurement. Verify the
+merged release manifest and APK, rather than trusting the source config.
 The app does not transmit or store sensor samples. Only the on/off choice is kept
 in SecureStore (`splitbook.header-tilt`), outside account Saved copies and sign-out
 clearing, like Motion and Appearance (ADR 0006). It defaults on.
 
-A cancellable sensor lease loads the module only for an available, visible Group
-scene, in the foreground, with Motion and Tilt on and Remove animations off.
+A cancellable sensor lease loads the module only on Android 12 and later, for an
+available, visible Group scene whose pictures have loaded, in the foreground,
+with Motion and Tilt on and Remove animations off. The float and drift loops stop
+on the same conditions, including the app going to the background.
 Leaving any condition removes the listener and resets the transforms; a late
 module/availability result cannot register after disposal. No polling, sensor
 permission request or background listener remains. When supported, gravity relative

@@ -11,6 +11,7 @@ import {
   SCENE_UNIT,
   TILT_DEPTH,
   useCloudDrift,
+  useForeground,
   useSceneRise,
 } from './header-scene-motion';
 import type { HeaderSceneSprites, SceneSprite } from './header-scene-sprite';
@@ -115,7 +116,16 @@ export default function HeaderScene({
   const [art, setArt] = useState<HeaderSceneSprites | null>(null);
   const [, setHour] = useState(() => new Date().getHours());
   const visibility = useContext(SceneVisibility);
-  const moving = motion && headerSceneMotionAvailable && visible && visibility.visible && !preview;
+  const foreground = useForeground();
+  // Nothing moves, and no sensor is read, until this scene's pictures are the ones on screen.
+  const moving =
+    motion &&
+    headerSceneMotionAvailable &&
+    visible &&
+    visibility.visible &&
+    foreground &&
+    !preview &&
+    art?.id === header.scene;
   const position = useHeaderTilt(moving && tilt);
   const frameWidth = useWindowDimensions().width;
   const rise7 = useSceneRise(moving, 7);
@@ -174,7 +184,7 @@ export default function HeaderScene({
       <View
         accessible
         accessibilityRole="image"
-        accessibilityLabel={art?.id === header.scene ? art.description : 'Loading Header scene'}
+        accessibilityLabel={art.description}
         style={{ height: 208, overflow: 'hidden' }}
       >
         <LinearGradient colors={sky[time]} style={StyleSheet.absoluteFill} />

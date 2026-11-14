@@ -17,7 +17,7 @@ import s11 from '../../../assets/header-scenes/eco-city-glow-body.png';
 const scene: HeaderSceneSprites = {
   id: 'eco-city',
   description: "A floating green city with planted towers, solar roofs, a pond, turning wind turbines and a waterfall.",
-  source: 'a4e439d59e3d473b8a8e4bf078493caa8d1aefe5de7ae98502e6051ac1aad26a',
+  source: '9fe23c7b19836495b67600281347f1fddcdb4d65b6913a95d4316f1c10c617dd',
   sprites: [
     { layer: 'far', kind: 'body', seconds: 9, x: -16.67, y: 42.33, w: 699.33, h: 153.33, image: s0 },
     { layer: 'far', kind: 'cloud', seconds: 260, x: 397.33, y: 24.33, w: 47.33, h: 28.33, image: s1 },
