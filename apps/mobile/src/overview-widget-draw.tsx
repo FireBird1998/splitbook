@@ -39,7 +39,10 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       </FlexWidget>
     ));
   const mark = (
-    <SvgWidget svg={t.mode === 'dark' ? darkMark : lightMark} style={{ width: 16, height: 16 }} />
+    <SvgWidget
+      svg={t.mode === 'dark' ? darkMark : lightMark}
+      style={{ width: l.headerMarkSize, height: l.headerMarkSize }}
+    />
   );
   const column = (label: string, amounts: string[], more: string | null, tone: string) => (
     <FlexWidget
