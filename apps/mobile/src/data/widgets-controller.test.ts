@@ -26,6 +26,8 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
   let user = alex,
     expired = false,
     owed = 2400;
+  let extraGroups: ReturnType<typeof group>[] = [];
+  let homeOverride: { buckets: unknown[]; groups?: unknown[] } | null = null;
   let groupBalances: unknown = { byCurrency: [] };
   let refused = 0;
   let offlineAfterSave = false;
@@ -76,22 +78,25 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
   backend.world.people.alex = { ...alex, image: null };
   backend.world.people.sam = { ...sam, image: null };
   backend.auth.cookie = () => 'better-auth.session_token=fictional.signature';
-  Object.defineProperty(backend.world, 'groups', { get: () => [group(), ...additionalGroups] });
+  Object.defineProperty(backend.world, 'groups', {
+    get: () => [group(), ...additionalGroups, ...extraGroups],
+  });
   for (const id of [alex.id, sam.id])
     Object.defineProperty(backend.world.groupsByAccount, id, {
-      get: () => (noGroups || archived ? [] : [group(), ...additionalGroups]),
+      get: () => (noGroups || archived ? [] : [group(), ...additionalGroups, ...extraGroups]),
     });
   Object.defineProperty(backend.world.balances, groupId, { get: () => groupBalances });
   Object.defineProperty(backend.world, 'home', {
-    get: () => ({
-      buckets: [
-        { currency: 'INR', youOwe: 1480, youAreOwed: owed, net: owed - 1480 },
-        { currency: 'EUR', youOwe: 0, youAreOwed: 40, net: 40 },
-      ],
-      groups: [
-        { groupId, name: 'Maple House', balances: [{ currency: 'INR', balance: owed - 1480 }] },
-      ],
-    }),
+    get: () =>
+      homeOverride ?? {
+        buckets: [
+          { currency: 'INR', youOwe: 1480, youAreOwed: owed, net: owed - 1480 },
+          { currency: 'EUR', youOwe: 0, youAreOwed: 40, net: 40 },
+        ],
+        groups: [
+          { groupId, name: 'Maple House', balances: [{ currency: 'INR', balance: owed - 1480 }] },
+        ],
+      },
   });
   backend.world.toReview = { total: 0, groups: [] };
   backend.world.pages[`/api/groups/${groupId}/currencies`] = {
@@ -332,6 +337,12 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
     addGroup: (value: ReturnType<typeof group>) => additionalGroups.push(value),
     drafts: native.stores.expenseDrafts,
     phone: native,
+    addOverviewGroup: (id: string, name: string) => {
+      extraGroups.push({ ...group(), _id: id, name });
+    },
+    home: (value: { buckets: unknown[]; groups?: unknown[] }) => {
+      homeOverride = value;
+    },
     archive: () => {
       archived = true;
     },
@@ -2393,4 +2404,121 @@ it('keeps the Recent prompt for an old server without a complete enrichment', as
   );
   expect(view.recent?.prompt).toBe('Open the Group to update');
   expect(view.recent?.rows).toEqual([]);
+});
+
+describe('Overview Groups copy', () => {
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+  });
+  it('keeps every Group’s Home balances with Home’s own time without needing a Group widget or Group read', async () => {
+    const f = fixture(),
+      c = f.make();
+    const second = 'b00000000000000000000002';
+    f.addOverviewGroup(second, 'Lisbon & Tokyo');
+    f.home({
+      buckets: [
+        { currency: 'INR', youOwe: 0, youAreOwed: 920 },
+        { currency: 'JPY', youOwe: 3000, youAreOwed: 0 },
+      ],
+      groups: [
+        { groupId, balances: [{ currency: 'INR', balance: 920 }] },
+        { groupId: second, balances: [{ currency: 'JPY', balance: -3000 }] },
+      ],
+    });
+    await c.signIn('alex');
+    await vi.waitFor(() =>
+      expect(f.record().copy?.home).toHaveProperty('byGroup', {
+        [groupId]: [{ currency: 'INR', balanceMinor: 92000 }],
+        [second]: [{ currency: 'JPY', balanceMinor: -3000 }],
+      }),
+    );
+    expect(f.record().copy?.home?.verifiedAt).toBe(verified);
+    expect(f.record().copy?.groups ?? {}).toEqual({});
+    expect(
+      f.requests.filter(
+        (r) => r.path === `/api/groups/${groupId}` || r.path === `/api/groups/${groupId}/balances`,
+      ),
+    ).toEqual([]);
+    const view = overview(f);
+    expect(view.groups[0]).toMatchObject({
+      name: 'Maple House',
+      amounts: ['₹920.00'],
+      target: { kind: 'group', groupId },
+    });
+    await c.openWidget(view.groups[0].target);
+    expect(c.getSnapshot()).toMatchObject({ screen: 'group', detail: { id: groupId } });
+  });
+});
+
+describe('Overview Group balance lifetime', () => {
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+  });
+  it.each(['sign-out', 'account-change', 'denied', '401'] as const)(
+    'guards Home’s per-Group copy after %s',
+    async (reason) => {
+      const f = fixture(),
+        c = f.make();
+      await c.signIn('alex');
+      await vi.waitFor(() =>
+        expect(f.record().copy?.home?.byGroup?.[groupId]).toEqual([
+          { currency: 'INR', balanceMinor: 92000 },
+        ]),
+      );
+      const before = f.record().copy;
+      f.events.length = 0;
+      if (reason === 'sign-out') await c.signOut();
+      if (reason === 'account-change') {
+        f.home({
+          buckets: [{ currency: 'INR', youOwe: 120, youAreOwed: 0 }],
+          groups: [{ groupId, balances: [{ currency: 'INR', balance: -120 }] }],
+        });
+        await c.signIn('sam');
+      }
+      if (reason === 'denied') {
+        f.refuse(403);
+        await c.openGroup(groupId, false);
+      }
+      if (reason === '401') {
+        f.expire();
+        await c.refreshHome();
+      }
+      if (reason === '401') {
+        await vi.waitFor(() => expect(f.record().session.status).toBe('expired'));
+        expect(overview(f).groups).toEqual([]);
+        expect(f.record().copy).toEqual(before);
+        expect(f.events).not.toContain('clear');
+      } else if (reason === 'denied') {
+        await vi.waitFor(() => expect(f.record().copy?.home?.byGroup?.[groupId]).toBeUndefined());
+        expect(overview(f).groups).toEqual([]);
+      } else {
+        expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+        if (reason === 'sign-out') expect(f.record().copy).toBeNull();
+        else {
+          await vi.waitFor(() => expect(f.record().copy?.accountId).toBe(sam.id));
+          expect(f.record().copy?.home?.byGroup?.[groupId]).toEqual([
+            { currency: 'INR', balanceMinor: -12000 },
+          ]);
+        }
+      }
+    },
+  );
+  it('restores each Group’s original Home time on a cold offline restart', async () => {
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await vi.waitFor(() => expect(f.record().copy?.home?.byGroup?.[groupId]).toHaveLength(1));
+    const n = f.copies.length;
+    f.offline();
+    const cold = f.make();
+    await cold.restore();
+    await vi.waitFor(() => expect(f.copies.length).toBeGreaterThan(n));
+    expect(f.record().copy?.home).toMatchObject({
+      verifiedAt: verified,
+      byGroup: { [groupId]: [{ currency: 'INR', balanceMinor: 92000 }] },
+    });
+    expect(cold.getSnapshot().home.restored).toBe(true);
+  });
 });

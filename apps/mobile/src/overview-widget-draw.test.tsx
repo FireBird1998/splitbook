@@ -355,3 +355,36 @@ it.each([false, true])(
     expect(minimumHeight(tree.children![i], 1)).toBeLessThanOrEqual(view.layout.sections[i].height);
   },
 );
+it('draws admitted Group names, theme icons and Home amounts with their Group tap targets', () => {
+  vi.stubGlobal('__DEV__', false);
+  const c: WidgetCopy = {
+    ...copy,
+    home: { ...copy.home!, byGroup: { maple: [{ currency: 'INR', balanceMinor: -148000 }] } },
+    savedGroups: {
+      verifiedAt: now,
+      rows: [
+        {
+          id: 'maple',
+          name: 'Maple House',
+          theme: 'home',
+          archived: false,
+          members: 3,
+          currencies: 1,
+        },
+      ],
+    },
+  };
+  const view = overviewWidget(
+    c,
+    { kind: 'balances', widgetId: 7 },
+    { width: 360, height: 464 },
+    auth,
+    now,
+  );
+  expect(view.groups).toHaveLength(1);
+  const tree = buildWidgetTree(drawOverview(view, lightTokens));
+  expect(labels(tree)).toContain('Groups');
+  expect(labels(tree)).toContain('Maple House');
+  expect(labels(tree)).toContain('You owe');
+  expect(labels(tree)).toContain('₹1,480.00');
+});
