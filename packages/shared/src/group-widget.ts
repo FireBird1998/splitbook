@@ -509,7 +509,8 @@ function groupLayout(
           width;
       const monthEligible = !!view.month && optional && level === 0 && !tiny;
       const sectionLabelHeight = text.line(11) + 4;
-      const monthColumnWidth = compact ? width : (width - 8) / 2;
+      const monthPanelPadding = compact ? 0 : 8;
+      const monthColumnWidth = (compact ? width : (width - 8) / 2) - monthPanelPadding * 2;
       const monthAmountFont = monthEligible
         ? text.fit(
             [...(view.month?.totals ?? []), view.month?.share ?? ''].sort(
@@ -523,17 +524,23 @@ function groupLayout(
       const monthNoteLines = text.words(view.month?.mainCurrencyOnly ?? '', 10, monthColumnWidth);
       const monthPromptLines = text.words(view.month?.prompt ?? view.month?.count ?? '', 11);
       const spentHeight = view.month?.totals.length
-        ? text.line(11) + 4 + view.month.totals.length * text.line(monthAmountFont)
+        ? monthPanelPadding * 2 +
+          text.line(11) +
+          4 +
+          view.month.totals.length * text.line(monthAmountFont)
         : 0;
       const shareHeight = view.month?.share
-        ? text.line(11) +
+        ? monthPanelPadding * 2 +
+          text.line(11) +
           4 +
           text.line(monthAmountFont) +
           (monthNoteLines.length ? 4 + monthNoteLines.length * text.line(10) : 0)
         : 0;
       const monthTextHeight = monthPromptLines.length * text.line(11);
       const monthHeading = view.hidden ? 0 : sectionLabelHeight;
-      const monthSpendingLabel = view.month?.totals.length ? text.line(11) + 4 : 0;
+      const monthSpendingLabel = view.month?.totals.length
+        ? monthPanelPadding * 2 + text.line(11) + 4
+        : 0;
       const monthInset =
         monthHeading +
         monthSpendingLabel +
@@ -674,6 +681,7 @@ function groupLayout(
         sectionLabelHeight,
         monthAmountFontSize: text.font(monthAmountFont),
         monthColumnWidth,
+        monthPanelPadding,
         monthNoteLines,
         monthPromptLines,
         monthColumnGap: compact ? (spentHeight && shareHeight ? 8 : 0) : 8,

@@ -235,7 +235,7 @@ it('admits a partial Month before filling more payment rows at an in-between hei
       { currency: 'GBP', totalMinor: 30000 },
     ],
   };
-  const view = groupWidget(group, setup, { width: 360, height: 270 }, auth, now, 1, many);
+  const view = groupWidget(group, setup, { width: 360, height: 286 }, auth, now, 1, many);
   expect(view.layout.sections.some((s) => s.id === 'month')).toBe(true);
   expect(view.month?.totals.length).toBeGreaterThan(0);
   expect(view.month?.totals.length).toBeLessThan(5);
@@ -250,7 +250,7 @@ it('uses currency words instead of a more hint when no Month amount row fits', (
     totals: Array.from({ length: 5 }, () => month.totals[0]!),
   };
   delete many.shareMinor;
-  const view = groupWidget(group, setup, { width: 360, height: 250 }, auth, now, 1, many);
+  const view = groupWidget(group, setup, { width: 360, height: 266 }, auth, now, 1, many);
   expect(view.layout.sections.find((s) => s.id === 'month')?.rows).toBe(0);
   expect(view.month?.totals).toEqual([]);
   expect(view.month?.more).toBe('In 5\u00a0currencies');
@@ -274,4 +274,17 @@ it('uses the current phone zone for the Month even while Date retains its former
   } finally {
     vi.restoreAllMocks();
   }
+});
+
+it('includes the Month panels padding in the measured section', () => {
+  const view = groupWidget(group, setup, { width: 360, height: 464 }, auth, now, 1, month);
+  expect(view.layout.monthPanelPadding).toBe(8);
+  const measured = view.layout.sections.find((s) => s.id === 'month')!;
+  expect(measured.height).toBeGreaterThanOrEqual(
+    view.layout.sectionLabelHeight +
+      16 +
+      view.layout.fontSizes.secondary * 1.3 +
+      4 +
+      view.layout.monthAmountFontSize * 1.3,
+  );
 });

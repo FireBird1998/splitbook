@@ -340,6 +340,15 @@ it.each([lightTokens, darkTokens])(
         'Main currency only',
       ]),
     );
+    for (const label of ['Group spent', 'Your share']) {
+      const panel = allNodes(tree).find((node) =>
+        node.children?.some((child) => (child.props as { text?: string }).text === label),
+      );
+      expect(panel?.props).toMatchObject({
+        backgroundColor: tokens.surfaceMuted,
+        padding: { top: 8, bottom: 8, left: 8, right: 8 },
+      });
+    }
     const section = tree.children!.find((child) => drawnText(child).includes('THIS MONTH'))!;
     expect(minimumHeight(section)).toBeLessThanOrEqual(
       (section.props as { height: number }).height,
@@ -392,7 +401,7 @@ it('opens the Group through the missing-Month prompt and hides Month amounts and
   vi.unstubAllGlobals();
 });
 
-it.each([250, 270])('fits a partial Month and its overflow words at %s dp height', (height) => {
+it.each([266, 286])('fits a partial Month and its overflow words at %s dp height', (height) => {
   vi.stubGlobal('__DEV__', false);
   const month = {
     month: '2026-11',
@@ -407,7 +416,7 @@ it.each([250, 270])('fits a partial Month and its overflow words at %s dp height
       { currency: 'USD', totalMinor: 50000 },
       { currency: 'GBP', totalMinor: 30000 },
     ],
-    ...(height === 270 ? { shareMinor: 610000 } : {}),
+    ...(height === 286 ? { shareMinor: 610000 } : {}),
   };
   const tree = buildWidgetTree(
     drawGroup(
@@ -422,7 +431,7 @@ it.each([250, 270])('fits a partial Month and its overflow words at %s dp height
   const section = tree.children!.find((node) => drawnText(node).includes('THIS MONTH'))!;
   expect(section).toBeDefined();
   expect(drawnText(section).join(' ').replace(/\s/g, ' ')).toContain(
-    height === 270 ? '+4 more' : 'In 5 currencies',
+    height === 286 ? '+4 more' : 'In 5 currencies',
   );
   expect(minimumHeight(section)).toBeLessThanOrEqual((section.props as { height: number }).height);
   vi.unstubAllGlobals();

@@ -283,7 +283,14 @@ export function drawGroup(
           }}
         >
           {view.month?.totals.length || view.month?.more ? (
-            <FlexWidget style={l.compact ? { width: 'match_parent' } : { flex: 1 }}>
+            <FlexWidget
+              style={{
+                ...(l.compact ? { width: 'match_parent' as const } : { flex: 1 }),
+                padding: l.monthPanelPadding,
+                borderRadius: 12,
+                backgroundColor: color(t.surfaceMuted),
+              }}
+            >
               {text('Group spent', t.textSecondary, l.fontSizes.secondary)}
               <FlexWidget style={{ height: 4 }} />
               {view.month.totals.map((amount, index) => (
@@ -299,7 +306,14 @@ export function drawGroup(
             </FlexWidget>
           ) : null}
           {view.month?.share ? (
-            <FlexWidget style={l.compact ? { width: 'match_parent' } : { flex: 1 }}>
+            <FlexWidget
+              style={{
+                ...(l.compact ? { width: 'match_parent' as const } : { flex: 1 }),
+                padding: l.monthPanelPadding,
+                borderRadius: 12,
+                backgroundColor: color(t.surfaceMuted),
+              }}
+            >
               {text('Your share', t.textSecondary, l.fontSizes.secondary)}
               <FlexWidget style={{ height: 4 }} />
               {text(view.month.share, t.text, l.monthAmountFontSize, true, true)}
