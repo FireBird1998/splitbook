@@ -72,7 +72,7 @@ it('the rendered still fallback never evaluates sensors, with both phone choices
   expect(native.listeners).toBe(0);
   act(() => view.unmount());
 });
-it('the rendered available scene applies every phone/visibility gate; previews never subscribe', async () => {
+it('the rendered available scene applies every phone/visibility gate; a preview moves outside any Group scroll', async () => {
   availability.enabled = true;
   let view!: ReturnType<typeof create>;
   try {
@@ -91,7 +91,8 @@ it('the rendered available scene applies every phone/visibility gate; previews n
       { tilt: false },
       { visible: false },
       { uncovered: false },
-      { preview: true },
+      { preview: true, motion: false },
+      { preview: true, tilt: false },
     ]) {
       await act(async () => view.update(<Scene {...props} />));
       await vi.waitFor(
@@ -110,6 +111,15 @@ it('the rendered available scene applies every phone/visibility gate; previews n
         { timeout: 5000 },
       );
     }
+    // The settings preview is pinned on its own page: no Group scroll reports it as on screen.
+    await act(async () => view.update(<Scene preview uncovered={false} />));
+    await vi.waitFor(
+      async () => {
+        await act(async () => {});
+        expect(native.listeners).toBe(1);
+      },
+      { timeout: 5000 },
+    );
   } finally {
     act(() => view.unmount());
     availability.enabled = false;

@@ -2,6 +2,7 @@ import { act, create } from 'react-test-renderer';
 import { Platform } from 'react-native';
 import { afterEach, expect, it, vi } from 'vitest';
 import { HeaderSettings } from './header-settings';
+import { setWindow } from '../test-utils/native';
 import type { MobileGroup } from '../data/types';
 import type { HeaderSettings as Settings } from '../data/header-settings';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -204,4 +205,54 @@ it.each([
     act(() => view.unmount());
     (Platform as { Version: number | string }).Version = original;
   }
+});
+
+it.each([
+  ['a usual phone', {}, true],
+  ['130% text', { fontScale: 1.3 }, false],
+  ['a short screen', { height: 560 }, false],
+])('on %s the preview is pinned above the scrolling choices: %s', async (_, size, pinned) => {
+  setWindow(size);
+  let view!: ReturnType<typeof create>;
+  const scene = { style: 'scene', scene: 'beach', time: 'day' } as const;
+  await act(async () => {
+    view = create(
+      <HeaderSettings
+        group={
+          {
+            name: 'Maple House',
+            category: 'home',
+            members: [],
+            defaultCurrency: 'INR',
+            alternateCurrencies: [],
+          } as unknown as MobileGroup
+        }
+        state={{ groupId: 'g', saved: scene, draft: scene, status: 'editing', message: null }}
+        offline={false}
+        motion
+        motionMessage={null}
+        tilt
+        tiltMessage={null}
+        onTilt={() => {}}
+        onMotion={() => {}}
+        onChoose={() => {}}
+        onSave={() => {}}
+        onRetry={() => {}}
+        onClose={() => {}}
+      />,
+    );
+  });
+  const isPreview = (node: { type: unknown; props: Record<string, unknown> }) =>
+    node.type === 'View' &&
+    (node.props.accessibilityRole === 'image' ||
+      node.props.accessibilityLabel === 'Loading Header scene');
+  const scroll = view.root.findAll((node) => (node.type as unknown) === 'ScrollView')[0];
+  expect(view.root.findAll(isPreview)).toHaveLength(1);
+  // Pinned means the preview is not among the things that scroll away.
+  expect(scroll.findAll(isPreview)).toHaveLength(pinned ? 0 : 1);
+  // The choices always scroll.
+  expect(
+    scroll.findAll((node) => node.props.accessibilityLabel === 'Header style').length,
+  ).toBeGreaterThan(0);
+  act(() => view.unmount());
 });

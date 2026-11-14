@@ -122,9 +122,9 @@ export default function HeaderScene({
     motion &&
     headerSceneMotionAvailable &&
     visible &&
-    visibility.visible &&
+    // The settings preview is pinned on its own page, outside any Group scroll.
+    (preview || visibility.visible) &&
     foreground &&
-    !preview &&
     art?.id === header.scene;
   const position = useHeaderTilt(moving && tilt);
   const frameWidth = useWindowDimensions().width;
