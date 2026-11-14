@@ -1,3 +1,6 @@
+import { useContext } from 'react';
+import { HeldUpdateSurfaceContext } from './held-update-surface';
+import { SceneVisibility, useSceneVisibility } from './scene-visibility';
 import type { ScrollViewInstance } from 'react-native';
 import { useHeldUpdateBottomSpace } from './held-update-surface';
 import { useState, type ReactNode, type Ref } from 'react';
@@ -101,6 +104,11 @@ export function GroupShell({
 }: GroupShellProps) {
   const theme = useTheme();
   const [options, setOptions] = useState(false);
+  const nativeCovered = useContext(HeldUpdateSurfaceContext)?.covered ?? 0;
+  const sceneVisibility = useSceneVisibility(
+    !options && !cover && nativeCovered === 0,
+    destination,
+  );
   const bottomSpace = useHeldUpdateBottomSpace();
   const content = {
     paddingHorizontal: 16,
@@ -145,6 +153,14 @@ export function GroupShell({
           key={destination}
           ref={scrollRef}
           {...scroll}
+          onLayout={(event) => {
+            scroll?.onLayout?.(event);
+            sceneVisibility.onViewport(event);
+          }}
+          onScroll={(event) => {
+            scroll?.onScroll?.(event);
+            sceneVisibility.onScroll(event.nativeEvent);
+          }}
           // Under a cover it keeps its content and its offset, out of TalkBack's reach.
           importantForAccessibility={cover ? 'no-hide-descendants' : 'auto'}
           accessibilityElementsHidden={!!cover}
@@ -159,7 +175,9 @@ export function GroupShell({
             />
           }
         >
-          {children}
+          <SceneVisibility.Provider value={sceneVisibility.context}>
+            {children}
+          </SceneVisibility.Provider>
         </ScrollView>
         {cover ? (
           <ScrollView

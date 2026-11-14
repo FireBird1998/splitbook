@@ -23,6 +23,11 @@ export default {
   ios: { bundleIdentifier: appIdentifier },
   android: {
     package: appIdentifier,
+    // Accelerometer tilt uses 20 Hz, never steps or high-rate sampling.
+    blockedPermissions: [
+      'android.permission.ACTIVITY_RECOGNITION',
+      'android.permission.HIGH_SAMPLING_RATE_SENSORS',
+    ],
     ...(process.env.ANDROID_GOOGLE_SERVICES_FILE
       ? { googleServicesFile: process.env.ANDROID_GOOGLE_SERVICES_FILE }
       : {}),

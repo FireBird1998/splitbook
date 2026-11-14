@@ -1,5 +1,6 @@
 import { HeaderScenePlaceholder } from './src/ui/header-scene-card';
 import { HeaderSettings } from './src/ui/header-settings';
+import { sceneTilt } from './src/data/scene-tilt';
 import { sceneMotion } from './src/data/scene-motion';
 import {
   HeldUpdateSurfaceContext,
@@ -1005,6 +1006,7 @@ const unlistedGroup = (id: string): MobileGroup => ({
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen() {
   const motion = useSyncExternalStore(sceneMotion.subscribe, sceneMotion.getSnapshot);
+  const tilt = useSyncExternalStore(sceneTilt.subscribe, sceneTilt.getSnapshot);
   const native = useHeldUpdateNativeOverlays();
   const shareInvite = useShareInvite();
   const heldUpdate = useHeldUpdateBanner();
@@ -1441,6 +1443,9 @@ function GroupScreen() {
           offline={state.offline.active}
           motion={motion.enabled}
           motionMessage={motion.message}
+          tilt={tilt.enabled}
+          tiltMessage={tilt.message}
+          onTilt={(value) => void sceneTilt.select(value)}
           onMotion={(value) => void sceneMotion.select(value)}
           onChoose={controller.chooseHeader}
           onSave={() => void controller.saveHeader()}
@@ -1534,7 +1539,17 @@ function GroupScreen() {
                 state.headerSettings ? (
                   <HeaderScenePlaceholder group={shown} />
                 ) : (
-                  <GroupHeader group={shown} motion={motion.enabled} />
+                  <GroupHeader
+                    group={shown}
+                    motion={motion.enabled}
+                    tilt={tilt.enabled}
+                    visible={
+                      state.screen === 'group' &&
+                      !state.tagsOpenFor &&
+                      !state.currenciesOpenFor &&
+                      !confirmation
+                    }
+                  />
                 )
               ) : getGroupTheme(shown.category).header === 'strip' ? (
                 <TripStrip group={shown} />

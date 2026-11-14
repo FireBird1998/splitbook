@@ -143,3 +143,18 @@ it('uses the local hand-built day key when Intl does not produce an ISO day', as
     locale.mockRestore();
   }
 });
+
+it.each([
+  ['2026-09-14', 'Starts in 3\u00a0days'],
+  ['2026-09-18', 'Day 2 of 4'],
+  ['2026-09-21', 'Trip over\u00a0· 4\u00a0days'],
+])('renders the shared Trip caption on %s', (today, caption) => {
+  let view!: ReturnType<typeof create>;
+  act(() => {
+    view = create(<HeaderSceneCard group={group} today={today} />);
+  });
+  const markup = JSON.stringify(view.toJSON());
+  expect(markup).toContain(caption);
+  expect(markup).not.toContain('4 trip days');
+  act(() => view.unmount());
+});

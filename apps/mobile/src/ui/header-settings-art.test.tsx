@@ -54,6 +54,9 @@ it('uses four raster Images and only the selected full-size scene, with zero vec
       offline={false}
       motion
       motionMessage={null}
+      tilt={true}
+      tiltMessage={null}
+      onTilt={() => {}}
       onMotion={() => {}}
       onChoose={() => {}}
       onSave={() => {}}

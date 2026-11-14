@@ -98,8 +98,17 @@ export function useHeldUpdateSurfaces(controller: MobileController) {
     [timeline.owner, timeline.shown, timeline.widget, top?.id, register, active],
   );
   return useMemo(
-    () => ({ controller, active, register, notice, cover, reserveBottom, bottomClearance }),
-    [controller, active, register, notice, cover, reserveBottom, bottomClearance],
+    () => ({
+      controller,
+      active,
+      register,
+      notice,
+      cover,
+      covered,
+      reserveBottom,
+      bottomClearance,
+    }),
+    [controller, active, register, notice, cover, covered, reserveBottom, bottomClearance],
   );
 }
 
