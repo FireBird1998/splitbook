@@ -1,8 +1,11 @@
 /** A phone preference, like Appearance: never registered in accountLocal.stores. */
-export function createSceneMotion(storage: {
-  load(): Promise<string | null>;
-  save(value: string): Promise<void>;
-}) {
+export function createSceneMotion(
+  storage: {
+    load(): Promise<string | null>;
+    save(value: string): Promise<void>;
+  },
+  label = 'Motion',
+) {
   let snapshot = { enabled: true, message: null as string | null };
   let revision = 0;
   let writes = Promise.resolve();
@@ -25,7 +28,7 @@ export function createSceneMotion(storage: {
         const value = await storage.load();
         if (reading === revision) publish(value !== 'off');
       } catch {
-        if (reading === revision) publish(true, 'Couldn’t load Motion. Please choose again.');
+        if (reading === revision) publish(true, `Couldn’t load ${label}. Please choose again.`);
       }
     },
     async select(enabled: boolean) {
@@ -36,7 +39,7 @@ export function createSceneMotion(storage: {
         await writes;
       } catch {
         if (change === revision)
-          publish(enabled, 'Couldn’t keep Motion on this phone. Please try again.');
+          publish(enabled, `Couldn’t keep ${label} on this phone. Please try again.`);
       }
     },
   };

@@ -1,4 +1,6 @@
-import { createElement, memo, useEffect, useState, type ComponentType } from 'react';
+import { SceneVisibility } from './scene-visibility';
+import { useHeaderTilt } from './use-header-tilt';
+import { createElement, memo, useContext, useEffect, useState, type ComponentType } from 'react';
 import { Animated, AppState, StyleSheet, View } from 'react-native';
 import Svg, {
   G,
@@ -55,13 +57,15 @@ function vector(node: SceneVector, key: number | string): React.ReactNode {
 const Art = memo(function Art({
   art,
   time,
+  layer,
 }: {
+  layer?: 'far' | 'clouds' | 'main' | 'front';
   art: HeaderSceneArt;
   time: ReturnType<typeof headerTimeOfDay>;
 }) {
   return (
     <Svg width="100%" height="100%" viewBox="70 0 460 240" preserveAspectRatio="xMidYMid slice">
-      {(['far', 'clouds', 'main', 'front'] as const).map((layer) =>
+      {(layer ? [layer] : (['far', 'clouds', 'main', 'front'] as const)).map((layer) =>
         vector(art.layers[layer], layer),
       )}
       <Rect
@@ -70,9 +74,23 @@ const Art = memo(function Art({
         width="1100"
         height="240"
         fill={time === 'night' ? '#28386e' : time === 'sunset' ? '#faaa8c' : '#ffd6ba'}
-        opacity={time === 'night' ? 0.52 : time === 'sunset' ? 0.22 : time === 'morning' ? 0.12 : 0}
+        opacity={
+          layer && layer !== 'front'
+            ? 0
+            : time === 'night'
+              ? 0.52
+              : time === 'sunset'
+                ? 0.22
+                : time === 'morning'
+                  ? 0.12
+                  : 0
+        }
       />
-      <G opacity={time === 'night' ? 0.92 : time === 'sunset' ? 0.55 : 0}>
+      <G
+        opacity={
+          layer && layer !== 'front' ? 0 : time === 'night' ? 0.92 : time === 'sunset' ? 0.55 : 0
+        }
+      >
         {vector(art.layers.glow, 'glow')}
       </G>
     </Svg>
@@ -90,6 +108,8 @@ export default function HeaderScene({
   header,
   motion = true,
   preview = false,
+  tilt = true,
+  visible = true,
   today = currentDayKey(),
 }: {
   group: MobileGroup;
@@ -97,11 +117,20 @@ export default function HeaderScene({
   motion?: boolean;
   today?: string;
   preview?: boolean;
+  tilt?: boolean;
+  visible?: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   const [art, setArt] = useState<HeaderSceneArt | null>(null);
   const [, setHour] = useState(() => new Date().getHours());
-  const translateY = useSceneFloat(motion && headerSceneMotionAvailable);
+  const visibility = useContext(SceneVisibility);
+  const moving = motion && headerSceneMotionAvailable && visible && visibility.visible && !preview;
+  const position = useHeaderTilt(moving && tilt);
+  const translateY = useSceneFloat(moving);
+  const transform = (depth: number) => [
+    { translateX: Animated.multiply(position.x, depth) },
+    { translateY: Animated.multiply(position.y, depth * 0.6) },
+  ];
   useEffect(() => {
     let active = true;
     loaders[header.scene]()
@@ -132,47 +161,74 @@ export default function HeaderScene({
       />
     );
   return (
-    <View style={{ borderRadius: 16, overflow: 'hidden' }}>
+    <View
+      onLayout={preview ? undefined : visibility.onLayout}
+      style={{ borderRadius: 16, overflow: 'hidden' }}
+    >
       <View
         accessible
         accessibilityRole="image"
         accessibilityLabel={art?.id === header.scene ? art.description : 'Loading Header scene'}
         style={{ height: 208, overflow: 'hidden' }}
       >
-        <LinearGradient colors={sky[time]} style={StyleSheet.absoluteFill} />
-        {time === 'night'
-          ? [6, 14, 22, 33, 47, 58, 66, 78, 88, 94].map((left, index) => (
-              <View
-                key={left}
-                style={{
-                  position: 'absolute',
-                  left: `${left}%`,
-                  top: 12 + (index % 3) * 12,
-                  width: 2,
-                  height: 2,
-                  backgroundColor: '#e9eefc',
-                  borderRadius: 1,
-                }}
-              />
-            ))
-          : null}
-        <View
-          style={{
-            position: 'absolute',
-            left: time === 'morning' ? '12%' : '82%',
-            top: time === 'sunset' ? '70%' : '18%',
-            width: 26,
-            height: 26,
-            borderRadius: 13,
-            backgroundColor: time === 'night' ? '#f4f1e6' : '#fff1c9',
-          }}
-        />
+        <Animated.View
+          style={[
+            { position: 'absolute', top: -4, bottom: -4, left: -4, right: -4 },
+            { transform: transform(-3) },
+          ]}
+        >
+          <LinearGradient colors={sky[time]} style={StyleSheet.absoluteFill} />
+          {time === 'night'
+            ? [6, 14, 22, 33, 47, 58, 66, 78, 88, 94].map((left, index) => (
+                <View
+                  key={left}
+                  style={{
+                    position: 'absolute',
+                    left: `${left}%`,
+                    top: 12 + (index % 3) * 12,
+                    width: 2,
+                    height: 2,
+                    backgroundColor: '#e9eefc',
+                    borderRadius: 1,
+                  }}
+                />
+              ))
+            : null}
+          <View
+            style={{
+              position: 'absolute',
+              left: time === 'morning' ? '12%' : '82%',
+              top: time === 'sunset' ? '70%' : '18%',
+              width: 26,
+              height: 26,
+              borderRadius: 13,
+              backgroundColor: time === 'night' ? '#f4f1e6' : '#fff1c9',
+            }}
+          />
+        </Animated.View>
         <Animated.View
           renderToHardwareTextureAndroid
           importantForAccessibility="no-hide-descendants"
           style={[StyleSheet.absoluteFill, { transform: [{ translateY }] }]}
         >
-          {art?.id === header.scene ? <Art art={art} time={time} /> : null}
+          {art?.id === header.scene ? (
+            headerSceneMotionAvailable && tilt && !preview ? (
+              (['far', 'clouds', 'main', 'front'] as const).map((layer, index) => (
+                <Animated.View
+                  key={layer}
+                  renderToHardwareTextureAndroid
+                  style={[
+                    StyleSheet.absoluteFill,
+                    { transform: transform([-4, -3, -2, 5][index]) },
+                  ]}
+                >
+                  <Art art={art} time={time} layer={layer} />
+                </Animated.View>
+              ))
+            ) : (
+              <Art art={art} time={time} />
+            )
+          ) : null}
         </Animated.View>
       </View>
       {preview ? (

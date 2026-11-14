@@ -33,3 +33,42 @@ bring it within budget. Header scenes therefore render still on Android under
 Motion preference is retained for a renderer that meets the budget. Remove
 animations still takes precedence through the existing motion helper. The
 measurements and comparison are in the A1 QA handoff report.
+
+## Phone tilt and the sensor dependency (#1208)
+
+Use `expo-sensors` 58.0.4, within SDK 58's bundled `~58.0.4`, through its
+Accelerometer API. The SDK's Expo module bridge works with the existing Hermes
+runtime; local acceptance also requires an R8 release run. No custom keep rules,
+background service, permission prompt or new data collection is introduced.
+
+The package manifest includes `ACTIVITY_RECOGNITION` for its unused pedometer.
+Block it and `HIGH_SAMPLING_RATE_SENSORS` in app config: tilt only samples the
+accelerometer every 50 ms (at most 20 Hz), far below Android's 200 Hz permission boundary.
+Expo 58.0.4 uses normal native sampling without that permission on Android 12+
+(about 5 Hz on the spare emulator), then throttles forwarding to the requested
+interval. On Android 7–11 it uses fastest native sampling; verify handset power
+cost before enabling availability there. Verify the merged release manifest and
+APK, rather than trusting the source config.
+The app does not transmit or store sensor samples. Only the on/off choice is kept
+in SecureStore (`splitbook.header-tilt`), outside account Saved copies and sign-out
+clearing, like Motion and Appearance (ADR 0006). It defaults on.
+
+A cancellable sensor lease loads the module only for an available, visible Group
+scene, in the foreground, with Motion and Tilt on and Remove animations off.
+Leaving any condition removes the listener and resets the transforms; a late
+module/availability result cannot register after disposal. No polling, sensor
+permission request or background listener remains. When supported, gravity relative
+to the first sample controls bounded, eased native-driver translations (up to
+5 dp horizontally and 3 dp vertically) at different layer depths. No React state
+or vector path changes occur per sample. Sampling and animated work still cost
+battery while visible, so a low rate and explicit unsubscription matter.
+
+Tilt shares `headerSceneMotionAvailable` with the A1 motion fallback. It stays
+false: A1's release scene scrolling missed the frame budget, and adding layer
+transforms does not establish that budget. The setting and sensor wiring are
+retained behind this flag; normal Android builds never load or register a sensor.
+The A2 report distinguishes the shipping still release from a temporary inspection
+build with the flag enabled for virtual-sensor and R8 verification.
+
+References: [Expo SDK 58 Sensors](https://docs.expo.dev/versions/v58.0.0/sdk/sensors/),
+[Android sensor guidance](https://developer.android.com/develop/sensors-and-location/sensors/sensors_overview).

@@ -1,3 +1,4 @@
+import { configureSceneTiltStorage } from './data/scene-tilt';
 import { configureSceneMotionStorage } from './data/scene-motion';
 import { androidWidgetsEnabled } from './widgets-flag';
 import { createWidgetsNative, createWidgetsStore } from './widgets-native';
@@ -62,6 +63,10 @@ export const environment = {
 export const appearance = createAppearanceController({
   load: () => SecureStore.getItemAsync('splitbook.appearance'),
   save: (mode) => SecureStore.setItemAsync('splitbook.appearance', mode),
+});
+void configureSceneTiltStorage({
+  load: () => SecureStore.getItemAsync('splitbook.header-tilt'),
+  save: (value) => SecureStore.setItemAsync('splitbook.header-tilt', value),
 });
 void configureSceneMotionStorage({
   load: () => SecureStore.getItemAsync('splitbook.header-motion'),

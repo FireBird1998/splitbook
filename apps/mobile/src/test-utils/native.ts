@@ -12,6 +12,7 @@ type Window = { width: number; height: number; scale: number; fontScale: number 
 const phone: Window = { width: 412, height: 915, scale: 2, fontScale: 1 };
 let fileWindow: Window = { ...phone };
 const currentWindow: Window = { ...phone };
+let currentAppState = 'active';
 const appStateListeners: ((state: string) => void)[] = [];
 const keyboardListeners = new Map<
   string,
@@ -46,6 +47,7 @@ export function setWindow(size: Partial<Window>) {
 
 /** Android reports a new app state, e.g. 'active' when the app returns to the foreground. */
 export function emitAppState(state: string) {
+  currentAppState = state;
   for (const listener of [...appStateListeners]) listener(state);
 }
 
@@ -147,7 +149,8 @@ export const spring = vi.fn(() => ({ start: vi.fn() }));
  * never depends on timing. A test checks what was started and stopped, and with what config.
  */
 interface StandInAnimation {
-  kind: 'timing' | 'loop';
+  kind: 'timing' | 'loop' | 'sequence';
+  animations?: StandInAnimation[];
   value?: unknown;
   config?: Record<string, unknown>;
   animation?: StandInAnimation;
@@ -162,6 +165,9 @@ const animation = (fields: Omit<StandInAnimation, 'start' | 'stop'>): StandInAni
 /** `Animated.timing`, recorded with its value and config. */
 export const timing = vi.fn((value: unknown, config: Record<string, unknown>) =>
   animation({ kind: 'timing', value, config }),
+);
+export const sequence = vi.fn((animations: StandInAnimation[]) =>
+  animation({ kind: 'sequence', animations }),
 );
 /** `Animated.loop`, recorded with the animation it repeats. */
 export const loop = vi.fn((inner: StandInAnimation) =>
@@ -222,6 +228,7 @@ function listen<Listener>(listeners: Listener[], listener: Listener) {
 
 /** Puts every stand-in back to the file's defaults; `./setup.ts` runs it after each test. */
 export function resetNative() {
+  currentAppState = 'active';
   Object.assign(currentWindow, fileWindow);
   appStateListeners.length = 0;
   keyboardListeners.clear();
@@ -237,6 +244,7 @@ export function resetNative() {
   spring.mockClear();
   timing.mockClear();
   loop.mockClear();
+  sequence.mockClear();
   waitingForFrame.clear();
   for (const spy of Object.values(spies)) spy.mockClear();
 }
@@ -260,6 +268,7 @@ export const reactNative = {
     spring,
     timing,
     loop,
+    sequence,
   },
   // Easing curves are named, not run: no animation runs in a test.
   Easing: {
@@ -274,6 +283,9 @@ export const reactNative = {
     sin: 'sin',
   },
   AppState: {
+    get currentState() {
+      return currentAppState;
+    },
     addEventListener: (_type: string, listener: (state: string) => void) =>
       listen(appStateListeners, listener),
   },

@@ -156,3 +156,13 @@ describe('runtime storage wiring', () => {
     expect(accountLocal.stores).toContain(accountLocal.untrustedCopies);
   });
 });
+
+it('keeps Tilt in phone SecureStore, outside the account purge contract', async () => {
+  const { sceneTilt } = await import('./data/scene-tilt');
+  const SecureStore = await import('expo-secure-store');
+  await sceneTilt.select(false);
+  expect(SecureStore.setItemAsync).toHaveBeenCalledWith('splitbook.header-tilt', 'off');
+  const local = wired.dependencies!.accountLocal as { stores: unknown[] };
+  expect(local.stores).not.toContain(sceneTilt);
+  expect(sceneTilt).not.toHaveProperty('clear');
+});

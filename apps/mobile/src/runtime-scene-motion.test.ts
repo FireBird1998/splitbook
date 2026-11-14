@@ -71,11 +71,12 @@ afterAll(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
-it('real runtime controller sign-out purges account stores while retaining the SecureStore Motion key', async () => {
+it('real runtime controller sign-out purges account stores while retaining the SecureStore Motion and Tilt keys', async () => {
   const server = fakeSplitbook();
   native.fetch = server.fetch;
   const { controller } = await import('./runtime');
   const { sceneMotion } = await import('./data/scene-motion');
+  const { sceneTilt } = await import('./data/scene-tilt');
   const secure = await import('expo-secure-store');
   try {
     await controller.signIn('alex');
@@ -83,12 +84,16 @@ it('real runtime controller sign-out purges account stores while retaining the S
     await controller.openGroup(server.world.groups[0]!._id);
     await until(controller, (state) => state.detail.status === 'ready');
     await sceneMotion.select(false);
+    await sceneTilt.select(false);
     expect(native.values.get('splitbook.header-motion')).toBe('off');
+    expect(native.values.get('splitbook.header-tilt')).toBe('off');
     await controller.signOut();
     expect(controller.getSnapshot().auth.status).toBe('signed-out');
     expect(native.values.get('splitbook.header-motion')).toBe('off');
+    expect(native.values.get('splitbook.header-tilt')).toBe('off');
     expect(secure.deleteItemAsync).toHaveBeenCalled();
     expect(secure.deleteItemAsync).not.toHaveBeenCalledWith('splitbook.header-motion');
+    expect(secure.deleteItemAsync).not.toHaveBeenCalledWith('splitbook.header-tilt');
   } finally {
     controller.dispose();
   }

@@ -17,7 +17,11 @@ afterEach(() => {
 });
 const header = { style: 'classic', scene: 'beach', time: 'auto' } as const;
 it.each([false, true])('shows selected states, unchanged Save and offline=%s', (offline) => {
+  availability.enabled = true;
   let renderer!: ReturnType<typeof create>;
+  const onTilt = vi.fn();
+  const onChoose = vi.fn();
+  const onSave = vi.fn();
   const state: Settings = {
     groupId: 'g',
     saved: header,
@@ -41,9 +45,12 @@ it.each([false, true])('shows selected states, unchanged Save and offline=%s', (
         offline={offline}
         motion={false}
         motionMessage={null}
+        tilt={true}
+        tiltMessage={null}
+        onTilt={onTilt}
         onMotion={() => undefined}
-        onChoose={() => undefined}
-        onSave={() => undefined}
+        onChoose={onChoose}
+        onSave={onSave}
         onRetry={() => undefined}
         onClose={() => undefined}
       />,
@@ -68,7 +75,15 @@ it.each([false, true])('shows selected states, unchanged Save and offline=%s', (
   const markup = JSON.stringify(renderer.toJSON());
   expect(markup).toContain('Who sees what');
   expect(markup.includes('Changing the header needs a connection')).toBe(offline);
-  expect(markup).not.toContain('Tilt');
+  expect(markup).toContain('Tilt with the phone');
+  const tilt = renderer.root
+    .findAll((node) => (node.type as unknown) === 'Switch')
+    .find((node) => node.props.accessibilityLabel === 'Tilt with the phone')!;
+  expect(tilt.props.value).toBe(true);
+  act(() => tilt.props.onValueChange(false));
+  expect(onTilt).toHaveBeenCalledWith(false);
+  expect(onChoose).not.toHaveBeenCalled();
+  expect(onSave).not.toHaveBeenCalled();
   act(() => renderer.unmount());
 });
 
@@ -89,6 +104,9 @@ it.each([false, true])('a changed header has Save disabled only when offline=%s'
         offline={offline}
         motion={false}
         motionMessage={null}
+        tilt={true}
+        tiltMessage={null}
+        onTilt={() => {}}
         onMotion={() => {}}
         onChoose={() => {}}
         onSave={() => {}}
@@ -108,6 +126,7 @@ it.each([false, true])('renders the phone card only when motion is available=%s'
   availability.enabled = available;
   let view!: ReturnType<typeof create>;
   const onMotion = vi.fn();
+  const onTilt = vi.fn();
   act(() => {
     view = create(
       <HeaderSettings
@@ -116,6 +135,9 @@ it.each([false, true])('renders the phone card only when motion is available=%s'
         offline={false}
         motion
         motionMessage={null}
+        tilt
+        tiltMessage={null}
+        onTilt={onTilt}
         onMotion={onMotion}
         onChoose={() => {}}
         onSave={() => {}}
@@ -125,7 +147,7 @@ it.each([false, true])('renders the phone card only when motion is available=%s'
     );
   });
   const switches = view.root.findAll((node) => (node.type as unknown) === 'Switch');
-  expect(switches).toHaveLength(available ? 1 : 0);
+  expect(switches).toHaveLength(available ? 2 : 0);
   const text = JSON.stringify(view.toJSON());
   expect(text.includes('On this phone')).toBe(available);
   expect(text.includes('Scenes stay still')).toBe(available);
@@ -133,6 +155,9 @@ it.each([false, true])('renders the phone card only when motion is available=%s'
     expect(switches[0].props.accessibilityLabel).toBe('Motion');
     act(() => switches[0].props.onValueChange(false));
     expect(onMotion).toHaveBeenCalledWith(false);
+    expect(switches[1].props.accessibilityLabel).toBe('Tilt with the phone');
+    act(() => switches[1].props.onValueChange(false));
+    expect(onTilt).toHaveBeenCalledWith(false);
   }
   act(() => view.unmount());
 });

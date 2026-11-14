@@ -23,6 +23,9 @@ export function HeaderSettings({
   offline,
   motion,
   motionMessage,
+  tilt,
+  tiltMessage,
+  onTilt,
   onMotion,
   onChoose,
   onSave,
@@ -34,6 +37,9 @@ export function HeaderSettings({
   offline: boolean;
   motion: boolean;
   motionMessage: string | null;
+  tilt: boolean;
+  tiltMessage: string | null;
+  onTilt: (value: boolean) => void;
   onMotion: (value: boolean) => void;
   onChoose: (change: Partial<Header>) => void;
   onSave: () => void;
@@ -158,16 +164,43 @@ export function HeaderSettings({
                     style={{ minWidth: 48, minHeight: 48 }}
                   />
                 </View>
+                <View
+                  style={{
+                    padding: 14,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    borderTopWidth: 1,
+                    borderColor: theme.border,
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <CompactText>Tilt with the phone</CompactText>
+                    <CompactText variant="small" tone="secondary">
+                      The scene shifts a little as you move it. Scenes stay still on Android for
+                      now.
+                    </CompactText>
+                  </View>
+                  <Switch
+                    accessibilityLabel="Tilt with the phone"
+                    value={tilt}
+                    onValueChange={onTilt}
+                    style={{ minWidth: 48, minHeight: 48 }}
+                  />
+                </View>
               </Card>
               {motionMessage ? (
                 <CompactText accessibilityRole="alert">{motionMessage}</CompactText>
+              ) : null}
+              {tiltMessage ? (
+                <CompactText accessibilityRole="alert">{tiltMessage}</CompactText>
               ) : null}
             </>
           )}
           <SectionHeader title="Who sees what" />
           <CompactText variant="small" tone="secondary">
-            Everyone in {group.name} sees the header, scene and time you save. Motion is kept on
-            this phone only.
+            Everyone in {group.name} sees the header, scene and time you save. Motion and Tilt are
+            kept on this phone only.
           </CompactText>
           {offline ? (
             <NotAvailableOffline
