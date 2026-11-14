@@ -407,7 +407,7 @@ function SinglePaymentSheet({
       {!figures ? (
         checking ? (
           <CompactText tone="secondary">{checkingBalances}</CompactText>
-        ) : status === 'ready' && !chosen && !state.attempt && onSelect ? (
+        ) : state.widgetEntry && status === 'ready' && !chosen && !state.attempt && onSelect ? (
           <View style={{ gap: 12 }}>
             {state.balances.flatMap((bucket) =>
               bucket.debts.filter(

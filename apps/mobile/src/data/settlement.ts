@@ -189,6 +189,8 @@ export interface SettlementChoice {
   all?: boolean;
 }
 export interface SettlementState {
+  /** Only the widget Record payment entry offers an unselected payment list. */
+  widgetEntry?: boolean;
   /** Group refusal keeps a stored payment blocked until leaving or Discard. */
   accessLost?: boolean;
   groupId: string | null;

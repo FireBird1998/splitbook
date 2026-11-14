@@ -266,3 +266,31 @@ it('wraps a blocked action’s reason in full and keeps its status glyph inside 
     tileTone: 'muted',
   });
 });
+
+it('blocked summaries retain the action and only name an available Group', () => {
+  const chosen = { ...setup, groupId: 'maple', mode: 'payment' as const };
+  const size = { width: 172, height: 104 };
+  expect(quickWidget(copy, { ...chosen, groupId: null }, size, session).summary).toBe(
+    'Record payment. Choose a Group',
+  );
+  expect(quickWidget({ ...copy, lostGroupIds: ['maple'] }, chosen, size, session).summary).toBe(
+    'Record payment. Not in this Group. Choose a Group',
+  );
+  expect(
+    quickWidget(
+      {
+        ...copy,
+        savedGroups: {
+          ...copy.savedGroups!,
+          rows: [{ ...copy.savedGroups!.rows[0], archived: true }],
+        },
+      },
+      chosen,
+      size,
+      session,
+    ).summary,
+  ).toBe('Record payment in Maple House. Group archived. Choose another');
+  expect(quickWidget(copy, chosen, size, { ...session, accountId: 'sam' }).summary).toBe(
+    'Set up again. Another account',
+  );
+});

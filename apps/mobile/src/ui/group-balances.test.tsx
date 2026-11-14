@@ -1987,7 +1987,13 @@ it('an empty Record payment entry offers payments without selecting one, or says
   const root = render(
     <RecordPaymentSheet
       {...props}
-      state={{ ...emptySettlement(), status: 'ready', group: group(), balances: [inr] }}
+      state={{
+        ...emptySettlement(),
+        widgetEntry: true,
+        status: 'ready',
+        group: group(),
+        balances: [inr],
+      }}
     />,
   );
   const choice = labelled(root, 'You pay Sam Chen ₹1,060.00')[0];
@@ -1998,7 +2004,13 @@ it('an empty Record payment entry offers payments without selecting one, or says
   const square = render(
     <RecordPaymentSheet
       {...props}
-      state={{ ...emptySettlement(), status: 'ready', group: group(), balances: [] }}
+      state={{
+        ...emptySettlement(),
+        widgetEntry: true,
+        status: 'ready',
+        group: group(),
+        balances: [],
+      }}
     />,
   );
   expect(text(square)).toContain('Nothing to pay');
@@ -2029,3 +2041,37 @@ it('does not replace a withdrawn chosen payment with the blank Quick actions sel
   );
   expect(text(root)).not.toContain('Choose a payment');
 });
+
+it.each(['loading', 'ready'] as const)(
+  'Check payment %s never offers the widget payment list',
+  (status) => {
+    const root = render(
+      <RecordPaymentSheet
+        visible
+        currentUserId={you}
+        today="Today"
+        now={at}
+        state={{
+          ...emptySettlement(),
+          status,
+          group: group(),
+          balances: [inr],
+          message:
+            status === 'ready'
+              ? 'Nothing is waiting to be retried. Close this to see the latest balances.'
+              : null,
+        }}
+        onChange={vi.fn()}
+        onLeaveField={vi.fn()}
+        onAcknowledge={vi.fn()}
+        onRecord={vi.fn()}
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(text(root)).not.toContain('Choose a payment');
+    expect(labelled(root, 'You pay Sam Chen ₹1,060.00')).toHaveLength(0);
+    if (status === 'ready') expect(text(root)).toContain('Nothing is waiting to be retried.');
+  },
+);

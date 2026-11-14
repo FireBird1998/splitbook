@@ -257,7 +257,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                       onPress={() => {
                         const groupId =
                           value === 'payment' && (!selected || selected === 'ask')
-                            ? (groups[0]?.id ?? null)
+                            ? null
                             : selected;
                         setMode(value);
                         setSelected(value === 'expense' ? (groupId ?? 'ask') : groupId);
@@ -487,7 +487,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
         >
           <Pressable
             accessibilityRole="button"
-            disabled={!record && !error}
+            disabled={(!record && !error) || (!blocked && quick && mode === 'payment' && !selected)}
             onPress={() => {
               if (blocked) {
                 setResult('cancel');

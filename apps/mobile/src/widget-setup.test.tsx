@@ -326,6 +326,12 @@ it('Record payment needs a saved Group, survives Reconfigure and cannot use Ask 
   await act(async () => payment!.props.onPress());
   expect(text()).not.toContain('Ask each time');
   expect(text()).toContain('Opens Settle up, on Record payment');
+  expect(button().props.disabled).toBe(true);
+  await act(async () =>
+    host('Pressable')
+      .find((n) => n.props.accessibilityLabel === 'Maple House')!
+      .props.onPress(),
+  );
   await act(async () => button().props.onPress());
   expect(store.saveSetup).toHaveBeenCalledWith({
     kind: 'quick',

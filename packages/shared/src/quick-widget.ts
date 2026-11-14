@@ -125,7 +125,15 @@ export function quickWidget(
     size,
     title,
     subtitle,
-    summary: [title, subtitle].filter(Boolean).join('. '),
+    summary: [
+      ...(session.status === 'authenticated' && state !== 'other-account'
+        ? [state === 'archived' && group ? `${action} in ${group.name}` : action]
+        : []),
+      title,
+      subtitle,
+    ]
+      .filter(Boolean)
+      .join('. '),
     target,
   });
   if (session.status !== 'authenticated')

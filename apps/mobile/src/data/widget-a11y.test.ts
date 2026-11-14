@@ -193,7 +193,7 @@ it.each(['1x1', '2x1'] as const)(
         size === '1x1' ? { width: 78, height: 104 } : { width: 172, height: 104 },
         auth,
       ).summary,
-    ).toBe('Not in this Group. Choose a Group');
+    ).toBe('Add expense. Not in this Group. Choose a Group');
     expect(
       quickWidget(
         { ...copy, groups: { maple: { ...part, archived: true } } },
@@ -201,7 +201,7 @@ it.each(['1x1', '2x1'] as const)(
         size === '1x1' ? { width: 78, height: 104 } : { width: 172, height: 104 },
         auth,
       ).summary,
-    ).toBe('Group archived. Choose another');
+    ).toBe('Add expense in Maple House. Group archived. Choose another');
   },
 );
 

@@ -1161,8 +1161,22 @@ it('uses the newly reported phone zone for the app Month read and the saved Widg
 it('Quick actions Record payment opens Settle up with nothing filled, including when all square', async () => {
   const f = fixture(),
     c = f.make();
+  f.groupBalances({
+    byCurrency: [
+      {
+        currency: 'INR',
+        balances: [
+          { user: { _id: alex.id, name: alex.name }, balance: 0 },
+          { user: { _id: sam.id, name: sam.name }, balance: 0 },
+        ],
+        debts: [],
+      },
+    ],
+  });
   await c.signIn('alex');
   await c.openWidget({ kind: 'record-payment', groupId });
+  expect(c.getSnapshot().settlement.balances.flatMap((b) => b.debts)).toEqual([]);
+  expect(c.getSnapshot().settlement.balances).toHaveLength(1);
   expect(c.getSnapshot().screen).toBe('settlement');
   expect(c.getSnapshot().settlement).toMatchObject({ status: 'ready', chosen: null, draft: null });
   expect(
