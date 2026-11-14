@@ -138,12 +138,12 @@ export function overviewWidget(
       const privacyLines = hidden
         ? text.words(hidden, small && level === 2 ? 8 : 10, width - 18)
         : [];
-      const titleLines = title
-        ? text.words(title, small ? 10 : 15, width - (!small && optional && !level ? 60 : 0))
-        : [];
+      const showStateTile =
+        !normal && !['loading', 'no-groups'].includes(state) && optional && !level && !small;
+      const messageWidth = width - (showStateTile ? 60 : 0);
+      const titleLines = title ? text.words(title, small ? 10 : 15, messageWidth) : [];
       const descriptionLines =
-        description && optional && level < 2 ? text.words(description, bodyFont) : [];
-      const showStateTile = !normal && state !== 'loading' && optional && !level && !small;
+        description && optional && level < 2 ? text.words(description, bodyFont, messageWidth) : [];
       const secondary =
         small && normal && !hidden && owed.length && owe.length ? `You owe ${owe[0]}` : null;
       const secondaryFont = text.fit(secondary ?? '', level ? 9 : 12, width);
@@ -231,9 +231,13 @@ export function overviewWidget(
               {
                 id: 'message',
                 rows: 1,
-                rowHeight:
-                  Math.max(titleLines.length * text.line(small ? 10 : 15), showStateTile ? 48 : 0) +
-                  (descriptionLines.length ? 8 + descriptionLines.length * text.line(bodyFont) : 0),
+                rowHeight: Math.max(
+                  titleLines.length * text.line(small ? 10 : 15) +
+                    (descriptionLines.length
+                      ? 8 + descriptionLines.length * text.line(bodyFont)
+                      : 0),
+                  showStateTile ? 48 : 0,
+                ),
                 required: true,
               },
             ]

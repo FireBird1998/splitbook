@@ -133,11 +133,17 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
             )}
           </FlexWidget>
         ) : null}
-        <FlexWidget style={{ flex: 1 }}>{lines(l.titleLines, t.text, f.title, true)}</FlexWidget>
+        <FlexWidget style={{ flex: 1, flexGap: 8 }}>
+          {[
+            <FlexWidget key="title">{lines(l.titleLines, t.text, f.title, true)}</FlexWidget>,
+            l.descriptionLines.length ? (
+              <FlexWidget key="description">
+                {lines(l.descriptionLines, t.textSecondary, f.body)}
+              </FlexWidget>
+            ) : null,
+          ].filter(Boolean)}
+        </FlexWidget>
       </FlexWidget>
-      {l.descriptionLines.length ? (
-        <FlexWidget>{lines(l.descriptionLines, t.textSecondary, f.body)}</FlexWidget>
-      ) : null}
     </FlexWidget>
   );
   const reviewChip = view.review ? (
