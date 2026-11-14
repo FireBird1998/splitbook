@@ -808,7 +808,7 @@ const groupsCopy: WidgetCopy = {
   },
   finishLater: { groupId: 'maple', groupName: 'Maple House' },
 };
-it('adds two Groups at 4×4 after the two payments, keeping both waiting chips and Add expense', () => {
+it('adds three natural Groups at 4×4 after the two payments, keeping both waiting chips and Add expense', () => {
   const v = overviewWidget(
     groupsCopy,
     setup,
@@ -817,8 +817,12 @@ it('adds two Groups at 4×4 after the two payments, keeping both waiting chips a
     now,
   );
   expect(v.payments).toHaveLength(2);
-  expect(v.groups.map((g) => g.name)).toEqual(['Goa Friends Trip', 'Maple House']);
-  expect(v.groupMore).toBe('+2\u00a0more');
+  expect(v.groups.map((g) => g.name)).toEqual([
+    'Goa Friends Trip',
+    'Maple House',
+    'Lisbon & Tokyo',
+  ]);
+  expect(v.groupMore).toBe('+1\u00a0more');
   expect(v.groupMoreTarget).toBe('home');
   expect(v.review).not.toBeNull();
   expect(v.finishLater).not.toBeNull();
@@ -1039,4 +1043,37 @@ it('fills the quiet 4×4 with all four natural Group rows', () => {
   const v = overviewWidget(c, setup, { width: 360, height: 464 }, auth, now);
   expect(v.groups).toHaveLength(4);
   expect(v.groupMore).toBeNull();
+});
+
+it('uses a third Group at natural height in 4x4 when the whole footer fits, without stretching payments over hidden Groups', () => {
+  const c = clone(groupsCopy);
+  c.home!.currencies = c.home!.currencies.slice(0, 1);
+  delete c.finishLater;
+  delete c.review;
+  const v = overviewWidget(c, setup, { width: 360, height: 464, pixelRatio: 2.625 }, auth, now);
+  expect(v.payments).toHaveLength(2);
+  expect(v.groups).toHaveLength(3);
+  expect(v.action).toBe('＋ Add expense');
+  expect(v.layout.fits).toBe(true);
+  const paymentSection = v.layout.sections.find((s) => s.id === 'payments')!;
+  expect(paymentSection.rowHeight).toBeLessThan(40);
+});
+
+it('keeps two payments and two Groups when taller Group content cannot admit a third above the whole footer', () => {
+  const c = clone(groupsCopy);
+  for (const row of c.savedGroups!.rows) {
+    row.name += ' and friends sharing costs';
+    c.home!.byGroup![row.id] = [
+      { currency: 'INR', balanceMinor: -148000 },
+      { currency: 'EUR', balanceMinor: 4000 },
+    ];
+  }
+  const v = overviewWidget(c, setup, { width: 360, height: 464, pixelRatio: 2.625 }, auth, now);
+  expect(v.payments).toHaveLength(2);
+  expect(v.groups).toHaveLength(2);
+  expect(v.action).toBe('＋ Add expense');
+  expect(v.review).not.toBeNull();
+  expect(v.finishLater).not.toBeNull();
+  expect(v.layout.fits).toBe(true);
+  expect(v.layout.sections.find((s) => s.id === 'payments')!.rowHeight).toBeLessThan(40);
 });

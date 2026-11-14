@@ -461,7 +461,7 @@ export function overviewWidget(
                 headingHeight: paymentHeaderHeight,
                 inset: compactPayments ? 0 : 8,
                 moreHeight: paymentDetails ? 0 : undefined,
-                grow: true,
+                grow: showGroups ? false : ('when-complete' as const),
               },
             ]
           : []),
@@ -508,7 +508,7 @@ export function overviewWidget(
                   ? availablePayments.length && paymentFits
                     ? level
                       ? 1
-                      : 2 + Math.floor(Math.max(0, size.height - 464) / 120) * 2
+                      : 3 + Math.floor(Math.max(0, size.height - 464) / 120) * 2
                     : groupRows.length
                   : 0,
                 rowHeight: groupRowHeight,
