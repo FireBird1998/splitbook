@@ -1,4 +1,5 @@
 import { balancesLayout, widgetTextLevel } from './widget-layout';
+import { dayKeyInZone } from './zoned-calendar';
 import { widgetSummary } from './widget-accessibility';
 import type { WidgetGroupPart } from './group-widget';
 import type { GroupCategory } from './types';
@@ -70,18 +71,25 @@ export interface BalancesWidgetView {
 
 /** Calendar boundaries use the phone's local zone; age uses elapsed time. */
 export function widgetSavedTime(verifiedAt: number, now: number) {
-  const saved = new Date(verifiedAt),
-    today = new Date(now);
-  const day = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-  if (day(saved) === day(today))
-    return `Saved ${saved.getHours() % 12 || 12}:${String(saved.getMinutes()).padStart(2, '0')}`;
-  const days =
-    (Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) -
-      Date.UTC(saved.getFullYear(), saved.getMonth(), saved.getDate())) /
-    86_400_000;
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const savedDay = dayKeyInZone(verifiedAt, zone);
+  const today = dayKeyInZone(now, zone);
+  if (savedDay === today) {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: zone,
+      hour: 'numeric',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(verifiedAt);
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+    const minute = parts.find((part) => part.type === 'minute')?.value;
+    return `Saved ${hour % 12 || 12}:${minute}`;
+  }
+  const days = (Date.parse(today) - Date.parse(savedDay)) / 86_400_000;
+  const saved = new Date(`${savedDay}T00:00:00Z`);
   if (days > 0 && days < 7)
-    return `Saved ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][saved.getDay()]}`;
-  return `Saved ${saved.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][saved.getMonth()]}`;
+    return `Saved ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][saved.getUTCDay()]}`;
+  return `Saved ${saved.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][saved.getUTCMonth()]}`;
 }
 
 function balancesWidgetView(

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { groupWidget, type WidgetGroupPart } from './group-widget';
 import type { WidgetSession } from './balances-widget';
+import { widgetSavedTime } from './balances-widget';
 import { widgetText } from './widget-sizing';
 beforeAll(() => {
   vi.stubEnv('TZ', 'Asia/Kolkata');
@@ -540,5 +541,42 @@ it('uses the newly reported phone zone while Date keeps its former local day', (
   expect(groupWidget(copy, setup, { width: 360, height: 224 }, auth, instant).tripDay).toBe(
     'Day 1 of 3',
   );
+  vi.restoreAllMocks();
+});
+
+it('reserves the Trip capsule padding above the balance and bounds long names', () => {
+  const copy = {
+    ...part,
+    theme: 'trip' as const,
+    tripDates: { start: '2026-11-13', end: '2026-11-15' },
+  };
+  const view = groupWidget(copy, setup, { width: 360, height: 224 }, auth, now);
+  const text = widgetText(332);
+  expect(view.layout.sections.find((s) => s.id === 'header')!.height).toBeGreaterThanOrEqual(
+    text.line(11) * 2 + 9,
+  );
+  const long = groupWidget(
+    { ...copy, name: 'Goa Friends Trip with a very long Group name' },
+    setup,
+    { width: 172, height: 224 },
+    auth,
+    now,
+    2,
+  );
+  expect(long.layout.nameLines).toHaveLength(2);
+  expect(long.summary).toContain('Goa Friends Trip with a very long Group name');
+  expect(long.layout.fits).toBe(true);
+});
+
+it('uses the fresh phone zone for the saved clock and weekday', () => {
+  const resolve = Intl.DateTimeFormat.prototype.resolvedOptions;
+  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
+    this: Intl.DateTimeFormat,
+  ) {
+    return { ...resolve.call(this), timeZone: 'Pacific/Honolulu' };
+  });
+  const saved = Date.parse('2026-11-14T02:04:00Z');
+  expect(widgetSavedTime(saved, Date.parse('2026-11-14T04:30:00Z'))).toBe('Saved 4:04');
+  expect(widgetSavedTime(saved, Date.parse('2026-11-14T10:30:00Z'))).toBe('Saved Fri');
   vi.restoreAllMocks();
 });

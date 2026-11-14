@@ -370,10 +370,12 @@ function groupLayout(
         13,
         nameRoom,
       );
-      const nameLines =
+      const wrappedName =
         tiny || name.split(/\s+/).some((word) => text.width(word, nameFont) > nameRoom)
           ? [name]
           : text.words(name, nameFont, nameRoom);
+      const nameLines =
+        wrappedName.length > 2 ? [wrappedName[0], wrappedName.slice(1).join(' ')] : wrappedName;
       const balanceFont = tiny ? 10 : 14;
       const balanceLabelLines = text.words(
         tiny && view.final
@@ -393,7 +395,7 @@ function groupLayout(
       );
       const showCurrencyOverflow = optional && level === 0 && !tiny && !!view.currencyOverflow;
       const headerHeight =
-        nameLines.length * text.line(nameFont) +
+        Math.max(nameLines.length * text.line(nameFont), showTripDay ? text.line(11) + 6 : 0) +
         (stackHeader ? text.line(9) + 12 : 0) +
         (compact ? (showSaved ? text.line(9) + 3 : 0) : text.line(11) + 3);
       const balanceHeight =
