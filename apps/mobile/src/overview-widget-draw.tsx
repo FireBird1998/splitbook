@@ -192,7 +192,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
     ) : null;
   const note = l.footerNote ? text(l.footerNote, t.textMuted, f.small) : null;
   const leading =
-    reviewChip || note ? (
+    waiting || note ? (
       <FlexWidget
         style={{
           ...(l.footerAcross ? {} : { width: 'match_parent' }),
