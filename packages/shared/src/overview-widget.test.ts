@@ -713,3 +713,18 @@ it('uses all five natural rows when a 130-percent tall Overview has room', () =>
   expect(v.review).toBe('To review\u00a0· 3');
   expect(v.action).toBe('＋ Add expense');
 });
+
+it.each([
+  { width: 172, height: 224, scale: 1 },
+  { width: 360, height: 224, scale: 1 },
+  { width: 360, height: 344, scale: 1.3 },
+  { width: 360, height: 584, scale: 2 },
+])(
+  'leaves small Balances unchanged and drops Finish later first at large text ($width×$height, $scale)',
+  ({ width, height, scale }) => {
+    const c = { ...copy, finishLater: { groupId: 'maple', groupName: 'Maple House' } };
+    const v = overviewWidget(c, setup, { width, height }, auth, now, scale);
+    expect(v.finishLater).toBeNull();
+    expect(v.summary).toContain('Finish later in Maple House');
+  },
+);

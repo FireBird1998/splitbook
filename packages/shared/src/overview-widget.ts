@@ -140,7 +140,7 @@ export function overviewWidget(
       const bodyFont = small ? 10 : 12;
       const review = !small && optional && (!level || tall) ? read.review : null;
       const finishLater =
-        !small && optional && (!level || (tall && level === 1)) && unfinished
+        tall && optional && !level && unfinished
           ? {
               label: wide ? 'Finish later' : '✎',
               groupName: unfinished.groupName,
