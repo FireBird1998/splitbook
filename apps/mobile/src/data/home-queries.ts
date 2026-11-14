@@ -470,8 +470,6 @@ export function createHomeQueries(session: HomeSession) {
     const { snapshot } = session,
       listed = new Set(groups.map((group) => group.id)),
       lost = new Set<string>();
-    if (session.current(owner)) await session.checkUnlisted?.(listed, owner);
-    if (!session.current(owner)) throw new Superseded();
     answers += 1;
     latest = listed;
     const reading = client.getQueryCache().findAll({
@@ -549,6 +547,7 @@ export function createHomeQueries(session: HomeSession) {
         'home',
       ]);
     }
+    if (session.current(owner)) await session.checkUnlisted?.(listed, owner);
   };
   const options = (): QueryObserverOptions<Envelope, Error, Envelope, Envelope, QueryKey>[] => [
     {

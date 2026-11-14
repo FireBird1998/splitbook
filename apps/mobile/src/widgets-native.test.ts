@@ -1434,6 +1434,7 @@ it.each([
 ] as const)(
   'confirms an omitted Group held only by a cold native %s part (%s), retaining it until the answer',
   async (part, outcome) => {
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
     const server = fakeSplitbook(),
       environment = 'confirm-cold-' + part,
       accountId = server.world.people.alex.id,
@@ -1449,6 +1450,13 @@ it.each([
     try {
       const first = phone.open();
       await first.signIn('alex');
+      if (part === 'Finish later') {
+        await first.openGroup(groupId);
+        await first.openExpense(groupId);
+        await first.updateExpenseDraft({ description: 'Unfinished groceries', amount: '123' });
+        await first.closeExpense(true);
+        await first.back();
+      }
       first.dispose();
       await phone.stores.savedQueries.clear();
       const saved: WidgetCopy = {
@@ -1498,6 +1506,10 @@ it.each([
           server.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`),
         ).toHaveLength(2);
       }
+      if (part === 'Finish later')
+        await vi.waitFor(async () =>
+          expect((await store.read()).copy?.finishLater).toEqual(saved.finishLater),
+        );
       expect((await store.read()).copy?.lostGroupIds).not.toContain(groupId);
     } finally {
       groupHold?.release();

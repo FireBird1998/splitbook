@@ -3066,48 +3066,67 @@ it('confirms a list omission as archived and preserves the Group widget’s veri
   );
 });
 
-it('keeps the saved Group and Person lines when a partial list is confirmed by a successful live Group read', async () => {
-  vi.spyOn(Date, 'now').mockReturnValue(verified);
-  const f = fixture(),
-    c = f.make();
-  f.groupBalances(paymentBalances);
-  await c.signIn('alex');
-  await c.openGroup(groupId);
-  await vi.waitFor(() => expect(f.record().copy?.groups?.[groupId]).toBeDefined());
-  const before = structuredClone(f.record().copy!);
-  await c.back();
-  f.listGroups([]);
-  const start = f.requests.length;
-  await c.refresh('pull');
-  await vi.waitFor(() =>
-    expect(f.record().copy?.savedGroups?.rows.some((g) => g.id === groupId)).toBe(true),
-  );
-  expect(f.record().copy?.groups).toEqual(before.groups);
-  expect(f.record().copy?.groupPeople).toEqual(before.groupPeople);
-  expect(f.record().copy?.tags).toEqual(before.tags);
-  expect(overview(f).payments).toHaveLength(1);
-  expect(
-    overviewWidget(
-      f.record().copy,
-      { kind: 'balances', widgetId: 7 },
-      { width: 360, height: 464 },
-      f.record().session,
-      verified,
-    ).groups.some((g) => g.id === groupId),
-  ).toBe(true);
-  expect(widgetPeople(f.record().copy, alex.id).some((p) => p.id === sam.id)).toBe(true);
-  expect(
-    quickWidget(
-      f.record().copy,
-      { kind: 'quick', widgetId: 8, accountId: alex.id, groupId },
-      { width: 360, height: 224 },
-      f.record().session,
-    ).state,
-  ).toBe('normal');
-  expect(f.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`)).toHaveLength(
-    1,
-  );
-});
+it.each(['success', '500'] as const)(
+  'keeps saved lines and a real Finish later prompt after a partial list with %s confirmation',
+  async (outcome) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+    const f = fixture([], true),
+      c = f.make();
+    f.groupBalances(paymentBalances);
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await c.openExpense(groupId);
+    await c.updateExpenseDraft({ description: 'Unfinished groceries', amount: '123', tagId });
+    await c.closeExpense(true);
+    await vi.waitFor(() => expect(f.record().copy?.finishLater?.groupId).toBe(groupId));
+    const before = structuredClone(f.record().copy!);
+    await c.back();
+    f.listGroups([]);
+    if (outcome === '500')
+      f.backend.reply(
+        'GET',
+        `/api/groups/${groupId}`,
+        () => Response.json({ error: 'Failed' }, { status: 500 }),
+        { once: true },
+      );
+    const start = f.backend.requests.length;
+    await c.refresh('pull');
+    await vi.waitFor(() =>
+      expect(overview(f).finishLater).toMatchObject({
+        groupName: 'Maple House',
+        target: { kind: 'expense', groupId },
+      }),
+    );
+    expect(f.record().copy?.finishLater).toEqual(before.finishLater);
+    expect(f.record().copy?.savedGroups?.rows.some((g) => g.id === groupId)).toBe(true);
+    expect(f.record().copy?.groups).toEqual(before.groups);
+    expect(f.record().copy?.groupPeople).toEqual(before.groupPeople);
+    expect(f.record().copy?.tags).toEqual(before.tags);
+    expect(overview(f).payments).toHaveLength(1);
+    expect(
+      overviewWidget(
+        f.record().copy,
+        { kind: 'balances', widgetId: 7 },
+        { width: 360, height: 464 },
+        f.record().session,
+        verified,
+      ).groups.some((g) => g.id === groupId),
+    ).toBe(true);
+    expect(widgetPeople(f.record().copy, alex.id).some((p) => p.id === sam.id)).toBe(true);
+    expect(
+      quickWidget(
+        f.record().copy,
+        { kind: 'quick', widgetId: 8, accountId: alex.id, groupId },
+        { width: 360, height: 224 },
+        f.record().session,
+      ).state,
+    ).toBe('normal');
+    expect(
+      f.backend.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`),
+    ).toHaveLength(1);
+  },
+);
 
 it.each(['offline', '500', 'timeout', '401'] as const)(
   'keeps omitted widget parts after a %s confirmation and tries once on the next trusted list',
@@ -3277,4 +3296,28 @@ it('ignores an old native restore arriving after account invalidation, before th
   await Promise.all([restoring, changed]);
   await vi.waitFor(() => expect(f.record().copy?.accountId).toBe(sam.id));
   expect(f.record().copy?.groups?.[groupId]).toBeUndefined();
+});
+
+it('does not confirm a listed Group when its delayed first native restore completes during the list check', async () => {
+  const f = fixture(),
+    c = f.make();
+  f.groupBalances(paymentBalances);
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.record().copy?.groups?.[groupId]).toBeDefined());
+  c.dispose();
+  const held = f.blockRead(),
+    restarted = f.make(),
+    start = f.requests.length;
+  const restoring = restarted.restore();
+  await held.arrived;
+  await vi.waitFor(() =>
+    expect(f.requests.slice(start).some((r) => r.path === '/api/groups')).toBe(true),
+  );
+  held.release();
+  await restoring;
+  expect(f.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`)).toHaveLength(
+    0,
+  );
+  expect(f.record().copy?.groups?.[groupId]).toBeDefined();
 });

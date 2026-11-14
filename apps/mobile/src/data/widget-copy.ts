@@ -1,7 +1,8 @@
 import { Superseded } from './transport';
 import { widgetGroupsToConfirm } from '@splitbook/shared/widget-membership';
 import { parseGroupListResponse, type GroupReadTag } from '@splitbook/shared/group-read';
-import { expenseDraftChanged, parseExpenseContext } from './expense-draft';
+import { expenseDraftChanged, parseExpenseContext, parseStoredExpenseDraft } from './expense-draft';
+import type { AccountGroupRecordStore } from './account-record-storage';
 import { cachedRead } from './offline-cache';
 import { parseGroup, parseGroups } from './dto';
 import { widgetMonthCopy } from './widget-month-copy';
@@ -45,6 +46,7 @@ export function createWidgetCopy(
   trusted: (path: string, verifiedAt: number) => boolean = () => true,
   monthRead: (id: string) => { month: string; read: Envelope } | null = () => null,
   recentRead: (id: string) => WidgetRecentPart | null = () => null,
+  drafts?: Pick<AccountGroupRecordStore, 'load'>,
 ) {
   const queue = createSavedCopyQueue();
   let signature = '';
@@ -460,6 +462,31 @@ export function createWidgetCopy(
         if (copy.finishLater && copy.lostGroupIds?.includes(copy.finishLater.groupId))
           delete copy.finishLater;
         const old = await held.writeSavedCopy(async () => (await native.readCopy?.()) ?? written);
+        const unfinished = old?.finishLater;
+        if (
+          !copy.finishLater &&
+          unfinished &&
+          drafts &&
+          process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' &&
+          !snapshot.groups.data.some((group) => group.id === unfinished.groupId) &&
+          !copy.lostGroupIds?.includes(unfinished.groupId) &&
+          !archived.has(unfinished.groupId) &&
+          !copy.groups?.[unfinished.groupId]?.archived
+        ) {
+          try {
+            const record = await held.writeSavedCopy(() =>
+              drafts.load(held.accountId, unfinished.groupId),
+            );
+            const { draft, attempt, mutation } = parseStoredExpenseDraft(
+              record,
+              held.accountId,
+              unfinished.groupId,
+            );
+            if (!draft.original && !attempt && !mutation) copy.finishLater = unfinished;
+          } catch {
+            // An unreadable kept record supplies no Finish later prompt.
+          }
+        }
         const discard: WidgetCopyDiscard = {
           groups: Object.entries(old?.groups ?? {})
             .filter(([id, part]) => !trustedGroup(id, part))
@@ -517,7 +544,13 @@ export function createWidgetCopy(
       return copy?.accountId === held.accountId
         ? [
             ...new Set([...before, ...pendingNativeGroups, ...widgetGroupsToConfirm(copy, listed)]),
-          ].filter((id) => !lost.has(id) && !archived.has(id) && peopleRefusedAt[id] === undefined)
+          ].filter(
+            (id) =>
+              !listed.has(id) &&
+              !lost.has(id) &&
+              !archived.has(id) &&
+              peopleRefusedAt[id] === undefined,
+          )
         : [];
     },
     confirmedGroup(id: string) {
