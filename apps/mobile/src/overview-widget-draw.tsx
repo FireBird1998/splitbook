@@ -513,10 +513,48 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
     balance,
     payments,
     groups,
+    'payment-counts': (
+      <FlexWidget style={{ width: 'match_parent' }}>
+        {paymentHeader}
+        <FlexWidget
+          style={{
+            width: 'match_parent',
+            paddingVertical: 4,
+            backgroundColor: color(t.surfaceMuted),
+            borderRadius: 14,
+          }}
+        >
+          {view.paymentCounts.map((row, i) => (
+            <FlexWidget key={i} style={{ width: 'match_parent', height: row.rowHeight }}>
+              {row.dividerHeight ? (
+                <FlexWidget
+                  style={{
+                    width: 'match_parent',
+                    height: row.dividerHeight,
+                    backgroundColor: color(t.border),
+                  }}
+                />
+              ) : null}
+              <FlexWidget
+                clickAction="OPEN_URI"
+                clickActionData={link(view.paymentMoreTarget)}
+                style={{
+                  width: 'match_parent',
+                  height: row.contentHeight,
+                  paddingHorizontal: 12,
+                  justifyContent: 'center',
+                }}
+              >
+                {lines(row.lines, t.textSecondary, f.body)}
+              </FlexWidget>
+            </FlexWidget>
+          ))}
+        </FlexWidget>
+      </FlexWidget>
+    ),
     'payments-message': (
       <FlexWidget style={{ width: 'match_parent' }}>
         {paymentHeader}
-        {lines(l.paymentCountsLines, t.textSecondary, f.body)}
         {lines(l.paymentMessageLines, t.textSecondary, f.small)}
       </FlexWidget>
     ),

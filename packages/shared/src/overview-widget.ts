@@ -341,7 +341,13 @@ export function overviewWidget(
       const paymentMessage =
         normal && tall && !suggested.length && !hasReadGroup ? 'Open the Group to update' : null;
       const paymentMessageLines = paymentMessage ? text.words(paymentMessage, 11) : [];
-      const paymentCountsLines = hiddenPayments.flatMap((label) => text.words(label, 12));
+      const paymentCountsLines = hiddenPayments.map((label) => text.words(label, 12, width - 24));
+      const paymentCountHeight = Math.max(
+        36 * scale * text.factor,
+        ...paymentCountsLines.map(
+          (lines) => lines.length * text.line(12) + 8 + Math.ceil(ratio) / ratio,
+        ),
+      );
       const groupDetails = optional && !level;
       const groupHeaderHeight = groupDetails ? text.line(10) + 4 : 0;
       const compactGroups = size.width / Math.max(1, scale) < 240;
@@ -432,16 +438,24 @@ export function overviewWidget(
               },
             ]
           : []),
-        ...(normal && tall && (paymentCountsLines.length || paymentMessage)
+        ...(normal && tall && paymentCountsLines.length
+          ? [
+              {
+                id: 'payment-counts',
+                rows: paymentCountsLines.length,
+                rowHeight: paymentCountHeight,
+                headingHeight: paymentHeaderHeight,
+                inset: 8,
+                grow: true,
+              },
+            ]
+          : []),
+        ...(normal && tall && paymentMessage
           ? [
               {
                 id: 'payments-message',
                 rows: 1,
-                rowHeight:
-                  paymentHeaderHeight +
-                  (paymentCountsLines.length
-                    ? paymentCountsLines.length * text.line(12)
-                    : paymentMessageLines.length * text.line(11)),
+                rowHeight: paymentHeaderHeight + paymentMessageLines.length * text.line(11),
               },
             ]
           : []),
@@ -620,6 +634,15 @@ export function overviewWidget(
     dividerHeight: i ? Math.ceil(ratio) / ratio : 0,
     contentHeight: paymentSection!.rowHeight - (i ? Math.ceil(ratio) / ratio : 0),
   }));
+  const countSection = layout.sections.find((s) => s.id === 'payment-counts');
+  const paymentCounts = layout.paymentCountsLines
+    .slice(0, countSection?.rows ?? 0)
+    .map((lines, i) => ({
+      lines,
+      rowHeight: countSection!.rowHeight,
+      dividerHeight: i ? Math.ceil(ratio) / ratio : 0,
+      contentHeight: countSection!.rowHeight - (i ? Math.ceil(ratio) / ratio : 0),
+    }));
   const groupSection = layout.sections.find((s) => s.id === 'groups');
   const visibleGroups = groupRows.slice(0, groupSection?.rows ?? 0).map((group, i) => ({
     id: group.id,
@@ -705,6 +728,7 @@ export function overviewWidget(
     action: footerVisible ? action : null,
     actionTarget,
     payments: visiblePayments,
+    paymentCounts,
     groups: visibleGroups,
     groupMore,
     groupCount,

@@ -464,3 +464,30 @@ it.each([360, 720])(
     }
   },
 );
+
+it.each([344, 464])(
+  'draws hidden payment counts as measured rows inside a growing panel at %s dp',
+  (height) => {
+    vi.stubGlobal('__DEV__', false);
+    const v = overviewWidget(
+      withPayments,
+      { kind: 'balances', widgetId: 7, hideAmounts: true },
+      { width: 360, height },
+      auth,
+      now,
+    );
+    const tree = buildWidgetTree(drawOverview(v, lightTokens));
+    const i = v.layout.sections.findIndex((s) => s.id === 'payment-counts');
+    expect(i).toBeGreaterThanOrEqual(0);
+    const panel = nodes(tree.children![i]).find(
+      (n) =>
+        (n.props as { backgroundColor?: string }).backgroundColor === lightTokens.surfaceMuted &&
+        labels(n).includes('You pay 1 person'),
+    );
+    expect(panel).toBeDefined();
+    expect(labels(panel!)).toContain('1 person pays you');
+    expect(minimumHeight(tree.children![i])).toBeLessThanOrEqual(v.layout.sections[i].height);
+    // Whole-pixel row rounding may leave less than one row's pixel per count.
+    expect(v.layout.sections.find((s) => s.id === 'space')!.height).toBeLessThanOrEqual(1);
+  },
+);
