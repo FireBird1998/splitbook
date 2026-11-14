@@ -1,6 +1,6 @@
 import { overviewWidget } from '@splitbook/shared/overview-widget';
 import { widgetDimensions } from '../test-utils/widget-size';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MobileController } from './mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
@@ -224,6 +224,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     group,
     addGroup: (value: ReturnType<typeof group>) => additionalGroups.push(value),
     drafts: native.stores.expenseDrafts,
+    phone: native,
     archive: () => {
       archived = true;
     },
@@ -257,6 +258,9 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     sessionCopies,
     offline: () => {
       backend.online = false;
+    },
+    online: () => {
+      backend.online = true;
     },
     expire: () => {
       expired = true;
@@ -636,12 +640,21 @@ it.each(
       'Leave Group',
     ] as const
   ).flatMap((task) =>
-    (['home', 'review', 'choose-group', 'record-payment', 'settle', 'expense-tag'] as const).map(
-      (destination) => ({
-        task,
-        destination,
-      }),
-    ),
+    (
+      [
+        'home',
+        'review',
+        'choose-group',
+        'record-payment',
+        'settle',
+        'expense',
+        'expense-tag',
+        'group',
+      ] as const
+    ).map((destination) => ({
+      task,
+      destination,
+    })),
   ),
 )(
   'holds $destination with the entire protected $task task unchanged',
@@ -701,11 +714,15 @@ it.each(
     await c.openWidget(
       destination === 'expense-tag'
         ? { kind: 'expense-tag', groupId, tagId }
-        : destination === 'settle'
-          ? { kind: 'settle', groupId, payment: { from: alex.id, to: sam.id, currency: 'INR' } }
-          : destination === 'record-payment'
-            ? { kind: 'record-payment', groupId }
-            : destination,
+        : destination === 'expense'
+          ? { kind: 'expense', groupId }
+          : destination === 'settle'
+            ? { kind: 'settle', groupId, payment: { from: alex.id, to: sam.id, currency: 'INR' } }
+            : destination === 'record-payment'
+              ? { kind: 'record-payment', groupId }
+              : destination === 'group'
+                ? { kind: 'group', groupId }
+                : destination,
     );
     const after = c.getSnapshot();
     expect(after.screen).toBe(before.screen);
@@ -1009,15 +1026,24 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
 );
 
 it.each(['sign out', 'account change', '403', '404', '401'] as const)(
-  'keeps Tags, Trip dates and Month parts under the same purge rule on %s',
+  'keeps Tags, Trip dates, Months, payments and Finish later under the same purge rule on %s',
   async (action) => {
     vi.spyOn(Date, 'now').mockReturnValue(verified);
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
     const f = fixture();
     f.trip();
     f.month();
+    f.groupBalances(paymentBalances);
     const c = f.make();
     await c.signIn('alex');
     await c.openGroup(groupId);
+    await c.openExpense(groupId);
+    await c.updateExpenseDraft({
+      description: 'Private unfinished groceries',
+      amount: '123',
+      tagId,
+    });
+    await c.closeExpense(true);
     await vi.waitFor(() => {
       expect(f.storedCopy()?.tags?.[groupId]?.rows).toEqual([{ id: tagId, name: 'Groceries' }]);
       expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toEqual({
@@ -1025,6 +1051,12 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
         end: '2026-11-10',
       });
       expect(f.storedCopy()?.months?.[groupId]?.shareMinor).toBe(785000);
+      expect(f.storedCopy()?.groups?.[groupId]?.currencies[0]?.payments).toEqual([
+        expect.objectContaining({ from: alex.id, to: sam.id, amountMinor: 10000 }),
+      ]);
+      expect(f.storedCopy()?.finishLater).toEqual({ groupId, groupName: 'Maple House' });
+      expect(overview(f).payments).toHaveLength(1);
+      expect(overview(f).finishLater?.groupName).toBe('Maple House');
     });
     const saved = structuredClone(f.storedCopy());
     f.events.length = 0;
@@ -1040,6 +1072,8 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
         await vi.waitFor(() => expect(f.storedCopy()?.accountId).toBe(sam.id));
         expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toBeUndefined();
         expect(f.storedCopy()?.months?.[groupId]).toBeUndefined();
+        expect(f.storedCopy()?.groups?.[groupId]).toBeUndefined();
+        expect(f.storedCopy()?.finishLater).toBeUndefined();
       }
     } else if (action === '401') {
       f.expire();
@@ -1056,8 +1090,14 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
         expect(f.storedCopy()?.tags?.[groupId]).toBeUndefined();
         expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toBeUndefined();
         expect(f.storedCopy()?.months?.[groupId]).toBeUndefined();
+        expect(f.storedCopy()?.groups?.[groupId]).toBeUndefined();
+        expect(f.storedCopy()?.finishLater).toBeUndefined();
       });
     }
+    await vi.waitFor(() => {
+      expect(overview(f).payments).toEqual([]);
+      expect(overview(f).finishLater).toBeNull();
+    });
   },
 );
 
@@ -1682,3 +1722,157 @@ it.each(['Overview', 'Group'] as const)(
     expect(f.requests.slice(before).filter((r) => r.path.includes('/settlements'))).toEqual([]);
   },
 );
+
+describe('Overview Finish later copy', () => {
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+  });
+  it.each([
+    { description: '', amount: '' },
+    { description: 'Private offline entry', amount: '123' },
+  ])(
+    'copies an explicit offline Finish later choice without its typed facts ($description)',
+    async (entries) => {
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+      const f = fixture(),
+        c = f.make();
+      await c.signIn('alex');
+      await c.openExpense(groupId);
+      await c.updateExpenseDraft(entries);
+      f.offline();
+      await c.refresh();
+      expect(c.getSnapshot().offline.active).toBe(true);
+      await c.keepExpenseAsSharedDraft();
+      expect(c.getSnapshot().screen).toBe('group');
+      await vi.waitFor(() =>
+        expect(f.record().copy?.finishLater).toEqual({ groupId, groupName: 'Maple House' }),
+      );
+      expect(await f.phone.stores.expenseDrafts.load(alex.id, groupId)).toMatchObject({
+        version: 1,
+        blank: null,
+        draft: entries,
+      });
+      expect(
+        f.requests.filter(
+          (r) =>
+            r.method === 'POST' && (r.path.endsWith('/expenses') || r.path.includes('/drafts')),
+        ),
+      ).toEqual([]);
+      f.online();
+      await c.back();
+      await c.refreshHome();
+      await vi.waitFor(() => expect(overview(f).finishLater?.groupName).toBe('Maple House'));
+    },
+  );
+  it('writes only the Group of a Finish later draft, and the Overview tap resumes its device entries', async () => {
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await c.openExpense(groupId);
+    await c.updateExpenseDraft({
+      description: 'Private unfinished groceries',
+      amount: '123',
+      tagId,
+    });
+    await c.closeExpense(true);
+    await vi.waitFor(() =>
+      expect(f.copies.at(-1)).toHaveProperty('finishLater', { groupId, groupName: 'Maple House' }),
+    );
+    const copy = f.copies.at(-1)!;
+    expect(JSON.stringify(copy)).not.toContain('Private unfinished groceries');
+    expect(JSON.stringify(copy)).not.toContain('"amount":"123"');
+    const view = overviewWidget(
+      copy,
+      { kind: 'balances', widgetId: 7 },
+      { width: 360, height: 464 },
+      f.record().session,
+      Date.now(),
+    );
+    expect(view.finishLater?.groupName).toBe('Maple House');
+    await c.openWidget(view.finishLater!.target);
+    expect(c.getSnapshot().expense.draft).toMatchObject({
+      description: 'Private unfinished groceries',
+      amount: '123',
+    });
+    expect(f.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/expenses'))).toEqual(
+      [],
+    );
+  });
+
+  it.each(['save', 'discard'] as const)(
+    'redraws without the device draft after %s, including an earlier Home summary',
+    async (action) => {
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+      const f = fixture(),
+        c = f.make();
+      await c.signIn('alex');
+      await c.openExpense(groupId);
+      await c.updateExpenseDraft({ description: 'Unfinished', amount: '100', tagId });
+      await c.closeExpense(true);
+      await c.back();
+      await vi.waitFor(() => expect(f.record().copy?.finishLater?.groupId).toBe(groupId));
+      await c.openWidget({ kind: 'expense', groupId });
+      if (c.getSnapshot().expense.status === 'resume') c.resumeExpenseDraft();
+      const n = f.events.length;
+      if (action === 'save') await c.saveExpense();
+      else await c.discardExpenseDraft();
+      await vi.waitFor(() => expect(f.record().copy?.finishLater).toBeUndefined());
+      expect(f.events.slice(n)).toContain('redraw');
+      expect(await f.phone.stores.expenseDrafts.load(alex.id, groupId)).toBeNull();
+    },
+  );
+  it.each(['sign-out', 'account-change', 'denied', '401'] as const)(
+    'guards the Finish later Group after %s',
+    async (reason) => {
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+      const f = fixture(),
+        c = f.make();
+      await c.signIn('alex');
+      await c.openExpense(groupId);
+      await c.updateExpenseDraft({ description: 'Private entry', amount: '100', tagId });
+      await c.closeExpense(true);
+      await c.back();
+      await vi.waitFor(() => expect(f.record().copy?.finishLater?.groupId).toBe(groupId));
+      const before = f.record().copy;
+      f.events.length = 0;
+      if (reason === 'sign-out') await c.signOut();
+      if (reason === 'account-change') await c.signIn('sam');
+      if (reason === 'denied') {
+        f.refuse(403);
+        await c.openGroup(groupId, false);
+      }
+      if (reason === '401') {
+        f.expire();
+        await c.refreshHome();
+      }
+      await vi.waitFor(() => expect(overview(f).finishLater).toBeNull());
+      if (reason === '401') {
+        expect(f.record().copy).toEqual(before);
+        expect(f.record().session.status).toBe('expired');
+        expect(f.events).not.toContain('clear');
+      } else if (reason === 'denied') expect(f.record().copy?.finishLater).toBeUndefined();
+      else {
+        expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+        expect(f.record().copy?.finishLater).toBeUndefined();
+      }
+    },
+  );
+  it('restores the same account’s device draft offline without exposing another account’s entry', async () => {
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await c.openExpense(groupId);
+    await c.updateExpenseDraft({ description: 'Kept on this phone', amount: '100', tagId });
+    await c.closeExpense(true);
+    await c.back();
+    await vi.waitFor(() => expect(f.record().copy?.finishLater?.groupId).toBe(groupId));
+    f.offline();
+    const restarted = f.make();
+    await restarted.restore();
+    await vi.waitFor(() => expect(f.record().copy?.finishLater?.groupId).toBe(groupId));
+    expect(f.record().copy?.accountId).toBe(alex.id);
+  });
+});
