@@ -1,4 +1,5 @@
 import { widgetSetupGroups } from '@splitbook/shared/widget-membership';
+import { StatusBar } from 'expo-status-bar';
 import { PersonWidgetSetupScreen } from './person-widget-setup';
 import { mobileBuildSettings, widgetKey } from './config';
 import { useEffect, useState } from 'react';
@@ -194,6 +195,7 @@ function ExistingWidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScree
   };
   return (
     <SafeAreaProvider>
+      <StatusBar style={t.mode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, gap: 20 }}>
           <Pressable
