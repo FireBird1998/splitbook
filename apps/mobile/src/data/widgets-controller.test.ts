@@ -649,6 +649,7 @@ it.each(
         'settle',
         'expense',
         'expense-tag',
+        'group',
       ] as const
     ).map((destination) => ({
       task,
@@ -719,7 +720,9 @@ it.each(
             ? { kind: 'settle', groupId, payment: { from: alex.id, to: sam.id, currency: 'INR' } }
             : destination === 'record-payment'
               ? { kind: 'record-payment', groupId }
-              : destination,
+              : destination === 'group'
+                ? { kind: 'group', groupId }
+                : destination,
     );
     const after = c.getSnapshot();
     expect(after.screen).toBe(before.screen);
@@ -1023,15 +1026,24 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
 );
 
 it.each(['sign out', 'account change', '403', '404', '401'] as const)(
-  'keeps Tags, Trip dates and Month parts under the same purge rule on %s',
+  'keeps Tags, Trip dates, Months, payments and Finish later under the same purge rule on %s',
   async (action) => {
     vi.spyOn(Date, 'now').mockReturnValue(verified);
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
     const f = fixture();
     f.trip();
     f.month();
+    f.groupBalances(paymentBalances);
     const c = f.make();
     await c.signIn('alex');
     await c.openGroup(groupId);
+    await c.openExpense(groupId);
+    await c.updateExpenseDraft({
+      description: 'Private unfinished groceries',
+      amount: '123',
+      tagId,
+    });
+    await c.closeExpense(true);
     await vi.waitFor(() => {
       expect(f.storedCopy()?.tags?.[groupId]?.rows).toEqual([{ id: tagId, name: 'Groceries' }]);
       expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toEqual({
@@ -1039,6 +1051,12 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
         end: '2026-11-10',
       });
       expect(f.storedCopy()?.months?.[groupId]?.shareMinor).toBe(785000);
+      expect(f.storedCopy()?.groups?.[groupId]?.currencies[0]?.payments).toEqual([
+        expect.objectContaining({ from: alex.id, to: sam.id, amountMinor: 10000 }),
+      ]);
+      expect(f.storedCopy()?.finishLater).toEqual({ groupId, groupName: 'Maple House' });
+      expect(overview(f).payments).toHaveLength(1);
+      expect(overview(f).finishLater?.groupName).toBe('Maple House');
     });
     const saved = structuredClone(f.storedCopy());
     f.events.length = 0;
@@ -1054,6 +1072,8 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
         await vi.waitFor(() => expect(f.storedCopy()?.accountId).toBe(sam.id));
         expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toBeUndefined();
         expect(f.storedCopy()?.months?.[groupId]).toBeUndefined();
+        expect(f.storedCopy()?.groups?.[groupId]).toBeUndefined();
+        expect(f.storedCopy()?.finishLater).toBeUndefined();
       }
     } else if (action === '401') {
       f.expire();
@@ -1070,8 +1090,14 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
         expect(f.storedCopy()?.tags?.[groupId]).toBeUndefined();
         expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toBeUndefined();
         expect(f.storedCopy()?.months?.[groupId]).toBeUndefined();
+        expect(f.storedCopy()?.groups?.[groupId]).toBeUndefined();
+        expect(f.storedCopy()?.finishLater).toBeUndefined();
       });
     }
+    await vi.waitFor(() => {
+      expect(overview(f).payments).toEqual([]);
+      expect(overview(f).finishLater).toBeNull();
+    });
   },
 );
 
