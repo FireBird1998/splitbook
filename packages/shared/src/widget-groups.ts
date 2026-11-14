@@ -17,7 +17,7 @@ export function widgetGroups(copy: WidgetCopy | null, accountId: string) {
         !copy.groups?.[group.id]?.archived &&
         !copy.lostGroupIds?.includes(group.id),
     )
-    .map((group, recent) => {
+    .map((group, position) => {
       const balances = copy.home?.byGroup?.[group.id];
       const owing = balances
         ?.filter((row) => row.balanceMinor !== 0)
@@ -29,7 +29,7 @@ export function widgetGroups(copy: WidgetCopy | null, accountId: string) {
         // Empty means verified square; missing means Home has not answered for this Group.
         balances: balances === undefined ? null : owing!,
         verifiedAt: balances === undefined ? null : copy.home!.verifiedAt,
-        recent,
+        position,
         target: { kind: 'group', groupId: group.id } satisfies WidgetTarget,
       };
     })
@@ -42,8 +42,8 @@ export function widgetGroups(copy: WidgetCopy | null, accountId: string) {
           ? rank(first.currency) - rank(second.currency) ||
             Math.abs(second.balanceMinor) - Math.abs(first.balanceMinor)
           : 0) ||
-        // The saved Home list is already in most-recent order; do not invent another clock.
-        a.recent - b.recent
+        // Preserve the Groups list order when no balance distinguishes the rows.
+        a.position - b.position
       );
     });
 }

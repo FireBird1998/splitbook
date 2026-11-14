@@ -866,7 +866,7 @@ it.each(sizes.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scale }))
     for (const row of v.payments) expect(row.textHeight).toBeLessThanOrEqual(row.contentHeight);
   },
 );
-it('orders Groups by the first nonzero Home currency, compares only that currency, then preserves recent Home order', () => {
+it('orders Groups by the first nonzero Home currency, compares only that currency, then preserves the Home list order', () => {
   const c = clone(groupsCopy);
   c.home!.byGroup = {
     maple: [{ currency: 'INR', balanceMinor: -100 }],
