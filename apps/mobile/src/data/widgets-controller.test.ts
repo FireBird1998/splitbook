@@ -28,6 +28,7 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
     owed = 2400;
   const extraGroups: ReturnType<typeof group>[] = [];
   let homeOverride: { buckets: unknown[]; groups?: unknown[] } | null = null;
+  let listedGroupIds: string[] | null = null;
   let groupBalances: unknown = { byCurrency: [] };
   let refused = 0;
   let offlineAfterSave = false;
@@ -83,7 +84,10 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
   });
   for (const id of [alex.id, sam.id])
     Object.defineProperty(backend.world.groupsByAccount, id, {
-      get: () => (noGroups || archived ? [] : [group(), ...additionalGroups, ...extraGroups]),
+      get: () =>
+        (noGroups || archived ? [] : [group(), ...additionalGroups, ...extraGroups]).filter(
+          (row) => !listedGroupIds || listedGroupIds.includes(row._id),
+        ),
     });
   Object.defineProperty(backend.world.balances, groupId, { get: () => groupBalances });
   Object.defineProperty(backend.world, 'home', {
@@ -337,6 +341,9 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
     addGroup: (value: ReturnType<typeof group>) => additionalGroups.push(value),
     drafts: native.stores.expenseDrafts,
     phone: native,
+    listGroups: (ids: string[]) => {
+      listedGroupIds = ids;
+    },
     addOverviewGroup: (id: string, name: string) => {
       extraGroups.push({ ...group(), _id: id, name });
     },
@@ -2461,12 +2468,29 @@ describe('Overview Group balance lifetime', () => {
     async (reason) => {
       const f = fixture(),
         c = f.make();
+      const second = 'b00000000000000000000002';
+      if (reason === 'denied') {
+        f.addOverviewGroup(second, 'Cedar House');
+        f.home({
+          buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 990 }],
+          groups: [
+            { groupId, balances: [{ currency: 'INR', balance: 920 }] },
+            { groupId: second, balances: [{ currency: 'INR', balance: 70 }] },
+          ],
+        });
+      }
       await c.signIn('alex');
       await vi.waitFor(() =>
         expect(f.record().copy?.home?.byGroup?.[groupId]).toEqual([
           { currency: 'INR', balanceMinor: 92000 },
         ]),
       );
+      if (reason === 'denied')
+        await vi.waitFor(() =>
+          expect(f.record().copy?.home?.byGroup?.[second]).toEqual([
+            { currency: 'INR', balanceMinor: 7000 },
+          ]),
+        );
       const before = f.record().copy;
       f.events.length = 0;
       if (reason === 'sign-out') await c.signOut();
@@ -2479,7 +2503,14 @@ describe('Overview Group balance lifetime', () => {
       }
       if (reason === 'denied') {
         f.refuse(403);
+        f.listGroups([second]);
+        f.home({
+          buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 70 }],
+          groups: [{ groupId: second, balances: [{ currency: 'INR', balance: 70 }] }],
+        });
         await c.openGroup(groupId, false);
+        await c.back();
+        await c.refreshHome();
       }
       if (reason === '401') {
         f.expire();
@@ -2492,7 +2523,13 @@ describe('Overview Group balance lifetime', () => {
         expect(f.events).not.toContain('clear');
       } else if (reason === 'denied') {
         await vi.waitFor(() => expect(f.record().copy?.home?.byGroup?.[groupId]).toBeUndefined());
-        expect(overview(f).groups).toEqual([]);
+        await vi.waitFor(() =>
+          expect(f.record().copy?.savedGroups?.rows.map((g) => g.id)).toEqual([second]),
+        );
+        expect(f.record().copy?.home?.byGroup).toEqual({
+          [second]: [{ currency: 'INR', balanceMinor: 7000 }],
+        });
+        expect(overview(f).groups.map((g) => g.name)).toEqual(['Cedar House']);
       } else {
         expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
         if (reason === 'sign-out') expect(f.record().copy).toBeNull();
