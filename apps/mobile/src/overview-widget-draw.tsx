@@ -1,3 +1,4 @@
+import { widgetThemeIcon } from './widget-theme-icon';
 import { FlexWidget } from 'react-native-android-widget/src/widgets/FlexWidget';
 import { TextWidget } from 'react-native-android-widget/src/widgets/TextWidget';
 import { SvgWidget } from 'react-native-android-widget/src/widgets/SvgWidget';
@@ -100,7 +101,26 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       {column('You owe', view.owe, view.oweOverflow, t.status.negative)}
     </FlexWidget>
   );
-  const message = (
+  const message = l.quietBalance ? (
+    <FlexWidget
+      style={{
+        width: 'match_parent',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        flexGap: 8,
+        backgroundColor: color(t.surfaceMuted),
+        borderRadius: 14,
+      }}
+    >
+      <FlexWidget style={{ flexDirection: 'row', alignItems: 'center', flexGap: 8, flex: 1 }}>
+        {text('✓', t.status.positive, f.title, true)}
+        <FlexWidget style={{ flex: 1 }}>{lines(l.titleLines, t.text, f.title, true)}</FlexWidget>
+      </FlexWidget>
+      {l.quietNote ? text(l.quietNote, t.textSecondary, l.quietNoteFont) : null}
+    </FlexWidget>
+  ) : (
     <FlexWidget style={{ width: 'match_parent', flexGap: 8 }}>
       <FlexWidget
         style={{
@@ -149,17 +169,27 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       ) : null}
     </FlexWidget>
   );
+  const chipIcon = (path: string, ink: string) => (
+    <SvgWidget
+      svg={`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path d="${path}" fill="none" stroke="${ink}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
+      style={{ width: 14, height: 14 }}
+    />
+  );
   const reviewChip = view.review ? (
     <FlexWidget
       clickAction="OPEN_URI"
       clickActionData={link(view.reviewTarget)}
       style={{
-        paddingHorizontal: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexGap: 4,
+        paddingHorizontal: l.chipPaddingHorizontal,
         paddingVertical: 5,
         backgroundColor: color(t.brand.bg),
         borderRadius: 16,
       }}
     >
+      {chipIcon('M4 13.5L6 5h12l2 8.5V19H4z M4 13.5h5l1 2h4l1-2h5', t.brand.main)}
       {text(view.review, t.brand.main, f.review, true)}
     </FlexWidget>
   ) : null;
@@ -167,14 +197,20 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
     <FlexWidget
       clickAction="OPEN_URI"
       clickActionData={link(view.finishLater.target)}
-      accessibilityLabel={`Finish later in ${view.finishLater.groupName}`}
+      accessibilityLabel={view.finishLater.accessibilityLabel}
       style={{
-        paddingHorizontal: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexGap: 4,
+        paddingHorizontal: l.chipPaddingHorizontal,
         paddingVertical: 5,
         backgroundColor: color(t.surfaceMuted),
         borderRadius: 16,
       }}
     >
+      {view.finishLater.icon
+        ? chipIcon('M4 20h4L19 9l-4-4L4 16z M13 7l4 4', t.textSecondary)
+        : null}
       {text(view.finishLater.label, t.textSecondary, f.review, true)}
     </FlexWidget>
   ) : null;
@@ -207,7 +243,10 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
     ) : null;
   const action = view.action ? (
     <FlexWidget
-      style={{ ...(l.footerAcross ? {} : { width: 'match_parent' }), alignItems: 'flex-end' }}
+      style={{
+        ...(l.footerAcross ? {} : { width: 'match_parent' }),
+        alignItems: l.footerActionAlign,
+      }}
     >
       <FlexWidget
         clickAction="OPEN_URI"
@@ -350,6 +389,139 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       </FlexWidget>
     </FlexWidget>
   );
+  const groups = (
+    <FlexWidget style={{ width: 'match_parent' }}>
+      {l.groupHeaderHeight ? (
+        <FlexWidget
+          style={{
+            width: 'match_parent',
+            height: l.groupHeaderHeight,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          {text('Groups', t.textSecondary, f.small, true)}
+          {view.groupMore ? (
+            <FlexWidget clickAction="OPEN_URI" clickActionData={link(view.groupMoreTarget)}>
+              {text(view.groupMore, t.brand.main, f.small)}
+            </FlexWidget>
+          ) : view.groupCount ? (
+            text(view.groupCount, t.textSecondary, f.small)
+          ) : null}
+        </FlexWidget>
+      ) : null}
+      <FlexWidget
+        style={{
+          width: 'match_parent',
+          ...(l.compactGroups || !view.groups.length
+            ? {}
+            : { backgroundColor: color(t.surfaceMuted), borderRadius: 14, paddingVertical: 4 }),
+        }}
+      >
+        {view.groups.map((row) => (
+          <FlexWidget key={row.id} style={{ width: 'match_parent', height: row.rowHeight }}>
+            {row.dividerHeight ? (
+              <FlexWidget
+                style={{
+                  width: 'match_parent',
+                  height: row.dividerHeight,
+                  backgroundColor: color(t.border),
+                }}
+              />
+            ) : null}
+            <FlexWidget
+              clickAction="OPEN_URI"
+              clickActionData={link(row.target)}
+              style={{
+                width: 'match_parent',
+                height: row.contentHeight,
+                justifyContent: 'center',
+                ...(l.compactGroups ? {} : { paddingHorizontal: 8 }),
+              }}
+            >
+              <FlexWidget
+                style={{
+                  width: 'match_parent',
+                  flexDirection: row.stack ? 'column' : 'row',
+                  alignItems: row.stack ? 'flex-start' : 'center',
+                  flexGap: row.stack ? 2 : 8,
+                }}
+              >
+                <FlexWidget
+                  style={{
+                    ...(row.stack ? { width: 'match_parent' } : { flex: 1 }),
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    flexGap: 8,
+                  }}
+                >
+                  {!l.compactGroups ? (
+                    <FlexWidget
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 8,
+                        backgroundColor: color(t.brand.bg),
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {widgetThemeIcon(row.theme, t.brand.main)}
+                    </FlexWidget>
+                  ) : null}
+                  <FlexWidget style={{ flex: 1 }}>
+                    {text(row.name, t.text, l.groupNameFont, true)}
+                  </FlexWidget>
+                </FlexWidget>
+                <FlexWidget
+                  style={{
+                    ...(row.stack ? { width: 'match_parent' } : { width: row.balanceWidth }),
+                  }}
+                >
+                  {row.labels.map((label, i) => (
+                    <FlexWidget
+                      key={i}
+                      style={{
+                        flexDirection: row.amountStack ? 'column' : 'row',
+                        alignItems: row.amountStack ? 'flex-start' : 'center',
+                        flexGap: row.amountStack ? 0 : 6,
+                      }}
+                    >
+                      {text(
+                        label,
+                        row.muted
+                          ? t.textMuted
+                          : row.positive[i] === undefined
+                            ? t.textSecondary
+                            : row.positive[i]
+                              ? t.status.positive
+                              : t.status.negative,
+                        l.groupLabelFont,
+                        true,
+                      )}
+                      {row.amounts[i]
+                        ? text(
+                            row.amounts[i],
+                            row.muted ? t.textMuted : t.text,
+                            l.groupAmountFont,
+                            true,
+                            true,
+                          )
+                        : null}
+                    </FlexWidget>
+                  ))}
+                  {row.moreCurrencies
+                    ? text(row.moreCurrencies, t.textSecondary, l.groupLabelFont)
+                    : null}
+                </FlexWidget>
+              </FlexWidget>
+            </FlexWidget>
+          </FlexWidget>
+        ))}
+      </FlexWidget>
+    </FlexWidget>
+  );
   const content: Record<string, React.ReactNode> = {
     header: (
       <FlexWidget
@@ -375,10 +547,49 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
     ),
     balance,
     payments,
+    groups,
+    'payment-counts': (
+      <FlexWidget style={{ width: 'match_parent' }}>
+        {paymentHeader}
+        <FlexWidget
+          style={{
+            width: 'match_parent',
+            paddingVertical: 4,
+            backgroundColor: color(t.surfaceMuted),
+            borderRadius: 14,
+          }}
+        >
+          {view.paymentCounts.map((row, i) => (
+            <FlexWidget key={i} style={{ width: 'match_parent', height: row.rowHeight }}>
+              {row.dividerHeight ? (
+                <FlexWidget
+                  style={{
+                    width: 'match_parent',
+                    height: row.dividerHeight,
+                    backgroundColor: color(t.border),
+                  }}
+                />
+              ) : null}
+              <FlexWidget
+                clickAction="OPEN_URI"
+                clickActionData={link(view.paymentMoreTarget)}
+                style={{
+                  width: 'match_parent',
+                  height: row.contentHeight,
+                  paddingHorizontal: 12,
+                  justifyContent: 'center',
+                }}
+              >
+                {lines(row.lines, t.textSecondary, f.body)}
+              </FlexWidget>
+            </FlexWidget>
+          ))}
+        </FlexWidget>
+      </FlexWidget>
+    ),
     'payments-message': (
       <FlexWidget style={{ width: 'match_parent' }}>
         {paymentHeader}
-        {lines(l.paymentCountsLines, t.textSecondary, f.body)}
         {lines(l.paymentMessageLines, t.textSecondary, f.small)}
       </FlexWidget>
     ),

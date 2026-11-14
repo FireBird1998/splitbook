@@ -1,3 +1,6 @@
+import { widgetGroups } from './widget-groups';
+import { formatCurrency } from './currency';
+import { toMajorAmount } from './exact-money';
 import { widgetPayments, spokenWidgetPayments } from './widget-payments';
 import {
   readWidgetBalances,
@@ -38,11 +41,18 @@ export function overviewWidget(
     'no-copy': 'Open Splitbook to load your balances, payments and Groups.',
     'no-groups': 'Share costs with a Group, and it shows here.',
   };
-  const description = otherAccount
-    ? 'This phone is signed in to another account.'
-    : tall
-      ? (tallDescriptions[state] ?? read.description)
-      : read.description;
+  const groupRows =
+    session.status === 'authenticated' && (state === 'normal' || state === 'all-square')
+      ? widgetGroups(copy, session.accountId)
+      : [];
+  const description =
+    state === 'all-square' && tall
+      ? 'in every currency'
+      : otherAccount
+        ? 'This phone is signed in to another account.'
+        : tall
+          ? (tallDescriptions[state] ?? read.description)
+          : read.description;
   const target: WidgetTarget = otherAccount
     ? { kind: 'setup', widgetId: setup.widgetId }
     : read.target;
@@ -59,9 +69,11 @@ export function overviewWidget(
   const wide = size.width >= 280;
   const heading = tall ? 'Overview' : 'Balances';
   const level = widgetTextLevel(scale);
+  const showGroups = tall && groupRows.length > 0 && (state === 'all-square' || size.height >= 400);
+  const homeFiguresMissing = !!copy?.home && copy.home.byGroup === undefined;
   const allOwed = read.owed,
     allOwe = read.owe;
-  const hidden = read.hidden;
+  const hidden = read.hidden ? 'Amounts and names hidden' : null;
   const suggested =
     normal && session.status === 'authenticated' ? widgetPayments(copy, session.accountId) : [];
   const personCount = (incoming: boolean) =>
@@ -86,7 +98,7 @@ export function overviewWidget(
   const padding = Math.ceil((small ? 8 : 14) * ratio) / ratio;
   const width = Math.max(1, Math.floor(size.width * ratio) / ratio - padding * 2);
   const height = Math.max(0, Math.floor(size.height * ratio) / ratio - padding * 2);
-  const gap = small ? 4 : 8;
+  const gap = small ? (hidden && level === 2 ? 2 : 4) : 8;
   const layout = fitWidgetLayout(
     { ...size, width, height },
     scale,
@@ -143,6 +155,8 @@ export function overviewWidget(
         tall && optional && !level && unfinished
           ? {
               label: wide ? 'Finish later' : '✎',
+              icon: wide,
+              accessibilityLabel: '1 Expense to finish',
               groupName: unfinished.groupName,
               target: { kind: 'expense', groupId: unfinished.groupId } satisfies WidgetTarget,
             }
@@ -168,25 +182,42 @@ export function overviewWidget(
         ? text.words(action, actionFont, width - actionPaddingHorizontal * 2)
         : [];
       const privacyLines = hidden
-        ? text.words(hidden, small && level === 2 ? 8 : 10, width - 18)
+        ? text.words(hidden, small && level === 2 ? 7 : 10, width - 18)
         : [];
+      const quietBalance = state === 'all-square' && tall;
+      const quietNote =
+        quietBalance &&
+        optional &&
+        text.width(title ?? '', 14) + text.width('in every currency', 11) + 60 <= width
+          ? 'in every currency'
+          : null;
       const showStateTile =
-        !normal && !['loading', 'no-groups'].includes(state) && optional && !level && !small;
+        !normal &&
+        !['loading', 'no-groups', 'no-copy'].includes(state) &&
+        !quietBalance &&
+        optional &&
+        !level &&
+        !small;
       const messageBesideTile = state === 'signed-out' || state === 'expired';
-      const messageWidth = width - (showStateTile ? 60 : 0);
-      const titleLines = title ? text.words(title, small ? 10 : 15, messageWidth) : [];
+      const messageWidth = quietBalance
+        ? width - 52 - (quietNote ? text.width(quietNote, 11) + 8 : 0)
+        : width - (showStateTile ? 60 : 0);
+      const titleFont = quietBalance ? 14 : small ? 10 : 15;
+      const titleLines = title ? text.words(title, titleFont, messageWidth) : [];
       const descriptionLines =
-        description && optional && level < 2
+        !quietBalance && description && optional && level < 2
           ? text.words(description, bodyFont, messageBesideTile ? messageWidth : width)
           : [];
-      const titleHeight = titleLines.length * text.line(small ? 10 : 15);
+      const titleHeight = titleLines.length * text.line(titleFont);
       const descriptionHeight = descriptionLines.length
         ? 8 + descriptionLines.length * text.line(bodyFont)
         : 0;
       const tileHeight = showStateTile ? 48 : 0;
-      const messageHeight = messageBesideTile
-        ? Math.max(titleHeight + descriptionHeight, tileHeight)
-        : Math.max(titleHeight, tileHeight) + descriptionHeight;
+      const messageHeight = quietBalance
+        ? Math.max(20, titleHeight, quietNote ? text.line(11) : 0) + 20
+        : messageBesideTile
+          ? Math.max(titleHeight + descriptionHeight, tileHeight)
+          : Math.max(titleHeight, tileHeight) + descriptionHeight;
       const secondary =
         small && normal && !hidden && owed.length && owe.length ? `You owe ${owe[0]}` : null;
       const secondaryFont = text.fit(secondary ?? '', level ? 9 : 12, width);
@@ -198,7 +229,7 @@ export function overviewWidget(
           : [];
       const compactFont = text.fit(
         compactLines.reduce((a, b) => (a.length > b.length ? a : b), ''),
-        small && level === 2 ? 9 : 10,
+        small && level === 2 ? (hidden ? 8 : 9) : 10,
         width,
       );
       const compactFallback =
@@ -225,20 +256,26 @@ export function overviewWidget(
               ? Math.max(colHeight(owed, owedOverflow), colHeight(owe, oweOverflow))
               : colHeight(owed, owedOverflow) + colHeight(owe, oweOverflow) + 6;
       const footerNote =
-        !small && read.muted
+        !small && (read.muted || (showGroups && homeFiguresMissing))
           ? 'Open to update'
           : !action && !small && showSaved && !finishLater && (!review || wide)
             ? acrossGroups
             : null;
-      const reviewWidth = review ? text.width(review, 11) + 20 : 0;
-      const draftWidth = finishLater ? text.width(finishLater.label, 11) + 20 : 0;
+      const chipPaddingHorizontal = 8;
+      const reviewWidth = review ? text.width(review, 11) + chipPaddingHorizontal * 2 + 18 : 0;
+      const draftWidth = finishLater
+        ? text.width(finishLater.label, 11) +
+          chipPaddingHorizontal * 2 +
+          (finishLater.icon ? 18 : 0)
+        : 0;
       const waitingAcross = reviewWidth + draftWidth + (reviewWidth && draftWidth ? 6 : 0) <= width;
       const waitingWidth = waitingAcross
         ? reviewWidth + draftWidth + (reviewWidth && draftWidth ? 6 : 0)
         : Math.max(reviewWidth, draftWidth);
       const waitingHeight =
         review || finishLater
-          ? (text.line(11) + 10) * (waitingAcross || !review || !finishLater ? 1 : 2) +
+          ? (Math.max(text.line(11), 14) + 10) *
+              (waitingAcross || !review || !finishLater ? 1 : 2) +
             (waitingAcross ? 0 : 4)
           : 0;
       const noteWidth = footerNote ? text.width(footerNote, 10) : 0;
@@ -324,7 +361,86 @@ export function overviewWidget(
       const paymentMessage =
         normal && tall && !suggested.length && !hasReadGroup ? 'Open the Group to update' : null;
       const paymentMessageLines = paymentMessage ? text.words(paymentMessage, 11) : [];
-      const paymentCountsLines = hiddenPayments.flatMap((label) => text.words(label, 12));
+      const measuredPaymentCounts = hiddenPayments.map((label) =>
+        text.words(label, 12, width - 24),
+      );
+      const paymentCountHeight = Math.max(
+        36 * scale * text.factor,
+        ...measuredPaymentCounts.map(
+          (lines) => lines.length * text.line(12) + 8 + Math.ceil(ratio) / ratio,
+        ),
+      );
+      const groupDetails = optional && !level;
+      const groupHeaderHeight = groupDetails ? text.line(10) + 4 : 0;
+      const compactGroups = size.width / Math.max(1, scale) < 240;
+      const groupLimit = !level && size.height >= 584 ? 2 : 1;
+      const measuredGroups = groupRows.map((group) => {
+        const visible = group.balances?.slice(0, groupLimit) ?? [];
+        const labels =
+          group.balances === null
+            ? homeFiguresMissing
+              ? []
+              : ['Open the Group to update']
+            : !group.balances.length
+              ? ['All square']
+              : visible.map((row) => (row.balanceMinor > 0 ? 'You’re owed' : 'You owe'));
+        const amounts = hidden
+          ? []
+          : visible.map((row) =>
+              formatCurrency(toMajorAmount(Math.abs(row.balanceMinor), row.currency), row.currency),
+            );
+        const moreCurrencies =
+          !hidden && group.balances && group.balances.length > groupLimit
+            ? `+${counted(group.balances.length - groupLimit, 'currency', 'currencies')}`
+            : null;
+        const contentWidth = width - (compactGroups ? 0 : 16);
+        const balanceWidth = Math.max(
+          ...labels.map(
+            (label, i) =>
+              text.width(label, 9) + (amounts[i] ? text.width(amounts[i], 12, true) + 6 : 0),
+          ),
+          0,
+        );
+        const stack =
+          compactGroups || text.width(group.name, 12) + balanceWidth + 44 > contentWidth;
+        const amountStack =
+          stack &&
+          amounts.some(
+            (amount, i) =>
+              text.width(amount, 12, true) + text.width(labels[i], 9) + 8 > contentWidth,
+          );
+        const valueHeight =
+          labels.reduce(
+            (n, _, i) =>
+              n +
+              (amounts[i]
+                ? amountStack
+                  ? text.line(9) + text.line(12)
+                  : Math.max(text.line(9), text.line(12))
+                : text.line(9)),
+            0,
+          ) + (moreCurrencies ? text.line(9) : 0);
+        const nameHeight = compactGroups ? text.line(12) : Math.max(24, text.line(12));
+        const textHeight = stack ? nameHeight + valueHeight + 2 : Math.max(nameHeight, valueHeight);
+        return {
+          labels,
+          amounts,
+          moreCurrencies,
+          stack,
+          amountStack,
+          textHeight,
+          balanceWidth: Math.max(balanceWidth, moreCurrencies ? text.width(moreCurrencies, 9) : 0),
+          positive: visible.map((row) => row.balanceMinor > 0),
+          fits:
+            amounts.every((amount) => text.width(amount, 12, true) <= contentWidth) &&
+            labels.every((label) => text.width(label, 9) <= contentWidth) &&
+            (!moreCurrencies || text.width(moreCurrencies, 9) <= contentWidth),
+        };
+      });
+      const groupRowHeight = Math.max(
+        (compactGroups ? 36 : 42) * scale * text.factor,
+        ...measuredGroups.map((row) => row.textHeight + Math.ceil(ratio) / ratio),
+      );
       const sections: WidgetSection[] = [
         ...(showHeader
           ? [{ id: 'header', rows: 1, rowHeight: text.line(small ? 10 : 13), required: true }]
@@ -344,16 +460,24 @@ export function overviewWidget(
               },
             ]
           : []),
-        ...(normal && tall && (paymentCountsLines.length || paymentMessage)
+        ...(normal && tall && measuredPaymentCounts.length
+          ? [
+              {
+                id: 'payment-counts',
+                rows: measuredPaymentCounts.length,
+                rowHeight: paymentCountHeight,
+                headingHeight: paymentHeaderHeight,
+                inset: 8,
+                grow: true,
+              },
+            ]
+          : []),
+        ...(normal && tall && paymentMessage
           ? [
               {
                 id: 'payments-message',
                 rows: 1,
-                rowHeight:
-                  paymentHeaderHeight +
-                  (paymentCountsLines.length
-                    ? paymentCountsLines.length * text.line(12)
-                    : paymentMessageLines.length * text.line(11)),
+                rowHeight: paymentHeaderHeight + paymentMessageLines.length * text.line(11),
               },
             ]
           : []),
@@ -367,6 +491,26 @@ export function overviewWidget(
                 rows: 1,
                 rowHeight: messageHeight,
                 required: true,
+              },
+            ]
+          : []),
+        ...(showGroups
+          ? [
+              {
+                id: 'groups',
+                rows: groupRows.length,
+                maxRows: measuredGroups.every((row) => row.fits)
+                  ? availablePayments.length && paymentFits
+                    ? level
+                      ? 1
+                      : 2 + Math.floor(Math.max(0, size.height - 464) / 120) * 2
+                    : groupRows.length
+                  : 0,
+                rowHeight: groupRowHeight,
+                headingHeight: groupHeaderHeight,
+                inset: compactGroups ? 0 : 8,
+                moreHeight: groupDetails ? 0 : undefined,
+                grow: 'when-complete' as const,
               },
             ]
           : []),
@@ -389,7 +533,7 @@ export function overviewWidget(
                 rows: 1,
                 rowHeight: Math.max(
                   14,
-                  privacyLines.length * text.line(small && level === 2 ? 8 : 10),
+                  privacyLines.length * text.line(small && level === 2 ? 7 : 10),
                 ),
                 required: true,
               },
@@ -424,10 +568,17 @@ export function overviewWidget(
         sections,
         compactPayments,
         measuredPayments,
+        measuredGroups,
+        compactGroups,
+        groupHeaderHeight,
+        groupNameFont: text.font(12),
+        groupAmountFont: text.font(12),
+        groupLabelFont: text.font(9),
         paymentHeaderHeight,
         paymentAvatarSize,
         paymentMessageLines,
-        paymentCountsLines,
+        paymentCountsLines: measuredPaymentCounts.flat(),
+        measuredPaymentCounts,
         paymentLabelFont: text.font(paymentFont),
         paymentAmountFont: text.font(13),
         primary,
@@ -446,6 +597,9 @@ export function overviewWidget(
         showSaved,
         showStateTile,
         messageBesideTile,
+        quietBalance,
+        quietNote,
+        quietNoteFont: text.font(11),
         review,
         action,
         actionTarget,
@@ -454,7 +608,10 @@ export function overviewWidget(
         actionPaddingVertical,
         actionPaddingHorizontal,
         footerAcross,
+        footerActionAlign:
+          !footerAcross && leadingHeight ? ('flex-start' as const) : ('flex-end' as const),
         waitingAcross,
+        chipPaddingHorizontal,
         finishLater,
         footerNote,
         privacyLines,
@@ -470,11 +627,11 @@ export function overviewWidget(
           label: text.font(labelFont),
           money: text.font(moneyFont),
           body: text.font(bodyFont),
-          title: text.font(small ? 10 : 15),
+          title: text.font(titleFont),
           action: text.font(actionFont),
           review: text.font(11),
           small: text.font(10),
-          privacy: text.font(small && level === 2 ? 8 : 10),
+          privacy: text.font(small && level === 2 ? 7 : 10),
           secondary: text.font(secondaryFont),
           compact: text.font(compactFont),
         },
@@ -492,6 +649,8 @@ export function overviewWidget(
     actionTarget,
     finishLater,
     measuredPayments,
+    measuredGroups,
+    measuredPaymentCounts,
     ...geometry
   } = layout;
   const paymentSection = layout.sections.find((s) => s.id === 'payments');
@@ -503,6 +662,53 @@ export function overviewWidget(
     dividerHeight: i ? Math.ceil(ratio) / ratio : 0,
     contentHeight: paymentSection!.rowHeight - (i ? Math.ceil(ratio) / ratio : 0),
   }));
+  const countSection = layout.sections.find((s) => s.id === 'payment-counts');
+  const paymentCounts = measuredPaymentCounts.slice(0, countSection?.rows ?? 0).map((lines, i) => ({
+    lines,
+    rowHeight: countSection!.rowHeight,
+    dividerHeight: i ? Math.ceil(ratio) / ratio : 0,
+    contentHeight: countSection!.rowHeight - (i ? Math.ceil(ratio) / ratio : 0),
+  }));
+  const groupSection = layout.sections.find((s) => s.id === 'groups');
+  const visibleGroups = groupRows.slice(0, groupSection?.rows ?? 0).map((group, i) => ({
+    id: group.id,
+    name: group.name,
+    theme: group.theme,
+    target: group.target,
+    ...measuredGroups[i],
+    muted: group.verifiedAt !== null && now - group.verifiedAt > 86400000,
+    rowHeight: groupSection!.rowHeight,
+    dividerHeight: i ? Math.ceil(ratio) / ratio : 0,
+    contentHeight: groupSection!.rowHeight - (i ? Math.ceil(ratio) / ratio : 0),
+  }));
+  const groupMore =
+    groupSection?.rows && groupSection.more && layout.showOverflow
+      ? `+${counted(groupSection.more, 'more', 'more')}`
+      : null;
+  const groupCount = groupSection && !groupSection.rows ? counted(groupRows.length, 'Group') : null;
+  const spokenGroups = groupRows.map((group) => {
+    const figures =
+      group.balances === null
+        ? homeFiguresMissing
+          ? null
+          : 'Open the Group to update'
+        : !group.balances.length
+          ? 'All square'
+          : group.balances
+              .map(
+                (row) =>
+                  (row.balanceMinor > 0 ? 'You’re owed' : 'You owe') +
+                  (hidden
+                    ? ''
+                    : ' ' +
+                      formatCurrency(
+                        toMajorAmount(Math.abs(row.balanceMinor), row.currency),
+                        row.currency,
+                      )),
+              )
+              .join(' and ');
+    return [group.name, figures].filter(Boolean).join('. ');
+  });
   const paymentMore =
     paymentSection?.rows && paymentSection.more && layout.showOverflow
       ? `+${counted(paymentSection.more, 'more', 'more')}`
@@ -521,11 +727,12 @@ export function overviewWidget(
     normal && allOwed.length ? 'You’re owed ' + allOwed.join(' and ') : null,
     normal && allOwe.length ? 'You owe ' + allOwe.join(' and ') : null,
     ...spokenPayments,
+    ...spokenGroups,
     read.review?.replace(SEPARATOR, ' '),
-    unfinished ? `Finish later in ${unfinished.groupName}` : null,
+    unfinished ? '1 Expense to finish' : null,
     read.saved,
     hidden,
-    read.muted ? 'Open to update' : null,
+    read.muted || (homeFiguresMissing && groupRows.length) ? 'Open to update' : null,
     normal && wide && tall ? 'Add expense' : null,
   ]);
   return {
@@ -547,6 +754,11 @@ export function overviewWidget(
     action: footerVisible ? action : null,
     actionTarget,
     payments: visiblePayments,
+    paymentCounts,
+    groups: visibleGroups,
+    groupMore,
+    groupCount,
+    groupMoreTarget: 'home' as const,
     paymentMore,
     paymentCount,
     paymentMoreTarget: 'home' as const,

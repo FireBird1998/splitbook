@@ -26,6 +26,9 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
   let user = alex,
     expired = false,
     owed = 2400;
+  const extraGroups: ReturnType<typeof group>[] = [];
+  let homeOverride: { buckets: unknown[]; groups?: unknown[] } | null = null;
+  let listedGroupIds: string[] | null = null;
   let groupBalances: unknown = { byCurrency: [] };
   let refused = 0;
   let offlineAfterSave = false;
@@ -76,22 +79,28 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
   backend.world.people.alex = { ...alex, image: null };
   backend.world.people.sam = { ...sam, image: null };
   backend.auth.cookie = () => 'better-auth.session_token=fictional.signature';
-  Object.defineProperty(backend.world, 'groups', { get: () => [group(), ...additionalGroups] });
+  Object.defineProperty(backend.world, 'groups', {
+    get: () => [group(), ...additionalGroups, ...extraGroups],
+  });
   for (const id of [alex.id, sam.id])
     Object.defineProperty(backend.world.groupsByAccount, id, {
-      get: () => (noGroups || archived ? [] : [group(), ...additionalGroups]),
+      get: () =>
+        (noGroups || archived ? [] : [group(), ...additionalGroups, ...extraGroups]).filter(
+          (row) => !listedGroupIds || listedGroupIds.includes(row._id),
+        ),
     });
   Object.defineProperty(backend.world.balances, groupId, { get: () => groupBalances });
   Object.defineProperty(backend.world, 'home', {
-    get: () => ({
-      buckets: [
-        { currency: 'INR', youOwe: 1480, youAreOwed: owed, net: owed - 1480 },
-        { currency: 'EUR', youOwe: 0, youAreOwed: 40, net: 40 },
-      ],
-      groups: [
-        { groupId, name: 'Maple House', balances: [{ currency: 'INR', balance: owed - 1480 }] },
-      ],
-    }),
+    get: () =>
+      homeOverride ?? {
+        buckets: [
+          { currency: 'INR', youOwe: 1480, youAreOwed: owed, net: owed - 1480 },
+          { currency: 'EUR', youOwe: 0, youAreOwed: 40, net: 40 },
+        ],
+        groups: [
+          { groupId, name: 'Maple House', balances: [{ currency: 'INR', balance: owed - 1480 }] },
+        ],
+      },
   });
   backend.world.toReview = { total: 0, groups: [] };
   backend.world.pages[`/api/groups/${groupId}/currencies`] = {
@@ -332,6 +341,15 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
     addGroup: (value: ReturnType<typeof group>) => additionalGroups.push(value),
     drafts: native.stores.expenseDrafts,
     phone: native,
+    listGroups: (ids: string[]) => {
+      listedGroupIds = ids;
+    },
+    addOverviewGroup: (id: string, name: string) => {
+      extraGroups.push({ ...group(), _id: id, name });
+    },
+    home: (value: { buckets: unknown[]; groups?: unknown[] }) => {
+      homeOverride = value;
+    },
     archive: () => {
       archived = true;
     },
@@ -2393,4 +2411,291 @@ it('keeps the Recent prompt for an old server without a complete enrichment', as
   );
   expect(view.recent?.prompt).toBe('Open the Group to update');
   expect(view.recent?.rows).toEqual([]);
+});
+
+describe('Overview Groups copy', () => {
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+  });
+  it('keeps every Group’s Home balances with Home’s own time without needing a Group widget or Group read', async () => {
+    const f = fixture(),
+      c = f.make();
+    const second = 'b00000000000000000000002';
+    f.addOverviewGroup(second, 'Lisbon & Tokyo');
+    f.home({
+      buckets: [
+        { currency: 'INR', youOwe: 0, youAreOwed: 920 },
+        { currency: 'JPY', youOwe: 3000, youAreOwed: 0 },
+      ],
+      groups: [
+        { groupId, balances: [{ currency: 'INR', balance: 920 }] },
+        { groupId: second, balances: [{ currency: 'JPY', balance: -3000 }] },
+      ],
+    });
+    await c.signIn('alex');
+    await vi.waitFor(() =>
+      expect(f.record().copy?.home).toHaveProperty('byGroup', {
+        [groupId]: [{ currency: 'INR', balanceMinor: 92000 }],
+        [second]: [{ currency: 'JPY', balanceMinor: -3000 }],
+      }),
+    );
+    expect(f.record().copy?.home?.verifiedAt).toBe(verified);
+    expect(f.record().copy?.groups ?? {}).toEqual({});
+    expect(
+      f.requests.filter(
+        (r) => r.path === `/api/groups/${groupId}` || r.path === `/api/groups/${groupId}/balances`,
+      ),
+    ).toEqual([]);
+    const view = overview(f);
+    expect(view.groups[0]).toMatchObject({
+      name: 'Maple House',
+      amounts: ['₹920.00'],
+      target: { kind: 'group', groupId },
+    });
+    await c.openWidget(view.groups[0].target);
+    expect(c.getSnapshot()).toMatchObject({ screen: 'group', detail: { id: groupId } });
+  });
+});
+
+describe('Overview Group balance lifetime', () => {
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+  });
+  it.each(['sign-out', 'account-change', 'denied', '401'] as const)(
+    'guards Home’s per-Group copy after %s',
+    async (reason) => {
+      const f = fixture(),
+        c = f.make();
+      const second = 'b00000000000000000000002';
+      if (reason === 'denied') {
+        f.addOverviewGroup(second, 'Cedar House');
+        f.home({
+          buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 990 }],
+          groups: [
+            { groupId, balances: [{ currency: 'INR', balance: 920 }] },
+            { groupId: second, balances: [{ currency: 'INR', balance: 70 }] },
+          ],
+        });
+      }
+      await c.signIn('alex');
+      await vi.waitFor(() =>
+        expect(f.record().copy?.home?.byGroup?.[groupId]).toEqual([
+          { currency: 'INR', balanceMinor: 92000 },
+        ]),
+      );
+      if (reason === 'denied')
+        await vi.waitFor(() =>
+          expect(f.record().copy?.home?.byGroup?.[second]).toEqual([
+            { currency: 'INR', balanceMinor: 7000 },
+          ]),
+        );
+      const before = f.record().copy;
+      f.events.length = 0;
+      if (reason === 'sign-out') await c.signOut();
+      if (reason === 'account-change') {
+        f.home({
+          buckets: [{ currency: 'INR', youOwe: 120, youAreOwed: 0 }],
+          groups: [{ groupId, balances: [{ currency: 'INR', balance: -120 }] }],
+        });
+        await c.signIn('sam');
+      }
+      if (reason === 'denied') {
+        f.refuse(403);
+        f.listGroups([second]);
+        f.home({
+          buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 70 }],
+          groups: [{ groupId: second, balances: [{ currency: 'INR', balance: 70 }] }],
+        });
+        await c.openGroup(groupId, false);
+        await c.back();
+        await c.refreshHome();
+      }
+      if (reason === '401') {
+        f.expire();
+        await c.refreshHome();
+      }
+      if (reason === '401') {
+        await vi.waitFor(() => expect(f.record().session.status).toBe('expired'));
+        expect(overview(f).groups).toEqual([]);
+        expect(f.record().copy).toEqual(before);
+        expect(f.events).not.toContain('clear');
+      } else if (reason === 'denied') {
+        await vi.waitFor(() => expect(f.record().copy?.home?.byGroup?.[groupId]).toBeUndefined());
+        await vi.waitFor(() =>
+          expect(f.record().copy?.savedGroups?.rows.map((g) => g.id)).toEqual([second]),
+        );
+        expect(f.record().copy?.home?.byGroup).toEqual({
+          [second]: [{ currency: 'INR', balanceMinor: 7000 }],
+        });
+        expect(overview(f).groups.map((g) => g.name)).toEqual(['Cedar House']);
+      } else {
+        expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+        if (reason === 'sign-out') expect(f.record().copy).toBeNull();
+        else {
+          await vi.waitFor(() => expect(f.record().copy?.accountId).toBe(sam.id));
+          expect(f.record().copy?.home?.byGroup?.[groupId]).toEqual([
+            { currency: 'INR', balanceMinor: -12000 },
+          ]);
+        }
+      }
+    },
+  );
+  it('restores each Group’s original Home time on a cold offline restart', async () => {
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await vi.waitFor(() => expect(f.record().copy?.home?.byGroup?.[groupId]).toHaveLength(1));
+    const n = f.copies.length;
+    f.offline();
+    const cold = f.make();
+    await cold.restore();
+    await vi.waitFor(() => expect(f.copies.length).toBeGreaterThan(n));
+    expect(f.record().copy?.home).toMatchObject({
+      verifiedAt: verified,
+      byGroup: { [groupId]: [{ currency: 'INR', balanceMinor: 92000 }] },
+    });
+    expect(cold.getSnapshot().home.restored).toBe(true);
+  });
+});
+
+describe('combined Widget copy account and Group rules', () => {
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+  });
+  it.each(['sign-out', 'account-change', '403', '404', '401'] as const)(
+    'keeps Tags, Recent, Trip dates, Month, payments, Finish later and Home figures together on %s',
+    async (reason) => {
+      const f = fixture([], true);
+      f.trip();
+      f.expenses();
+      const recent = parseExpensePageResponse({
+        status: 200,
+        data: f.backend.world.expenses[groupId],
+      }).recent;
+      f.month();
+      const month = parseExpensePageResponse({
+        status: 200,
+        data: f.backend.world.expenses[groupId],
+      });
+      f.backend.world.expenses[groupId] = { ...month, recent };
+      f.recentPlacements(1);
+      f.groupBalances(paymentBalances);
+      f.home({
+        buckets: [{ currency: 'INR', youOwe: 100, youAreOwed: 0, net: -100 }],
+        groups: [{ groupId, name: 'Maple House', balances: [{ currency: 'INR', balance: -100 }] }],
+      });
+      const c = f.make();
+      await c.signIn('alex');
+      await c.openGroup(groupId);
+      await c.openExpense(groupId);
+      await c.updateExpenseDraft({ description: 'Private phone entry', amount: '100', tagId });
+      await c.closeExpense(true);
+      await c.back();
+      await vi.waitFor(() =>
+        expect(f.record().copy).toMatchObject({
+          accountId: alex.id,
+          tags: { [groupId]: { rows: [{ id: tagId, name: 'Groceries' }] } },
+          recents: {
+            [groupId]: { rows: [expect.objectContaining({ description: 'Private beach lunch' })] },
+          },
+          groups: {
+            [groupId]: {
+              tripDates: { start: '2026-11-08', end: '2026-11-10' },
+              currencies: [
+                {
+                  currency: 'INR',
+                  balanceMinor: -10000,
+                  payments: [{ from: alex.id, to: sam.id, amountMinor: 10000 }],
+                },
+              ],
+            },
+          },
+          months: { [groupId]: { month: '2026-11', count: 12, shareMinor: 785000 } },
+          finishLater: { groupId, groupName: 'Maple House' },
+          home: { byGroup: { [groupId]: [{ currency: 'INR', balanceMinor: -10000 }] } },
+          savedGroups: { rows: [expect.objectContaining({ id: groupId })] },
+        }),
+      );
+      const before = structuredClone(f.record().copy);
+      expect(JSON.stringify(before)).not.toContain('Private phone entry');
+      f.events.length = 0;
+      f.sessionCopies.length = 0;
+      if (reason === 'sign-out') await c.signOut();
+      else if (reason === 'account-change') {
+        f.home({
+          buckets: [],
+          groups: [{ groupId, name: 'Maple House', balances: [] }],
+        });
+        await c.signIn('sam');
+      } else if (reason === '401') {
+        f.expire();
+        await c.openGroup(groupId, false);
+      } else {
+        f.refuse(Number(reason));
+        await c.openGroup(groupId, false);
+      }
+      if (reason === '401') {
+        await vi.waitFor(() => expect(f.record().session.status).toBe('expired'));
+        expect(f.events).not.toContain('clear');
+        expect(f.sessionCopies.find((event) => event.status === 'expired')?.copy).toEqual(before);
+        expect(f.record().copy).toEqual(before);
+        expect(overview(f)).toMatchObject({
+          state: 'expired',
+          payments: [],
+          groups: [],
+          finishLater: null,
+        });
+        expect(
+          groupWidget(
+            f.record().copy?.groups?.[groupId],
+            { kind: 'group', widgetId: 7, accountId: alex.id, groupId, showRecentExpenses: true },
+            { width: 360, height: 584 },
+            f.record().session,
+            verified,
+            1,
+            f.record().copy?.months?.[groupId],
+            f.record().copy?.recents?.[groupId],
+          ),
+        ).toMatchObject({
+          state: 'expired',
+          name: null,
+          tripDay: null,
+          month: null,
+          recent: null,
+          payments: [],
+        });
+      } else if (reason === '403' || reason === '404') {
+        await vi.waitFor(() => expect(f.record().copy?.lostGroupIds).toContain(groupId));
+        expect(f.record().copy?.groups?.[groupId]).toBeUndefined();
+        expect(f.record().copy?.months?.[groupId]).toBeUndefined();
+        expect(f.record().copy?.tags?.[groupId]).toBeUndefined();
+        expect(f.record().copy?.recents?.[groupId]).toBeUndefined();
+        expect(f.record().copy?.finishLater).toBeUndefined();
+        expect(f.record().copy?.home?.byGroup?.[groupId]).toBeUndefined();
+        expect(f.record().copy?.savedGroups?.rows).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: groupId })]),
+        );
+        expect(overview(f)).toMatchObject({ payments: [], groups: [], finishLater: null });
+      } else {
+        expect(f.sessionCopies.find((event) => event.status === 'signed-out')?.copy).toBeNull();
+        expect(f.events.indexOf('clear')).toBeGreaterThanOrEqual(0);
+        expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+        expect(f.events.lastIndexOf('redraw')).toBeGreaterThan(f.events.indexOf('signed-out'));
+        if (reason === 'sign-out') expect(f.record().copy).toBeNull();
+        else {
+          await vi.waitFor(() => expect(f.record().copy?.accountId).toBe(sam.id));
+          expect(f.record().copy?.groups).toEqual({});
+          expect(f.record().copy?.months).toEqual({});
+          expect(f.record().copy?.recents?.[groupId]).toBeUndefined();
+          expect(f.record().copy?.home?.byGroup).toEqual({ [groupId]: [] });
+          expect(f.record().copy?.finishLater).toBeUndefined();
+          expect(f.events.indexOf('write:' + sam.id)).toBeGreaterThan(f.events.indexOf('clear'));
+        }
+      }
+    },
+  );
 });

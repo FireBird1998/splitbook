@@ -8,6 +8,8 @@ export interface WidgetCopy {
   home: null | {
     verifiedAt: number;
     groupCount: number;
+    /** Home’s own per-Group figures; absent on older copies, never inferred from a total. */
+    byGroup?: Record<string, { currency: string; balanceMinor: number }[]>;
     currencies: { currency: string; owedMinor: number; oweMinor: number }[];
   };
   groups?: Record<string, WidgetGroupPart>;

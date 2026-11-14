@@ -230,6 +230,18 @@ export function createWidgetCopy(
             ? {
                 verifiedAt: data.refreshedAt,
                 groupCount: Object.keys(data.byGroup).length,
+                byGroup: Object.fromEntries(
+                  Object.entries(data.byGroup)
+                    .filter(([id]) => !lost.has(id))
+                    .map(([id, balances]) => [
+                      id,
+                      balances.map(({ currency, balance }) => ({
+                        currency,
+                        balanceMinor:
+                          Math.sign(balance) * parseAmountMinor(Math.abs(balance), currency),
+                      })),
+                    ]),
+                ),
                 currencies: data.data.map(({ currency, youOwe, youAreOwed }) => ({
                   currency,
                   oweMinor: parseAmountMinor(youOwe, currency),

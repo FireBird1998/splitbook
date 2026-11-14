@@ -71,7 +71,7 @@ it('speaks the visible Group name but not amounts or member names when hidden', 
     auth,
     now,
   ).summary;
-  expect(b).toContain('Amounts hidden');
+  expect(b).toContain('Amounts and names hidden');
   expect(g).toContain('You owe 1\u00a0person');
   expect(g).toContain('Amounts and names hidden');
   expect(g).toContain('Maple House');

@@ -190,16 +190,12 @@ it('fits the whole ordinary native footer with To review and Add expense at 130 
   );
 });
 
-it.each(['all-square', 'no-copy', 'other-account'] as const)(
+it.each(['no-copy', 'other-account'] as const)(
   'keeps the existing sentence position for %s',
   (state) => {
     vi.stubGlobal('__DEV__', false);
     const saved =
-      state === 'no-copy'
-        ? null
-        : state === 'other-account'
-          ? { ...copy, accountId: 'sam' }
-          : { ...copy, home: { ...copy.home!, currencies: [] } };
+      state === 'no-copy' ? null : state === 'other-account' ? { ...copy, accountId: 'sam' } : copy;
     const v = overviewWidget(
       saved,
       { kind: 'balances', widgetId: 7 },
@@ -355,3 +351,195 @@ it.each([false, true])(
     expect(minimumHeight(tree.children![i], 1)).toBeLessThanOrEqual(view.layout.sections[i].height);
   },
 );
+it('draws admitted Group names, theme icons and Home amounts with their Group tap targets', () => {
+  vi.stubGlobal('__DEV__', false);
+  const c: WidgetCopy = {
+    ...copy,
+    home: { ...copy.home!, byGroup: { maple: [{ currency: 'INR', balanceMinor: -148000 }] } },
+    savedGroups: {
+      verifiedAt: now,
+      rows: [
+        {
+          id: 'maple',
+          name: 'Maple House',
+          theme: 'home',
+          archived: false,
+          members: 3,
+          currencies: 1,
+        },
+      ],
+    },
+  };
+  const view = overviewWidget(
+    c,
+    { kind: 'balances', widgetId: 7 },
+    { width: 360, height: 464 },
+    auth,
+    now,
+  );
+  expect(view.groups).toHaveLength(1);
+  const tree = buildWidgetTree(drawOverview(view, lightTokens));
+  expect(labels(tree)).toContain('Groups');
+  expect(labels(tree)).toContain('Maple House');
+  expect(labels(tree)).toContain('You owe');
+  expect(labels(tree)).toContain('₹1,480.00');
+});
+
+it('draws one Home update prompt for an older copy without per-Group figures', () => {
+  vi.stubGlobal('__DEV__', false);
+  const c: WidgetCopy = {
+    ...withPayments,
+    savedGroups: {
+      verifiedAt: now,
+      rows: [
+        {
+          id: 'maple',
+          name: 'Maple House',
+          theme: 'home',
+          archived: false,
+          members: 3,
+          currencies: 1,
+        },
+      ],
+    },
+  };
+  const v = overviewWidget(
+    c,
+    { kind: 'balances', widgetId: 7 },
+    { width: 360, height: 584 },
+    auth,
+    now,
+  );
+  const tree = buildWidgetTree(drawOverview(v, lightTokens));
+  const groupSection = tree.children![v.layout.sections.findIndex((s) => s.id === 'groups')];
+  expect(labels(groupSection)).toContain('Maple House');
+  expect(labels(groupSection)).not.toContain('Open the Group to update');
+  expect(labels(tree).filter((label) => label === 'Open to update')).toHaveLength(1);
+});
+
+it('draws Nothing saved yet as a left-aligned text block without an icon', () => {
+  vi.stubGlobal('__DEV__', false);
+  const v = overviewWidget(
+    null,
+    { kind: 'balances', widgetId: 7 },
+    { width: 360, height: 584 },
+    auth,
+    now,
+  );
+  expect(v.layout.showStateTile).toBe(false);
+  const tree = buildWidgetTree(drawOverview(v, lightTokens));
+  const message = tree.children![v.layout.sections.findIndex((s) => s.id === 'message')];
+  expect(labels(message)).toContain('Nothing saved yet');
+  expect(labels(message)).not.toContain('!');
+  expect(labels(message).join(' ')).toContain(
+    'Open Splitbook to load your balances, payments and Groups.',
+  );
+});
+
+it.each([360, 720])(
+  'aligns the large-text footer on one line when it fits, otherwise at the left at %s dp',
+  (width) => {
+    vi.stubGlobal('__DEV__', false);
+    const v = overviewWidget(
+      { ...withPayments, review: { count: 3, verifiedAt: now } },
+      { kind: 'balances', widgetId: 7 },
+      { width, height: 584 },
+      auth,
+      now,
+      2,
+    );
+    const tree = buildWidgetTree(drawOverview(v, lightTokens));
+    const section = tree.children![v.layout.sections.findIndex((s) => s.id === 'footer')];
+    const footer = section.children![0];
+    expect((footer.props as { orientation: string }).orientation).toBe(
+      width === 720 ? 'HORIZONTAL' : 'VERTICAL',
+    );
+    if (width === 360) {
+      const action = footer.children!.at(-1)!;
+      expect((action.props as { gravity: number }).gravity & 7).toBe(3);
+    }
+  },
+);
+
+it.each([344, 464])(
+  'draws hidden payment counts as measured rows inside a growing panel at %s dp',
+  (height) => {
+    vi.stubGlobal('__DEV__', false);
+    const v = overviewWidget(
+      withPayments,
+      { kind: 'balances', widgetId: 7, hideAmounts: true },
+      { width: 360, height },
+      auth,
+      now,
+    );
+    const tree = buildWidgetTree(drawOverview(v, lightTokens));
+    const i = v.layout.sections.findIndex((s) => s.id === 'payment-counts');
+    expect(i).toBeGreaterThanOrEqual(0);
+    const panel = nodes(tree.children![i]).find(
+      (n) =>
+        (n.props as { backgroundColor?: string }).backgroundColor === lightTokens.surfaceMuted &&
+        labels(n).includes('You pay 1 person'),
+    );
+    expect(panel).toBeDefined();
+    expect(labels(panel!)).toContain('1 person pays you');
+    expect(minimumHeight(tree.children![i])).toBeLessThanOrEqual(v.layout.sections[i].height);
+    // Whole-pixel row rounding may leave less than one row's pixel per count.
+    expect(v.layout.sections.find((s) => s.id === 'space')!.height).toBeLessThanOrEqual(1);
+  },
+);
+
+it.each([172, 360])(
+  'keeps the Finish later pencil and announces one Expense without its Group at %s dp',
+  (width) => {
+    vi.stubGlobal('__DEV__', false);
+    const v = overviewWidget(
+      {
+        ...copy,
+        review: { count: 3, verifiedAt: now },
+        finishLater: { groupId: 'maple', groupName: 'Maple House' },
+      },
+      { kind: 'balances', widgetId: 7 },
+      { width, height: 464 },
+      auth,
+      now,
+    );
+    const tree = buildWidgetTree(drawOverview(v, lightTokens));
+    expect(v.finishLater).not.toBeNull();
+    const chip = nodes(tree).find(
+      (n) =>
+        (n.props as { accessibilityLabel?: string }).accessibilityLabel === '1 Expense to finish',
+    );
+    expect(chip).toBeDefined();
+    expect(JSON.stringify(chip)).not.toContain('Maple House');
+    if (width === 360) {
+      expect(v.layout.footerAcross).toBe(true);
+      expect(labels(chip!)).toContain('Finish later');
+      expect(JSON.stringify(chip)).toContain('M4 20h4L19 9l-4-4L4 16z');
+    } else expect(labels(chip!)).toContain('✎');
+    expect(v.summary).toContain('1 Expense to finish');
+  },
+);
+
+it('keeps the quiet balance in one measured panel line with the note at the right', () => {
+  vi.stubGlobal('__DEV__', false);
+  const v = overviewWidget(
+    { ...copy, home: { ...copy.home!, currencies: [] } },
+    { kind: 'balances', widgetId: 7 },
+    { width: 360, height: 464 },
+    auth,
+    now,
+  );
+  const tree = buildWidgetTree(drawOverview(v, lightTokens));
+  const section = v.layout.sections.find((s) => s.id === 'message')!;
+  const message = tree.children![v.layout.sections.indexOf(section)];
+  const panel = nodes(message).find(
+    (n) => (n.props as { backgroundColor?: string }).backgroundColor === lightTokens.surfaceMuted,
+  );
+  expect(panel).toBeDefined();
+  expect(labels(panel!)).toContain('You’re all square');
+  expect(labels(panel!)).toContain('in every currency');
+  expect(labels(panel!)).toContain('✓');
+  expect((panel!.props as { orientation: string }).orientation).toBe('HORIZONTAL');
+  expect(minimumHeight(message)).toBeLessThanOrEqual(section.height);
+  expect(section.height).toBeLessThan(50);
+});

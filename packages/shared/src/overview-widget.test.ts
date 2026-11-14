@@ -118,7 +118,7 @@ it.each(
   if (['signed-out', 'expired', 'other-account', 'no-copy', 'loading'].includes(state))
     expect(JSON.stringify(v)).not.toMatch(/2,400|1,480|40\.00|42000/);
   if (state === 'hidden') {
-    expect(v.hidden).toBe('Amounts hidden');
+    expect(v.hidden).toBe('Amounts and names hidden');
     expect(JSON.stringify(v)).not.toMatch(/₹|€|¥|2,400/);
   }
   if (state === 'old') {
@@ -624,7 +624,7 @@ it.each([true, false])(
         target: { kind: 'expense', groupId: 'maple' },
       });
       expect(view.review).toBe(withReview ? 'To review\u00a0· 3' : null);
-      expect(view.summary).toContain('Finish later in Maple House');
+      expect(view.summary).toContain('1 Expense to finish');
       expect(view.layout.sections.find((s) => s.id === 'footer')!.height).toBeGreaterThanOrEqual(
         25,
       );
@@ -723,7 +723,7 @@ it.each([
     const c = { ...copy, finishLater: { groupId: 'maple', groupName: 'Maple House' } };
     const v = overviewWidget(c, setup, { width, height }, auth, now, scale);
     expect(v.finishLater).toBeNull();
-    expect(v.summary).toContain('Finish later in Maple House');
+    expect(v.summary).toContain('1 Expense to finish');
   },
 );
 
@@ -745,7 +745,7 @@ it.each([false, true])(
         label: 'Finish later',
         target: { kind: 'expense', groupId: 'maple' },
       });
-      expect(v.summary).toContain('Finish later in Maple House');
+      expect(v.summary).toContain('1 Expense to finish');
     }
   },
 );
@@ -755,4 +755,288 @@ it('does not offer Finish later in Nothing saved yet', () => {
   expect(v.state).toBe('no-copy');
   expect(v.finishLater).toBeNull();
   expect(v.summary).not.toContain('Finish later');
+});
+
+const groupsCopy: WidgetCopy = {
+  ...paymentCopy,
+  home: {
+    ...paymentCopy.home!,
+    currencies: paymentCopy.home!.currencies.slice(0, 2),
+    byGroup: {
+      goa: [{ currency: 'INR', balanceMinor: 240000 }],
+      maple: [{ currency: 'INR', balanceMinor: -148000 }],
+      lisbon: [{ currency: 'EUR', balanceMinor: 4000 }],
+      football: [],
+    },
+  },
+  savedGroups: {
+    verifiedAt: now,
+    rows: [
+      {
+        id: 'football',
+        name: 'Sunday Football',
+        theme: 'other',
+        archived: false,
+        members: 3,
+        currencies: 1,
+      },
+      {
+        id: 'lisbon',
+        name: 'Lisbon & Tokyo',
+        theme: 'trip',
+        archived: false,
+        members: 3,
+        currencies: 2,
+      },
+      {
+        id: 'goa',
+        name: 'Goa Friends Trip',
+        theme: 'trip',
+        archived: false,
+        members: 3,
+        currencies: 1,
+      },
+      {
+        id: 'maple',
+        name: 'Maple House',
+        theme: 'home',
+        archived: false,
+        members: 3,
+        currencies: 1,
+      },
+    ],
+  },
+  finishLater: { groupId: 'maple', groupName: 'Maple House' },
+};
+it('adds two Groups at 4×4 after the two payments, keeping both waiting chips and Add expense', () => {
+  const v = overviewWidget(
+    groupsCopy,
+    setup,
+    { width: 360, height: 464, pixelRatio: 2.625 },
+    auth,
+    now,
+  );
+  expect(v.payments).toHaveLength(2);
+  expect(v.groups.map((g) => g.name)).toEqual(['Goa Friends Trip', 'Maple House']);
+  expect(v.groupMore).toBe('+2\u00a0more');
+  expect(v.groupMoreTarget).toBe('home');
+  expect(v.review).not.toBeNull();
+  expect(v.finishLater).not.toBeNull();
+  expect(v.action).not.toBeNull();
+});
+it('adds three payments and all four Groups at 4×5, with no more link', () => {
+  const v = overviewWidget(
+    groupsCopy,
+    setup,
+    { width: 360, height: 584, pixelRatio: 2.625 },
+    auth,
+    now,
+  );
+  expect(v.payments).toHaveLength(3);
+  expect(v.groups.map((g) => g.name)).toEqual([
+    'Goa Friends Trip',
+    'Maple House',
+    'Lisbon & Tokyo',
+    'Sunday Football',
+  ]);
+  expect(v.groupMore).toBeNull();
+  expect(v.groups.at(-1)?.labels).toEqual(['All square']);
+});
+
+it.each(sizes.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scale }))))(
+  'fits Groups, payments and waiting at $width×$height, $scale, with measured row text',
+  ({ width, height, scale }) => {
+    const v = overviewWidget(
+      groupsCopy,
+      setup,
+      { width, height, pixelRatio: 2.625 },
+      auth,
+      now,
+      scale,
+    );
+    expect(v.layout.fits).toBe(true);
+    const px = (n: number) => Math.round(n * 2.625);
+    expect(
+      v.layout.sections.reduce(
+        (sum, s) => sum + px(s.height),
+        Math.max(0, v.layout.sections.length - 1) * px(v.layout.gap) + 2 * px(v.layout.padding),
+      ),
+    ).toBeLessThanOrEqual(Math.floor(height * 2.625));
+    for (const row of v.groups) expect(row.textHeight).toBeLessThanOrEqual(row.contentHeight);
+    for (const row of v.payments) expect(row.textHeight).toBeLessThanOrEqual(row.contentHeight);
+  },
+);
+it('orders Groups by the first nonzero Home currency, compares only that currency, then preserves the Home list order', () => {
+  const c = clone(groupsCopy);
+  c.home!.byGroup = {
+    maple: [{ currency: 'INR', balanceMinor: -100 }],
+    goa: [{ currency: 'INR', balanceMinor: 2000 }],
+    lisbon: [{ currency: 'EUR', balanceMinor: 999999999 }],
+    football: [],
+  };
+  const v = overviewWidget(c, setup, { width: 640, height: 640 }, auth, now);
+  expect(v.groups.map((g) => g.id)).toEqual(['goa', 'maple', 'lisbon', 'football']);
+  c.home!.byGroup = { maple: [], goa: [], lisbon: [], football: [] };
+  c.home!.currencies = [];
+  c.groups = {};
+  expect(
+    overviewWidget(c, setup, { width: 640, height: 640 }, auth, now).groups.map((g) => g.id),
+  ).toEqual(['football', 'lisbon', 'goa', 'maple']);
+});
+it('keeps Group currencies separate, shows +1 currency, and renders yen without decimals', () => {
+  const c = clone(groupsCopy);
+  c.groups = {};
+  c.home!.currencies.push({ currency: 'JPY', owedMinor: 42000, oweMinor: 0 });
+  c.home!.byGroup!.goa = [
+    { currency: 'JPY', balanceMinor: 42000 },
+    { currency: 'EUR', balanceMinor: 4000 },
+    { currency: 'INR', balanceMinor: 240000 },
+  ];
+  const small = overviewWidget(c, setup, { width: 360, height: 464 }, auth, now);
+  expect(small.groups[0].amounts).toEqual(['₹2,400.00']);
+  expect(small.groups[0].moreCurrencies).toBe('+2\u00a0currencies');
+  const tall = overviewWidget(c, setup, { width: 360, height: 584 }, auth, now);
+  expect(tall.groups[0].amounts).toEqual(['₹2,400.00', '€40.00']);
+  expect(tall.groups[0].moreCurrencies).toBe('+1\u00a0currency');
+  expect(tall.summary).toContain('¥42,000');
+  expect(tall.summary).not.toContain('¥42,000.00');
+});
+it('keeps Group names and directions with Hide amounts, and excludes archived, refused and other-account Groups', () => {
+  const c = clone(groupsCopy);
+  c.savedGroups!.rows.find((g) => g.id === 'lisbon')!.archived = true;
+  c.lostGroupIds = ['maple'];
+  const v = overviewWidget(
+    c,
+    { ...setup, hideAmounts: true },
+    { width: 360, height: 584 },
+    auth,
+    now,
+  );
+  expect(v.groups.map((g) => g.name)).toEqual(['Goa Friends Trip', 'Sunday Football']);
+  expect(v.groups[0].labels).toEqual(['You’re owed']);
+  expect(JSON.stringify(v)).not.toMatch(/₹|€|¥|Priya|Sam|240000|148000/);
+  expect(v.summary).not.toContain('Maple House');
+  expect(v.summary).not.toContain('Lisbon & Tokyo');
+  expect(
+    overviewWidget({ ...c, accountId: 'sam' }, setup, { width: 360, height: 584 }, auth, now)
+      .groups,
+  ).toEqual([]);
+});
+it('does not invent a square balance on an older copy without per-Group figures, and uses Home’s own time', () => {
+  const c = clone(groupsCopy);
+  delete c.home!.byGroup;
+  c.groups = {};
+  const v = overviewWidget(c, setup, { width: 360, height: 584 }, auth, now);
+  expect(v.groups[0]).toMatchObject({
+    name: 'Sunday Football',
+    labels: [],
+    amounts: [],
+  });
+  expect(v.layout.footerNote).toBe('Open to update');
+  expect(v.summary).not.toContain('Open the Group to update');
+  const old = clone(groupsCopy);
+  old.home!.verifiedAt = now - 86400001;
+  const aged = overviewWidget(old, setup, { width: 360, height: 584 }, auth, now);
+  expect(aged.groups[0]).toMatchObject({ muted: true });
+  expect(aged.saved).toBe('Saved Thu');
+});
+it('moves square Groups up as one message block with a bottom action and speaks sections in drawn order', () => {
+  const c = clone(groupsCopy);
+  c.home!.currencies = [];
+  c.home!.byGroup = { football: [], lisbon: [], goa: [], maple: [] };
+  c.groups = {};
+  const v = overviewWidget(c, setup, { width: 360, height: 344 }, auth, now);
+  expect(v.description).toBe('in every currency');
+  expect(v.layout.showStateTile).toBe(false);
+  expect(v.groups).toHaveLength(3);
+  expect(v.groupMore).toBe('+1\u00a0more');
+  const message = v.layout.sections.find((s) => s.id === 'message')!;
+  expect(message.height).toBe(message.rowHeight);
+  expect(v.summary.indexOf('Sunday Football')).toBeLessThan(v.summary.indexOf('To review'));
+});
+
+it.each([1, 1.3, 2])(
+  'keeps a 4×3 Overview unchanged before the Groups section fits at %s text',
+  (scale) => {
+    const without = clone(groupsCopy);
+    delete without.savedGroups;
+    const before = overviewWidget(
+      without,
+      setup,
+      { width: 360, height: 344, pixelRatio: 2.625 },
+      auth,
+      now,
+      scale,
+    );
+    const after = overviewWidget(
+      groupsCopy,
+      setup,
+      { width: 360, height: 344, pixelRatio: 2.625 },
+      auth,
+      now,
+      scale,
+    );
+    expect(after.groups).toEqual([]);
+    expect(after.payments.map((p) => p.label)).toEqual(before.payments.map((p) => p.label));
+    expect(after.action).toBe(before.action);
+    expect(after.review).toBe(before.review);
+    expect(after.layout.textFactor).toBe(before.layout.textFactor);
+  },
+);
+
+it('does not spend the footer budget on a Groups section that is not drawn at in-between heights', () => {
+  const without = clone(groupsCopy);
+  delete without.savedGroups;
+  for (const width of [172, 231, 301, 360])
+    for (const height of [280, 300, 344, 390])
+      for (const scale of [1, 1.3, 2]) {
+        const size = { width, height, pixelRatio: 2.625 };
+        const a = overviewWidget(without, setup, size, auth, now, scale),
+          b = overviewWidget(groupsCopy, setup, size, auth, now, scale);
+        expect(
+          {
+            payments: b.payments.map((p) => p.label),
+            action: b.action,
+            review: b.review,
+            factor: b.layout.textFactor,
+          },
+          `${width}x${height}/${scale}`,
+        ).toEqual({
+          payments: a.payments.map((p) => p.label),
+          action: a.action,
+          review: a.review,
+          factor: a.layout.textFactor,
+        });
+      }
+});
+
+const withoutPayments = () => {
+  const c = clone(groupsCopy);
+  for (const part of Object.values(c.groups ?? {}))
+    for (const bucket of part.currencies) bucket.payments = [];
+  return c;
+};
+it.each([464, 584])(
+  'buys natural Group rows before stretching at 360×%s without payments',
+  (height) => {
+    const c = withoutPayments();
+    for (const id of ['extra1', 'extra2']) {
+      c.savedGroups!.rows.push({ ...c.savedGroups!.rows[0]!, id, name: id });
+      c.home!.byGroup![id] = [];
+    }
+    c.home!.groupCount = 6;
+    const v = overviewWidget(c, setup, { width: 360, height, pixelRatio: 2.625 }, auth, now);
+    expect(v.payments).toEqual([]);
+    expect(v.groups).toHaveLength(height === 464 ? 5 : 6);
+    expect(v.groupMore).toBe(height === 464 ? '+1\u00a0more' : null);
+    if (height === 464) expect(v.groups[0].rowHeight).toBeLessThan(43);
+  },
+);
+it('fills the quiet 4×4 with all four natural Group rows', () => {
+  const c = withoutPayments();
+  c.home!.currencies = [];
+  for (const id in c.home!.byGroup!) c.home!.byGroup![id] = [];
+  const v = overviewWidget(c, setup, { width: 360, height: 464 }, auth, now);
+  expect(v.groups).toHaveLength(4);
+  expect(v.groupMore).toBeNull();
 });
