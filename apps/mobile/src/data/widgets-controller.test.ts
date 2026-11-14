@@ -26,7 +26,7 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
   let user = alex,
     expired = false,
     owed = 2400;
-  let extraGroups: ReturnType<typeof group>[] = [];
+  const extraGroups: ReturnType<typeof group>[] = [];
   let homeOverride: { buckets: unknown[]; groups?: unknown[] } | null = null;
   let groupBalances: unknown = { byCurrency: [] };
   let refused = 0;
