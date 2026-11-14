@@ -909,11 +909,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const key =
         path === '/api/groups'
           ? groupsKey(account())
-          : path.includes('/expenses?')
-            ? expensePageKey(account(), id)
-            : path.endsWith('/balances')
-              ? groupBalancesKey(account(), id)
-              : groupKey(account(), id);
+          : path === '/api/user/balances'
+            ? homeBalancesKey(account())
+            : path.includes('/expenses?')
+              ? expensePageKey(account(), id)
+              : path.endsWith('/balances')
+                ? groupBalancesKey(account(), id)
+                : groupKey(account(), id);
       return verifiedAt > (scoped(untrusted, key) ?? -Infinity);
     },
     (id) =>
@@ -2351,6 +2353,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const reading = (async () => {
         try {
           const group = parseGroup(await request('/api/groups/' + id, owner));
+          if (current(owner)) widgets.confirmedGroup(id);
           if (
             current(owner) &&
             group.id === id &&

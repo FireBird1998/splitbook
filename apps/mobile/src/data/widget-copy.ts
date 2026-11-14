@@ -1,3 +1,4 @@
+import { Superseded } from './transport';
 import { widgetGroupsToConfirm } from '@splitbook/shared/widget-membership';
 import { parseGroupListResponse, type GroupReadTag } from '@splitbook/shared/group-read';
 import { expenseDraftChanged, parseExpenseContext } from './expense-draft';
@@ -16,11 +17,17 @@ import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widge
 import { createSavedCopyQueue, parseOnce, type Envelope } from './saved-read-engine';
 import type { AccountStorageLease, MobileSnapshot } from './types';
 
+export interface WidgetCopyDiscard {
+  groups?: readonly string[];
+  tags?: readonly string[];
+  months?: readonly string[];
+}
+
 export interface WidgetsNative {
   readCopy?(): Promise<WidgetCopy | null>;
   recentSelections?(accountId: string): Promise<Record<string, WidgetRecentPart | null>>;
   openSetup?(widgetId: number): Promise<void>;
-  write(copy: WidgetCopy): Promise<void>;
+  write(copy: WidgetCopy, discard?: WidgetCopyDiscard): Promise<void>;
   clear(): Promise<void>;
   setSession(session: WidgetSession): Promise<void>;
   redraw(): Promise<void>;
@@ -41,6 +48,7 @@ export function createWidgetCopy(
 ) {
   const queue = createSavedCopyQueue();
   let signature = '';
+  let epoch = 0;
   let groups: Record<string, WidgetGroupPart> = {};
   let months: NonNullable<WidgetCopy['months']> = {};
   let tags: NonNullable<WidgetCopy['tags']> = {};
@@ -76,6 +84,13 @@ export function createWidgetCopy(
   let groupPeople: NonNullable<WidgetCopy['groupPeople']> = {};
   let peopleRefusedAt: NonNullable<WidgetCopy['peopleRefusedAt']> = {};
   let written: WidgetCopy | null = null;
+  let restoreSource: WidgetCopy | null = null;
+  const pendingNativeGroups = new Set<string>();
+  const groupPath = (id: string) => '/api/groups/' + id;
+  const ledgerPath = (id: string) => expensePagePath(id, { limit: 20 });
+  const trustedGroup = (id: string, part: WidgetGroupPart) =>
+    trusted(groupPath(id), part.verifiedAt) &&
+    trusted(groupPath(id) + '/balances', part.balancesVerifiedAt);
   const rememberPeople = (
     group: Parameters<typeof widgetGroupPeople>[0],
     verifiedAt: number,
@@ -118,8 +133,15 @@ export function createWidgetCopy(
   const restore = async (accountId: string) => {
     if (restored || !rows) return;
     restored = true;
+    const started = epoch;
+    const assertCurrent = () => {
+      if (started !== epoch) throw new Superseded();
+    };
     const previous = await native?.readCopy?.();
+    assertCurrent();
     if (previous?.accountId === accountId) {
+      restoreSource = previous;
+      for (const id of widgetGroupsToConfirm(previous, new Set())) pendingNativeGroups.add(id);
       const fences = { ...previous.peopleRefusedAt };
       // Older copies already remember refusals, but do not yet carry their times.
       for (const id of previous.lostGroupIds ?? []) fences[id] ??= now();
@@ -135,14 +157,16 @@ export function createWidgetCopy(
       const allowed = (id: string) =>
         !lost.has(id) && !retired.has(id) && peopleRefusedAt[id] === undefined;
       for (const [id, part] of Object.entries(previous.groups ?? {}))
-        if (allowed(id) && !groups[id]) groups[id] = part;
+        if (allowed(id) && !groups[id] && trustedGroup(id, part)) groups[id] = part;
       for (const [id, part] of Object.entries(previous.groupPeople ?? {}))
-        if (allowed(id) && !groupPeople[id]) groupPeople[id] = part;
+        if (allowed(id) && !groupPeople[id] && trusted(groupPath(id), part.verifiedAt))
+          groupPeople[id] = part;
       for (const [id, part] of Object.entries(previous.tags ?? {}))
-        if (allowed(id) && !tags[id]) tags[id] = part;
+        if (allowed(id) && !tags[id] && trusted(groupPath(id), part.verifiedAt)) tags[id] = part;
       for (const [id, part] of Object.entries(previous.months ?? {}))
-        if (allowed(id) && !months[id]) months[id] = part;
-      if (previous.savedGroups) {
+        if (allowed(id) && !months[id] && trusted(ledgerPath(id), part.verifiedAt))
+          months[id] = part;
+      if (previous.savedGroups && trusted('/api/groups', previous.savedGroups.verifiedAt)) {
         const current = savedGroups;
         savedGroups = previous.savedGroups;
         rememberCatalogue(
@@ -153,6 +177,7 @@ export function createWidgetCopy(
     }
     const read = async (path: string) => {
       const row = cachedRead(await rows.load(accountId, path), accountId, path, now());
+      assertCurrent();
       return row && trusted(path, row.refreshedAt) ? row : null;
     };
     const list = await read('/api/groups');
@@ -175,6 +200,7 @@ export function createWidgetCopy(
       );
     if (list) rememberListTags(list);
     const keys = (await rows.keys?.(accountId)) ?? [];
+    assertCurrent();
     for (const path of keys.filter((path) => /^\/api\/groups\/[^/]+$/.test(path))) {
       const id = path.split('/').at(-1)!;
       if (retired.has(id)) continue;
@@ -389,6 +415,14 @@ export function createWidgetCopy(
       };
       queue.push('widget', async () => {
         await held.writeSavedCopy(() => restore(held.accountId));
+        if (
+          !copy.home &&
+          restoreSource?.home &&
+          trusted('/api/user/balances', restoreSource.home.verifiedAt)
+        )
+          copy.home = restoreSource.home;
+        if (!snapshot.groups.loaded && !copy.finishLater && restoreSource?.finishLater)
+          copy.finishLater = restoreSource.finishLater;
         copy.groups = { ...groups };
         copy.months = { ...months };
         copy.tags = { ...tags };
@@ -425,9 +459,48 @@ export function createWidgetCopy(
           };
         if (copy.finishLater && copy.lostGroupIds?.includes(copy.finishLater.groupId))
           delete copy.finishLater;
-        const next = JSON.stringify([copy, state]);
+        const old = await held.writeSavedCopy(async () => (await native.readCopy?.()) ?? written);
+        const discard: WidgetCopyDiscard = {
+          groups: Object.entries(old?.groups ?? {})
+            .filter(([id, part]) => !trustedGroup(id, part))
+            .map(([id]) => id),
+          tags: Object.entries(old?.tags ?? {})
+            .filter(([id, part]) => !trusted(groupPath(id), part.verifiedAt))
+            .map(([id]) => id),
+          months: Object.entries(old?.months ?? {})
+            .filter(([id, part]) => !trusted(ledgerPath(id), part.verifiedAt))
+            .map(([id]) => id),
+        };
+        copy.groups = Object.fromEntries(
+          Object.entries(copy.groups ?? {}).filter(([id, part]) => trustedGroup(id, part)),
+        );
+        copy.groupPeople = Object.fromEntries(
+          Object.entries(copy.groupPeople ?? {}).filter(([id, part]) =>
+            trusted(groupPath(id), part.verifiedAt),
+          ),
+        );
+        copy.tags = Object.fromEntries(
+          Object.entries(copy.tags ?? {}).filter(([id, part]) =>
+            trusted(groupPath(id), part.verifiedAt),
+          ),
+        );
+        copy.months = Object.fromEntries(
+          Object.entries(copy.months ?? {}).filter(([id, part]) =>
+            trusted(ledgerPath(id), part.verifiedAt),
+          ),
+        );
+        if (copy.recents)
+          copy.recents = Object.fromEntries(
+            Object.entries(copy.recents).filter(([id, part]) =>
+              trusted(ledgerPath(id), part.verifiedAt),
+            ),
+          );
+        if (copy.home && !trusted('/api/user/balances', copy.home.verifiedAt)) copy.home = null;
+        if (copy.savedGroups && !trusted('/api/groups', copy.savedGroups.verifiedAt))
+          delete copy.savedGroups;
+        const next = JSON.stringify([copy, state, discard]);
         if (next === signature) return;
-        await held.writeSavedCopy(() => native.write(copy));
+        await held.writeSavedCopy(() => native.write(copy, discard));
         written = copy;
         await held.writeSavedCopy(() => native.setSession(state));
         await held.writeSavedCopy(() => native.redraw());
@@ -437,16 +510,21 @@ export function createWidgetCopy(
     async unlistedGroups(listed: ReadonlySet<string>) {
       const held = lease();
       if (!held || !native) return [];
+      for (const id of listed) pendingNativeGroups.delete(id);
       const before = widgetGroupsToConfirm(written, listed);
       await queue.idle();
       const copy = await held.writeSavedCopy(async () => (await native.readCopy?.()) ?? written);
       return copy?.accountId === held.accountId
-        ? [...new Set([...before, ...widgetGroupsToConfirm(copy, listed)])].filter(
-            (id) => !lost.has(id) && !archived.has(id) && peopleRefusedAt[id] === undefined,
-          )
+        ? [
+            ...new Set([...before, ...pendingNativeGroups, ...widgetGroupsToConfirm(copy, listed)]),
+          ].filter((id) => !lost.has(id) && !archived.has(id) && peopleRefusedAt[id] === undefined)
         : [];
     },
+    confirmedGroup(id: string) {
+      pendingNativeGroups.delete(id);
+    },
     archiveGroup(id: string) {
+      pendingNativeGroups.delete(id);
       if (groups[id]) groups[id] = { ...groups[id], archived: true };
       if (groupPeople[id]) groupPeople[id] = { ...groupPeople[id], archived: true };
       archived.add(id);
@@ -456,6 +534,7 @@ export function createWidgetCopy(
       signature = '';
     },
     forgetGroup(id: string, denied = false) {
+      pendingNativeGroups.delete(id);
       delete groups[id];
       delete months[id];
       archived.delete(id);
@@ -474,6 +553,7 @@ export function createWidgetCopy(
       signature = '';
     },
     reset() {
+      epoch++;
       queue.cancel();
       signature = '';
       groups = {};
@@ -482,6 +562,8 @@ export function createWidgetCopy(
       groupPeople = {};
       peopleRefusedAt = {};
       written = null;
+      restoreSource = null;
+      pendingNativeGroups.clear();
       savedGroups = undefined;
       lost.clear();
       refusedAt.clear();
