@@ -58,6 +58,11 @@ export function headerTimeOfDay(
   return 'night';
 }
 
+/** Sunset and Night connect the picture to a dark card in either app theme. */
+export function headerCardTone(time: ReturnType<typeof headerTimeOfDay>): 'dark' | 'theme' {
+  return time === 'sunset' || time === 'night' ? 'dark' : 'theme';
+}
+
 type TripDates = { startDate?: Date | string | null; endDate?: Date | string | null };
 
 function headerTripDays(dates: TripDates) {
@@ -99,10 +104,12 @@ export function headerCard(
       members: readonly unknown[];
     },
   today: string,
+  time: ReturnType<typeof headerTimeOfDay> = 'day',
 ) {
   const theme = getGroupTheme(group.category);
   const { start, end } = headerTripDays(group);
   return {
+    tone: headerCardTone(time),
     name: group.name,
     theme: theme.label,
     members: group.members.length,

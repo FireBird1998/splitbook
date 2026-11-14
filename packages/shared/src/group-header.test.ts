@@ -4,6 +4,7 @@ import {
   HEADER_SCENES,
   headerTimeOfDay,
   headerCard,
+  headerCardTone,
   todayTripDay,
   tripDayCaption,
 } from './group-header';
@@ -65,6 +66,7 @@ const trip = {
 };
 it('gives a Trip its route, calendar dates and numbered days', () => {
   expect(headerCard(trip, '2026-11-15')).toEqual({
+    tone: 'theme',
     name: 'Goa Friends Trip',
     theme: 'Trip',
     members: 2,
@@ -137,4 +139,22 @@ it.each([
   const card = headerCard({ ...trip, startDate: '2026-01-01', endDate }, '2026-01-05');
   expect(card.trip?.days).toHaveLength(length);
   expect(card.trip?.today).toBe(5);
+});
+
+it.each([
+  ['morning', 'theme'],
+  ['day', 'theme'],
+  ['sunset', 'dark'],
+  ['night', 'dark'],
+] as const)('the %s card has %s tone', (time, tone) => {
+  expect(headerCardTone(time)).toBe(tone);
+  expect(headerCard(trip, '2026-11-15', time).tone).toBe(tone);
+});
+it.each([
+  [9, 'theme'],
+  [12, 'theme'],
+  [18, 'dark'],
+  [23, 'dark'],
+] as const)('Auto at local hour %s gives the card %s tone', (hour, tone) => {
+  expect(headerCard(trip, '2026-11-15', headerTimeOfDay('auto', hour)).tone).toBe(tone);
 });

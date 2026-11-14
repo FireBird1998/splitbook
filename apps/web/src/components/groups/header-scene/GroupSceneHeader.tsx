@@ -20,13 +20,14 @@ export default function GroupSceneHeader({
   const clock = useHeaderClock();
   const { picture, failed, retry } = useSceneArt(header.scene);
   const preferences = useScenePreferences();
+  const time = headerTimeOfDay(header.time, clock?.hour ?? 12);
   return (
     <Box aria-busy={!picture && !failed}>
       {picture && <style>{picture.css}</style>}
       <HeaderSceneView
-        card={headerCard(group, clock?.today ?? '')}
+        card={headerCard(group, clock?.today ?? '', time)}
         art={picture?.art ?? null}
-        time={headerTimeOfDay(header.time, clock?.hour ?? 12)}
+        time={time}
         motion={preferences.motion}
         followPointer={preferences.followPointer}
       />
