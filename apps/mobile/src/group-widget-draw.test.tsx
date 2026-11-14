@@ -489,3 +489,66 @@ it.each([lightTokens, darkTokens])(
     }
   },
 );
+
+it.each([lightTokens, darkTokens])(
+  'draws two-line Recent rows and Group-only tap targets in $mode',
+  (tokens) => {
+    vi.stubGlobal('__DEV__', false);
+    const recent = {
+      verifiedAt: now - 180000,
+      rows: [
+        {
+          id: 'private-expense-identity',
+          kind: 'expense' as const,
+          description: 'Beach shack lunch',
+          payer: 'Meera',
+          payerId: 'meera',
+          amountMinor: 280000,
+          currency: 'INR',
+          date: '2026-11-13',
+        },
+        {
+          id: 'private-payment-identity',
+          kind: 'settlement' as const,
+          description: 'Rohan paid Meera',
+          payer: 'Rohan',
+          payerId: 'rohan',
+          amountMinor: 50000,
+          currency: 'INR',
+          date: '2026-11-13',
+        },
+      ],
+    };
+    const tree = buildWidgetTree(
+      drawGroup(
+        { ...copy, recents: { maple: recent } },
+        {
+          kind: 'group',
+          accountId: 'alex',
+          groupId: 'maple',
+          widgetId: 7,
+          showRecentExpenses: true,
+        },
+        { width: 360, height: 584 },
+        { status: 'authenticated', accountId: 'alex', loading: false },
+        now,
+        tokens,
+      ),
+    );
+    expect(drawnText(tree)).toContain('Beach shack lunch');
+    expect(drawnText(tree)).toContain('Meera paid\u00a0· Today');
+    expect(drawnText(tree)).toContain('Payment\u00a0· Today');
+    const rows = allNodes(tree).filter(
+      (n) =>
+        n.children?.some((child) => drawnText(child).includes('Beach shack lunch')) &&
+        (n.props as { clickAction?: string }).clickAction === 'OPEN_URI',
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      const uri = (row.props as { clickActionData: { uri: string } }).clickActionData.uri;
+      expect(new URL(uri).pathname).toBe('/group/maple/group');
+      expect(uri).not.toContain('private-expense-identity');
+    }
+    vi.unstubAllGlobals();
+  },
+);

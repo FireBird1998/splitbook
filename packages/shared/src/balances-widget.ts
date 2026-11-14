@@ -1,5 +1,5 @@
 import { dayKeyInZone } from './zoned-calendar';
-import type { WidgetGroupPart, WidgetMonthPart } from './group-widget';
+import type { WidgetGroupPart, WidgetMonthPart, WidgetRecentPart } from './group-widget';
 import type { GroupCategory } from './types';
 /** Saved read available to the Android widget renderer, never a live balance. */
 export interface WidgetCopy {
@@ -14,6 +14,7 @@ export interface WidgetCopy {
   months?: Record<string, WidgetMonthPart>;
   /** Active Tags from Group reads already made by the app, in their read order. */
   tags?: Record<string, { verifiedAt: number; rows: { id: string; name: string }[] }>;
+  recents?: Record<string, WidgetRecentPart>;
   lostGroupIds?: string[];
   savedGroups?: {
     verifiedAt: number;

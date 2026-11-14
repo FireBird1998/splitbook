@@ -6,6 +6,7 @@ import type { AssistantAttribution } from '@splitbook/shared/draft-attribution';
 import connectDB from '@/lib/db';
 import { changeLedgerExpense, recordLedger, type ExpenseAccess } from '@/lib/ledger-recording';
 import Expense from '@/lib/models/Expense';
+import Settlement from '@/lib/models/Settlement';
 import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
 import type { CreateExpenseInput, UpdateExpenseInput } from '@splitbook/shared/validators/expense';
@@ -411,7 +412,38 @@ export class ExpenseService {
       count: summaryAgg.length,
     };
 
+    // This optional part uses the same admitted ledger read. Its window is independent of
+    // the visible Month and never changes that list's pagination, totals or member shares.
+    const firstUnfilteredPage =
+      page === 1 &&
+      limit >= 20 &&
+      Object.keys(query).every((key) => key === 'group' || key === 'isDeleted') &&
+      sortField === 'date' &&
+      sortOrder === -1;
+    const recent = filters.includeRecent
+      ? await Promise.all([
+          firstUnfilteredPage
+            ? Promise.resolve(expenses.slice(0, 20))
+            : Expense.find({ group: groupId, isDeleted: false })
+                .select('-editHistory -notes')
+                .sort({ date: -1, createdAt: -1 })
+                .limit(20)
+                .populate('paidBy.user', PERSON_FIELDS)
+                .populate('splitBetween.user', PERSON_FIELDS)
+                .lean(),
+          Settlement.find({ group: groupId })
+            .select(
+              'group paidBy paidTo amount amountMinor moneyVersion currency paidCurrency amountPaidMinor createdAt',
+            )
+            .sort({ createdAt: -1 })
+            .limit(20)
+            .populate('paidBy', PERSON_FIELDS)
+            .populate('paidTo', PERSON_FIELDS)
+            .lean(),
+        ]).then(([expenses, settlements]) => ({ expenses, settlements }))
+      : undefined;
     return {
+      ...(recent ? { recent } : {}),
       expenses: expenses.map((expense) => ({
         ...expense,
         ...displayTagReference(groupTags, expense),

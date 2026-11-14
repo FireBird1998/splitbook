@@ -22,9 +22,82 @@ import { dayKeyInZone, monthKeyInZone } from './zoned-calendar';
 export interface GroupWidgetSetup {
   kind: 'group';
   hideAmounts?: boolean;
+  showRecentExpenses?: boolean;
   widgetId: number;
   accountId: string;
   groupId: string;
+}
+export interface WidgetRecentPart {
+  verifiedAt: number;
+  rows: {
+    id: string;
+    kind: 'expense' | 'settlement';
+    description: string;
+    payer: string;
+    payerId: string | null;
+    payers?: number;
+    amountMinor: number;
+    currency: string;
+    date: string;
+    isDeleted?: boolean;
+  }[];
+}
+
+function recentWidgetView(
+  part: WidgetRecentPart | undefined,
+  setup: GroupWidgetSetup,
+  now: number,
+) {
+  if (setup.showRecentExpenses !== true) return null;
+  const today = dayKeyInZone(now, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const rows = (part?.rows ?? [])
+    .filter((row) => !row.isDeleted)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  return {
+    rows: setup.hideAmounts
+      ? []
+      : rows.map((row) => {
+          const day =
+            row.kind === 'settlement' && row.date.includes('T')
+              ? dayKeyInZone(
+                  Date.parse(row.date),
+                  Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+                )
+              : row.date.slice(0, 10);
+          const days = dayCount(day, today) - 1;
+          const when =
+            day === today
+              ? 'Today'
+              : days > 0 && days < 7
+                ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][
+                    new Date(`${day}T00:00:00Z`).getUTCDay()
+                  ]
+                : `${Number(day.slice(8, 10))} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(day.slice(5, 7)) - 1]}`;
+          const firstName = row.payer.trim().split(/\s+/)[0];
+          const payer =
+            row.payers && row.payers > 1
+              ? counted(row.payers, 'person', 'people')
+              : row.payerId === setup.accountId
+                ? 'You'
+                : row.payer === 'Former member'
+                  ? row.payer
+                  : firstName || 'Former member';
+          const detail = row.kind === 'settlement' ? 'Payment' : `${payer} paid`;
+          return {
+            id: row.id,
+            kind: row.kind,
+            description: row.description,
+            detail: `${detail}${SEPARATOR}${when}`,
+            amount: formatCurrency(displayMajorAmount(row.amountMinor, row.currency), row.currency),
+          };
+        }),
+    count: setup.hideAmounts
+      ? counted(rows.length, 'recent Expense or payment', 'recent Expenses and payments')
+      : null,
+    prompt: part ? null : 'Open the Group to update',
+    empty: part && !rows.length && !setup.hideAmounts ? 'No recent Expenses or payments' : null,
+    saved: part ? widgetSavedTime(part.verifiedAt, now) : null,
+  };
 }
 export interface WidgetMonthPart {
   month: string;
@@ -127,9 +200,11 @@ function groupWidgetView(
   session: WidgetSession,
   now: number,
   month?: WidgetMonthPart,
+  recent?: WidgetRecentPart,
 ) {
   const empty = {
     state: 'no-copy',
+    recent: null as ReturnType<typeof recentWidgetView>,
     month: null as null | {
       totals: string[];
       share: string | null;
@@ -246,8 +321,13 @@ function groupWidgetView(
     state: part.archived ? 'archived' : allSquare ? 'all-square' : 'normal',
     name: part.name,
     month: monthView,
+    recent: recentWidgetView(recent, setup, now),
     tripDay: tripDay(part, now),
-    hidden: setup.hideAmounts ? 'Amounts and names hidden' : null,
+    hidden: setup.hideAmounts
+      ? setup.showRecentExpenses
+        ? 'Amounts, names and descriptions hidden'
+        : 'Amounts and names hidden'
+      : null,
     theme: part.theme,
     compactLabel:
       bucket && !allSquare && !setup.hideAmounts
@@ -467,7 +547,31 @@ function groupLayout(
         text.width(paymentOverflow(view.payments), 10) + text.width(actionLabel, actionFont) + 32 <=
           width;
       const monthEligible = !!view.month && optional && level === 0 && !tiny;
+      const recentEligible = !!view.recent && optional && level === 0 && !tiny;
       const sectionLabelHeight = text.line(11) + 4;
+      const recentMessageLines = text.words(
+        view.recent?.prompt ?? view.recent?.count ?? view.recent?.empty ?? '',
+        11,
+      );
+      const recentCount = view.recent?.rows.length ?? 0;
+      const recentRowHeight = Math.max(40, text.line(12) + text.line(10) + 12);
+      const recentAmountFont = text.fit(
+        [...(view.recent?.rows ?? [])].sort(
+          (a, b) => text.width(b.amount, 13, true) - text.width(a.amount, 13, true),
+        )[0]?.amount ?? '',
+        13,
+        width / 2,
+        true,
+      );
+      const recentSection: WidgetSection = {
+        id: 'recent',
+        rows: recentCount || 1,
+        rowHeight: recentCount ? recentRowHeight : recentMessageLines.length * text.line(11) + 12,
+        inset:
+          (view.hidden ? 0 : sectionLabelHeight) + (recentCount && !compact ? pixels(4) * 2 : 0),
+        minHeight: recentCount ? sectionLabelHeight + text.line(10) + 4 : 0,
+        ...(recentCount ? { moreHeight: text.line(10) + 4, grow: true } : {}),
+      };
       const monthPanelPadding = compact ? 0 : 8;
       const monthColumnWidth = (compact ? width : (width - 8) / 2) - monthPanelPadding * 2;
       const monthAmountFont = monthEligible
@@ -531,8 +635,9 @@ function groupLayout(
             ? 0
             : monthHeading + text.line(11) + 4 + text.line(monthAmountFont),
         ...(view.month?.totals.length ? { moreHeight: monthMoreHeight } : {}),
+        ...(recentEligible ? { afterRows: { id: 'recent', rows: 3 } } : {}),
       };
-      let showSectionLabels = monthEligible && !view.hidden;
+      let showSectionLabels = (recentEligible || monthEligible) && !view.hidden;
       let sections: WidgetSection[] = [
         ...(view.name
           ? [
@@ -592,7 +697,7 @@ function groupLayout(
               },
             ]
           : []),
-        // #1187 inserts opt-in Recent between Payments and This Month.
+        ...(recentEligible ? [recentSection] : []),
         ...(monthEligible ? [monthSection] : []),
         ...(view.hidden && level < 2 && !tiny
           ? [{ id: 'hidden', rows: 1, rowHeight: text.line(10) + 6 }]
@@ -608,7 +713,7 @@ function groupLayout(
             ]
           : []),
         // Messages are fixed blocks. Only list rows (or this space below a message) grow.
-        ...(!view.payments.length && view.state !== 'loading'
+        ...(!view.payments.length && !view.recent?.rows.length && view.state !== 'loading'
           ? [{ id: 'space', rows: 1, rowHeight: 0, required: true, grow: true }]
           : []),
         ...(actionLabel
@@ -627,12 +732,12 @@ function groupLayout(
       if (
         showSectionLabels &&
         !fitWidgetSections(height, sections, gap, ratio).sections.some(
-          (section) => section.id === 'month',
+          (section) => section.id === 'recent' || section.id === 'month',
         )
       ) {
         showSectionLabels = false;
         sections = sections
-          .filter((section) => section.id !== 'month')
+          .filter((section) => section.id !== 'month' && section.id !== 'recent')
           .map((section) =>
             section.id === 'payments'
               ? { ...section, inset: (section.inset ?? 0) - sectionLabelHeight }
@@ -643,6 +748,8 @@ function groupLayout(
         sections,
         showSectionLabels,
         sectionLabelHeight,
+        recentMessageLines,
+        recentAmountFontSize: text.font(recentAmountFont),
         monthAmountFontSize: text.font(monthAmountFont),
         monthColumnWidth,
         monthPanelPadding,
@@ -685,6 +792,16 @@ function groupLayout(
   );
   const payments = settings.sections.find((s) => s.id === 'payments');
   const monthSection = settings.sections.find((s) => s.id === 'month');
+  const recentSection = settings.sections.find((s) => s.id === 'recent');
+  const recentMore = recentSection?.more
+    ? recentSection.rows
+      ? `+${counted(recentSection.more, 'more', 'more')}`
+      : counted(
+          view.recent?.rows.length ?? 0,
+          'recent Expense or payment',
+          'recent Expenses and payments',
+        )
+    : null;
   const monthMore = monthSection?.more
     ? monthSection.rows
       ? `+${counted(monthSection.more, 'more', 'more')}`
@@ -708,6 +825,20 @@ function groupLayout(
     cornerRadius,
     width,
     compact,
+    recentRows: recentSection?.rows ?? 0,
+    recentMore,
+    recentMoreIsCount: !!recentMore && !recentSection?.rows,
+    recentSaved: view.hidden ? null : view.recent?.saved,
+    recentLabel: view.hidden ? null : 'RECENT',
+    recentMoreHeight: recentSection?.moreHeight ?? 0,
+    recentPanelHeight: recentSection
+      ? recentSection.height - (view.hidden ? 0 : settings.sectionLabelHeight)
+      : 0,
+    recentRowSizes: Array.from({ length: recentSection?.rows ?? 0 }, (_, i) => ({
+      height: recentSection!.rowHeight,
+      contentHeight: recentSection!.rowHeight - (i ? pixels(1) : 0),
+      dividerHeight: i ? pixels(1) : 0,
+    })),
     scale,
     paymentPadding: compact ? 0 : pixels(4),
     monthRows: monthSection?.rows ?? 0,
@@ -755,10 +886,11 @@ function projectGroupWidget(
   now: number,
   fontScale = 1,
   month?: WidgetMonthPart,
+  recent?: WidgetRecentPart,
 ) {
   let full: ReturnType<typeof groupWidgetView>;
   try {
-    full = groupWidgetView(part, setup, session, now, month);
+    full = groupWidgetView(part, setup, session, now, month, recent);
   } catch {
     // Damaged saved data must not prevent Android drawing the widget or erase its setup.
     full = groupWidgetView(undefined, setup, session, now);
@@ -772,6 +904,13 @@ function projectGroupWidget(
     ...full,
     layout,
     more,
+    recent: full.recent
+      ? {
+          ...full.recent,
+          rows: full.recent.rows.slice(0, layout.recentRows),
+          more: layout.recentMore,
+        }
+      : null,
     month: full.month
       ? {
           ...full.month,
@@ -801,6 +940,12 @@ function projectGroupWidget(
       // Speech keeps every saved payment, including rows omitted at this size (Large text board).
       ...spokenWidgetPayments(full.payments),
       full.hidden ? null : full.description,
+      full.recent ? 'Recent' : null,
+      ...(full.recent?.rows.flatMap((row) => [row.description, row.detail, row.amount]) ?? []),
+      full.recent?.count,
+      full.recent?.prompt,
+      full.recent?.empty,
+      full.recent?.saved,
       full.month ? 'This Month' : null,
       ...(full.month?.totals.length ? ['Group spent', ...full.month.totals] : []),
       full.month?.share ? `Your share ${full.month.share}` : null,

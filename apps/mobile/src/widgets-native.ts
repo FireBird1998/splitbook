@@ -3,6 +3,26 @@ import { readWidgetTagIds, type WidgetSetupRecord } from '@splitbook/shared/widg
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
 import type { WidgetsNative } from './data/widget-copy';
 
+// SQLite checks the current setup in the same statement that stores a copy. A delayed app
+// write cannot put descriptions back after setup was switched off or its widget removed.
+const permittedRecents = `json_set(copy, '$.recents', json((
+  SELECT json_group_object(recent.key, json(recent.value))
+  FROM json_each(copy, '$.recents') AS recent
+  WHERE NOT EXISTS (SELECT 1 FROM json_each(copy, '$.lostGroupIds') AS lost WHERE lost.value = recent.key)
+  AND EXISTS (
+    SELECT 1 FROM widget_setup AS placed
+    WHERE placed.environment = widget_state.environment
+      AND json_valid(placed.setup)
+      AND json_extract(placed.setup, '$.kind') = 'group'
+      AND json_extract(placed.setup, '$.accountId') = json_extract(copy, '$.accountId')
+      AND json_extract(placed.setup, '$.groupId') = recent.key
+      AND json_type(placed.setup, '$.showRecentExpenses') = 'true'
+  )
+)))`;
+const pruneRecents = `UPDATE widget_state SET copy = ${permittedRecents}
+  WHERE json_valid(copy) AND json_type(copy, '$.recents') = 'object'
+    AND copy != ${permittedRecents};`;
+
 /** Separate saved read in app-private SQLite, readable by the headless widget renderer. */
 export function createWidgetsStore(environment: string) {
   let opening: Promise<SQLiteDatabase> | undefined;
@@ -11,7 +31,19 @@ export function createWidgetsStore(environment: string) {
       const db = await openDatabaseAsync('splitbook-widgets.db');
       await db.execAsync(`PRAGMA secure_delete = ON;
       CREATE TABLE IF NOT EXISTS widget_state (environment TEXT PRIMARY KEY, copy TEXT, session TEXT);
-      CREATE TABLE IF NOT EXISTS widget_setup (environment TEXT, widget_id INTEGER, setup TEXT, PRIMARY KEY(environment, widget_id));`);
+      CREATE TABLE IF NOT EXISTS widget_setup (environment TEXT, widget_id INTEGER, setup TEXT, PRIMARY KEY(environment, widget_id));
+      CREATE TRIGGER IF NOT EXISTS widget_recent_copy AFTER UPDATE OF copy ON widget_state
+      BEGIN ${pruneRecents} END;
+      CREATE TRIGGER IF NOT EXISTS widget_recent_setup_saved AFTER INSERT ON widget_setup
+      BEGIN
+        DELETE FROM widget_setup WHERE widget_id = NEW.widget_id AND environment != NEW.environment
+          AND json_valid(setup)
+          AND json_type(setup, '$.showRecentExpenses') = 'true';
+        ${pruneRecents}
+      END;
+      CREATE TRIGGER IF NOT EXISTS widget_recent_setup_removed AFTER DELETE ON widget_setup
+      BEGIN ${pruneRecents} END;
+      ${pruneRecents}`);
       return db;
     })());
   const ensure = async () => {
@@ -20,6 +52,23 @@ export function createWidgetsStore(environment: string) {
     return db;
   };
   return {
+    async recentGroups(accountId: string, activeIds: number[]) {
+      const rows = await (
+        await database()
+      ).getAllAsync<{ widget_id: number; group_id: string }>(
+        `SELECT widget_id, json_extract(setup, '$.groupId') AS group_id FROM widget_setup
+        WHERE environment = ? AND json_valid(setup) AND json_extract(setup, '$.kind') = 'group'
+          AND json_extract(setup, '$.accountId') = ?
+          AND json_type(setup, '$.showRecentExpenses') = 'true'`,
+        environment,
+        accountId,
+      );
+      return [
+        ...new Set(
+          rows.filter((row) => activeIds.includes(row.widget_id)).map((row) => row.group_id),
+        ),
+      ];
+    },
     async reconcileSetups(activeIds: number[]) {
       // An invalid/partial native result must never delete a live placement.
       if (activeIds.some((id) => !Number.isSafeInteger(id) || id <= 0))
@@ -74,13 +123,7 @@ export function createWidgetsStore(environment: string) {
       );
     },
     async removeSetup(widgetId: number) {
-      await (
-        await database()
-      ).runAsync(
-        'DELETE FROM widget_setup WHERE environment = ? AND widget_id = ?',
-        environment,
-        widgetId,
-      );
+      await (await database()).runAsync('DELETE FROM widget_setup WHERE widget_id = ?', widgetId);
     },
     async read(): Promise<{ copy: WidgetCopy | null; session: WidgetSession }> {
       const row = await (
@@ -172,6 +215,19 @@ export function createWidgetsNative(environment: string): WidgetsNative {
   const store = createWidgetsStore(environment);
   let sessions: Promise<void> = Promise.resolve();
   return {
+    recentSelections: async (accountId) => {
+      const { getWidgetInfo } = await import('react-native-android-widget/src/api/get-widget-info');
+      const activeIds = (await getWidgetInfo('Group')).map((widget) => widget.widgetId);
+      const selected = await store.recentGroups(accountId, activeIds);
+      if (!selected.length) return {};
+      const { copy } = await store.read();
+      return Object.fromEntries(
+        selected.map((id) => [
+          id,
+          copy?.accountId === accountId ? (copy.recents?.[id] ?? null) : null,
+        ]),
+      );
+    },
     openSetup: async (widgetId) => {
       const { Linking } = await import('react-native');
       const { default: Constants } = await import('expo-constants');

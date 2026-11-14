@@ -24,7 +24,7 @@ const allocation = z.looseObject({
   amount,
   amountMinor: z.number().int().optional(),
 });
-const expense = z.looseObject({
+export const expenseReadSchema = z.looseObject({
   preparedBy: assistantAttributionSchema.optional(),
   _id: identity,
   group: identity,
@@ -77,7 +77,7 @@ const summary = z.looseObject({
     )
     .optional(),
 });
-const expensePage = z.looseObject({ expenses: z.array(expense), pagination, summary });
+const expensePage = z.looseObject({ expenses: z.array(expenseReadSchema), pagination, summary });
 
 export type ExpensePageRead = z.infer<typeof expensePage>;
 export type ExpenseRead = ExpensePageRead['expenses'][number];

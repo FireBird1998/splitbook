@@ -33,6 +33,7 @@ export function drawGroup(
       now,
       fontScale,
       copy?.accountId === setup.accountId ? copy.months?.[setup.groupId] : undefined,
+      copy?.accountId === setup.accountId ? copy.recents?.[setup.groupId] : undefined,
     ),
     l = view.layout;
   const color = (value: string) => value as `#${string}`;
@@ -330,6 +331,116 @@ export function drawGroup(
       )}
     </FlexWidget>
   );
+  const recent = (
+    <FlexWidget style={{ width: 'match_parent' }}>
+      {l.recentLabel ? (
+        <FlexWidget
+          style={{
+            width: 'match_parent',
+            height: l.sectionLabelHeight,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}
+        >
+          <FlexWidget style={{ flex: 1 }}>
+            {text(l.recentLabel, t.textSecondary, l.fontSizes.secondary, true)}
+          </FlexWidget>
+          {l.recentSaved ? text(l.recentSaved, t.textMuted, l.fontSizes.caption) : null}
+        </FlexWidget>
+      ) : null}
+      <FlexWidget
+        style={{
+          width: 'match_parent',
+          height: l.recentPanelHeight,
+          ...(!l.compact ? { borderRadius: 14, backgroundColor: color(t.surfaceMuted) } : {}),
+          paddingVertical: view.recent?.rows.length && !l.compact ? l.paymentPadding : 0,
+        }}
+      >
+        {view.recent?.rows.map((row, index) => (
+          <FlexWidget
+            key={row.id}
+            clickAction="OPEN_URI"
+            clickActionData={action(group)}
+            style={{ width: 'match_parent', height: l.recentRowSizes[index]!.height }}
+          >
+            {l.recentRowSizes[index]!.dividerHeight ? (
+              <FlexWidget
+                style={{
+                  width: 'match_parent',
+                  height: l.recentRowSizes[index]!.dividerHeight,
+                  backgroundColor: color(t.border),
+                }}
+              />
+            ) : null}
+            <FlexWidget
+              style={{
+                width: 'match_parent',
+                height: l.recentRowSizes[index]!.contentHeight,
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: l.compact ? 0 : 7,
+                flexGap: 8,
+              }}
+            >
+              {!l.compact ? (
+                <FlexWidget
+                  style={{
+                    width: 24,
+                    height: 24,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 8,
+                    backgroundColor: color(t.surface),
+                  }}
+                >
+                  <SvgWidget
+                    svg={`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="${t.textSecondary}" stroke-width="1.6">${row.kind === 'settlement' ? '<path d="M16 4l4 4-4 4M20 8H8M8 20l-4-4 4-4M4 16h12"/>' : '<path d="M6 3.5h12v17l-3-2-3 2-3-2-3 2zM9 8.5h6M9 12.5h6"/>'}</g></svg>`}
+                    style={{ width: 14, height: 14 }}
+                  />
+                </FlexWidget>
+              ) : null}
+              <FlexWidget style={{ flex: 1, flexGap: 2 }}>
+                {text(row.description, t.text, l.fontSizes.body)}
+                {text(row.detail, t.textMuted, l.fontSizes.small)}
+              </FlexWidget>
+              {text(row.amount, t.text, l.recentAmountFontSize, true, true)}
+            </FlexWidget>
+          </FlexWidget>
+        ))}
+        {l.recentMessageLines.length ? (
+          <FlexWidget
+            clickAction="OPEN_URI"
+            clickActionData={action(group)}
+            style={{
+              paddingHorizontal: l.compact ? 0 : 12,
+              height: l.recentPanelHeight,
+              justifyContent: 'center',
+            }}
+          >
+            {lines(
+              l.recentMessageLines,
+              t.textSecondary,
+              l.fontSizes.secondary,
+              !!view.recent?.prompt,
+            )}
+          </FlexWidget>
+        ) : null}
+        {view.recent?.more ? (
+          <FlexWidget
+            clickAction="OPEN_URI"
+            clickActionData={action(group)}
+            style={{ height: l.recentMoreHeight, justifyContent: 'center' }}
+          >
+            {text(
+              view.recent.more,
+              l.recentMoreIsCount ? t.textSecondary : t.brand.main,
+              l.fontSizes.small,
+            )}
+          </FlexWidget>
+        ) : null}
+      </FlexWidget>
+    </FlexWidget>
+  );
   const message = (
     <FlexWidget
       style={{ flexDirection: 'row', width: 'match_parent', flexGap: 12, alignItems: 'flex-start' }}
@@ -417,6 +528,7 @@ export function drawGroup(
     header,
     balance,
     payments: paymentRows,
+    recent,
     month,
     title: message,
     description: (

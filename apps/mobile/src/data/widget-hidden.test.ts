@@ -196,10 +196,12 @@ it('defaults to visible amounts and restores the current per-widget hide and Gro
   expect(widgetSetupChoices('group', setup, 'alex', 'other')).toEqual({
     groupId: 'maple',
     hideAmounts: true,
+    showRecentExpenses: false,
   });
   expect(widgetSetupChoices('group', setup, 'sam', 'other')).toEqual({
     groupId: 'other',
     hideAmounts: true,
+    showRecentExpenses: false,
   });
   expect(
     widgetSetupChoices(

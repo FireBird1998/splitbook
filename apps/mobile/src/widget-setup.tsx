@@ -41,6 +41,7 @@ const pendingChoices = new Map<
     hideAmounts: boolean;
     mode?: 'expense' | 'payment';
     tagIds?: string[];
+    showRecentExpenses: boolean;
   }
 >();
 const store = createWidgetsStore(widgetKey(mobileBuildSettings, __DEV__));
@@ -62,6 +63,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
     [hideAmounts, setHideAmounts] = useState(false),
     [mode, setMode] = useState<'expense' | 'payment'>('expense'),
     [tagIds, setTagIds] = useState<string[] | undefined>(undefined),
+    [showRecentExpenses, setShowRecentExpenses] = useState(false),
     [error, setError] = useState(''),
     [buttonLabel, setButtonLabel] = useState<'Save' | 'Add widget'>('Add widget');
   const cancel = () => {
@@ -94,6 +96,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
           setHideAmounts(restored.hideAmounts);
           setMode(restored.mode ?? 'expense');
           setTagIds(restored.tagIds);
+          setShowRecentExpenses(restored.showRecentExpenses === true);
         }
       })
       .catch(() => setError('Could not read saved Groups. Open Splitbook and try again.'));
@@ -175,6 +178,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                   latest.session.status === 'authenticated' ? latest.session.accountId : '',
                 groupId: selected!,
                 hideAmounts,
+                showRecentExpenses,
               },
       );
       await redrawBalances();
@@ -360,6 +364,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                           mode,
                           accountId: record!.copy!.accountId,
                           hideAmounts: false,
+                          showRecentExpenses: false,
                         });
                       }}
                       style={{
@@ -402,6 +407,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                           mode,
                           accountId: record!.copy!.accountId,
                           hideAmounts,
+                          showRecentExpenses,
                         });
                       }}
                       style={{
@@ -509,46 +515,93 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                     borderRadius: 18,
                     borderWidth: 1,
                     borderColor: t.border,
-                    padding: 16,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 14,
                   }}
                 >
-                  <View style={{ padding: 12, backgroundColor: t.brand.bg, borderRadius: 12 }}>
-                    <Ionicons name="eye-off-outline" size={22} color={t.brand.main} />
+                  {!balances ? (
+                    <>
+                      <View
+                        style={{ padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}
+                      >
+                        <View
+                          style={{ padding: 12, backgroundColor: t.brand.bg, borderRadius: 12 }}
+                        >
+                          <Ionicons name="receipt-outline" size={22} color={t.brand.main} />
+                        </View>
+                        <View style={{ flex: 1, gap: 4 }}>
+                          {copy('Show recent Expenses', true, 16)}
+                          {copy('Descriptions, who paid and amounts', false, 12, t.textSecondary)}
+                        </View>
+                        <Switch
+                          accessibilityLabel="Show recent Expenses"
+                          value={showRecentExpenses}
+                          thumbColor={
+                            showRecentExpenses
+                              ? t.brand.main
+                              : t.mode === 'light'
+                                ? t.surface
+                                : t.textSecondary
+                          }
+                          trackColor={{ false: t.borderStrong, true: `${t.brand.main}80` }}
+                          onValueChange={(value) => {
+                            setShowRecentExpenses(value);
+                            pendingChoices.set(widgetInfo.widgetId, {
+                              accountId:
+                                record?.session.status === 'authenticated'
+                                  ? record.session.accountId
+                                  : null,
+                              groupId: selected,
+                              hideAmounts,
+                              showRecentExpenses: value,
+                            });
+                          }}
+                        />
+                      </View>
+                      <View style={{ height: 1, marginLeft: 72, backgroundColor: t.border }} />
+                    </>
+                  ) : null}
+                  <View
+                    style={{ padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}
+                  >
+                    <View style={{ padding: 12, backgroundColor: t.brand.bg, borderRadius: 12 }}>
+                      <Ionicons name="eye-off-outline" size={22} color={t.brand.main} />
+                    </View>
+                    <View style={{ flex: 1, gap: 4 }}>
+                      {copy('Hide amounts', true, 16)}
+                      {copy(
+                        balances
+                          ? 'Shows “You’re owed” without amounts'
+                          : 'Counts only: no amounts, names or descriptions',
+                        false,
+                        12,
+                        t.textSecondary,
+                      )}
+                    </View>
+                    <Switch
+                      accessibilityLabel="Hide amounts"
+                      value={hideAmounts}
+                      // The compact ListRow switch's colours (#976), as in Settings → Notifications.
+                      thumbColor={
+                        hideAmounts
+                          ? t.brand.main
+                          : t.mode === 'light'
+                            ? t.surface
+                            : t.textSecondary
+                      }
+                      trackColor={{ false: t.borderStrong, true: `${t.brand.main}80` }}
+                      onValueChange={(value) => {
+                        setHideAmounts(value);
+                        pendingChoices.set(widgetInfo.widgetId, {
+                          accountId:
+                            record?.session.status === 'authenticated'
+                              ? record.session.accountId
+                              : null,
+                          groupId: selected,
+                          hideAmounts: value,
+                          showRecentExpenses,
+                        });
+                      }}
+                    />
                   </View>
-                  <View style={{ flex: 1, gap: 4 }}>
-                    {copy('Hide amounts', true, 16)}
-                    {copy(
-                      balances
-                        ? 'Shows “You’re owed” without amounts'
-                        : 'Shows “You owe” without names or amounts',
-                      false,
-                      12,
-                      t.textSecondary,
-                    )}
-                  </View>
-                  <Switch
-                    accessibilityLabel="Hide amounts"
-                    value={hideAmounts}
-                    // The compact ListRow switch's colours (#976), as in Settings → Notifications.
-                    thumbColor={
-                      hideAmounts ? t.brand.main : t.mode === 'light' ? t.surface : t.textSecondary
-                    }
-                    trackColor={{ false: t.borderStrong, true: `${t.brand.main}80` }}
-                    onValueChange={(value) => {
-                      setHideAmounts(value);
-                      pendingChoices.set(widgetInfo.widgetId, {
-                        accountId:
-                          record?.session.status === 'authenticated'
-                            ? record.session.accountId
-                            : null,
-                        groupId: selected,
-                        hideAmounts: value,
-                      });
-                    }}
-                  />
                 </View>
                 {copy(
                   'Anyone who sees your unlocked phone can read this widget.',

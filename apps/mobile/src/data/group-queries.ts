@@ -12,6 +12,7 @@ import {
 import { groupCurrenciesPath, tagActionsPath } from '@splitbook/shared/api-paths';
 import { groupCurrencySettingsSchema } from '@splitbook/shared/group-currency-settings';
 import { monthKeyInZone } from '@splitbook/shared/zoned-calendar';
+import { parseExpensePageResponse } from '@splitbook/shared/expense-page-read';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { groupCurrencies } from '@splitbook/shared/group-currencies';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -1589,6 +1590,38 @@ export function createGroupQueries(session: GroupSession) {
      * what another destination reads beside the Group shows from now on (#222).
      */
     checked: (groupId: string) => !!view && view.groupId === groupId && view.checked && !view.lost,
+    /** Recent enrichment comes from any existing page. Older responses use only the first page. */
+    recentRead(groupId: string) {
+      const month = monthKeyInZone(session.now(), session.timeZone());
+      const shown = shownList();
+      const keys = [listKey(groupId, false, null), listKey(groupId, true, month)];
+      keys.sort(
+        (a, b) =>
+          Number(hashKey(b) === hashKey(shown ?? [])) - Number(hashKey(a) === hashKey(shown ?? [])),
+      );
+      const candidates: Envelope[] = keys.flatMap((key) => {
+        const state = stateOf<Pages>(key);
+        const pages = state?.data?.pages ?? [];
+        const ordered =
+          state?.fetchMeta?.fetchMore?.direction === 'forward' ? [...pages].reverse() : pages;
+        return ordered.filter((page) => page.source !== 'failed');
+      });
+      const separate = stateOf<Envelope>(monthPageKey(groupId, month))?.data;
+      if (separate) candidates.push(separate);
+      const enriched = candidates.find(
+        (read) => parseExpensePageResponse(read.value).recent !== undefined,
+      );
+      if (enriched) return enriched;
+      const allTime = stateOf<Pages>(listKey(groupId, false, null))?.data?.pages.find(
+        (page) => page.page === 1 && page.source !== 'failed',
+      );
+      const currentMonth = stateOf<Pages>(listKey(groupId, true, month))?.data?.pages.find(
+        (page) => page.page === 1 && page.source !== 'failed',
+      );
+      return (
+        allTime ?? currentMonth ?? stateOf<Envelope>(monthPageKey(groupId, month))?.data ?? null
+      );
+    },
     /** A Month summary already read by the app, carrying the time of that page's own read. */
     monthRead(groupId: string, month: string) {
       const key = listKey(groupId, true, month);

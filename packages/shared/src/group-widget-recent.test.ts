@@ -1,0 +1,179 @@
+import { expect, it } from 'vitest';
+import { groupWidget, type WidgetGroupPart, type WidgetRecentPart } from './group-widget';
+
+const now = new Date(2026, 10, 14, 9, 41).getTime();
+const group: WidgetGroupPart = {
+  id: 'maple',
+  name: 'Maple House',
+  theme: 'home',
+  archived: false,
+  mainCurrency: 'INR',
+  verifiedAt: now,
+  balancesVerifiedAt: now,
+  currencies: [
+    {
+      currency: 'INR',
+      balanceMinor: -148000,
+      payments: [
+        { from: 'alex', to: 'priya', fromName: 'Alex', toName: 'Priya', amountMinor: 106000 },
+        { from: 'alex', to: 'sam', fromName: 'Alex', toName: 'Sam', amountMinor: 42000 },
+      ],
+    },
+  ],
+};
+const setup = {
+  kind: 'group' as const,
+  widgetId: 7,
+  accountId: 'alex',
+  groupId: 'maple',
+  showRecentExpenses: true,
+};
+const auth = { status: 'authenticated' as const, accountId: 'alex', loading: false };
+const recent: WidgetRecentPart = {
+  verifiedAt: now - 180000,
+  rows: [
+    {
+      id: 'lunch',
+      kind: 'expense',
+      description: 'Beach shack lunch',
+      payer: 'Meera Iyer',
+      payerId: 'meera',
+      amountMinor: 280000,
+      currency: 'INR',
+      date: '2026-11-14',
+    },
+    {
+      id: 'scooter',
+      kind: 'expense',
+      description: 'Scooter rental',
+      payer: 'Alex Rivera',
+      payerId: 'alex',
+      amountMinor: 120000,
+      currency: 'INR',
+      date: '2026-11-14',
+    },
+    {
+      id: 'payment',
+      kind: 'settlement',
+      description: 'Rohan paid Meera',
+      payer: 'Rohan Kapoor',
+      payerId: 'rohan',
+      amountMinor: 50000,
+      currency: 'INR',
+      date: '2026-11-13',
+    },
+    {
+      id: 'villa',
+      kind: 'expense',
+      description: 'Villa booking',
+      payer: 'Alex Rivera',
+      payerId: 'alex',
+      amountMinor: 960000,
+      currency: 'INR',
+      date: '2026-11-13',
+    },
+  ],
+};
+const month = {
+  month: '2026-11',
+  verifiedAt: now - 360000,
+  count: 12,
+  mainCurrency: 'INR',
+  mainCurrencyOnly: false,
+  totals: [{ currency: 'INR', totalMinor: 1840000 }],
+  shareMinor: 460000,
+};
+const view = (size = { width: 360, height: 584 }, scale = 1, values = recent) =>
+  groupWidget(group, setup, size, auth, now, scale, month, values);
+
+it('Recent is off for an old or default setup, even with a saved private part', () => {
+  const off = groupWidget(
+    group,
+    { ...setup, showRecentExpenses: undefined },
+    { width: 360, height: 584 },
+    auth,
+    now,
+    1,
+    month,
+    recent,
+  );
+  expect(off.recent).toBeNull();
+  expect(JSON.stringify(off)).not.toContain('Beach shack lunch');
+});
+
+it('Recent shows its own saved time, first names and calendar days', () => {
+  const result = view();
+  expect(result.recent?.saved).toBe('Saved 9:38');
+  expect(result.saved).toBe('Saved 9:41');
+  expect(result.recent?.rows[0]).toMatchObject({
+    description: 'Beach shack lunch',
+    detail: 'Meera paid\u00a0· Today',
+    amount: '₹2,800.00',
+  });
+  expect(result.recent?.rows[1]?.detail).toBe('You paid\u00a0· Today');
+  expect(result.summary).toContain('Rohan paid Meera');
+  expect(result.summary).not.toContain('Iyer');
+  expect(result.summary).not.toContain('Rivera');
+  const sections = result.layout.sections.map((s) => s.id);
+  expect(sections.indexOf('payments')).toBeLessThan(sections.indexOf('recent'));
+  expect(sections.indexOf('recent')).toBeLessThan(sections.indexOf('month'));
+});
+
+it('Recent distinguishes no saved read from an empty saved list', () => {
+  const missing = groupWidget(group, setup, { width: 360, height: 464 }, auth, now, 1, month);
+  expect(missing.recent?.prompt).toBe('Open the Group to update');
+  const empty = view(undefined, 1, { ...recent, rows: [] });
+  expect(empty.recent).toMatchObject({
+    prompt: null,
+    empty: 'No recent Expenses or payments',
+    saved: 'Saved 9:38',
+  });
+});
+
+it('Hide amounts removes descriptions, names and amounts from pixels and speech', () => {
+  const hidden = groupWidget(
+    group,
+    { ...setup, hideAmounts: true },
+    { width: 360, height: 584 },
+    auth,
+    now,
+    1,
+    month,
+    recent,
+  );
+  expect(hidden.recent?.rows).toEqual([]);
+  expect(hidden.recent?.count).toBe('4\u00a0recent Expenses and payments');
+  expect(hidden.hidden).toBe('Amounts, names and descriptions hidden');
+  for (const secret of ['Beach shack', 'Meera', '2,800'])
+    expect(JSON.stringify(hidden)).not.toContain(secret);
+});
+
+it('deleted rows never appear, including in hidden counts or speech', () => {
+  const result = view(undefined, 1, {
+    ...recent,
+    rows: recent.rows.map((r, i) => (i === 0 ? { ...r, isDeleted: true } : r)),
+  });
+  expect(result.summary).not.toContain('Beach shack lunch');
+  expect(result.recent?.rows.map((r) => r.id)).not.toContain('lunch');
+});
+
+it.each([1, 1.3, 2])('Recent fits all launcher sizes at %s text scale', (scale) => {
+  for (const [width, height] of [
+    [172, 224],
+    [172, 344],
+    [266, 344],
+    [360, 224],
+    [360, 270],
+    [360, 344],
+    [360, 464],
+    [360, 584],
+  ]) {
+    const result = view({ width, height }, scale);
+    const used =
+      result.layout.sections.reduce((sum, s) => sum + s.height, 0) +
+      Math.max(0, result.layout.sections.length - 1) * result.layout.gap;
+    expect(used + result.layout.paddingVertical * 2).toBeLessThanOrEqual(height + 0.01);
+    if (result.recent?.more?.startsWith('+')) expect(result.recent.rows.length).toBeGreaterThan(0);
+    if (scale > 1) expect(result.layout.sections.some((s) => s.id === 'recent')).toBe(false);
+  }
+});

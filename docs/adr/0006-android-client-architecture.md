@@ -25,9 +25,9 @@ The Android controller (`createMobileController`) has become a hand-written quer
 
 **Saved copies**
 
-- The widget copy is a saved copy in app-private SQLite that the headless widget renderer can read. It uses the account lease and saved-copy queue, keeps each read’s verification time, and is deleted by the same account purge before widgets redraw signed out. A 401 hides it without deleting it.
+- The widget copy is a saved copy in app-private SQLite that the headless widget renderer can read. It uses the account lease and saved-copy queue, keeps each read’s verification time, and is deleted by the same account purge before widgets redraw signed out. A 401 hides it without deleting it. Expense descriptions may be held only for Groups where a placed widget has Show recent Expenses on. Turning off or removing the last such widget deletes that part. A refused Group read removes it with the Group’s other parts.
 
-- Widget setup records contain only the widget kind, Group ID (or Ask each time for Add expense), the Hide amounts preference where applicable, and setup account ID. They are device preferences, survive account purges and a 401, and are removed when Android deletes the widget. A different account must set the widget up again.
+- Widget setup records contain only the widget kind, Group ID (or Ask each time for Add expense), the Hide amounts preference where applicable, Show recent Expenses for a Group widget (off by default), and setup account ID. They are device preferences, survive account purges and a 401, and are removed when Android deletes the widget. A different account must set the widget up again.
 
 - A custom persister stores one row per query, in the wire format, in the existing expo-sqlite cache database. Every write goes through the account lease and checks the session at write time, so nothing lands after sign-out.
 - A restored copy keeps its original verification time, is marked as restored, and is never fresh. It reaches queries through an envelope whose stale time is 0, so a fallback to a saved copy is never treated as fresh for the normal 30 seconds.

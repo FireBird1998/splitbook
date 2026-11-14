@@ -4,9 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MobileController } from './mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import { expenseReceipt } from '../test-utils/expense-receipt';
 import { notificationTaskProtected } from './notification-alerts';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
-import { groupWidget } from '@splitbook/shared/group-widget';
+import { groupWidget, type WidgetRecentPart } from '@splitbook/shared/group-widget';
 import { createWidgetCopy } from './widget-copy';
 import { quickWidget } from '@splitbook/shared/quick-widget';
 
@@ -16,7 +17,10 @@ const tagId = 'e00000000000000000000001';
 const groupId = 'b00000000000000000000001';
 const controllers: MobileController[] = [];
 const verified = Date.parse('2026-11-08T04:11:00Z');
-function fixture(extraMembers: (typeof alex)[] = []) {
+function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
+  let recentPlacements = 0;
+  let nativeCopy: WidgetCopy | null = null;
+  const privacyEvents: { event: string; copy: WidgetCopy | null }[] = [];
   let user = alex,
     expired = false,
     owed = 2400;
@@ -161,18 +165,32 @@ function fixture(extraMembers: (typeof alex)[] = []) {
       groupCreations: undefined,
       netInfo: undefined,
       widgets: {
+        ...(recentAdapter
+          ? {
+              recentSelections: async (
+                accountId: string,
+              ): Promise<Record<string, WidgetRecentPart | null>> =>
+                recentPlacements && accountId === alex.id
+                  ? { [groupId]: nativeCopy?.recents?.[groupId] ?? null }
+                  : {},
+            }
+          : {}),
         write: async (copy) => {
           await hold;
+          nativeCopy = structuredClone(copy);
           copies.push(structuredClone(copy));
           storedCopy = structuredClone(copy);
           events.push('write:' + copy.accountId);
         },
         clear: async () => {
+          nativeCopy = null;
+          privacyEvents.push({ event: 'clear', copy: null });
           events.push('clear');
           storedCopy = null;
         },
         setSession: async (state) => {
           sessionCopies.push({ status: state.status, copy: structuredClone(storedCopy) });
+          privacyEvents.push({ event: state.status, copy: structuredClone(nativeCopy) });
           events.push(state.status);
           widgetSession = structuredClone(state);
         },
@@ -196,6 +214,72 @@ function fixture(extraMembers: (typeof alex)[] = []) {
   };
   return {
     make,
+    recentPlacements: (count: number) => {
+      recentPlacements = count;
+      if (!count && nativeCopy?.recents) delete nativeCopy.recents[groupId];
+    },
+    currentCopy: () => nativeCopy,
+    privacyEvents,
+    expenses: (withPayment = false) => {
+      const row = expenseReceipt(
+        group(),
+        {
+          description: 'Private beach lunch',
+          amount: 30,
+          currency: 'INR',
+          category: 'food',
+          date: '2026-11-08',
+          tagId,
+          paidBy: [{ user: sam.id, amount: 30 }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: alex.id }, { user: sam.id }],
+        },
+        'c00000000000000000000002',
+        sam.id,
+      );
+      backend.world.expenses[groupId] = {
+        expenses: [
+          { ...row, editHistory: [{ description: 'Old hidden history' }] },
+          {
+            ...row,
+            _id: 'c00000000000000000000003',
+            description: 'Deleted private meal',
+            isDeleted: true,
+          },
+        ],
+        pagination: { page: 1, limit: 20, total: 2, totalPages: 1 },
+        summary: {
+          count: 2,
+          totalsByCurrency: [{ currency: 'INR', totalAmount: 60 }],
+          userOwes: 30,
+          userGetsBack: 0,
+          byMember: [],
+        },
+        ...(withPayment
+          ? {
+              recent: {
+                expenses: [row],
+                settlements: [
+                  {
+                    _id: 'f00000000000000000000001',
+                    group: groupId,
+                    paidBy: { _id: sam.id, name: sam.name },
+                    paidTo: { _id: alex.id, name: alex.name },
+                    amount: 500,
+                    amountMinor: 50000,
+                    moneyVersion: 1,
+                    currency: 'INR',
+                    paidCurrency: 'JPY',
+                    amountPaidMinor: 84000,
+                    createdAt: '2026-11-08T04:00:00Z',
+                    note: 'Private payment note',
+                  },
+                ],
+              },
+            }
+          : {}),
+      };
+    },
     month: (count = 12) => {
       backend.world.expenses[groupId] = {
         expenses: [],
@@ -1875,4 +1959,143 @@ describe('Overview Finish later copy', () => {
     await vi.waitFor(() => expect(f.record().copy?.finishLater?.groupId).toBe(groupId));
     expect(f.record().copy?.accountId).toBe(alex.id);
   });
+});
+
+it('writes Recent only for a placed opt-in, with no extra request, full name or history', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture([], true);
+  f.expenses();
+  const c = f.make();
+  await c.signIn('alex');
+  const requests = f.requests.length;
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.currentCopy()?.months?.[groupId]).toBeDefined());
+  expect(f.requests.slice(requests).filter((r) => r.method === 'GET')).toHaveLength(3);
+  expect(JSON.stringify(f.currentCopy())).not.toContain('Private beach lunch');
+  f.recentPlacements(1);
+  await c.back();
+  const warm = f.requests.length;
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(1));
+  expect(f.requests.slice(warm)).toEqual([]);
+  expect(f.currentCopy()?.recents?.[groupId]).toMatchObject({
+    verifiedAt: verified,
+    rows: [{ description: 'Private beach lunch', payer: 'Sam', amountMinor: 3000 }],
+  });
+  for (const secret of ['Sam Chen', 'Old hidden history', 'Deleted private meal'])
+    expect(JSON.stringify(f.currentCopy())).not.toContain(secret);
+});
+
+it.each(['off', 'removed'] as const)(
+  'removes descriptions when the last Recent widget is %s, retaining them while another opts in',
+  async () => {
+    const f = fixture([], true);
+    f.expenses();
+    f.recentPlacements(2);
+    const c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]).toBeDefined());
+    f.recentPlacements(1);
+    await c.back();
+    await c.openGroup(groupId);
+    expect(f.currentCopy()?.recents?.[groupId]).toBeDefined();
+    f.recentPlacements(0);
+    await c.back();
+    await c.openGroup(groupId);
+    await vi.waitFor(() =>
+      expect(JSON.stringify(f.currentCopy())).not.toContain('Private beach lunch'),
+    );
+  },
+);
+
+it.each(['sign out', 'account change'] as const)(
+  'purges Recent before the signed-out redraw on %s',
+  async (action) => {
+    const f = fixture([], true);
+    f.expenses();
+    f.recentPlacements(1);
+    const c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]).toBeDefined());
+    f.privacyEvents.length = 0;
+    if (action === 'sign out') await c.signOut();
+    else await c.signIn('sam');
+    const cleared = f.privacyEvents.findIndex((e) => e.event === 'clear');
+    expect(cleared).toBeGreaterThanOrEqual(0);
+    const signedOut = f.privacyEvents.findIndex((e) => e.event === 'signed-out');
+    expect(signedOut).toBeGreaterThan(cleared);
+    expect(f.privacyEvents[signedOut].copy).toBeNull();
+  },
+);
+
+it.each([403, 404])('purges Recent when a Group read is refused with %s', async (status) => {
+  const f = fixture([], true);
+  f.expenses();
+  f.recentPlacements(1);
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]).toBeDefined());
+  f.refuse(status);
+  await c.openGroup(groupId, false);
+  await vi.waitFor(() => expect(f.currentCopy()?.lostGroupIds).toContain(groupId));
+  expect(JSON.stringify(f.currentCopy())).not.toContain('Private beach lunch');
+});
+
+it('hides Recent on a 401 while preserving its saved part and verification time', async () => {
+  const f = fixture([], true);
+  f.expenses();
+  f.recentPlacements(1);
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]).toBeDefined());
+  const before = f.currentCopy()?.recents?.[groupId];
+  f.events.length = 0;
+  f.expire();
+  await c.refreshHome();
+  await vi.waitFor(() => expect(f.events).toContain('expired'));
+  expect(f.currentCopy()?.recents?.[groupId]).toEqual(before);
+  expect(f.events).not.toContain('clear');
+});
+
+it('reads saved payments with the opt-in first page, retaining exact paid-currency money and first names', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture([], true);
+  f.expenses(true);
+  f.recentPlacements(1);
+  const c = f.make();
+  await c.signIn('alex');
+  const before = f.requests.length;
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(2));
+  expect(f.requests.slice(before).filter((r) => r.method === 'GET')).toHaveLength(3);
+  const expenseReads = f.requests.slice(before).filter((r) => r.path.endsWith('/expenses'));
+  expect(expenseReads).toHaveLength(1);
+  expect(expenseReads[0].query).toContain('includeRecent=1');
+  expect(f.currentCopy()?.recents?.[groupId]?.rows[0]).toMatchObject({
+    kind: 'settlement',
+    description: 'Sam paid you',
+    payer: 'Sam',
+    amountMinor: 84000,
+    currency: 'JPY',
+  });
+  for (const secret of ['Sam Chen', 'Alex Rivera', 'Private payment note'])
+    expect(JSON.stringify(f.currentCopy())).not.toContain(secret);
+});
+
+it('an unfinished Expense never enters Recent', async () => {
+  const f = fixture([], true);
+  f.expenses();
+  f.recentPlacements(1);
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]).toBeDefined());
+  await c.openExpense(groupId);
+  await c.updateExpenseDraft({ description: 'Unfinished private meal', amount: '10', tagId });
+  expect(JSON.stringify(f.currentCopy())).not.toContain('Unfinished private meal');
+  expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(1);
 });
