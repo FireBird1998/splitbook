@@ -276,6 +276,11 @@ export function createGroupQueries(session: GroupSession) {
   let opens = 0;
   /** Each Expense list or Balances read from the server, by its data: its fetch's start. */
   const answers = new WeakMap<object, Start>();
+  // An app read's arrival order survives clock rollback and query freshness expiry.
+  // This projection marker stays in memory. The engine persists the wire value and its own time.
+  let recentAnswerOrder = 0;
+  const noteRecentAnswer = <T extends Envelope | PageEnvelope>(read: T): T =>
+    read.source === 'network' ? { ...read, widgetRecentOrder: ++recentAnswerOrder } : read;
   /** Data restored from this device to show while the view is first read: never verified here. */
   const previews = new WeakSet<object>();
   /** The returns whose pages a read has shown again. */
@@ -493,13 +498,15 @@ export function createGroupQueries(session: GroupSession) {
       groupId = key[3] as string;
     noteStart(key);
     session.expensesRead(groupId, true);
-    return engine.read({
-      key,
-      accept: (value) => {
-        if (pageOf(value, groupId, currencyOf(groupId)).pagination.page !== 1)
-          throw new Error('Unexpected expense page.');
-      },
-    });
+    return engine
+      .read({
+        key,
+        accept: (value) => {
+          if (pageOf(value, groupId, currencyOf(groupId)).pagination.page !== 1)
+            throw new Error('Unexpected expense page.');
+        },
+      })
+      .then(noteRecentAnswer);
   };
   /** A Trip's summary in one currency (#730), checked by its decoder before it is kept. */
   const readTrip = ({ queryKey }: QueryFunctionContext) => {
@@ -538,13 +545,15 @@ export function createGroupQueries(session: GroupSession) {
       groupId = key[3] as string,
       page = context.pageParam as number;
     noteStart(key);
-    return paging.read(context, {
-      before: (fresh) => session.expensesRead(groupId, fresh),
-      accept: (value) => {
-        if (pageOf(value, groupId, currencyOf(groupId)).pagination.page !== page)
-          throw new Error('Unexpected expense page.');
-      },
-    });
+    return paging
+      .read(context, {
+        before: (fresh) => session.expensesRead(groupId, fresh),
+        accept: (value) => {
+          if (pageOf(value, groupId, currencyOf(groupId)).pagination.page !== page)
+            throw new Error('Unexpected expense page.');
+        },
+      })
+      .then(noteRecentAnswer);
   };
 
   // Only what the view lacks is read on its own; the view's commands, the foreground, a
@@ -1593,33 +1602,22 @@ export function createGroupQueries(session: GroupSession) {
     /** Recent enrichment comes from any existing page. Older responses use only the first page. */
     recentRead(groupId: string) {
       const month = monthKeyInZone(session.now(), session.timeZone());
-      const shown = shownList();
-      const keys = [listKey(groupId, false, null), listKey(groupId, true, month)];
-      if (view?.groupId === groupId && shown) keys.push(shown);
-      keys.sort(
-        (a, b) =>
-          Number(hashKey(b) === hashKey(shown ?? [])) - Number(hashKey(a) === hashKey(shown ?? [])),
-      );
-      const fresh = new Set<Envelope>();
-      const candidates: Envelope[] = keys.flatMap((key) => {
-        const state = stateOf<Pages>(key);
-        const pages = state?.data?.pages ?? [];
-        const ordered =
-          state?.fetchMeta?.fetchMore?.direction === 'forward' ? [...pages].reverse() : pages;
-        const successful = ordered.filter((page) => page.source !== 'failed');
-        if (hasFreshRead(key)) successful.forEach((page) => fresh.add(page));
-        return successful;
-      });
-      const separate = stateOf<Envelope>(monthPageKey(groupId, month))?.data;
-      if (separate) {
-        candidates.push(separate);
-        if (hasFreshRead(monthPageKey(groupId, month))) fresh.add(separate);
-      }
+      const candidates: Envelope[] = client
+        .getQueriesData<Pages | Envelope>({
+          queryKey: listKey(groupId, false, null).slice(0, 4),
+          predicate: ({ queryKey }) =>
+            typeof queryKey[4] === 'string' &&
+            queryKey[4].startsWith(`${groupPrefix(groupId)}/expenses?`),
+        })
+        .flatMap(([, data]) => {
+          if (!data) return [];
+          return 'pages' in data ? data.pages.filter((page) => page.source !== 'failed') : [data];
+        });
+      const order = (read: Envelope & { widgetRecentOrder?: number }) =>
+        read.widgetRecentOrder ?? 0;
       const enriched = candidates
         .filter((read) => parseExpensePageResponse(read.value).recent !== undefined)
-        .sort(
-          (a, b) => Number(fresh.has(b)) - Number(fresh.has(a)) || b.refreshedAt - a.refreshedAt,
-        )[0];
+        .sort((a, b) => order(b) - order(a) || b.refreshedAt - a.refreshedAt)[0];
       if (enriched) return enriched;
       const allTime = stateOf<Pages>(listKey(groupId, false, null))?.data?.pages.find(
         (page) => page.page === 1 && page.source !== 'failed',

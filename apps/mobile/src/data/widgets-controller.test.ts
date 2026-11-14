@@ -2128,6 +2128,16 @@ it.each([60_000, -60_000])(
       }),
     );
     expect(JSON.stringify(f.currentCopy())).not.toContain('Private beach lunch');
+    clock.mockReturnValue(verified + delta + 31_000);
+    await c.openSettings();
+    await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toEqual([]));
+    expect(JSON.stringify(f.currentCopy())).not.toContain('Private beach lunch');
+    c.dispose();
+    f.offline();
+    const restarted = f.make();
+    await restarted.restore();
+    await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toEqual([]));
+    expect(JSON.stringify(f.currentCopy())).not.toContain('Private beach lunch');
   },
 );
 

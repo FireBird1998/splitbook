@@ -920,7 +920,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ),
     (id) => {
       const read = groupQueries.recentRead(id);
-      return read ? widgetRecentCopy(read.value, id, read.refreshedAt, account().accountId) : null;
+      // On restart the existing native Recent is the last accepted snapshot. A saved page
+      // from another Month must not replace it before a successful live Expense read.
+      return read?.source === 'network'
+        ? widgetRecentCopy(read.value, id, read.refreshedAt, account().accountId)
+        : null;
     },
   );
 
