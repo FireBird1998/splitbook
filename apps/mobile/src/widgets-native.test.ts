@@ -1524,7 +1524,7 @@ it.each([
 );
 
 it.each([false, true])(
-  'does not resurrect quarantined native figures or Tags with archived=%s while a durable Tag save is unresolved at cold restore',
+  'keeps archived=%s final figures while quarantining active parts and Tags on cold restore',
   async (archived) => {
     const server = fakeSplitbook(),
       environment = 'confirm-untrusted',
@@ -1580,6 +1580,7 @@ it.each([false, true])(
         });
       }
 
+      const finalCopy = (await store.read()).copy!;
       await phone.stores.tagRequests.save(accountId, groupId, {
         command: {
           requestId: '00000000-0000-4000-8000-000000000001',
@@ -1595,10 +1596,16 @@ it.each([false, true])(
         expect((await store.read()).session.status).toBe('authenticated'),
       );
       await vi.waitFor(async () =>
-        expect((await store.read()).copy?.groups?.[groupId]).toBeUndefined(),
+        expect((await store.read()).copy?.tags?.[groupId]).toBeUndefined(),
       );
-      expect((await store.read()).copy?.tags?.[groupId]).toBeUndefined();
-      expect((await store.read()).copy?.months?.[groupId]).toBeUndefined();
+      const copy = (await store.read()).copy;
+      if (archived) {
+        expect(copy?.groups?.[groupId]).toEqual(finalCopy.groups![groupId]);
+        expect(copy?.months?.[groupId]).toEqual(finalCopy.months![groupId]);
+      } else {
+        expect(copy?.groups?.[groupId]).toBeUndefined();
+        expect(copy?.months?.[groupId]).toBeUndefined();
+      }
       expect(await phone.stores.tagRequests.load(accountId, groupId)).not.toBeNull();
     } finally {
       phone.dispose();

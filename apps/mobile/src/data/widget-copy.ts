@@ -23,9 +23,7 @@ import { createSavedCopyQueue, parseOnce, type Envelope } from './saved-read-eng
 import type { AccountStorageLease, MobileSnapshot } from './types';
 
 export interface WidgetCopyWriteOptions {
-  groups?: readonly string[];
   tags?: readonly string[];
-  months?: readonly string[];
   trustedGroups?: readonly string[];
   homeVerified?: boolean;
   current?(): boolean;
@@ -116,9 +114,13 @@ export function createWidgetCopy(
   const pendingNativeGroups = new Set<string>();
   const groupPath = (id: string) => '/api/groups/' + id;
   const ledgerPath = (id: string) => expensePagePath(id, { limit: 20 });
+  // An archived part is the final verified record: quarantine cannot fetch it again.
   const trustedGroup = (id: string, part: WidgetGroupPart) =>
-    trusted(groupPath(id), part.verifiedAt) &&
-    trusted(groupPath(id) + '/balances', part.balancesVerifiedAt);
+    part.archived ||
+    (trusted(groupPath(id), part.verifiedAt) &&
+      trusted(groupPath(id) + '/balances', part.balancesVerifiedAt));
+  const trustedMonth = (id: string, verifiedAt: number) =>
+    groups[id]?.archived || trusted(ledgerPath(id), verifiedAt);
   const rememberPeople = (
     group: Parameters<typeof widgetGroupPeople>[0],
     verifiedAt: number,
@@ -200,8 +202,7 @@ export function createWidgetCopy(
       for (const [id, part] of Object.entries(previous.tags ?? {}))
         if (allowed(id) && !tags[id] && trusted(groupPath(id), part.verifiedAt)) tags[id] = part;
       for (const [id, part] of Object.entries(previous.months ?? {}))
-        if (allowed(id) && !months[id] && trusted(ledgerPath(id), part.verifiedAt))
-          months[id] = part;
+        if (allowed(id) && !months[id] && trustedMonth(id, part.verifiedAt)) months[id] = part;
       if (previous.savedGroups && trusted('/api/groups', previous.savedGroups.verifiedAt)) {
         const current = savedGroups;
         savedGroups = previous.savedGroups;
@@ -533,14 +534,8 @@ export function createWidgetCopy(
           trustedGroups,
           homeVerified: homeReady && data.data !== null && !data.restored && !!copy.home,
           current: () => copyOwner === copyEvictions && accountOwner === epoch,
-          groups: Object.entries(old?.groups ?? {})
-            .filter(([id, part]) => !trustedGroup(id, part))
-            .map(([id]) => id),
           tags: Object.entries(old?.tags ?? {})
             .filter(([id, part]) => !trusted(groupPath(id), part.verifiedAt))
-            .map(([id]) => id),
-          months: Object.entries(old?.months ?? {})
-            .filter(([id, part]) => !trusted(ledgerPath(id), part.verifiedAt))
             .map(([id]) => id),
         };
         copy.groups = Object.fromEntries(
@@ -558,7 +553,7 @@ export function createWidgetCopy(
         );
         copy.months = Object.fromEntries(
           Object.entries(copy.months ?? {}).filter(([id, part]) =>
-            trusted(ledgerPath(id), part.verifiedAt),
+            trustedMonth(id, part.verifiedAt),
           ),
         );
         if (copy.recents)
