@@ -330,3 +330,28 @@ it.each([
     }
   },
 );
+
+it.each([false, true])(
+  'keeps the Finish later chip in the whole footer with review=%s',
+  (review) => {
+    vi.stubGlobal('__DEV__', false);
+    const view = overviewWidget(
+      {
+        ...copy,
+        review: review ? { count: 3, verifiedAt: now } : undefined,
+        finishLater: { groupId: 'maple', groupName: 'Maple House' },
+      },
+      { kind: 'balances', widgetId: 7 },
+      { width: 360, height: 344 },
+      auth,
+      now,
+      1,
+    );
+    const tree = buildWidgetTree(drawOverview(view, lightTokens));
+    expect(labels(tree)).toContain('Finish later');
+    if (review) expect(labels(tree)).toContain('To review\u00a0· 3');
+    expect(labels(tree)).toContain('＋ Add expense');
+    const i = view.layout.sections.findIndex((s) => s.id === 'footer');
+    expect(minimumHeight(tree.children![i], 1)).toBeLessThanOrEqual(view.layout.sections[i].height);
+  },
+);
