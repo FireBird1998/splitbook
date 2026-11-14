@@ -116,11 +116,11 @@ export function overviewWidget(
       const bodyFont = small ? 10 : 12;
       const review = !small && optional && (!level || (tall && level === 1)) ? read.review : null;
       const action =
-        (normal || state === 'all-square') && wide && tall && optional
+        (normal || state === 'all-square') && wide && tall && optional && level < 2
           ? '＋ Add expense'
-          : state === 'no-groups' && !small
+          : state === 'no-groups'
             ? '＋ Create a Group'
-            : (state === 'signed-out' || state === 'expired') && !small
+            : state === 'signed-out' || state === 'expired'
               ? 'Sign in'
               : null;
       const actionTarget: WidgetTarget =
@@ -129,8 +129,12 @@ export function overviewWidget(
           : state === 'signed-out' || state === 'expired'
             ? 'sign-in'
             : 'choose-group';
-      const actionFont = 12;
-      const actionLines = action ? text.words(action, actionFont, width - 24) : [];
+      const actionFont = small ? 10 : 12;
+      const actionPaddingVertical = small ? 4 : 9;
+      const actionPaddingHorizontal = small ? 8 : 12;
+      const actionLines = action
+        ? text.words(action, actionFont, width - actionPaddingHorizontal * 2)
+        : [];
       const privacyLines = hidden
         ? text.words(hidden, small && level === 2 ? 8 : 10, width - 18)
         : [];
@@ -178,32 +182,51 @@ export function overviewWidget(
               ? Math.max(colHeight(owed, owedOverflow), colHeight(owe, oweOverflow))
               : colHeight(owed, owedOverflow) + colHeight(owe, oweOverflow) + 6;
       const footerNote =
-        !small && read.muted
-          ? 'Open to update'
-          : !review && !action && !small && showSaved
-            ? acrossGroups
-            : null;
-      const leadingHeight = review ? text.line(11) + 10 : footerNote ? text.line(10) : 0;
+        level === 2 && (normal || state === 'all-square')
+          ? null
+          : !small && read.muted
+            ? 'Open to update'
+            : !action && !small && showSaved && (!review || wide)
+              ? acrossGroups
+              : null;
+      const reviewWidth = review ? text.width(review, 11) + 20 : 0;
+      const noteWidth = footerNote ? text.width(footerNote, 10) : 0;
+      const leadingWidth = reviewWidth + noteWidth + (reviewWidth && noteWidth ? 8 : 0);
+      const leadingHeight = Math.max(
+        review ? text.line(11) + 10 : 0,
+        footerNote ? text.line(10) : 0,
+      );
+      const actionWidth = action
+        ? Math.min(
+            width,
+            Math.ceil(
+              (Math.max(...actionLines.map((line) => text.width(line, actionFont))) +
+                actionPaddingHorizontal * 2 +
+                4) *
+                ratio,
+            ) / ratio,
+          )
+        : 0;
       const footerAcross =
-        wide &&
-        !!(review || footerNote) &&
-        !!action &&
-        text.width(review ?? footerNote ?? '', review ? 11 : 10) +
-          (review ? 20 : 0) +
-          text.width(action, actionFont) +
-          24 +
-          8 <=
-          width;
-      const actionHeight = action ? actionLines.length * text.line(actionFont) + 18 : 0;
+        wide && !!leadingHeight && !!action && leadingWidth + actionWidth + 8 <= width;
+      const actionHeight = action
+        ? actionLines.length * text.line(actionFont) + actionPaddingVertical * 2
+        : 0;
       const footer = footerAcross
         ? Math.max(leadingHeight, actionHeight)
         : leadingHeight + actionHeight + (leadingHeight && actionHeight ? 4 : 0);
+      const showTitle =
+        !small || !action || titleLines.length * text.line(10) + footer + gap * 2 + 1 <= height;
+      const centerMessage = tall && !!title && state !== 'all-square';
       const sections: WidgetSection[] = [
         ...(showHeader
           ? [{ id: 'header', rows: 1, rowHeight: text.line(small ? 10 : 13), required: true }]
           : []),
         ...(normal ? [{ id: 'balance', rows: 1, rowHeight: balanceHeight, required: true }] : []),
-        ...(title
+        ...(centerMessage
+          ? [{ id: 'message-before', rows: 1, rowHeight: 0, grow: true, required: true }]
+          : []),
+        ...(title && showTitle
           ? [
               {
                 id: 'message',
@@ -217,7 +240,15 @@ export function overviewWidget(
           : []),
         ...(state === 'loading'
           ? [{ id: 'loading', rows: 3, rowHeight: 24, grow: true, required: true }]
-          : [{ id: 'space', rows: 1, rowHeight: 0, grow: true, required: true }]),
+          : [
+              {
+                id: centerMessage ? 'message-after' : 'space',
+                rows: 1,
+                rowHeight: 0,
+                grow: true,
+                required: true,
+              },
+            ]),
         ...(hidden
           ? [
               {
@@ -265,6 +296,10 @@ export function overviewWidget(
         action,
         actionTarget,
         actionLines,
+        actionWidth,
+        actionPaddingVertical,
+        actionPaddingHorizontal,
+        actionAlign: 'right' as const,
         footerAcross,
         footerNote,
         privacyLines,

@@ -140,46 +140,72 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       ) : null}
     </FlexWidget>
   );
+  const reviewChip = view.review ? (
+    <FlexWidget
+      clickAction="OPEN_URI"
+      clickActionData={link(view.reviewTarget)}
+      style={{
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        backgroundColor: color(t.brand.bg),
+        borderRadius: 16,
+      }}
+    >
+      {text(view.review, t.brand.main, f.review, true)}
+    </FlexWidget>
+  ) : null;
+  const note = l.footerNote ? text(l.footerNote, t.textMuted, f.small) : null;
+  const leading =
+    reviewChip || note ? (
+      <FlexWidget
+        style={{
+          ...(l.footerAcross ? {} : { width: 'match_parent' }),
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexGap: 4,
+        }}
+      >
+        {[reviewChip, note].filter(Boolean)}
+      </FlexWidget>
+    ) : null;
+  const action = view.action ? (
+    <FlexWidget
+      style={{ ...(l.footerAcross ? {} : { width: 'match_parent' }), alignItems: 'flex-end' }}
+    >
+      <FlexWidget
+        clickAction="OPEN_URI"
+        clickActionData={link(view.actionTarget)}
+        style={{
+          width: l.actionWidth,
+          paddingHorizontal: l.actionPaddingHorizontal,
+          paddingVertical: l.actionPaddingVertical,
+          backgroundColor: color(t.brand.bg),
+          borderRadius: 14,
+          alignItems: 'center',
+        }}
+      >
+        {l.actionLines.map((line, i) => (
+          <TextWidget
+            key={i}
+            text={line}
+            maxLines={1}
+            style={{ color: color(t.brand.main), fontSize: f.action, fontWeight: 'bold' }}
+          />
+        ))}
+      </FlexWidget>
+    </FlexWidget>
+  ) : null;
   const footer = (
     <FlexWidget
       style={{
         width: 'match_parent',
         flexDirection: l.footerAcross ? 'row' : 'column',
-        alignItems: l.footerAcross ? 'center' : 'flex-start',
-        justifyContent: 'space-between',
+        justifyContent: l.footerAcross ? 'space-between' : 'flex-start',
         flexGap: 4,
       }}
     >
-      {view.review ? (
-        <FlexWidget
-          clickAction="OPEN_URI"
-          clickActionData={link(view.reviewTarget)}
-          style={{
-            paddingHorizontal: 10,
-            paddingVertical: 5,
-            backgroundColor: color(t.brand.bg),
-            borderRadius: 16,
-          }}
-        >
-          {text(view.review, t.brand.main, f.review, true)}
-        </FlexWidget>
-      ) : null}
-      {!view.review && l.footerNote ? text(l.footerNote, t.textMuted, f.small) : null}
-      {view.action ? (
-        <FlexWidget
-          clickAction="OPEN_URI"
-          clickActionData={link(view.actionTarget)}
-          style={{
-            paddingHorizontal: 12,
-            paddingVertical: 9,
-            backgroundColor: color(t.brand.bg),
-            borderRadius: 14,
-            alignItems: 'center',
-          }}
-        >
-          {lines(l.actionLines, t.brand.main, f.action, true)}
-        </FlexWidget>
-      ) : null}
+      {[leading, action].filter(Boolean)}
     </FlexWidget>
   );
   const content: Record<string, React.ReactNode> = {

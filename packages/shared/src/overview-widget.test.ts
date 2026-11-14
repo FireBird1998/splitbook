@@ -115,7 +115,7 @@ it.each(
   );
   expect(v.layout.fits).toBe(true);
   if (['signed-out', 'expired', 'other-account', 'no-copy', 'loading'].includes(state))
-    expect(JSON.stringify(v)).not.toMatch(/2,400|1,480|40.00|42000/);
+    expect(JSON.stringify(v)).not.toMatch(/2,400|1,480|40\.00|42000/);
   if (state === 'hidden') {
     expect(v.hidden).toBe('Amounts hidden');
     expect(JSON.stringify(v)).not.toMatch(/₹|€|¥|2,400/);
@@ -135,7 +135,10 @@ it('keeps the message together on a tall widget instead of spreading its lines',
   const v = overviewWidget(copy, setup, { width: 360, height: 584 }, { status: 'expired' }, now);
   const s = v.layout.sections.find((s) => s.id === 'message')!;
   expect(s.height).toBe(s.rowHeight);
-  expect(v.layout.sections.find((s) => s.id === 'space')!.height).toBeGreaterThan(350);
+  const before = v.layout.sections.find((s) => s.id === 'message-before')!;
+  const after = v.layout.sections.find((s) => s.id === 'message-after')!;
+  expect(before.height).toBeGreaterThan(150);
+  expect(Math.abs(before.height - after.height)).toBeLessThanOrEqual(1);
 });
 it('keeps the separately verified count with Hide amounts and omits it with Drafts off', () => {
   const v = overviewWidget(
@@ -197,6 +200,12 @@ it.each([1, 1.3, 2])(
   (scale) => {
     const v = overviewWidget(copy, setup, { width: 360, height: 584 }, auth, now + 86400001, scale),
       l = v.layout;
+    if (scale === 2) {
+      expect(v.action).toBeNull();
+      expect(l.footerNote).toBeNull();
+      expect(l.sections.some((s) => s.id === 'footer')).toBe(false);
+      return;
+    }
     expect(l.footerNote).toBe('Open to update');
     expect(v.action).toBe('＋ Add expense');
     const text = widgetText(l.width, scale);
@@ -267,3 +276,43 @@ it('keeps fitting compact balance amounts at 200 percent without testing an undr
   expect(v.layout.compactLines).toEqual(['Owed ₹2,400.00', 'Owe ₹1,480.00']);
   expect(v.layout.compactFallback).toBeNull();
 });
+
+it.each([344, 584])('has no ordinary footer at 200 percent, including height %s', (height) => {
+  const v = overviewWidget(copy, setup, { width: 360, height, pixelRatio: 2.625 }, auth, now, 2);
+  expect(v.action).toBeNull();
+  expect(v.review).toBeNull();
+  expect(v.layout.sections.some((s) => s.id === 'footer')).toBe(false);
+});
+it('restores Across N Groups beside the review chip in the small wide layout', () => {
+  const v = overviewWidget(copy, setup, { width: 360, height: 224, pixelRatio: 2.625 }, auth, now);
+  expect(v.review).toBe('To review\u00a0· 3');
+  expect(v.layout.footerNote).toBe('Across 4\u00a0Groups');
+});
+it.each(['signed-out', 'expired', 'no-groups'] as const)(
+  'reserves a right-aligned complete button and centres the tall %s message',
+  (state) => {
+    const c =
+      state === 'no-groups'
+        ? { ...copy, home: { ...copy.home!, groupCount: 0, currencies: [] } }
+        : copy;
+    const session = state === 'no-groups' ? auth : { status: state };
+    const v = overviewWidget(
+      c,
+      setup,
+      { width: 360, height: 584, pixelRatio: 2.625 },
+      session,
+      now,
+    );
+    expect(v.action).toBe(state === 'no-groups' ? '＋ Create a Group' : 'Sign in');
+    const ids = v.layout.sections.map((s) => s.id);
+    const message = ids.indexOf('message');
+    expect(ids[message - 1]).toBe('message-before');
+    expect(ids[message + 1]).toBe('message-after');
+    expect(v.layout.sections[message - 1].height).toBeCloseTo(
+      v.layout.sections[message + 1].height,
+      0,
+    );
+    expect(v.layout.sections.at(-1)?.id).toBe('footer');
+    expect(v.layout.actionAlign).toBe('right');
+  },
+);

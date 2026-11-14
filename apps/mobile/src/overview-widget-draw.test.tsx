@@ -98,3 +98,20 @@ it('keeps wrapped message lines in the measured small message block', () => {
   const tree = buildWidgetTree(drawOverview(view, lightTokens));
   expect(minimumHeight(tree.children![0])).toBeLessThanOrEqual(view.layout.sections[0].height);
 });
+
+it.each(['signed-out', 'expired'] as const)(
+  'fits the entire native %s button within its reserved footer',
+  (status) => {
+    vi.stubGlobal('__DEV__', false);
+    const view = overviewWidget(
+      copy,
+      { kind: 'balances', widgetId: 7 },
+      { width: 360, height: 584 },
+      { status },
+      now,
+    );
+    const tree = buildWidgetTree(drawOverview(view, lightTokens));
+    const i = view.layout.sections.findIndex((s) => s.id === 'footer');
+    expect(minimumHeight(tree.children![i])).toBeLessThanOrEqual(view.layout.sections[i].height);
+  },
+);
