@@ -141,6 +141,9 @@ it('keeps broadcast redraws inside a one-shot job and lets placement restore the
   expect(running).toContain('RNWidgetJsCommunication.requestWidgetUpdate');
   expect(running).not.toContain('changed(this)');
   expect(job).toContain('jobs.cancel(IMMEDIATE_JOB_ID)');
+  // The midnight/clock job must watch and redraw every placed widget type, including Person.
+  const kinds = job.match(/String\[\] KINDS = \{([^}]+)\}/)?.[1].match(/"[^"]+"/g);
+  expect(kinds).toEqual(['"Balances"', '"Group"', '"Quick"', '"Person"']);
   expect(job).toContain('placed ? PackageManager.COMPONENT_ENABLED_STATE_DEFAULT');
   expect(job).toContain('PackageManager.COMPONENT_ENABLED_STATE_DISABLED');
   expect(job).not.toContain('COMPONENT_ENABLED_STATE_ENABLED');

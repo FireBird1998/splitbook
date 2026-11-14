@@ -15,7 +15,7 @@ import com.reactnativeandroidwidget.RNWidgetJsCommunication;
 public class DateChangeJob extends JobService {
   private static final int JOB_ID = 0x53425744;
   private static final int IMMEDIATE_JOB_ID = 0x53425745;
-  private static final String[] KINDS = { "Balances", "Group", "Quick" };
+  private static final String[] KINDS = { "Balances", "Group", "Quick", "Person" };
 
   private static boolean placed(Context context, String kind) {
     return AppWidgetManager.getInstance(context).getAppWidgetIds(new ComponentName(
