@@ -88,6 +88,9 @@ import { DetailsNotice, RefreshStatus, RetainedNotice } from './src/ui/financial
 import { currentDayKey } from './src/ui/list-day-header';
 import { GroupExpensesView } from './src/ui/group-expenses';
 import { TripStrip } from './src/ui/trip-strip';
+import { readGroupHeader } from '@splitbook/shared/group-header';
+import { headerScenesEnabled } from './src/config';
+import { GroupHeader } from './src/ui/group-header';
 import {
   ContinueDrafts,
   GroupCreationCheck,
@@ -1505,7 +1508,9 @@ function GroupScreen() {
             />
           ) : (
             <>
-              {getGroupTheme(shown.category).header === 'strip' ? (
+              {readGroupHeader(shown.header, headerScenesEnabled()).style === 'scene' ? (
+                <GroupHeader group={shown} />
+              ) : getGroupTheme(shown.category).header === 'strip' ? (
                 <TripStrip group={shown} />
               ) : null}
               {shown.members.length === 1 ? (

@@ -1,4 +1,5 @@
 /** Shared Header scene choices and display rules; no device or framework state. */
+import { format } from 'date-fns';
 import { z } from 'zod';
 import { getGroupTheme } from './group-themes';
 import { groupCurrencies, type GroupCurrencyList } from './group-currencies';
@@ -10,7 +11,7 @@ import {
   tripDayNumber,
   TRIP_SUMMARY_MAX_DAYS,
 } from './trip-summary';
-import { expenseDay } from './expense-day';
+import { expenseLocalDate, expenseDay } from './expense-day';
 import { counted, SEPARATOR } from './separator';
 import type { GroupCategory } from './types';
 
@@ -95,6 +96,21 @@ export function tripDayCaption(dates: TripDates, today: string): string | null {
   return wait === 1 ? 'Starts tomorrow' : `Starts in ${counted(wait, 'day')}`;
 }
 
+/** Compact calendar range shared by Header cards, independent of Intl date-key support. */
+export function headerTripDateRange(dates: TripDates): string | null {
+  const { start, end } = headerTripDays(dates);
+  if (!start) return null;
+  const first = expenseLocalDate(start);
+  if (!end) return `Starts ${format(first, 'd MMM yyyy')}`;
+  const last = expenseLocalDate(end);
+  if (start === end) return format(first, 'd MMM yyyy');
+  if (first.getFullYear() !== last.getFullYear())
+    return `${format(first, 'd MMM yyyy')} – ${format(last, 'd MMM yyyy')}`;
+  if (first.getMonth() !== last.getMonth())
+    return `${format(first, 'd MMM')} – ${format(last, 'd MMM yyyy')}`;
+  return `${format(first, 'd')}–${format(last, 'd MMM yyyy')}`;
+}
+
 /** Card facts shared by the two renderers. Only a date-bounded Theme gets Trip facts. */
 export function headerCard(
   group: GroupCurrencyList &
@@ -126,6 +142,7 @@ export function headerCard(
                 : [],
             today: todayTripDay(group, today),
             caption: tripDayCaption(group, today),
+            dateRange: headerTripDateRange(group),
           }
         : null,
   };

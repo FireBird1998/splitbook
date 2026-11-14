@@ -125,3 +125,6 @@ export function mobileConfig(
 export function headerScenesEnabled(): boolean {
   return process.env.EXPO_PUBLIC_HEADER_SCENES_ENABLED === 'true';
 }
+
+/** #1200 fallback: release scrolling exceeded budget; see ADR 0012 and A1 QA measurements. */
+export const headerSceneMotionAvailable = false;
