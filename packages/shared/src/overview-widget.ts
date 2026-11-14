@@ -50,7 +50,7 @@ export function overviewWidget(
     session.status === 'authenticated' &&
     copy?.accountId === session.accountId &&
     setup.reviewEnabled !== false &&
-    !read.muted &&
+    !!copy.home &&
     !copy.lostGroupIds?.includes(copy.finishLater?.groupId ?? '')
       ? copy.finishLater
       : undefined;

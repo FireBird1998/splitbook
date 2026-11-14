@@ -649,7 +649,7 @@ it.each(sizes.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scale }))
     }
   },
 );
-it('keeps a pencil on narrow tall sizes, and hides the draft with Drafts off, old Home, another account or lost access', () => {
+it('keeps a pencil on narrow tall sizes, and hides the draft with Drafts off, another account or lost access', () => {
   const c = { ...copy, finishLater: { groupId: 'maple', groupName: 'Maple House' } };
   const view = overviewWidget(c, setup, { width: 172, height: 464 }, auth, now);
   expect(view.finishLater?.label).toBe('✎');
@@ -657,9 +657,7 @@ it('keeps a pencil on narrow tall sizes, and hides the draft with Drafts off, ol
     overviewWidget(c, { ...setup, reviewEnabled: false }, { width: 360, height: 464 }, auth, now)
       .finishLater,
   ).toBeNull();
-  expect(
-    overviewWidget(c, setup, { width: 360, height: 464 }, auth, now + 86400001).finishLater,
-  ).toBeNull();
+
   expect(
     overviewWidget({ ...c, accountId: 'other' }, setup, { width: 360, height: 464 }, auth, now)
       .finishLater,
@@ -728,3 +726,33 @@ it.each([
     expect(v.summary).toContain('Finish later in Maple House');
   },
 );
+
+it.each([false, true])(
+  'keeps the phone draft after Home is old, hidden amounts=%s',
+  (hideAmounts) => {
+    const c = { ...copy, finishLater: { groupId: 'maple', groupName: 'Maple House' } };
+    for (const height of [344, 464]) {
+      const v = overviewWidget(
+        c,
+        { ...setup, hideAmounts },
+        { width: 360, height },
+        auth,
+        now + 86400001,
+      );
+      expect(v.muted).toBe(true);
+      expect(v.review).toBeNull();
+      expect(v.finishLater).toMatchObject({
+        label: 'Finish later',
+        target: { kind: 'expense', groupId: 'maple' },
+      });
+      expect(v.summary).toContain('Finish later in Maple House');
+    }
+  },
+);
+it('does not offer Finish later in Nothing saved yet', () => {
+  const c = { ...copy, home: null, finishLater: { groupId: 'maple', groupName: 'Maple House' } };
+  const v = overviewWidget(c, setup, { width: 360, height: 464 }, auth, now);
+  expect(v.state).toBe('no-copy');
+  expect(v.finishLater).toBeNull();
+  expect(v.summary).not.toContain('Finish later');
+});
