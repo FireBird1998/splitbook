@@ -1447,7 +1447,7 @@ describe('saved-copy storage budget (#223)', () => {
   );
 });
 
-it('retains an archived Group’s financial records after a verified list omits it', async () => {
+it('retains financial records after an omitted Group’s successful confirmation is fully handled', async () => {
   const f = fixture();
   const controller = f.create();
   await controller.signIn('alex');
@@ -1455,18 +1455,25 @@ it('retains an archived Group’s financial records after a verified list omits 
   await controller.updateExpenseDraft({ description: 'Dinner', amount: '12' });
   await controller.back();
   await controller.back();
+  const original = structuredClone([...f.drafts.values()]);
   f.archive();
   const before = f.requests().length;
   await controller.refresh('pull');
-  await vi.waitFor(() =>
+  // A second request cannot start until the first detached confirmation has ended.
+  await vi.waitFor(async () => {
+    const count = f
+      .requests()
+      .slice(before)
+      .filter((request) => request === `GET /api/groups/${groupId}`).length;
+    if (count < 2) await controller.refresh('pull');
     expect(
       f
         .requests()
         .slice(before)
         .filter((request) => request === `GET /api/groups/${groupId}`),
-    ).toHaveLength(1),
-  );
-  expect(f.drafts.size).toBe(1);
+    ).toHaveLength(2);
+  });
+  expect([...f.drafts.values()]).toEqual(original);
 });
 it('retains a refused draft and reports a failed Discard without signing out', async () => {
   const f = fixture();
