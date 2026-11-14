@@ -177,3 +177,26 @@ it.each([1, 1.3, 2])('Recent fits all launcher sizes at %s text scale', (scale) 
     if (scale > 1) expect(result.layout.sections.some((s) => s.id === 'recent')).toBe(false);
   }
 });
+
+it('distinguishes matching first names by initials in speech while drawing first names', () => {
+  const result = view(undefined, 1, {
+    verifiedAt: now,
+    rows: [
+      { ...recent.rows[0], payer: 'Priya', payerId: 'priya-s', payerInitials: 'PS' },
+      { ...recent.rows[1], payer: 'Priya', payerId: 'priya-k', payerInitials: 'PK' },
+      {
+        ...recent.rows[2],
+        description: 'Priya paid Priya',
+        payer: 'Priya',
+        payerId: 'priya-s',
+        payerInitials: 'PS',
+        payee: { id: 'priya-k', firstName: 'Priya', initials: 'PK' },
+      },
+    ],
+  });
+  expect(result.summary).toContain('Priya S paid Priya K');
+  expect(result.summary).toContain('Priya S paid');
+  expect(result.summary).toContain('Priya K paid');
+  expect(result.recent?.rows[0].detail).toContain('Priya paid');
+  expect(result.recent?.rows[2].description).toBe('Priya paid Priya');
+});

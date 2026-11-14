@@ -219,6 +219,7 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
       if (!count && nativeCopy?.recents) delete nativeCopy.recents[groupId];
     },
     currentCopy: () => nativeCopy,
+    backend,
     privacyEvents,
     expenses: (withPayment = false) => {
       const row = expenseReceipt(
@@ -2098,4 +2099,74 @@ it('an unfinished Expense never enters Recent', async () => {
   await c.updateExpenseDraft({ description: 'Unfinished private meal', amount: '10', tagId });
   expect(JSON.stringify(f.currentCopy())).not.toContain('Unfinished private meal');
   expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(1);
+});
+
+it('a newer historical Month enrichment replaces an older All time Recent list', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture([], true);
+  f.expenses(true);
+  f.recentPlacements(1);
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await c.selectMonth(null);
+  await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(2));
+  clock.mockReturnValue(verified + 60_000);
+  f.backend.world.expenses[groupId] = {
+    ...f.backend.world.expenses[groupId],
+    recent: { expenses: [], settlements: [] },
+  };
+  await c.selectMonth('2026-10');
+  await vi.waitFor(() =>
+    expect(f.currentCopy()?.recents?.[groupId]).toEqual({
+      verifiedAt: verified + 60_000,
+      rows: [],
+    }),
+  );
+  expect(JSON.stringify(f.currentCopy())).not.toContain('Private beach lunch');
+});
+
+it('unsaved To review descriptions never enter the opted-in Widget copy', async () => {
+  vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+  const f = fixture([], true);
+  f.expenses();
+  f.recentPlacements(1);
+  const draft = {
+    id: 'e00000000000000000000009',
+    groupId,
+    revision: 0,
+    state: 'active',
+    preparedBy: { kind: 'member' },
+    changedBy: { kind: 'member' },
+    values: {
+      description: 'Unsaved To review secret',
+      amount: 10,
+      currency: 'INR',
+      date: '2026-11-08',
+    },
+    missingFields: [],
+    createdAt: '2026-11-08T00:00:00Z',
+    updatedAt: '2026-11-08T00:00:00Z',
+  };
+  f.backend.world.toReview = {
+    total: 1,
+    groups: [
+      {
+        groupId,
+        groupName: 'Maple House',
+        currency: 'INR',
+        category: 'home',
+        count: 1,
+        items: [{ draft, problems: [], duplicates: [] }],
+      },
+    ],
+  };
+  f.backend.world.pages[`/api/groups/${groupId}/drafts`] = [draft];
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openToReview(groupId);
+  expect(c.getSnapshot().toReview.read.total).toBe(1);
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(1));
+  expect(JSON.stringify(f.currentCopy())).not.toContain('Unsaved To review secret');
 });

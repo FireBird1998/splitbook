@@ -1595,6 +1595,7 @@ export function createGroupQueries(session: GroupSession) {
       const month = monthKeyInZone(session.now(), session.timeZone());
       const shown = shownList();
       const keys = [listKey(groupId, false, null), listKey(groupId, true, month)];
+      if (view?.groupId === groupId && shown) keys.push(shown);
       keys.sort(
         (a, b) =>
           Number(hashKey(b) === hashKey(shown ?? [])) - Number(hashKey(a) === hashKey(shown ?? [])),
@@ -1608,9 +1609,12 @@ export function createGroupQueries(session: GroupSession) {
       });
       const separate = stateOf<Envelope>(monthPageKey(groupId, month))?.data;
       if (separate) candidates.push(separate);
-      const enriched = candidates.find(
-        (read) => parseExpensePageResponse(read.value).recent !== undefined,
-      );
+      const enriched = candidates
+        .filter(
+          (read) =>
+            read.source !== 'failed' && parseExpensePageResponse(read.value).recent !== undefined,
+        )
+        .sort((a, b) => b.refreshedAt - a.refreshedAt)[0];
       if (enriched) return enriched;
       const allTime = stateOf<Pages>(listKey(groupId, false, null))?.data?.pages.find(
         (page) => page.page === 1 && page.source !== 'failed',

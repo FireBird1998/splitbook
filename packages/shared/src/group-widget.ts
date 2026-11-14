@@ -35,6 +35,8 @@ export interface WidgetRecentPart {
     description: string;
     payer: string;
     payerId: string | null;
+    payerInitials?: string;
+    payee?: { id: string | null; firstName: string; initials: string };
     payers?: number;
     amountMinor: number;
     currency: string;
@@ -53,6 +55,23 @@ function recentWidgetView(
   const rows = (part?.rows ?? [])
     .filter((row) => !row.isDeleted)
     .sort((a, b) => b.date.localeCompare(a.date));
+  const names = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const people = [
+      { name: row.payer, id: row.payerId },
+      ...(row.payee ? [{ name: row.payee.firstName, id: row.payee.id }] : []),
+    ];
+    for (const person of people) {
+      if (!person.id) continue;
+      const ids = names.get(person.name) ?? new Set<string>();
+      ids.add(person.id);
+      names.set(person.name, ids);
+    }
+  }
+  const spokenName = (name: string, initials = '') =>
+    (names.get(name)?.size ?? 0) > 1 && initials.length > 1
+      ? `${name} ${initials.slice(1, 2)}`
+      : name;
   return {
     rows: setup.hideAmounts
       ? []
@@ -87,6 +106,11 @@ function recentWidgetView(
             id: row.id,
             kind: row.kind,
             description: row.description,
+            spokenDescription:
+              row.kind === 'settlement' && row.payee
+                ? `${row.payerId === setup.accountId ? 'You' : spokenName(row.payer, row.payerInitials)} paid ${row.payee.id === setup.accountId ? 'you' : spokenName(row.payee.firstName, row.payee.initials)}`
+                : row.description,
+            spokenDetail: `${row.kind === 'expense' && row.payerId !== setup.accountId && (!row.payers || row.payers === 1) ? `${spokenName(payer, row.payerInitials)} paid` : detail}${SEPARATOR}${when}`,
             detail: `${detail}${SEPARATOR}${when}`,
             amount: formatCurrency(displayMajorAmount(row.amountMinor, row.currency), row.currency),
           };
@@ -941,7 +965,11 @@ function projectGroupWidget(
       ...spokenWidgetPayments(full.payments),
       full.hidden ? null : full.description,
       full.recent ? 'Recent' : null,
-      ...(full.recent?.rows.flatMap((row) => [row.description, row.detail, row.amount]) ?? []),
+      ...(full.recent?.rows.flatMap((row) => [
+        row.spokenDescription,
+        row.spokenDetail,
+        row.amount,
+      ]) ?? []),
       full.recent?.count,
       full.recent?.prompt,
       full.recent?.empty,

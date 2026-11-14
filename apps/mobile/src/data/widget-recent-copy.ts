@@ -1,3 +1,4 @@
+import { initials } from '../initials';
 import { parseExpensePageResponse } from '@splitbook/shared/expense-page-read';
 import { parseRecentLedgerRead } from '@splitbook/shared/recent-ledger-read';
 import { readStoredAmountMinor } from '@splitbook/shared/exact-money';
@@ -12,7 +13,7 @@ const firstName = (person: FinancialPersonRead) =>
     ? person.name.trim().split(/\s+/)[0]
     : 'Former member';
 
-/** Project the existing first-page read, keeping only the opt-in widget's fields. */
+/** Project an existing Expenses read, keeping only the opt-in widget's fields. */
 export function widgetRecentCopy(
   value: unknown,
   groupId: string,
@@ -38,6 +39,7 @@ export function widgetRecentCopy(
           description: row.description,
           payer: payers.length === 1 ? firstName(payer) : '',
           payerId: personId(payer),
+          payerInitials: typeof payer === 'object' && payer?.name ? initials(payer.name) : '',
           payers: payers.length,
           amountMinor: readStoredAmountMinor(row),
           currency: row.currency,
@@ -62,6 +64,14 @@ export function widgetRecentCopy(
         description: `${personId(row.paidBy) === accountId ? 'You' : firstName(row.paidBy)} paid ${personId(row.paidTo) === accountId ? 'you' : firstName(row.paidTo)}`,
         payer: firstName(row.paidBy),
         payerId: personId(row.paidBy),
+        payerInitials:
+          typeof row.paidBy === 'object' && row.paidBy?.name ? initials(row.paidBy.name) : '',
+        payee: {
+          id: personId(row.paidTo),
+          firstName: firstName(row.paidTo),
+          initials:
+            typeof row.paidTo === 'object' && row.paidTo?.name ? initials(row.paidTo.name) : '',
+        },
         payers: 1,
         amountMinor: row.paidCurrency ? row.amountPaidMinor! : readStoredAmountMinor(row),
         currency: row.paidCurrency ?? row.currency,
