@@ -1627,3 +1627,58 @@ it('keeps Suggested payments when Balances is read by a payment check without op
     expect(overview(f).payments).toMatchObject([{ groupId, amount: '₹100.00' }]),
   );
 });
+
+it.each(['Overview', 'Group'] as const)(
+  'refuses an old %s payment tap after its Group was archived elsewhere',
+  async (source) => {
+    const f = fixture(),
+      c = f.make();
+    f.groupBalances({
+      byCurrency: [
+        {
+          currency: 'INR',
+          balances: [
+            { user: { _id: alex.id, name: alex.name }, balance: -12 },
+            { user: { _id: sam.id, name: sam.name }, balance: 12 },
+          ],
+          debts: [
+            {
+              from: { _id: alex.id, name: alex.name },
+              to: { _id: sam.id, name: sam.name },
+              amount: 12,
+            },
+          ],
+        },
+      ],
+    });
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await vi.waitFor(() => expect(overview(f).payments).toHaveLength(1));
+    const record = f.record();
+    const groupPayment = groupWidget(
+      record.copy!.groups![groupId],
+      { kind: 'group', widgetId: 7, accountId: alex.id, groupId },
+      { width: 360, height: 344 },
+      record.session,
+      verified,
+    ).payments[0]!.payment;
+    const target =
+      source === 'Overview'
+        ? overview(f).payments[0]!.target
+        : { kind: 'settle' as const, groupId, payment: groupPayment! };
+    await c.back();
+    f.archive();
+    const before = f.requests.length;
+    await c.openWidget(target);
+    expect(c.getSnapshot().screen).toBe('group');
+    expect(c.getSnapshot().detail.data).toBeNull();
+    expect(c.getSnapshot().detail.message).toBe(
+      'This Group was archived, so nothing more can be saved in it.',
+    );
+    expect(c.getSnapshot().settlement.status).toBe('idle');
+    expect(f.requests.slice(before).filter((r) => r.path === `/api/groups/${groupId}`)).not.toEqual(
+      [],
+    );
+    expect(f.requests.slice(before).filter((r) => r.path.includes('/settlements'))).toEqual([]);
+  },
+);
