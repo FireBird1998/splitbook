@@ -2113,7 +2113,9 @@ it('a newer historical Month enrichment replaces an older All time Recent list',
   await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(2));
   clock.mockReturnValue(verified + 60_000);
   f.backend.world.expenses[groupId] = {
-    ...f.backend.world.expenses[groupId],
+    expenses: [],
+    pagination: { page: 1, limit: 20, total: 0, totalPages: 1 },
+    summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
     recent: { expenses: [], settlements: [] },
   };
   await c.selectMonth('2026-10');
