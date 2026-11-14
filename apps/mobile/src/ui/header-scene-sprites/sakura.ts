@@ -17,7 +17,7 @@ import s11 from '../../../assets/header-scenes/sakura-glow-body.png';
 const scene: HeaderSceneSprites = {
   id: 'sakura',
   description: "A floating cherry-blossom garden with a two-tier pagoda, a torii, a koi pond and bridge, a waterfall, a villager, a fox and stone lanterns.",
-  source: '5093cc89cd8e88872dfbf9904bc1936d641429936e934d9b09bf0124f5d1956a',
+  source: '181235745b7d62e88266177b73387eb77d092ef73d181071f3cdc2d2e1ccbfd9',
   sprites: [
     { layer: 'far', kind: 'body', seconds: 9, x: -16.67, y: 43.67, w: 674.67, h: 150, image: s0 },
     { layer: 'far', kind: 'cloud', seconds: 260, x: 364, y: 24.67, w: 112, h: 32, image: s1 },

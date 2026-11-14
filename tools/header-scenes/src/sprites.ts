@@ -52,6 +52,23 @@ export interface Sprite extends Omit<SpritePlan, 'svg'> {
   png: Buffer;
 }
 
+/** The web colours lit windows in CSS; a picture has no CSS, so the colour is set on the shapes. */
+const WINDOW_LIGHT = '#ffd98a';
+function lit(node: SceneVector, inWindows = false): SceneVector {
+  const windows = inWindows || (node.classes ?? []).includes('wins');
+  const shape = windows && node.tag !== 'g';
+  return {
+    ...node,
+    props: shape
+      ? {
+          ...node.props,
+          fill: WINDOW_LIGHT,
+          ...(node.props.stroke ? { stroke: WINDOW_LIGHT } : {}),
+        }
+      : node.props,
+    children: node.children?.map((child) => lit(child, windows)),
+  };
+}
 const frame = (defs: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${AREA.width * SCALE}" height="${AREA.height * SCALE}" viewBox="${AREA.x} ${AREA.y} ${AREA.width} ${AREA.height}">${defs}${body}</svg>`;
 
@@ -74,7 +91,7 @@ export function spritePlans(scene: HeaderSceneArt): SpritePlan[] {
         layer,
         kind,
         seconds,
-        svg: frame(defs, parts.map(vectorSvg).join('')),
+        svg: frame(defs, parts.map((part) => vectorSvg(lit(part))).join('')),
       });
     if (shadows.length) add('shadow', 'shadow', FLOAT_SECONDS[layer], shadows);
     if (body.length) add('body', 'body', FLOAT_SECONDS[layer], body);

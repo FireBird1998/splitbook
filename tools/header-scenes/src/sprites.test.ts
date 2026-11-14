@@ -69,3 +69,14 @@ it('lists the main island of every scene as its settings thumbnail', () => {
     expect(spritePlans(scene).some((plan) => plan.file === `${scene.id}-main-body.png`)).toBe(true);
   }
 });
+
+it.each(scenes.map((scene) => [scene.id, scene] as const))(
+  '%s night windows are drawn in the lit colour the web sets in CSS, never the default black',
+  (_, scene) => {
+    const glow = spritePlans(scene).find((plan) => plan.layer === 'glow')!.svg;
+    const windows = /<g class="[^"]*\bwins\b[^"]*">(.*?)<\/g>/.exec(glow)![1]!;
+    const shapes = windows.match(/<(polygon|path|rect|circle)\b[^>]*>/g)!;
+    expect(shapes.length).toBeGreaterThan(0);
+    for (const shape of shapes) expect(shape).toContain('fill="#ffd98a"');
+  },
+);
