@@ -73,9 +73,11 @@ it('speaks the generated scene description', async () => {
         today="2026-09-18"
       />,
     );
-    await new Promise((resolve) => setTimeout(resolve, 20));
   });
-  expect(JSON.stringify(renderer.toJSON())).toContain(beach.description);
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(JSON.stringify(renderer.toJSON())).toContain(beach.description);
+  });
   act(() => renderer.unmount());
 });
 
@@ -93,7 +95,10 @@ it('re-reads Auto when returning to the header across a local-hour boundary', as
         />,
       );
     });
-    expect(JSON.stringify(renderer.toJSON())).toContain('#c8d9ed');
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(JSON.stringify(renderer.toJSON())).toContain('#c8d9ed');
+    });
     hour.mockReturnValue(10);
     act(() =>
       renderer.update(
@@ -121,6 +126,14 @@ it('uses the local hand-built day key when Intl does not produce an ISO day', as
       view = create(
         <HeaderScene group={group} header={{ style: 'scene', scene: 'beach', time: 'day' }} />,
       );
+    });
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(
+        view.root.findAll(
+          (node) => (node.type as unknown) === 'View' && node.props.accessibilityRole === 'image',
+        ),
+      ).toHaveLength(1);
     });
     expect(JSON.stringify(view.toJSON())).toContain('Day 2 of 4');
     expect(locale).not.toHaveBeenCalled();

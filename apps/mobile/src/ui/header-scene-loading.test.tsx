@@ -39,15 +39,16 @@ it('reserves 208 dp and the real card while art is pending, then swaps in the sa
   expect(loading).toHaveLength(1);
   expect(loading[0].props.style.height).toBe(208);
   expect(JSON.stringify(view.toJSON())).toContain('Maple House');
-  await act(async () => {
-    load.resolve();
-    await import('@splitbook/shared/header-scenes/beach');
+  load.resolve();
+  const scene = () =>
+    view.root.findAll(
+      (node) => (node.type as unknown) === 'View' && node.props.accessibilityRole === 'image',
+    );
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(scene()).toHaveLength(1);
   });
-  const scene = view.root.findAll(
-    (node) => (node.type as unknown) === 'View' && node.props.accessibilityRole === 'image',
-  );
-  expect(scene).toHaveLength(1);
-  expect(scene[0].props.style.height).toBe(208);
+  expect(scene()[0].props.style.height).toBe(208);
   act(() => view.unmount());
 });
 it('falls back to the Household Classic header on a rejected art import', async () => {
@@ -56,8 +57,10 @@ it('falls back to the Household Classic header on a rejected art import', async 
     view = create(
       <HeaderScene group={group} header={{ style: 'scene', scene: 'sakura', time: 'day' }} />,
     );
-    await new Promise((done) => setTimeout(done, 20));
   });
-  expect(view.toJSON()).toBeNull();
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(view.toJSON()).toBeNull();
+  });
   act(() => view.unmount());
 });
