@@ -1,4 +1,3 @@
-import { SEPARATOR } from '@splitbook/shared/separator';
 import { createElement, memo, useEffect, useState, type ComponentType } from 'react';
 import { Animated, AppState, StyleSheet, View } from 'react-native';
 import Svg, {
@@ -13,13 +12,14 @@ import Svg, {
   Stop,
 } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
-import { headerCard, headerTimeOfDay, type GroupHeader } from '@splitbook/shared/group-header';
+import { headerTimeOfDay, type GroupHeader } from '@splitbook/shared/group-header';
 import type { HeaderSceneArt, SceneVector } from '@splitbook/shared/header-scene-art';
 import type { MobileGroup } from '../data/types';
-import { CompactText } from './compact';
 import { useSceneFloat } from './compact/motion';
 import { headerSceneMotionAvailable } from '../config';
-import { useTheme, fonts } from './theme';
+import { currentDayKey } from './list-day-header';
+import { HeaderSceneCard, HeaderScenePlaceholder, ClassicGroupHeader } from './header-scene-card';
+export { HeaderSceneCard } from './header-scene-card';
 
 const loaders = {
   beach: () => import('@splitbook/shared/header-scenes/beach'),
@@ -80,116 +80,30 @@ const sky = {
   night: ['#101a35', '#344362'],
 } as const;
 
-export function HeaderSceneCard({ group, today }: { group: MobileGroup; today: string }) {
-  const theme = useTheme();
-  const facts = headerCard(group, today);
-  return (
-    <View style={{ padding: 14, gap: 10, backgroundColor: theme.surface }}>
-      {facts.trip ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <CompactText variant="title" style={{ fontFamily: fonts.mono }}>
-            {facts.trip.route.from}
-          </CompactText>
-          <View style={{ flex: 1, borderTopWidth: 1, borderColor: theme.border }} />
-          <CompactText>✈</CompactText>
-          <View style={{ flex: 1, borderTopWidth: 1, borderColor: theme.border }} />
-          <CompactText variant="title" style={{ fontFamily: fonts.mono }}>
-            {facts.trip.route.to}
-          </CompactText>
-        </View>
-      ) : (
-        <>
-          <CompactText variant="title">{facts.name}</CompactText>
-          <CompactText tone="secondary">{facts.theme}</CompactText>
-        </>
-      )}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 20 }}>
-        {[
-          [
-            'Dates',
-            facts.trip
-              ? [facts.trip.start, facts.trip.end]
-                  .filter((day): day is string => !!day)
-                  .map((day) =>
-                    new Date(day + 'T00:00:00Z').toLocaleDateString('en-GB', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      timeZone: 'UTC',
-                    }),
-                  )
-                  .join(' – ')
-              : null,
-          ],
-          ['Members', String(facts.members)],
-          ['Currency', facts.currencies.join(SEPARATOR)],
-        ].map(([label, value]) =>
-          value ? (
-            <View key={label} style={{ gap: 2, flexShrink: 1 }}>
-              <CompactText variant="small" tone="secondary">
-                {label}
-              </CompactText>
-              <CompactText>{value}</CompactText>
-            </View>
-          ) : null,
-        )}
-      </View>
-      {facts.trip && facts.trip.days.length > 0 ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {facts.trip.days.map((day, index) => (
-            <View
-              key={day}
-              accessible
-              accessibilityLabel={`Trip day ${index + 1}${facts.trip!.today === index + 1 ? ', today' : ''}`}
-              style={{ alignItems: 'center', gap: 3 }}
-            >
-              <View
-                style={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: 2,
-                  borderWidth: 1,
-                  borderColor: theme.border,
-                  backgroundColor:
-                    facts.trip!.today === index + 1
-                      ? '#ffd27a'
-                      : day < today
-                        ? '#bfa98a'
-                        : 'transparent',
-                }}
-              />
-              <CompactText variant="small">{Number(day.slice(-2))}</CompactText>
-            </View>
-          ))}
-          <CompactText variant="small" tone="secondary">
-            {facts.trip.today
-              ? `Day ${facts.trip.today} of ${facts.trip.days.length}`
-              : `${facts.trip.days.length} trip days`}
-          </CompactText>
-        </View>
-      ) : null}
-    </View>
-  );
-}
 export default function HeaderScene({
   group,
   header,
   motion = true,
-  today = new Date().toLocaleDateString('en-CA'),
+  today = currentDayKey(),
 }: {
   group: MobileGroup;
   header: GroupHeader;
   motion?: boolean;
   today?: string;
 }) {
+  const [failed, setFailed] = useState<string | null>(null);
   const [art, setArt] = useState<HeaderSceneArt | null>(null);
   const [, setHour] = useState(() => new Date().getHours());
   const translateY = useSceneFloat(motion && headerSceneMotionAvailable);
   useEffect(() => {
     let active = true;
-    loaders[header.scene]().then((value) => {
-      if (active) setArt(value.default);
-    });
+    loaders[header.scene]()
+      .then((value) => {
+        if (active) setArt(value.default);
+      })
+      .catch(() => {
+        if (active) setFailed(header.scene);
+      });
     return () => {
       active = false;
     };
@@ -201,6 +115,8 @@ export default function HeaderScene({
     return () => sub.remove();
   }, []);
   const time = headerTimeOfDay(header.time, new Date().getHours());
+  if (failed === header.scene) return <ClassicGroupHeader group={group} />;
+  if (art?.id !== header.scene) return <HeaderScenePlaceholder group={group} />;
   return (
     <View style={{ borderRadius: 16, overflow: 'hidden' }}>
       <View
@@ -244,21 +160,6 @@ export default function HeaderScene({
         >
           {art?.id === header.scene ? <Art art={art} time={time} /> : null}
         </Animated.View>
-        <View
-          style={{
-            position: 'absolute',
-            left: 10,
-            top: 10,
-            backgroundColor: '#ffffffdd',
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 13,
-          }}
-        >
-          <CompactText style={{ color: '#151828' }}>
-            {header.time === 'auto' ? `Auto${SEPARATOR}${time}` : time}
-          </CompactText>
-        </View>
       </View>
       <HeaderSceneCard group={group} today={today} />
     </View>

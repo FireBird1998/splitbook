@@ -7,6 +7,7 @@ import {
   headerCardTone,
   todayTripDay,
   tripDayCaption,
+  headerTripDateRange,
 } from './group-header';
 
 describe('a Group header', () => {
@@ -78,6 +79,7 @@ it('gives a Trip its route, calendar dates and numbered days', () => {
       days: ['2026-11-14', '2026-11-15', '2026-11-16'],
       today: 2,
       caption: 'Day 2 of 3',
+      dateRange: '14–16 Nov 2026',
     },
   });
 });
@@ -157,4 +159,15 @@ it.each([
   [23, 'dark'],
 ] as const)('Auto at local hour %s gives the card %s tone', (hour, tone) => {
   expect(headerCard(trip, '2026-11-15', headerTimeOfDay('auto', hour)).tone).toBe(tone);
+});
+
+it.each([
+  [null, null, null],
+  ['2026-11-03', null, 'Starts 3 Nov 2026'],
+  ['2026-11-03', '2026-11-03', '3 Nov 2026'],
+  ['2026-11-03', '2026-11-06', '3–6 Nov 2026'],
+  ['2026-10-30', '2026-11-03', '30 Oct – 3 Nov 2026'],
+  ['2026-12-30', '2027-01-03', '30 Dec 2026 – 3 Jan 2027'],
+])('formats the Header calendar range %s to %s', (startDate, endDate, expected) => {
+  expect(headerTripDateRange({ startDate, endDate })).toBe(expected);
 });

@@ -41,7 +41,15 @@ it.each(['trip', 'home'] as const)(
     expect(markup).toContain('Members');
     if (category === 'trip') {
       expect(markup).toContain('GOA');
-      expect(markup).toContain('Trip day 2, today');
+      expect(markup).toContain('Day 2 of 4');
+      expect(markup).toContain('17–20 Sep 2026');
+      const stops = rendered.root.findAll(
+        (node) =>
+          (node.type as unknown) === 'View' &&
+          node.props.accessible &&
+          node.props.accessibilityLabel === 'Day 2 of 4',
+      );
+      expect(stops).toHaveLength(1);
     } else {
       expect(markup).toContain('Household');
       expect(markup).not.toContain('Trip day');
@@ -85,7 +93,7 @@ it('re-reads Auto when returning to the header across a local-hour boundary', as
         />,
       );
     });
-    expect(JSON.stringify(renderer.toJSON())).toContain('Auto\u00a0· morning');
+    expect(JSON.stringify(renderer.toJSON())).toContain('#c8d9ed');
     hour.mockReturnValue(10);
     act(() =>
       renderer.update(
@@ -96,9 +104,29 @@ it('re-reads Auto when returning to the header across a local-hour boundary', as
         />,
       ),
     );
-    expect(JSON.stringify(renderer.toJSON())).toContain('Auto\u00a0· day');
+    expect(JSON.stringify(renderer.toJSON())).toContain('#a9d3ec');
   } finally {
     act(() => renderer?.unmount());
     hour.mockRestore();
+  }
+});
+
+it('uses the local hand-built day key when Intl does not produce an ISO day', async () => {
+  const { default: HeaderScene } = await import('./header-scene');
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(new Date(2026, 8, 18, 10).getTime());
+  const locale = vi.spyOn(Date.prototype, 'toLocaleDateString').mockReturnValue('18/09/2026');
+  let view!: ReturnType<typeof create>;
+  try {
+    await act(async () => {
+      view = create(
+        <HeaderScene group={group} header={{ style: 'scene', scene: 'beach', time: 'day' }} />,
+      );
+    });
+    expect(JSON.stringify(view.toJSON())).toContain('Day 2 of 4');
+    expect(locale).not.toHaveBeenCalled();
+  } finally {
+    act(() => view?.unmount());
+    clock.mockRestore();
+    locale.mockRestore();
   }
 });
