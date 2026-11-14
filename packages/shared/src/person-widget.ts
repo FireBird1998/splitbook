@@ -270,7 +270,11 @@ function projectPerson(
       const titleFont = compact ? 13 : 15,
         bodyFont = 12,
         actionFont = 12;
-      const showStateTile = !!read.title && optional && !level && !compact;
+      const showStateTile =
+        !!read.title &&
+        optional &&
+        level < 2 &&
+        (read.state === 'all-square' || (!level && !compact));
       const stateTileSize = read.state === 'all-square' ? 22 : 48;
       const messageGap = read.state === 'all-square' ? 8 : 12;
       const messageWidth = width - (showStateTile ? stateTileSize + messageGap : 0);

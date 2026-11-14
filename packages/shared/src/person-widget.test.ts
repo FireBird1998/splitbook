@@ -519,3 +519,14 @@ it('admits the next all-square line at 4x3 and 130 percent before stretching the
   expect(result.more).toBeNull();
   expect(result.layout.fits).toBe(true);
 });
+
+it.each([1, 1.3, 2])(
+  'keeps the all-square check through 130 percent, dropping it only at 200 percent (%s)',
+  (scale) => {
+    const c: WidgetCopy = {
+      ...copy,
+      groups: { maple: { ...maple, currencies: [] }, lisbon: { ...lisbon, currencies: [] } },
+    };
+    expect(view(c, { width: 360, height: 224 }, scale).layout.showStateTile).toBe(scale < 2);
+  },
+);
