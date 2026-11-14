@@ -3866,16 +3866,38 @@ it('mounts one selected preview and releases the Group SVG while Header settings
         : undefined,
     );
     await app.press('Open Maple House');
-    await settle(import('@splitbook/shared/header-scenes/beach'));
     const scenes = () => app.root().findAll((node) => (node.type as unknown) === 'default');
-    expect(scenes()).toHaveLength(1);
+    await vi.waitFor(
+      async () => {
+        await settle();
+        expect(scenes()).toHaveLength(1);
+      },
+      { timeout: 5000 },
+    );
     await app.press('Group options');
     await app.press('Header scene');
-    await settle(import('./ui/header-scene-thumbnail'));
-    expect(scenes()).toHaveLength(1);
-    expect(app.root().findAll((node) => (node.type as unknown) === 'Image')).toHaveLength(4);
+    await vi.waitFor(
+      async () => {
+        await settle();
+        expect(scenes()).toHaveLength(1);
+      },
+      { timeout: 5000 },
+    );
+    await vi.waitFor(
+      async () => {
+        await settle();
+        expect(app.root().findAll((node) => (node.type as unknown) === 'Image')).toHaveLength(4);
+      },
+      { timeout: 5000 },
+    );
     await app.press('Back to Group');
-    expect(scenes()).toHaveLength(1);
+    await vi.waitFor(
+      async () => {
+        await settle();
+        expect(scenes()).toHaveLength(1);
+      },
+      { timeout: 5000 },
+    );
     expect(app.root().findAll((node) => (node.type as unknown) === 'Image')).toHaveLength(0);
   } finally {
     vi.unstubAllEnvs();

@@ -63,12 +63,17 @@ it('uses four raster Images and only the selected full-size scene, with zero vec
   );
   await act(async () => {
     view = create(render(header));
-    await import('./header-scene');
-    await import('./header-scene-thumbnail');
-    await import('@splitbook/shared/header-scenes/beach');
   });
   const count = () =>
     view.root.findAll((node) => typeof node.type === 'string' && vectors.has(node.type)).length;
+  await vi.waitFor(
+    async () => {
+      await act(async () => {});
+      expect(view.root.findAll((node) => (node.type as unknown) === 'Image')).toHaveLength(4);
+      expect(view.root.findAll((node) => (node.type as unknown) === 'default')).toHaveLength(1);
+    },
+    { timeout: 5000 },
+  );
   const beach = count();
   expect(view.root.findAll((node) => (node.type as unknown) === 'Image')).toHaveLength(4);
   expect(view.root.findAll((node) => (node.type as unknown) === 'default')).toHaveLength(1);
@@ -76,8 +81,14 @@ it('uses four raster Images and only the selected full-size scene, with zero vec
   expect(loaded).toEqual([]);
   await act(async () => {
     view.update(render({ ...header, scene: 'sakura' }));
-    await import('@splitbook/shared/header-scenes/sakura');
   });
+  await vi.waitFor(
+    async () => {
+      await act(async () => {});
+      expect(JSON.stringify(view.toJSON())).toContain('cherry-blossom garden');
+    },
+    { timeout: 5000 },
+  );
   const sakura = count();
   expect(loaded).toEqual(['sakura']);
   expect(sakura).toBeLessThanOrEqual(850);
@@ -85,6 +96,5 @@ it('uses four raster Images and only the selected full-size scene, with zero vec
   await act(async () => view.update(render({ ...header, style: 'classic' })));
   expect(count()).toBe(0);
   expect(view.root.findAll((node) => (node.type as unknown) === 'Image')).toHaveLength(4);
-  console.log('A3_SETTINGS_SVG_NODES', { beach, sakura, classic: count() });
   act(() => view.unmount());
 });
