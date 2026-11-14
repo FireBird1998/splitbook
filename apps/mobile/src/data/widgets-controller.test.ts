@@ -156,7 +156,8 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
     if (path.endsWith('/expenses') && !url.searchParams.has('includeRecent')) {
       const value = backend.world.expenses[groupId];
       if (value && typeof value === 'object') {
-        const { recent: _recent, ...ordinary } = value as Record<string, unknown>;
+        const ordinary = { ...(value as Record<string, unknown>) };
+        delete ordinary.recent;
         return Response.json({ status: 200, data: ordinary });
       }
     }
