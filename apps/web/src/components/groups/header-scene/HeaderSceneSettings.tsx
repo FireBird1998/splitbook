@@ -94,6 +94,7 @@ export default function HeaderSceneSettings({
           <ClassicHeaderPreview card={headerCard(group, clock?.today ?? '')} />
         )
       }
+      previewTone={headerCard(group, clock?.today ?? '', time).tone}
       previewCaption={
         form.value.style === 'classic'
           ? 'Classic header'

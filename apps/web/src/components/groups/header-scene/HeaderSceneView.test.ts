@@ -1,7 +1,8 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ThemeProvider } from '@mui/material/styles';
+import { getContrastRatio, ThemeProvider } from '@mui/material/styles';
 import { expect, it } from 'vitest';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { headerCard } from '@splitbook/shared/group-header';
 import ecoCity from '@splitbook/shared/header-scenes/eco-city';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
@@ -21,6 +22,7 @@ const render = (
   category: 'trip' | 'home' = 'trip',
   mode: 'light' | 'dark' = 'light',
   today = '2026-11-15',
+  time: 'morning' | 'day' | 'sunset' | 'night' = 'night',
 ) =>
   renderToStaticMarkup(
     createElement(
@@ -30,9 +32,10 @@ const render = (
         card: headerCard(
           { ...group, category, name: category === 'home' ? 'Maple House' : group.name },
           today,
+          time,
         ),
         art: ecoCity,
-        time: 'night',
+        time,
       }),
     ),
   );
@@ -86,3 +89,23 @@ it('centres the island on a phone-width header instead of slicing it from the le
   const html = render();
   expect(html).toContain('calc(50% - 262.5px)');
 });
+
+it.each(['light', 'dark'] as const)(
+  'uses shared card tone across all times in %s theme',
+  (mode) => {
+    for (const time of ['morning', 'day', 'sunset', 'night'] as const) {
+      const html = render('trip', mode, '2026-11-15', time);
+      const tone = headerCard(group, '2026-11-15', time).tone;
+      expect(html).toContain(`data-scene-card="${tone}"`);
+      if (tone === 'dark') {
+        const dark = getSemanticTokens('dark');
+        expect(getContrastRatio(dark.text, dark.surface)).toBeGreaterThanOrEqual(4.5);
+        expect(getContrastRatio(dark.textSecondary, dark.surface)).toBeGreaterThanOrEqual(4.5);
+        expect(html).toContain(`color:${dark.text}`);
+        expect(html).toContain(`background-color:${dark.surface}`);
+        expect(html).toContain(`color:${getSemanticTokens('dark').textSecondary}`);
+        expect(html).toContain(`border-color:${getSemanticTokens('dark').border}`);
+      }
+    }
+  },
+);

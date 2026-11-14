@@ -83,3 +83,11 @@ it('keeps the failed choice selected and says it was not saved', () => {
   expect(html).toContain('role="alert"');
   expect(disabledButton(html, 'Save changes')).toBe(false);
 });
+
+it('tones the scene preview while preserving the Classic preview', () => {
+  const night = { ...saved, time: 'night' } as const;
+  expect(render({ value: night, previewTone: 'dark' })).toContain('data-scene-preview-card="dark"');
+  const classic = render({ value: { ...night, style: 'classic' }, previewTone: 'dark' });
+  expect(classic).toContain('data-scene-preview-card="theme"');
+  expect(classic).not.toContain('data-scene-preview-card="dark"');
+});

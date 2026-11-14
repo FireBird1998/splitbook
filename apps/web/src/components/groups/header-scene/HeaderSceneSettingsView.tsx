@@ -14,6 +14,8 @@ import Radio from '@mui/material/Radio';
 import Switch from '@mui/material/Switch';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { HEADER_SCENES, HEADER_TIMES, type GroupHeader } from '@splitbook/shared/group-header';
+import type { headerCard } from '@splitbook/shared/group-header';
+import { SceneCardTheme } from './SceneCardTheme';
 import type { ScenePreferences } from './scene-preferences';
 
 export const sameHeader = (left: GroupHeader, right: GroupHeader) =>
@@ -28,6 +30,7 @@ interface Props {
   preview: ReactNode;
   thumbnails?: Partial<Record<GroupHeader['scene'], ReactNode>>;
   previewCaption?: string;
+  previewTone?: ReturnType<typeof headerCard>['tone'];
   saving?: boolean;
   error?: string | null;
   savedNotice?: boolean;
@@ -55,6 +58,7 @@ export default function HeaderSceneSettingsView({
   preview,
   thumbnails = {},
   previewCaption,
+  previewTone = 'theme',
   saving = false,
   error,
   savedNotice = false,
@@ -91,26 +95,43 @@ export default function HeaderSceneSettingsView({
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '20px 28px', px: 2.5, pb: 2.5 }}>
-          <Box sx={{ flex: '1 1 280px', minWidth: 0 }}>
-            {preview}
+          <SceneCardTheme tone={dimmed ? 'theme' : previewTone}>
             <Box
+              data-scene-preview-card={dimmed ? 'theme' : previewTone}
               sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: 1,
-                mt: 1,
+                flex: '1 1 280px',
+                alignSelf: 'flex-start',
+                minWidth: 0,
+                ...(!dimmed &&
+                  previewTone === 'dark' && {
+                    bgcolor: 'background.paper',
+                    color: 'text.primary',
+                    borderRadius: '14px',
+                    overflow: 'hidden',
+                  }),
               }}
             >
-              <Typography variant="overline">Preview</Typography>
-              <Typography variant="caption" color="text.secondary" aria-live="polite">
-                {previewCaption ??
-                  (dimmed
-                    ? 'Classic header'
-                    : `${HEADER_SCENES.find((scene) => scene.id === value.scene)?.name}, ${headerTimeLabel(value.time)}`)}
-              </Typography>
+              {preview}
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 1,
+                  mt: 1,
+                  ...(!dimmed && previewTone === 'dark' && { px: 1, pb: 1 }),
+                }}
+              >
+                <Typography variant="overline">Preview</Typography>
+                <Typography variant="caption" color="text.secondary" aria-live="polite">
+                  {previewCaption ??
+                    (dimmed
+                      ? 'Classic header'
+                      : `${HEADER_SCENES.find((scene) => scene.id === value.scene)?.name}, ${headerTimeLabel(value.time)}`)}
+                </Typography>
+              </Box>
             </Box>
-          </Box>
+          </SceneCardTheme>
           <Box
             sx={{
               flex: '1.2 1 300px',
