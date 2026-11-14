@@ -387,6 +387,7 @@ function projectPerson(
         separateDescription,
         actionLines,
         showStateTile,
+        stateIcon: read.state === 'no-shared-group' ? ('warning' as const) : null,
         stateTileSize,
         stateIconSize: read.state === 'all-square' ? 22 : 28,
         messageGap,
