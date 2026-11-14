@@ -209,7 +209,9 @@ it.each([
 
 it.each([
   ['a usual phone', {}, true],
-  ['130% text', { fontScale: 1.3 }, false],
+  ['a tall phone at 130% text', { fontScale: 1.3 }, true],
+  ['a tall phone at 200% text', { fontScale: 2 }, false],
+  ['a 640 dp phone at 130% text', { height: 640, fontScale: 1.3 }, false],
   ['a short screen', { height: 560 }, false],
 ])('on %s the preview is pinned above the scrolling choices: %s', async (_, size, pinned) => {
   setWindow(size);

@@ -25,8 +25,8 @@ import { GroupHeader } from './group-header';
 import { NotAvailableOffline } from './offline-notice';
 import { useTheme } from './theme';
 const Scene = lazy(() => import('./header-scene'));
-const PIN_MAX_FONT_SCALE = 1.3;
-const PIN_MIN_HEIGHT = 600;
+// Screen height, in dp at the member's text size, below which a pinned preview crowds the choices.
+const PIN_MIN_ROOM = 600;
 const Thumbnail = lazy(() => import('./header-scene-thumbnail'));
 export function HeaderSettings({
   state,
@@ -61,7 +61,7 @@ export function HeaderSettings({
   const { fontScale, height } = useWindowDimensions();
   // The preview stays in view while the choices scroll, unless large text or a short screen
   // would leave the choices too little room; then it scrolls with them.
-  const pinned = fontScale < PIN_MAX_FONT_SCALE && height >= PIN_MIN_HEIGHT;
+  const pinned = height / fontScale >= PIN_MIN_ROOM;
   const dimmed = state.draft.style === 'classic';
   const choice = (
     label: string,
