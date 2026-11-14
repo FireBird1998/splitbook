@@ -291,8 +291,8 @@ export function createWidgetCopy(
         copy.tags = { ...tags };
         copy.lostGroupIds = [...lost];
         if (savedGroups) copy.savedGroups = savedGroups;
-        copy.recents = {};
         if (native.recentSelections) {
+          copy.recents = {};
           try {
             await held.writeSavedCopy(async () => {
               const selected = await native.recentSelections!(held.accountId);
