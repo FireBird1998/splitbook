@@ -267,6 +267,7 @@ export function createWidgetsNative(environment: string): WidgetsNative {
   const store = createWidgetsStore(environment);
   let sessions: Promise<void> = Promise.resolve();
   return {
+    readCopy: async () => (await store.read()).copy,
     recentSelections: async (accountId) => {
       const { getWidgetInfo } = await import('react-native-android-widget/src/api/get-widget-info');
       const activeIds = (await getWidgetInfo('Group')).map((widget) => widget.widgetId);

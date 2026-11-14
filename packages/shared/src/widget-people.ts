@@ -12,6 +12,26 @@ export interface WidgetGroupPeople {
   people: WidgetPerson[];
 }
 
+/** A verified list can retire older Person parts without changing other widgets. */
+export function personGroupWasDropped(
+  copy: Pick<WidgetCopy, 'groups' | 'groupPeople'> & {
+    savedGroups?: { verifiedAt: number; rows: readonly { id: string }[] };
+  },
+  id: string,
+) {
+  const list = copy.savedGroups,
+    people = copy.groupPeople?.[id],
+    part = copy.groups?.[id];
+  if (!list || !Number.isFinite(list.verifiedAt) || !Array.isArray(list.rows) || !people)
+    return false;
+  const newest = Math.max(
+    people.verifiedAt,
+    part?.verifiedAt ?? -Infinity,
+    part?.balancesVerifiedAt ?? -Infinity,
+  );
+  return list.verifiedAt >= newest && !list.rows.some((group) => group.id === id);
+}
+
 /** The setup catalogue uses saved membership, never the network or payment participation. */
 export function widgetPeople(copy: WidgetCopy | null, accountId: string) {
   if (!copy || copy.accountId !== accountId) return [];
@@ -23,6 +43,7 @@ export function widgetPeople(copy: WidgetCopy | null, accountId: string) {
     if (
       !group ||
       group.archived ||
+      personGroupWasDropped(copy, id) ||
       copy.lostGroupIds?.includes(id) ||
       !Array.isArray(group.people) ||
       typeof group.name !== 'string' ||

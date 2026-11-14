@@ -1,3 +1,4 @@
+import { widgetPeople } from '@splitbook/shared/widget-people';
 import { personWidget } from '@splitbook/shared/person-widget';
 import { overviewWidget } from '@splitbook/shared/overview-widget';
 import { widgetDimensions } from '../test-utils/widget-size';
@@ -2872,4 +2873,18 @@ it('a Person line opens the matching Group payment, through the shared target, w
   expect(f.requests.filter((r) => r.method === 'POST' && r.path.includes('/settlements'))).toEqual(
     [],
   );
+});
+
+it('prunes Person membership when a newer trusted list drops its only shared Group', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() => expect(f.record().copy?.groupPeople?.[groupId]).toBeDefined());
+  f.listGroups([]);
+  clock.mockReturnValue(verified + 1000);
+  await c.refresh('pull');
+  await vi.waitFor(() => expect(f.record().copy?.savedGroups?.rows).toEqual([]));
+  expect(f.record().copy?.groupPeople?.[groupId]).toBeUndefined();
+  expect(widgetPeople(f.record().copy, alex.id)).toEqual([]);
 });

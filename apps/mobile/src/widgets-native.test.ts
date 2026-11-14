@@ -1,3 +1,4 @@
+import { widgetPeople } from '@splitbook/shared/widget-people';
 import { personWidget } from '@splitbook/shared/person-widget';
 import { overviewAt } from './test-utils/overview-widget';
 import { widgetDimensions } from './test-utils/widget-size';
@@ -1321,6 +1322,81 @@ it('keeps stored Person labels on a 401 while the widget reveals no person', asy
     expect(personWidget(copy, setup, { width: 360, height: 224 }, session, homeTime)).toMatchObject(
       { state: 'expired', name: null, initials: null, payments: [] },
     );
+  } finally {
+    phone.dispose();
+  }
+});
+
+it('does not restore refused Person membership from the old saved list on an offline restart', async () => {
+  const server = fakeSplitbook(),
+    environment = 'person-refused';
+  const groupId = server.world.groups[0]._id;
+  const store = createWidgetsStore(environment),
+    adapter = createWidgetsNative(environment);
+  let redraws = 0;
+  const phone = testPhone(server, {
+    now: homeTime,
+    parts: {
+      widgets: {
+        ...adapter,
+        redraw: async () => {
+          redraws++;
+        },
+      },
+    },
+  });
+  try {
+    const first = phone.open();
+    await first.signIn('alex');
+    await vi.waitFor(async () =>
+      expect(
+        await phone.stores.savedQueries.load(server.world.people.alex.id, '/api/groups'),
+      ).not.toBeNull(),
+    );
+    const savedList = await phone.stores.savedQueries.load(
+      server.world.people.alex.id,
+      '/api/groups',
+    );
+    await first.openGroup(groupId);
+    await vi.waitFor(async () =>
+      expect((await store.read()).copy?.groupPeople?.[groupId]).toBeDefined(),
+    );
+    phone.clock.now = homeTime + 1000;
+    server.reply('GET', `/api/groups/${groupId}`, () =>
+      Response.json({ error: 'Not a member' }, { status: 403 }),
+    );
+    await first.openGroup(groupId, false);
+    await vi.waitFor(async () =>
+      expect((await store.read()).copy?.lostGroupIds).toContain(groupId),
+    );
+    first.dispose();
+    // Surviving disk state when the process ends before a replacement list is saved.
+    await phone.stores.savedQueries.save(server.world.people.alex.id, '/api/groups', savedList);
+    server.online = false;
+    const restarted = phone.open();
+    await restarted.restore();
+    await vi.waitFor(async () =>
+      expect((await store.read()).copy?.savedGroups?.rows.some((g) => g.id === groupId)).toBe(true),
+    );
+    expect((await store.read()).copy?.groupPeople?.[groupId]).toBeUndefined();
+    expect(widgetPeople((await store.read()).copy, server.world.people.alex.id)).toEqual([]);
+    const before = redraws;
+    await phone.open().restore();
+    await vi.waitFor(() => expect(redraws).toBeGreaterThan(before));
+    expect((await store.read()).copy?.groupPeople?.[groupId]).toBeUndefined();
+    expect((await store.read()).copy?.peopleRefusedAt?.[groupId]).toBe(homeTime + 1000);
+    server.online = true;
+    phone.clock.now = homeTime + 2000;
+    server.reply('GET', `/api/groups/${groupId}`, () =>
+      Response.json({ status: 200, data: server.world.groups[0] }),
+    );
+    const returning = phone.open();
+    await returning.restore();
+    await returning.openGroup(groupId, false);
+    await vi.waitFor(async () =>
+      expect((await store.read()).copy?.groupPeople?.[groupId]).toBeDefined(),
+    );
+    expect((await store.read()).copy?.peopleRefusedAt?.[groupId]).toBeUndefined();
   } finally {
     phone.dispose();
   }

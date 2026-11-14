@@ -21,6 +21,8 @@ export interface WidgetCopy {
 
   /** Membership reads have their own age; they do not depend on a Balances read. */
   groupPeople?: Record<string, WidgetGroupPeople>;
+  /** Refusal fences for Person membership restored from older saved reads. */
+  peopleRefusedAt?: Record<string, number>;
   lostGroupIds?: string[];
   savedGroups?: {
     verifiedAt: number;

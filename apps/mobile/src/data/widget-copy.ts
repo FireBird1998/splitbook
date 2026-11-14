@@ -1,3 +1,4 @@
+import { personGroupWasDropped } from '@splitbook/shared/widget-people';
 import { parseGroupListResponse, type GroupReadTag } from '@splitbook/shared/group-read';
 import { expenseDraftChanged, parseExpenseContext } from './expense-draft';
 import { cachedRead } from './offline-cache';
@@ -16,6 +17,7 @@ import { createSavedCopyQueue, parseOnce, type Envelope } from './saved-read-eng
 import type { AccountStorageLease, MobileSnapshot } from './types';
 
 export interface WidgetsNative {
+  readCopy?(): Promise<WidgetCopy | null>;
   recentSelections?(accountId: string): Promise<Record<string, WidgetRecentPart | null>>;
   openSetup?(widgetId: number): Promise<void>;
   write(copy: WidgetCopy): Promise<void>;
@@ -68,6 +70,19 @@ export function createWidgetCopy(
     }
   };
   let groupPeople: NonNullable<WidgetCopy['groupPeople']> = {};
+  let peopleRefusedAt: NonNullable<WidgetCopy['peopleRefusedAt']> = {};
+  let peopleList: Pick<Envelope, 'refreshedAt' | 'value'> | null = null;
+  const prunePeople = () => {
+    if (!peopleList) return;
+    const parts = {
+      groups,
+      groupPeople,
+      savedGroups: { verifiedAt: peopleList.refreshedAt, rows: parseGroups(peopleList.value) },
+    };
+    for (const id of Object.keys(groupPeople))
+      if (personGroupWasDropped(parts, id)) delete groupPeople[id];
+  };
+
   const rememberPeople = (
     group: Parameters<typeof widgetGroupPeople>[0],
     verifiedAt: number,
@@ -76,9 +91,11 @@ export function createWidgetCopy(
     if (
       (!direct && groupPeople[group.id]?.verifiedAt === verifiedAt) ||
       lost.has(group.id) ||
+      verifiedAt <= (peopleRefusedAt[group.id] ?? -Infinity) ||
       (groupPeople[group.id]?.verifiedAt ?? -Infinity) > verifiedAt
     )
       return;
+    delete peopleRefusedAt[group.id];
     groupPeople[group.id] = {
       ...widgetGroupPeople(group, verifiedAt),
       archived: !!group.isArchived || archived.has(group.id),
@@ -94,12 +111,27 @@ export function createWidgetCopy(
   const restore = async (accountId: string) => {
     if (restored || !rows) return;
     restored = true;
+    const previous = await native?.readCopy?.();
+    if (previous?.accountId === accountId) {
+      const fences = { ...previous.peopleRefusedAt };
+      // Older copies already remember refusals, but do not yet carry their times.
+      for (const id of previous.lostGroupIds ?? []) fences[id] ??= now();
+      for (const [id, at] of Object.entries(fences)) {
+        if (!Number.isFinite(at)) continue;
+        if ((groupPeople[id]?.verifiedAt ?? -Infinity) > at) continue;
+        peopleRefusedAt[id] = Math.max(peopleRefusedAt[id] ?? -Infinity, at);
+        delete groupPeople[id];
+      }
+    }
     const read = async (path: string) => {
       const row = cachedRead(await rows.load(accountId, path), accountId, path, now());
       return row && trusted(path, row.refreshedAt) ? row : null;
     };
     const list = await read('/api/groups');
-    if (list) for (const group of parseGroups(list.value)) rememberPeople(group, list.refreshedAt);
+    if (list) {
+      if (!peopleList || list.refreshedAt > peopleList.refreshedAt) peopleList = list;
+      for (const group of parseGroups(list.value)) rememberPeople(group, list.refreshedAt);
+    }
     if (list && !savedGroups)
       savedGroups = {
         verifiedAt: list.refreshedAt,
@@ -183,8 +215,10 @@ export function createWidgetCopy(
       if (!held) return;
       const data = snapshot.home;
       const listed = groupsRead();
-      if (snapshot.groups.loaded && listed && trusted('/api/groups', listed.refreshedAt))
-        for (const group of snapshot.groups.data) rememberPeople(group, listed.refreshedAt);
+      if (snapshot.groups.loaded && listed && trusted('/api/groups', listed.refreshedAt)) {
+        if (!peopleList || listed.refreshedAt > peopleList.refreshedAt) peopleList = listed;
+        for (const group of parseGroups(listed.value)) rememberPeople(group, listed.refreshedAt);
+      }
       if (snapshot.groups.loaded && listed !== null)
         savedGroups = {
           verifiedAt: listed.refreshedAt,
@@ -243,6 +277,7 @@ export function createWidgetCopy(
           month.read.refreshedAt,
         );
       }
+      prunePeople();
       const copy: WidgetCopy = {
         version: 1,
         accountId: held.accountId,
@@ -250,6 +285,7 @@ export function createWidgetCopy(
         months: { ...months },
         tags: { ...tags },
         groupPeople: { ...groupPeople },
+        peopleRefusedAt: { ...peopleRefusedAt },
         lostGroupIds: [...lost],
         ...(savedGroups ? { savedGroups } : {}),
         home:
@@ -328,7 +364,9 @@ export function createWidgetCopy(
         copy.groups = { ...groups };
         copy.months = { ...months };
         copy.tags = { ...tags };
+        prunePeople();
         copy.groupPeople = { ...groupPeople };
+        copy.peopleRefusedAt = { ...peopleRefusedAt };
         copy.lostGroupIds = [...lost];
         if (savedGroups) copy.savedGroups = savedGroups;
         if (native.recentSelections) {
@@ -378,6 +416,7 @@ export function createWidgetCopy(
       if (denied) {
         delete tags[id];
         delete groupPeople[id];
+        peopleRefusedAt[id] = now();
         lost.add(id);
         refusedAt.set(id, now());
         if (savedGroups)
@@ -392,6 +431,8 @@ export function createWidgetCopy(
       months = {};
       tags = {};
       groupPeople = {};
+      peopleRefusedAt = {};
+      peopleList = null;
       savedGroups = undefined;
       lost.clear();
       refusedAt.clear();
