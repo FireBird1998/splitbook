@@ -200,3 +200,27 @@ it('distinguishes matching first names by initials in speech while drawing first
   expect(result.recent?.rows[0].detail).toContain('Priya paid');
   expect(result.recent?.rows[2].description).toBe('Priya paid Priya');
 });
+
+it('groups hidden section counts into measured rows on a full widget', () => {
+  const result = groupWidget(
+    group,
+    { ...setup, hideAmounts: true },
+    { width: 360, height: 344 },
+    auth,
+    now,
+    1,
+    month,
+    recent,
+  );
+  expect(result.layout.hiddenHeaderBalance).toBe('You owe');
+  expect(result.layout.hiddenCountRows.map((row) => row.lines.join(' '))).toEqual([
+    'You pay 2 people',
+    '4 recent Expenses and payments',
+    '12 Expenses this Month',
+  ]);
+  expect(result.layout.hiddenCountsHeight).toBeGreaterThan(0);
+  expect(
+    result.layout.sections.some((section) => section.id === 'recent' || section.id === 'month'),
+  ).toBe(false);
+  expect(JSON.stringify(result)).not.toContain('Beach shack lunch');
+});

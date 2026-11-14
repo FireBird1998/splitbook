@@ -239,6 +239,8 @@ function groupWidgetView(
       more: string | null;
     },
     hidden: null as string | null,
+    hiddenCounts: [] as string[],
+    hiddenBalance: null as string | null,
     name: null as string | null,
     tripDay: null as string | null,
     theme: null as GroupCategory | null,
@@ -304,6 +306,7 @@ function groupWidgetView(
       title: session.loading ? null : empty.title,
     };
   const monthView = monthWidgetView(month, setup, now);
+  const recentView = recentWidgetView(recent, setup, now);
   const currencies = [...part.currencies].sort(
     (a, b) => Number(b.currency === part.mainCurrency) - Number(a.currency === part.mainCurrency),
   );
@@ -345,7 +348,23 @@ function groupWidgetView(
     state: part.archived ? 'archived' : allSquare ? 'all-square' : 'normal',
     name: part.name,
     month: monthView,
-    recent: recentWidgetView(recent, setup, now),
+    recent: recentView,
+    hiddenCounts:
+      setup.hideAmounts && setup.showRecentExpenses
+        ? [
+            hiddenSummary().replace('You owe ', 'You pay '),
+            recentView?.count ?? recentView?.prompt,
+            monthView?.count ?? monthView?.prompt,
+          ].filter((value): value is string => !!value)
+        : [],
+    hiddenBalance:
+      setup.hideAmounts && setup.showRecentExpenses
+        ? currencies.length > 1
+          ? 'Balances hidden'
+          : bucket!.balanceMinor < 0
+            ? 'You owe'
+            : 'You’re owed'
+        : null,
     tripDay: tripDay(part, now),
     hidden: setup.hideAmounts
       ? setup.showRecentExpenses
@@ -570,8 +589,10 @@ function groupLayout(
         !!actionLabel &&
         text.width(paymentOverflow(view.payments), 10) + text.width(actionLabel, actionFont) + 32 <=
           width;
-      const monthEligible = !!view.month && optional && level === 0 && !tiny;
-      const recentEligible = !!view.recent && optional && level === 0 && !tiny;
+      const countsEligible =
+        view.hiddenCounts.length > 0 && optional && level === 0 && !tiny && !compact;
+      const monthEligible = !countsEligible && !!view.month && optional && level === 0 && !tiny;
+      const recentEligible = !countsEligible && !!view.recent && optional && level === 0 && !tiny;
       const sectionLabelHeight = text.line(11) + 4;
       const recentMessageLines = text.words(
         view.recent?.prompt ?? view.recent?.count ?? view.recent?.empty ?? '',
@@ -712,6 +733,22 @@ function groupLayout(
               },
             ]
           : []),
+        ...(countsEligible
+          ? [
+              {
+                id: 'counts',
+                rows: view.hiddenCounts.length,
+                rowHeight: Math.max(
+                  38,
+                  ...view.hiddenCounts.map(
+                    (count) => text.words(count, 11, width - 24).length * text.line(11) + 16,
+                  ),
+                ),
+                inset: 8,
+                grow: true,
+              },
+            ]
+          : []),
         ...(view.description && optional && level < 2 && !tiny
           ? [
               {
@@ -777,6 +814,7 @@ function groupLayout(
         monthAmountFontSize: text.font(monthAmountFont),
         monthColumnWidth,
         monthPanelPadding,
+        hiddenCountLines: view.hiddenCounts.map((count) => text.words(count, 11, width - 24)),
         monthNoteLines,
         monthPromptLines,
         monthColumnGap: compact ? (spentHeight && shareHeight ? 8 : 0) : 8,
@@ -817,6 +855,7 @@ function groupLayout(
   const payments = settings.sections.find((s) => s.id === 'payments');
   const monthSection = settings.sections.find((s) => s.id === 'month');
   const recentSection = settings.sections.find((s) => s.id === 'recent');
+  const countsSection = settings.sections.find((s) => s.id === 'counts');
   const recentMore = recentSection?.more
     ? recentSection.rows
       ? `+${counted(recentSection.more, 'more', 'more')}`
@@ -846,6 +885,15 @@ function groupLayout(
     ...settings,
     padding,
     paddingVertical,
+    hiddenHeaderBalance: countsSection ? view.hiddenBalance : null,
+    hiddenCountRows: settings.hiddenCountLines
+      .slice(0, countsSection?.rows ?? 0)
+      .map((lines, index) => ({
+        lines,
+        height: countsSection!.rowHeight,
+        dividerHeight: index ? pixels(1) : 0,
+      })),
+    hiddenCountsHeight: countsSection?.height ?? 0,
     cornerRadius,
     width,
     compact,

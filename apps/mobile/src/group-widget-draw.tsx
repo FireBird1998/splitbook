@@ -141,7 +141,7 @@ export function drawGroup(
           ? l.showSaved && view.saved
             ? text(view.saved, t.textMuted, l.fontSizes.caption)
             : null
-          : text(view.balance, tone, l.fontSizes.secondary, true)}
+          : text(l.hiddenHeaderBalance ?? view.balance, tone, l.fontSizes.secondary, true)}
       </FlexWidget>
       {!l.compact && l.showSaved && view.saved
         ? text(view.saved, t.textMuted, l.fontSizes.caption)
@@ -352,7 +352,9 @@ export function drawGroup(
         style={{
           width: 'match_parent',
           height: l.recentPanelHeight,
-          ...(!l.compact ? { borderRadius: 14, backgroundColor: color(t.surfaceMuted) } : {}),
+          ...(!l.compact && view.recent?.rows.length
+            ? { borderRadius: 14, backgroundColor: color(t.surfaceMuted) }
+            : {}),
           paddingVertical: view.recent?.rows.length && !l.compact ? l.paymentPadding : 0,
         }}
       >
@@ -529,6 +531,40 @@ export function drawGroup(
     balance,
     payments: paymentRows,
     recent,
+    counts: (
+      <FlexWidget
+        style={{
+          width: 'match_parent',
+          height: l.hiddenCountsHeight,
+          borderRadius: 14,
+          backgroundColor: color(t.surfaceMuted),
+          paddingVertical: 4,
+        }}
+      >
+        {l.hiddenCountRows.map((row, index) => (
+          <FlexWidget key={index} style={{ width: 'match_parent', height: row.height }}>
+            {row.dividerHeight ? (
+              <FlexWidget
+                style={{
+                  height: row.dividerHeight,
+                  width: 'match_parent',
+                  backgroundColor: color(t.border),
+                }}
+              />
+            ) : null}
+            <FlexWidget
+              style={{
+                height: row.height - row.dividerHeight,
+                paddingHorizontal: 12,
+                justifyContent: 'center',
+              }}
+            >
+              {lines(row.lines, t.textSecondary, l.fontSizes.secondary)}
+            </FlexWidget>
+          </FlexWidget>
+        ))}
+      </FlexWidget>
+    ),
     month,
     title: message,
     description: (
