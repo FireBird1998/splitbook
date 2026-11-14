@@ -279,13 +279,6 @@ export function createWidgetsStore(environment: string) {
         id,
         JSON.stringify(eviction),
       );
-      const current = (await this.read()).copy;
-      if (current?.accountId === accountId)
-        await db.runAsync(
-          'UPDATE widget_state SET copy = ? WHERE environment = ?',
-          JSON.stringify(current),
-          environment,
-        );
     },
     async write(copy: WidgetCopy, options: WidgetCopyWriteOptions = {}) {
       const db = await ensure();

@@ -339,7 +339,7 @@ it('draws no previous account’s final balance, people or To review count after
   }
 });
 
-function holdCopyWrite(verifiedAt: number) {
+function holdCopyWrite(verifiedAt: number, predicate?: (copy: WidgetCopy) => boolean) {
   let arrive!: () => void, release!: () => void, complete!: () => void;
   const arrived = new Promise<void>((done) => {
     arrive = done;
@@ -353,7 +353,10 @@ function holdCopyWrite(verifiedAt: number) {
   // Initial Group/list projections may still be queued. Hold the new verified Home read,
   // rather than an older copy whose redraw just became visible.
   native.copyWrite = {
-    when: (value) => (JSON.parse(value) as WidgetCopy).home?.verifiedAt === verifiedAt,
+    when: (value) =>
+      predicate
+        ? predicate(JSON.parse(value) as WidgetCopy)
+        : (JSON.parse(value) as WidgetCopy).home?.verifiedAt === verifiedAt,
     arrive,
     waiting,
     complete,
@@ -2226,3 +2229,46 @@ it.each(['re-added', 'spurious', 'unarchived', 'clock-back', 'unarchived-clock-b
     }
   },
 );
+
+it('does not let a delayed eviction overwrite a newer ordinary copy', async () => {
+  const store = createWidgetsStore('eviction-interleave'),
+    id = 'maple';
+  await store.write({
+    version: 1,
+    accountId: 'alex',
+    home: {
+      verifiedAt: homeTime,
+      groupCount: 1,
+      currencies: [{ currency: 'INR', oweMinor: 3000, owedMinor: 0 }],
+    },
+  });
+  const held = holdCopyWrite(
+    homeTime,
+    (copy) => copy.home === null && !!copy.lostGroupIds?.includes(id),
+  );
+  const evicting = store.evictGroup('alex', id, { kind: 'lost', at: homeTime + 1000 });
+  try {
+    await Promise.race([held.arrived, evicting]);
+    await store.write(
+      {
+        version: 1,
+        accountId: 'alex',
+        home: {
+          verifiedAt: homeTime + 2000,
+          groupCount: 1,
+          currencies: [{ currency: 'INR', oweMinor: 2000, owedMinor: 0 }],
+        },
+        review: { verifiedAt: homeTime + 2000, count: 7 },
+      },
+      { homeVerified: true },
+    );
+    held.release();
+    await evicting;
+    expect((await store.read()).copy?.home?.currencies).toEqual([
+      { currency: 'INR', oweMinor: 2000, owedMinor: 0 },
+    ]);
+    expect((await store.read()).copy?.review?.count).toBe(7);
+  } finally {
+    held.release();
+  }
+});
