@@ -2691,8 +2691,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return null;
     const owner = generation;
-    await notifications.read();
-    return current(owner) && matchingNotification(event) ? event : null;
+    const confirmed = await notifications.read();
+    return confirmed && current(owner) && matchingNotification(event) ? event : null;
   };
   /**
    * Returns whether the phone may show the fixed generic alert. Never navigates or writes money.
@@ -8550,7 +8550,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     consumeHeldNotificationNotice: consumeHeldUpdateNotice,
     dismissPendingNotification: dismissHeldUpdate,
     openPendingNotification: openHeldUpdate,
-    refreshNotifications: notifications.read,
+    refreshNotifications: async () => {
+      await notifications.read();
+    },
     enableNotifications: notifications.enable,
     disableNotifications: notifications.disable,
     setNotificationCategory: notifications.category,
