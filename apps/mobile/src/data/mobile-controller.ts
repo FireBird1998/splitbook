@@ -8265,7 +8265,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             (tag) => tag.id === target.tagId && !tag.isArchived && !tag.isDeleted,
           )
         )
-          await updateExpenseDraft({ tagId: target.tagId });
+          publish({
+            ...snapshot,
+            expense: {
+              ...editor,
+              draft: { ...editor.draft, tagId: target.tagId },
+              blank: { ...editor.blank, tagId: target.tagId },
+            },
+          });
       } else {
         await openGroup(target.groupId, false, 'balances');
         if (!owns() || heldTaskProtected()) return;

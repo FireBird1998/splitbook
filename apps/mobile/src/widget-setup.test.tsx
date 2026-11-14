@@ -406,6 +406,13 @@ it('prefills the first four active Tags, lets a member swap one, and keeps their
       .find((n) => n.props.accessibilityLabel === 'Travel')!
       .props.onPress(),
   );
+  expect(chips().map((n) => n.props.accessibilityLabel)).toEqual([
+    'Groceries',
+    'Bills',
+    'Dining',
+    'Travel',
+    'Rent',
+  ]);
   await act(async () => button().props.onPress());
   expect(store.saveSetup).toHaveBeenCalledWith({
     kind: 'quick',
@@ -440,10 +447,10 @@ it('keeps remaining chosen Tags after an archive, permits none, and offers none 
     tagIds: ['rent', 'archived', 'bills'],
   });
   const chips = () => host('Pressable').filter((n) => n.props.accessibilityRole === 'checkbox');
-  expect(chips().map((n) => n.props.accessibilityLabel)).toEqual(['Bills', 'Rent']);
+  expect(chips().map((n) => n.props.accessibilityLabel)).toEqual(['Rent', 'Bills']);
   expect(chips().every((n) => n.props.accessibilityState.checked)).toBe(true);
   await act(async () => button().props.onPress());
-  expect(store.saveSetup.mock.calls[0][0].tagIds).toEqual(['rent', 'bills']);
+  expect(store.saveSetup.mock.calls[0][0].tagIds).toEqual(['rent', 'archived', 'bills']);
   await act(async () =>
     host('Pressable')
       .find((n) => n.props.accessibilityLabel === 'Record payment')!
@@ -463,11 +470,31 @@ it('keeps remaining chosen Tags after an archive, permits none, and offers none 
     );
   expect(chips().filter((n) => n.props.accessibilityState.checked)).toHaveLength(0);
   await act(async () => button().props.onPress());
-  expect(store.saveSetup.mock.calls.at(-1)![0].tagIds).toEqual([]);
+  expect(store.saveSetup.mock.calls.at(-1)![0].tagIds).toEqual(['archived']);
   await act(async () =>
     host('Pressable')
       .find((n) => n.props.accessibilityLabel === 'Ask each time')!
       .props.onPress(),
   );
   expect(chips()).toEqual([]);
+});
+
+it('saving setup retains a chosen Tag temporarily missing from the latest Widget copy', async () => {
+  store.read.mockResolvedValue({
+    copy: { ...copy, tags: { maple: { verifiedAt: 1, rows: [{ id: 'rent', name: 'Rent' }] } } },
+    session,
+  });
+  await render('Quick', {
+    kind: 'quick',
+    widgetId: 989,
+    accountId: 'alex',
+    groupId: 'maple',
+    tagIds: ['rent'],
+  });
+  store.read.mockResolvedValue({
+    copy: { ...copy, tags: { maple: { verifiedAt: 2, rows: [] } } },
+    session,
+  });
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup.mock.calls.at(-1)![0].tagIds).toEqual(['rent']);
 });

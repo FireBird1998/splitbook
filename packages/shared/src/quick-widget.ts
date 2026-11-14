@@ -50,7 +50,9 @@ function tagShortcuts(
   group: string,
   theme: string,
 ): QuickShortcuts | null {
-  const tags = (setup.tagIds ?? [])
+  const tags = (
+    Array.isArray(setup.tagIds) ? setup.tagIds.filter((id) => typeof id === 'string') : []
+  )
     .slice(0, 4)
     .flatMap((id) => copy.tags?.[setup.groupId!]?.rows.find((tag) => tag.id === id) ?? []);
   if (!tags.length || (size.width < 250 && size.height < 180)) return null;
@@ -61,7 +63,7 @@ function tagShortcuts(
   const bigHeader = !horizontal && size.width >= 250;
   const text = widgetText(width, fontScale, 1, size.pixelRatio);
   const minimumWidth = Math.max(44, text.line(12) + 16);
-  const columnsFit = fitWidgetSections(
+  let columnsFit = fitWidgetSections(
     width,
     Array.from({ length: size.width < 250 ? 2 : 4 }, (_, i) => ({
       id: `column-${i}`,
@@ -72,6 +74,25 @@ function tagShortcuts(
     gap,
     size.pixelRatio,
   );
+  // Reduce columns before admitting rows: every displayed name must fit in full,
+  // except a single Tag using the whole row. Height admission then drops the tail.
+  if (!horizontal) {
+    for (let count = columnsFit.sections.length; count > 1; count--) {
+      const available = columnsFit.sections[0]?.height ?? 0;
+      if (tags.every((tag) => text.width(tag.name, 12) + 8 <= available)) break;
+      columnsFit = fitWidgetSections(
+        width,
+        Array.from({ length: count - 1 }, (_, i) => ({
+          id: `column-${i}`,
+          rows: 1,
+          rowHeight: minimumWidth,
+          grow: true,
+        })),
+        gap,
+        size.pixelRatio,
+      );
+    }
+  }
   const columns = columnsFit.sections.length;
   if (!horizontal && !columns) return null;
   // The LargeText drawing trades short-row Tags before shrinking type. Real width
@@ -146,17 +167,22 @@ function tagShortcuts(
     primary: true,
     fontSize: fitted.addFontSize,
   };
-  const buttons = visible
-    .slice(0, horizontal ? visible.length : tagRows.length * columns)
-    .map((tag, i) => ({
+  const shown = visible.slice(0, horizontal ? visible.length : tagRows.length * columns);
+  const buttons = shown.map((tag, i) => {
+    const rowStart = Math.floor(i / columns) * columns;
+    const rowColumns = Math.min(columns, shown.length - rowStart);
+    return {
       id: tag.id,
       label: tag.name,
       summary: `Add expense in ${group} with ${tag.name}`,
       target: { kind: 'expense-tag' as const, groupId: setup.groupId!, tagId: tag.id },
-      width: horizontal ? admitted[i].height : columnsFit.sections[i % columns].height,
+      width: horizontal
+        ? admitted[i].height
+        : (fullWidth - (rowColumns - 1) * fitted.gap) / rowColumns,
       primary: false,
       fontSize: fitted.fontSize,
-    }));
+    };
+  });
   const rows = horizontal
     ? [{ height: tagRows[0].height, buttons: [add, ...buttons] }]
     : [

@@ -113,9 +113,11 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
   const groups = signedIn ? (record.copy?.savedGroups?.rows.filter((g) => !g.archived) ?? []) : [];
   const activeTags =
     selected && selected !== 'ask' && signedIn ? (record?.copy?.tags?.[selected]?.rows ?? []) : [];
-  const chosenTags = (tagIds ?? activeTags.slice(0, 4).map((tag) => tag.id)).filter((id) =>
-    activeTags.some((tag) => tag.id === id),
-  );
+  const chosenTags = tagIds ?? activeTags.slice(0, 4).map((tag) => tag.id);
+  const orderedTags = [
+    ...chosenTags.flatMap((id) => activeTags.find((tag) => tag.id === id) ?? []),
+    ...activeTags.filter((tag) => !chosenTags.includes(tag.id)),
+  ];
   const blocked = !balances && (!signedIn || ((!quick || mode === 'payment') && !groups.length));
   const copy = (value: string, bold = false, size = 14, color = t.text) => (
     <Text
@@ -157,9 +159,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                   ? { mode }
                   : selected !== 'ask' && (tagIds || activeTags.length)
                     ? {
-                        tagIds: chosenTags.filter((id) =>
-                          latest.copy?.tags?.[selected!]?.rows.some((tag) => tag.id === id),
-                        ),
+                        tagIds: chosenTags,
                       }
                     : {}),
               }
@@ -441,7 +441,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                   {copy(`${chosenTags.length} of 4 chosen`, false, 12, t.textSecondary)}
                 </View>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {activeTags.map((tag) => {
+                  {orderedTags.map((tag) => {
                     const checked = chosenTags.includes(tag.id);
                     return (
                       <Pressable

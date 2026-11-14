@@ -1,3 +1,5 @@
+import { widgetText } from '@splitbook/shared/widget-sizing';
+import { widgetSetupChoices } from '@splitbook/shared/widget-setup';
 import { expect, it } from 'vitest';
 import { quickWidget, type QuickWidgetSetup } from '@splitbook/shared/quick-widget';
 import type { WidgetCopy } from '@splitbook/shared/balances-widget';
@@ -412,3 +414,46 @@ it('uses one Tag column in a narrow tall cell and keeps the plain action as a pl
   expect(large.shortcuts?.rows[0].buttons[0].label).toBe('＋');
   expect(large.shortcuts?.rows[0].buttons[0].summary).toBe('Add expense in Maple House');
 });
+
+it.each([null, 'tag0', 3, {}, true])('malformed stored tagIds %j means no Tags', (value) => {
+  const chosen = { ...setup, groupId: 'maple', tagIds: value } as unknown as QuickWidgetSetup;
+  expect(quickWidget(copy, chosen, { width: 360, height: 224 }, session).shortcuts).toBeNull();
+  expect(widgetSetupChoices('quick', chosen, 'alex', 'maple').tagIds).toEqual([]);
+});
+
+it.each([1, 1.3, 2])(
+  'fits full Tag names by reducing columns and drops only the ordered tail at %s',
+  (scale) => {
+    for (const width of [78, 172, 360])
+      for (const names of [
+        ['Groceries', 'Rent', 'Bills', 'Dining'],
+        ['Tea', 'Bus', 'Oil', 'TV'],
+        ['An exceptionally long groceries Tag', 'Rent', 'Bills', 'Dining'],
+      ]) {
+        const tags = names.map((name, i) => ({ id: String(i), name }));
+        const view = quickWidget(
+          { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
+          { ...setup, groupId: 'maple', tagIds: tags.map((t) => t.id) },
+          { width, height: 224, pixelRatio: 2.625 },
+          session,
+          scale,
+        );
+        const rows = view.shortcuts!.rows.slice(1);
+        const visible = rows.flatMap((row) => row.buttons);
+        expect(visible.map((b) => b.label)).toEqual(names.slice(0, visible.length));
+        for (const row of rows)
+          for (const button of row.buttons) {
+            const measured = widgetText(width, scale, 1, 2.625).width(
+              button.label,
+              button.fontSize,
+            );
+            if (measured + 8 > button.width) {
+              expect(row.buttons).toHaveLength(1);
+              expect(button.width).toBeCloseTo(width - 24, 0);
+            }
+          }
+        if (width === 172 && scale === 2 && names[0] === 'Groceries')
+          expect(rows.every((row) => row.buttons.length === 1)).toBe(true);
+      }
+  },
+);

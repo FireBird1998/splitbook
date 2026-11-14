@@ -67,6 +67,7 @@ export function createWidgetCopy(
   };
   let savedGroups: WidgetCopy['savedGroups'];
   const lost = new Set<string>();
+  const refusedAt = new Map<string, number>();
   const retired = new Set<string>();
   const archived = new Set<string>();
   let restored = false;
@@ -178,14 +179,20 @@ export function createWidgetCopy(
       ]);
       for (const id of ids) {
         const read = id ? groupReads(id)?.group : null;
-        if (!id || !read || !trusted('/api/groups/' + id, read.refreshedAt)) continue;
+        if (
+          !id ||
+          !read ||
+          !trusted('/api/groups/' + id, read.refreshedAt) ||
+          read.refreshedAt <= (refusedAt.get(id) ?? -Infinity)
+        )
+          continue;
         const context = contextOf(read.value, 'widget');
         rememberTags(id, context.tags, read.refreshedAt);
         lost.delete(id);
       }
       const id = snapshot.detail.data?.id;
       const reads = id ? groupReads(id) : null;
-      if (id && reads?.balances) {
+      if (id && reads?.balances && reads.group.refreshedAt > (refusedAt.get(id) ?? -Infinity)) {
         groups[id] = widgetGroupCopy(
           parseGroup(reads.group.value),
           parseGroupBalances(reads.balances.value),
@@ -267,6 +274,7 @@ export function createWidgetCopy(
       if (denied) {
         delete tags[id];
         lost.add(id);
+        refusedAt.set(id, now());
         if (savedGroups)
           savedGroups = { ...savedGroups, rows: savedGroups.rows.filter((g) => g.id !== id) };
       }
@@ -280,6 +288,7 @@ export function createWidgetCopy(
       tags = {};
       savedGroups = undefined;
       lost.clear();
+      refusedAt.clear();
       retired.clear();
       archived.clear();
       restored = false;

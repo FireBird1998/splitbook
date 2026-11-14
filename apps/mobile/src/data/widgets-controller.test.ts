@@ -1,3 +1,4 @@
+import { createWidgetCopy } from './widget-copy';
 import { widgetDimensions } from '../test-utils/widget-size';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MobileController } from './mobile-controller';
@@ -215,6 +216,8 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     trip: () => {
       trip = true;
     },
+    group,
+    drafts: native.stores.expenseDrafts,
     archive: () => {
       archived = true;
     },
@@ -1336,4 +1339,105 @@ it('a newer Groups list retires a Tag without an older open Group read restoring
   await vi.waitFor(() =>
     expect(f.storedCopy()?.tags?.[groupId]).toEqual({ verifiedAt: verified + 1000, rows: [] }),
   );
+});
+
+it('Tag-only entry leaves no stored draft or protected task and the next shortcut applies', async () => {
+  const f = fixture(),
+    c = f.make();
+  const second = 'e00000000000000000000002';
+  f.groupTags(
+    [tagId, second].map((id, i) => ({
+      _id: id,
+      name: i ? 'Rent' : 'Food',
+      isArchived: false,
+      createdAt: '2026-11-01T00:00:00Z',
+    })),
+  );
+  await c.signIn('alex');
+  await c.openWidget({ kind: 'expense-tag', groupId, tagId });
+  expect(c.getSnapshot().expense.draft?.tagId).toBe(tagId);
+  await c.back();
+  expect(await f.drafts.load(alex.id, groupId)).toBeNull();
+  expect(notificationTaskProtected(c.getSnapshot())).toBe(false);
+  await c.openWidget({ kind: 'expense-tag', groupId, tagId: second });
+  expect(c.getSnapshot().expense.draft?.tagId).toBe(second);
+  await c.back();
+  await c.openWidget({ kind: 'expense', groupId });
+  expect(c.getSnapshot().expense.draft?.tagId).toBe('');
+  expect(await f.drafts.load(alex.id, groupId)).toBeNull();
+});
+
+it.each(['archived', 'another Group'])(
+  'a shortcut for %s Tag opens without assigning or storing it',
+  async (kind) => {
+    const f = fixture(),
+      c = f.make();
+    if (kind === 'archived')
+      f.groupTags([
+        { _id: tagId, name: 'Old', isArchived: true, createdAt: '2026-11-01T00:00:00Z' },
+      ]);
+    await c.signIn('alex');
+    await c.openWidget({
+      kind: 'expense-tag',
+      groupId,
+      tagId: kind === 'archived' ? tagId : 'e00000000000000000000099',
+    });
+    expect(c.getSnapshot().screen).toBe('expense');
+    expect(c.getSnapshot().expense.draft?.tagId).toBe('');
+    await c.back();
+    expect(await f.drafts.load(alex.id, groupId)).toBeNull();
+  },
+);
+
+it('a refused Group stays lost without Tags while an older trusted Group read remains', async () => {
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openExpense(groupId);
+  let time = verified;
+  const envelope = {
+    source: 'network' as const,
+    refreshedAt: verified,
+    value: { status: 200, data: f.group() },
+  };
+  const copies: WidgetCopy[] = [];
+  const write = async <T>(operation: () => Promise<T>) => operation();
+  const projection = createWidgetCopy(
+    {
+      write: async (copy) => {
+        copies.push(copy);
+      },
+      clear: async () => {},
+      setSession: async () => {},
+      redraw: async () => {},
+    },
+    () => ({ accountId: alex.id, write, writeSavedCopy: write }),
+    () => undefined,
+    () => null,
+    undefined,
+    () => time,
+    () => ({
+      group: envelope,
+      balances: {
+        source: 'network',
+        refreshedAt: verified,
+        value: { status: 200, data: { byCurrency: [] } },
+      },
+    }),
+  );
+  projection.update(c.getSnapshot());
+  await projection.idle();
+  expect(copies.at(-1)?.tags?.[groupId]?.rows).toHaveLength(1);
+  time += 1000;
+  projection.forgetGroup(groupId, true);
+  projection.update(c.getSnapshot());
+  await projection.idle();
+  expect(copies.at(-1)?.lostGroupIds).toContain(groupId);
+  expect(copies.at(-1)?.tags?.[groupId]).toBeUndefined();
+  expect(copies.at(-1)?.groups?.[groupId]).toBeUndefined();
+  envelope.refreshedAt = time + 1;
+  projection.update(c.getSnapshot());
+  await projection.idle();
+  expect(copies.at(-1)?.lostGroupIds).not.toContain(groupId);
+  expect(copies.at(-1)?.tags?.[groupId]?.rows).toHaveLength(1);
 });
