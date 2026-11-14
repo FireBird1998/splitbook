@@ -543,3 +543,23 @@ it('keeps the quiet balance in one measured panel line with the note at the righ
   expect(minimumHeight(message)).toBeLessThanOrEqual(section.height);
   expect(section.height).toBeLessThan(50);
 });
+
+it('paints the footer inbox at its measured scaled size while the plus follows the action text', () => {
+  vi.stubGlobal('__DEV__', false);
+  const v = overviewWidget(
+    { ...copy, review: { count: 3, verifiedAt: now } },
+    { kind: 'balances', widgetId: 7 },
+    { width: 360, height: 584 },
+    auth,
+    now,
+    2,
+  );
+  const tree = buildWidgetTree(drawOverview(v, lightTokens));
+  const footer = tree.children![v.layout.sections.findIndex((s) => s.id === 'footer')];
+  const icons = nodes(footer).filter(
+    (n) => !!n.props && typeof n.props === 'object' && 'svgString' in n.props,
+  );
+  expect(icons).toHaveLength(1);
+  expect(icons[0].props).toMatchObject({ width: 28, height: 28 });
+  expect(labels(footer)).toContain('＋ Add expense');
+});
