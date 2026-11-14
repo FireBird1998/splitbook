@@ -545,3 +545,14 @@ it('centres the all-square title in the free 4x2 space and anchors its sentence 
   expect(Math.abs(before.height - after.height)).toBeLessThanOrEqual(1);
   expect(result.layout.fits).toBe(true);
 });
+
+it('projects a warning tile for no shared Group while keeping the established state action', () => {
+  const result = view({
+    ...copy,
+    groups: {},
+    groupPeople: {},
+    savedGroups: { verifiedAt: now, rows: [] },
+  });
+  expect(result.layout).toMatchObject({ stateIcon: 'warning' });
+  expect(result.action).toBe('Choose another');
+});

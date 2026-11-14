@@ -186,7 +186,7 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
       ? t.mode === 'dark'
         ? darkMark
         : lightMark
-      : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="${view.state === 'all-square' ? t.status.positive : t.textSecondary}" stroke-width="1.8">${view.state === 'all-square' ? '<circle cx="12" cy="12" r="8.5"/><path d="M8 12l3 3 5-6"/>' : view.state === 'no-shared-group' ? '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v6M12 7v1"/>' : view.state === 'expired' ? '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>' : '<circle cx="12" cy="8" r="3.6"/><path d="M5 20c.7-3.8 3.4-6 7-6s6.3 2.2 7 6"/>'}</g></svg>`;
+      : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="${view.state === 'all-square' ? t.status.positive : t.textSecondary}" stroke-width="1.8">${view.state === 'all-square' ? '<circle cx="12" cy="12" r="8.5"/><path d="M8 12l3 3 5-6"/>' : l.stateIcon === 'warning' ? '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v6M12 16v1"/>' : view.state === 'expired' ? '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>' : '<circle cx="12" cy="8" r="3.6"/><path d="M5 20c.7-3.8 3.4-6 7-6s6.3 2.2 7 6"/>'}</g></svg>`;
   const message = (
     <FlexWidget
       style={{
