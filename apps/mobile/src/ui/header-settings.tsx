@@ -1,6 +1,6 @@
 import { SEPARATOR } from '@splitbook/shared/separator';
 import { lazy, Suspense, type ReactNode } from 'react';
-import { Modal, ScrollView, Switch, View, Pressable } from 'react-native';
+import { Modal, ScrollView, Switch, View, Pressable, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   HEADER_SCENES,
@@ -39,6 +39,7 @@ export function HeaderSettings({
   onClose: () => void;
 }) {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
   const dimmed = state.draft.style === 'classic';
   const choice = (
     label: string,
@@ -55,7 +56,7 @@ export function HeaderSettings({
       disabled={disabled || state.status === 'saving'}
       onPress={onPress}
       style={{
-        ...(picture ? { width: '23%', flexGrow: 1, padding: 6 } : {}),
+        ...(picture ? { width: fontScale >= 1.15 ? '46%' : '23%', flexGrow: 1, padding: 6 } : {}),
         minHeight: 48,
         minWidth: 48,
         padding: 12,
