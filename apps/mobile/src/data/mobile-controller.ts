@@ -1320,6 +1320,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     offline: () => offlineSession,
     drafts: dependencies.expenseDrafts,
     checkUnlisted: (listed, owner) => checkUnlistedRecords(listed, owner),
+    homeVerified: () => widgets.homeVerified(),
     financialBlocked: financialCleanup.blocked,
     shows: () => route.screen === 'groups' && snapshot.auth.status === 'authenticated',
     listed: (listed, lost) => {
@@ -2440,8 +2441,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       'home',
     ];
     // The app still refuses archived Groups; widgets retain their verified final balance.
-    if (archivedWidget) widgets.archiveGroup(groupId);
-    else widgets.forgetGroup(groupId, true);
+    const widgetEviction = archivedWidget
+      ? widgets.archiveGroup(groupId)
+      : widgets.forgetGroup(groupId, true);
     // Its views observe nothing more, so their removed queries are never read back (F5).
     groupQueries.lose(groupId);
     expenseQueries.lose(groupId);
@@ -2470,6 +2472,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // A saved copy that can't be removed is never shown again; the member stays signed in (#212).
       untrusted.mark(lease.accountId, scopes, time);
     }
+    await widgetEviction;
     if (!onLostForm(groupId)) await clearLostRecords(groupId, owner);
   };
 

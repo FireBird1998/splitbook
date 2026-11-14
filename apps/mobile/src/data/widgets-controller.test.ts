@@ -2957,10 +2957,8 @@ it.each([403, 404])(
     expect(f.record().copy?.tags?.[groupId]).toBeUndefined();
     expect(f.record().copy?.months?.[groupId]).toBeUndefined();
     expect(f.record().copy?.home?.byGroup?.[groupId]).toBeUndefined();
-    expect(f.record().copy?.home?.currencies).toEqual([
-      { currency: 'INR', owedMinor: 240000, oweMinor: 148000 },
-      { currency: 'EUR', owedMinor: 4000, oweMinor: 0 },
-    ]);
+    // Totals that still cover the refused Group are withheld whole, never netted or recomputed.
+    expect(f.record().copy?.home).toBeNull();
   },
 );
 
@@ -3354,5 +3352,39 @@ it('confirms a warm Home-only Group even when trimming the next partial list cle
   } finally {
     home.release();
     await refreshing;
+  }
+});
+
+it('never writes a pre-refusal widget snapshot after a native read finishes late', async () => {
+  const f = fixture([], true),
+    c = f.make();
+  f.month();
+  f.groupBalances(paymentBalances);
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.record().copy?.months?.[groupId]).toBeDefined());
+  const held = f.blockRead(),
+    refreshing = c.refreshHome();
+  try {
+    await held.arrived;
+    f.refuse(403);
+    await c.openGroup(groupId, false);
+    expect(c.getSnapshot().detail.status).toBe('denied');
+    const start = f.copies.length;
+    held.release();
+    await refreshing;
+    await vi.waitFor(() => expect(f.record().copy?.lostGroupIds).toContain(groupId));
+    expect(f.copies.slice(start).length).toBeGreaterThan(0);
+    for (const copy of f.copies.slice(start)) {
+      expect(copy.groups?.[groupId]).toBeUndefined();
+      expect(copy.groupPeople?.[groupId]).toBeUndefined();
+      expect(copy.tags?.[groupId]).toBeUndefined();
+      expect(copy.months?.[groupId]).toBeUndefined();
+      expect(copy.home).toBeNull();
+      expect(copy.lostGroupIds).toContain(groupId);
+      expect(copy.peopleRefusedAt?.[groupId]).toBeDefined();
+    }
+  } finally {
+    held.release();
   }
 });

@@ -252,6 +252,7 @@ export interface HomeSession {
   listed(listed: Set<string>, lost: Set<string>): void;
   /** A trusted omission confirms access for kept financial records and Widget copy parts. */
   checkUnlisted?(listed: Set<string>, owner: number): Promise<void>;
+  homeVerified?(): void;
   financialBlocked?(accountId: string, groupId: string): boolean;
   /** The persister keeps only these Groups' copies (inside a lease write). */
   retain(accountId: string, listed: string[]): Promise<void> | undefined;
@@ -843,6 +844,13 @@ export function createHomeQueries(session: HomeSession) {
             (scope !== 'groups' && scope !== 'home')
           )
             return;
+          if (
+            scope === 'home' &&
+            event.action.type === 'success' &&
+            !event.action.manual &&
+            (query.state.data as Envelope | undefined)?.source === 'network'
+          )
+            session.homeVerified?.();
           if (project(session.snapshot()) !== session.snapshot()) session.publish({});
         }),
         focus.subscribe((focused) => focused && client.getQueryCache().onFocus()),
