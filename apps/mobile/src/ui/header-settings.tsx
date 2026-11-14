@@ -51,7 +51,7 @@ export function HeaderSettings({
       key={label}
       accessibilityRole="radio"
       accessibilityLabel={label}
-      accessibilityState={{ checked: selected, disabled }}
+      accessibilityState={{ checked: selected, disabled: disabled || state.status === 'saving' }}
       disabled={disabled || state.status === 'saving'}
       onPress={onPress}
       style={{
@@ -173,6 +173,7 @@ export function HeaderSettings({
         </ScrollView>
         <View style={{ padding: 16, borderTopWidth: 1, borderColor: theme.border }}>
           <CompactButton
+            block
             label={state.status === 'saving' ? 'Saving…' : 'Save'}
             disabled={!headerChanged(state) || state.status === 'saving'}
             onPress={onSave}
