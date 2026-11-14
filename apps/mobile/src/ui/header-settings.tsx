@@ -25,6 +25,8 @@ import { GroupHeader } from './group-header';
 import { NotAvailableOffline } from './offline-notice';
 import { useTheme } from './theme';
 const Scene = lazy(() => import('./header-scene'));
+// Screen height, in dp at the member's text size, below which a pinned preview crowds the choices.
+const PIN_MIN_ROOM = 600;
 const Thumbnail = lazy(() => import('./header-scene-thumbnail'));
 export function HeaderSettings({
   state,
@@ -56,7 +58,10 @@ export function HeaderSettings({
   onClose: () => void;
 }) {
   const theme = useTheme();
-  const { fontScale } = useWindowDimensions();
+  const { fontScale, height } = useWindowDimensions();
+  // The preview stays in view while the choices scroll, unless large text or a short screen
+  // would leave the choices too little room; then it scrolls with them.
+  const pinned = height / fontScale >= PIN_MIN_ROOM;
   const dimmed = state.draft.style === 'classic';
   const choice = (
     label: string,
@@ -92,6 +97,14 @@ export function HeaderSettings({
       </CompactText>
     </Pressable>
   );
+  const preview =
+    state.draft.style === 'scene' ? (
+      <Suspense fallback={<HeaderScenePlaceholder group={group} preview={state.draft} />}>
+        <Scene group={group} header={state.draft} motion={motion} tilt={tilt} preview />
+      </Suspense>
+    ) : (
+      <GroupHeader group={{ ...group, header: state.draft }} motion={motion} />
+    );
   return (
     <Modal visible onRequestClose={onClose} animationType="none">
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -100,14 +113,9 @@ export function HeaderSettings({
           subtitle={group.name}
           leading={{ kind: 'back', label: 'Back to Group', onPress: onClose }}
         />
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-          {state.draft.style === 'scene' ? (
-            <Suspense fallback={<HeaderScenePlaceholder group={group} preview={state.draft} />}>
-              <Scene group={group} header={state.draft} motion={motion} preview />
-            </Suspense>
-          ) : (
-            <GroupHeader group={{ ...group, header: state.draft }} motion={motion} />
-          )}
+        {pinned && <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>{preview}</View>}
+        <ScrollView contentContainerStyle={{ padding: 16, paddingTop: pinned ? 0 : 16, gap: 12 }}>
+          {!pinned && preview}
           <SectionHeader title="Header" />
           <View
             accessibilityRole="radiogroup"

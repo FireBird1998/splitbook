@@ -1547,6 +1547,7 @@ function GroupScreen() {
                       state.screen === 'group' &&
                       !state.tagsOpenFor &&
                       !state.currenciesOpenFor &&
+                      !state.headerSettings &&
                       !confirmation
                     }
                   />
