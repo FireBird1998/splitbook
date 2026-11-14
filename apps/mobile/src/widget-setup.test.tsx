@@ -679,6 +679,41 @@ it('makes another account choose its own saved person before saving this Person 
     hideAmounts: false,
   });
 });
+it('requires a new choice when the saved Person no longer shares a Group', async () => {
+  store.read.mockResolvedValue({
+    copy: {
+      ...copy,
+      groupPeople: {
+        maple: {
+          name: 'Maple House',
+          archived: false,
+          verifiedAt: 1,
+          people: [{ id: 'priya', firstName: 'Priya', initials: 'PS' }],
+        },
+      },
+    },
+    session,
+  });
+  await render('Person', {
+    kind: 'person',
+    widgetId: 989,
+    accountId: 'alex',
+    person: { id: 'sam', firstName: 'Sam', initials: 'SC' },
+  });
+  const radio = host('Pressable').find((n) => n.props.accessibilityRole === 'radio')!;
+  expect(radio.props.accessibilityState.checked).toBe(false);
+  expect(button().props.disabled).toBe(true);
+  await act(async () => radio.props.onPress());
+  expect(button().props.disabled).toBe(false);
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup).toHaveBeenCalledExactlyOnceWith({
+    kind: 'person',
+    widgetId: 989,
+    accountId: 'alex',
+    person: { id: 'priya', firstName: 'Priya', initials: 'PS' },
+    hideAmounts: false,
+  });
+});
 it('rechecks saved membership when confirming Person setup and refuses a person who has gone', async () => {
   store.read.mockResolvedValue({
     copy: {

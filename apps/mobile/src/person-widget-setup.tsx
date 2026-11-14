@@ -76,15 +76,15 @@ export function PersonWidgetSetupScreen({ widgetInfo, setResult }: WidgetConfigu
               ? saved.hideAmounts === true
               : false,
         );
-        setSelected(
+        const preferred =
           held?.accountId === accountId
             ? held.personId
             : saved?.kind === 'person' && saved.accountId === accountId
               ? saved.person.id
               : other
                 ? null
-                : (choices[0]?.id ?? null),
-        );
+                : (choices[0]?.id ?? null);
+        setSelected(choices.some((person) => person.id === preferred) ? preferred : null);
       })
       .catch(() => {
         if (alive) setError('Could not read saved people. Open Splitbook and try again.');
