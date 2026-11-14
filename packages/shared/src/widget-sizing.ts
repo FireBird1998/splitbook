@@ -17,7 +17,8 @@ export interface WidgetSection {
   headingHeight?: number;
   moreHeight?: number;
   required?: boolean;
-  grow?: boolean;
+  /** Stretch rows immediately, or only after every available row has been drawn. */
+  grow?: boolean | 'when-complete';
   /** Takes spare height only when no admitted list row grows. */
   fallbackGrow?: boolean;
   /** A lower-priority prompt is admitted only after this list is complete. */
@@ -132,11 +133,14 @@ export function fitWidgetSections(
   }
   const overflow = Math.max(0, used() - height),
     spare = Math.max(0, height - used());
-  const explicit = sections.some((s, i) => s.grow && chosen[i] > 0);
-  const first = chosen.findIndex((rows) => rows > 0);
+  const wantsGrowth = (i: number) =>
+    sections[i].grow === true ||
+    (sections[i].grow === 'when-complete' && chosen[i] === sections[i].rows);
+  const explicit = sections.some((_, i) => wantsGrowth(i) && chosen[i] > 0);
+  const first = chosen.findIndex((rows, i) => rows > 0 && sections[i].grow !== 'when-complete');
   const fallback = sections.some((s, i) => s.fallbackGrow && chosen[i] > 0);
   const grows = (i: number) =>
-    explicit ? !!sections[i].grow : fallback ? !!sections[i].fallbackGrow : i === first;
+    explicit ? wantsGrowth(i) : fallback ? !!sections[i].fallbackGrow : i === first;
   const growing = sections.reduce((sum, _, i) => sum + (grows(i) ? chosen[i] : 0), 0);
   let remainder = spare;
   const extras = sections.map((_, i) => {

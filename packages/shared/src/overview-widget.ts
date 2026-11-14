@@ -464,17 +464,17 @@ export function overviewWidget(
                 id: 'groups',
                 rows: groupRows.length,
                 maxRows: measuredGroups.every((row) => row.fits)
-                  ? level
-                    ? 1
-                    : state === 'all-square' && size.height < 400
-                      ? 3
+                  ? availablePayments.length && paymentFits
+                    ? level
+                      ? 1
                       : 2 + Math.floor(Math.max(0, size.height - 464) / 120) * 2
+                    : groupRows.length
                   : 0,
                 rowHeight: groupRowHeight,
                 headingHeight: groupHeaderHeight,
                 inset: compactGroups ? 0 : 8,
                 moreHeight: groupDetails ? 0 : undefined,
-                grow: true,
+                grow: 'when-complete' as const,
               },
             ]
           : []),

@@ -1009,3 +1009,34 @@ it('does not spend the footer budget on a Groups section that is not drawn at in
         });
       }
 });
+
+const withoutPayments = () => {
+  const c = clone(groupsCopy);
+  for (const part of Object.values(c.groups ?? {}))
+    for (const bucket of part.currencies) bucket.payments = [];
+  return c;
+};
+it.each([464, 584])(
+  'buys natural Group rows before stretching at 360×%s without payments',
+  (height) => {
+    const c = withoutPayments();
+    for (const id of ['extra1', 'extra2']) {
+      c.savedGroups!.rows.push({ ...c.savedGroups!.rows[0]!, id, name: id });
+      c.home!.byGroup![id] = [];
+    }
+    c.home!.groupCount = 6;
+    const v = overviewWidget(c, setup, { width: 360, height, pixelRatio: 2.625 }, auth, now);
+    expect(v.payments).toEqual([]);
+    expect(v.groups).toHaveLength(height === 464 ? 5 : 6);
+    expect(v.groupMore).toBe(height === 464 ? '+1\u00a0more' : null);
+    if (height === 464) expect(v.groups[0].rowHeight).toBeLessThan(43);
+  },
+);
+it('fills the quiet 4×4 with all four natural Group rows', () => {
+  const c = withoutPayments();
+  c.home!.currencies = [];
+  for (const id in c.home!.byGroup!) c.home!.byGroup![id] = [];
+  const v = overviewWidget(c, setup, { width: 360, height: 464 }, auth, now);
+  expect(v.groups).toHaveLength(4);
+  expect(v.groupMore).toBeNull();
+});

@@ -286,3 +286,20 @@ it.each([0, 1])(
     expect(v.sections[0].height).toBeGreaterThanOrEqual(49);
   },
 );
+
+it('stretches a list only after every row is drawn when growth requires completion', () => {
+  const sections = [
+    { id: 'groups', rows: 4, rowHeight: 30, moreHeight: 0, grow: 'when-complete' as const },
+    { id: 'space', rows: 1, rowHeight: 1, required: true, fallbackGrow: true },
+  ];
+  const partial = fitWidgetSections(110, sections, 0);
+  expect(partial.sections[0]).toMatchObject({ rows: 3, more: 1, rowHeight: 30, height: 90 });
+  expect(partial.sections[1].height).toBe(20);
+  expect(fitWidgetSections(110, sections.slice(0, 1), 0).sections[0]).toMatchObject({
+    rows: 3,
+    rowHeight: 30,
+    height: 90,
+  });
+  const complete = fitWidgetSections(150, sections, 0);
+  expect(complete.sections[0]).toMatchObject({ rows: 4, more: 0, rowHeight: 37, height: 149 });
+});
