@@ -259,6 +259,9 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     offline: () => {
       backend.online = false;
     },
+    online: () => {
+      backend.online = true;
+    },
     expire: () => {
       expired = true;
     },
@@ -1699,6 +1702,43 @@ describe('Overview Finish later copy', () => {
     vi.spyOn(Date, 'now').mockReturnValue(verified);
     vi.stubEnv('TZ', 'Asia/Kolkata');
   });
+  it.each([
+    { description: '', amount: '' },
+    { description: 'Private offline entry', amount: '123' },
+  ])(
+    'copies an explicit offline Finish later choice without its typed facts ($description)',
+    async (entries) => {
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+      const f = fixture(),
+        c = f.make();
+      await c.signIn('alex');
+      await c.openExpense(groupId);
+      await c.updateExpenseDraft(entries);
+      f.offline();
+      await c.refresh();
+      expect(c.getSnapshot().offline.active).toBe(true);
+      await c.keepExpenseAsSharedDraft();
+      expect(c.getSnapshot().screen).toBe('group');
+      await vi.waitFor(() =>
+        expect(f.record().copy?.finishLater).toEqual({ groupId, groupName: 'Maple House' }),
+      );
+      expect(await f.phone.stores.expenseDrafts.load(alex.id, groupId)).toMatchObject({
+        version: 1,
+        blank: null,
+        draft: entries,
+      });
+      expect(
+        f.requests.filter(
+          (r) =>
+            r.method === 'POST' && (r.path.endsWith('/expenses') || r.path.includes('/drafts')),
+        ),
+      ).toEqual([]);
+      f.online();
+      await c.back();
+      await c.refreshHome();
+      await vi.waitFor(() => expect(overview(f).finishLater?.groupName).toBe('Maple House'));
+    },
+  );
   it('writes only the Group of a Finish later draft, and the Overview tap resumes its device entries', async () => {
     vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
     const f = fixture(),
