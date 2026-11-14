@@ -403,10 +403,10 @@ it('uses one Tag column in a narrow tall cell and keeps the plain action as a pl
   const tagged = { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
     chosen = { ...setup, groupId: 'maple', tagIds: tags.map((tag) => tag.id) };
   const narrow = quickWidget(tagged, chosen, { width: 78, height: 224 }, session);
-  expect(narrow.shortcuts?.rows.map((row) => row.buttons.length)).toEqual([1, 1, 1, 1]);
+  expect(narrow.shortcuts?.rows.map((row) => row.buttons.length)).toEqual([1, 1]);
   expect(
     narrow.shortcuts?.rows.flatMap((row) => row.buttons).map((button) => button.label),
-  ).toEqual(['＋', 'Groceries', 'Rent', 'Bills']);
+  ).toEqual(['＋', 'Groceries']);
   expect(
     narrow.shortcuts?.rows.flatMap((row) => row.buttons).every((button) => button.width >= 44),
   ).toBe(true);
@@ -440,6 +440,8 @@ it.each([1, 1.3, 2])(
         );
         const rows = view.shortcuts!.rows.slice(1);
         const visible = rows.flatMap((row) => row.buttons);
+        if (widgetText(width, scale, 1, 2.625).width(names[0], 12) + 8 > width - 24)
+          expect(visible).toHaveLength(1);
         expect(visible.map((b) => b.label)).toEqual(names.slice(0, visible.length));
         for (const row of rows)
           for (const button of row.buttons) {

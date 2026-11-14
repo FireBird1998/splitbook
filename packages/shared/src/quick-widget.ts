@@ -110,7 +110,11 @@ function tagShortcuts(
     size.pixelRatio,
   );
   const admitted = across.sections.filter((section) => section.id.startsWith('tag-'));
-  const visible = horizontal ? tags.slice(0, admitted.length) : tags;
+  let visible = horizontal ? tags.slice(0, admitted.length) : tags;
+  if (!horizontal && columns === 1) {
+    while (visible.length > 1 && visible.some((tag) => text.width(tag.name, 12) + 8 > width))
+      visible = visible.slice(0, -1);
+  }
   if (!visible.length) return null;
   const rowCount = horizontal ? 1 : Math.ceil(visible.length / columns);
   const addLabel = horizontal || text.width('＋ Add expense', 14) > width ? '＋' : '＋ Add expense';
