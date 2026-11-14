@@ -1,3 +1,4 @@
+import { headerSceneMotionAvailable } from '../config';
 import { HeaderScenePlaceholder } from './header-scene-card';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import { lazy, Suspense, type ReactNode } from 'react';
@@ -138,27 +139,31 @@ export function HeaderSettings({
               )}
             </View>
           </View>
-          <SectionHeader title="On this phone" />
-          <Card>
-            <View style={{ padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={{ flex: 1 }}>
-                <CompactText>Motion</CompactText>
-                <CompactText variant="small" tone="secondary">
-                  Scenes stay still on Android for now. Your Motion preference is kept on this
-                  phone.
-                </CompactText>
-              </View>
-              <Switch
-                accessibilityLabel="Motion"
-                value={motion}
-                onValueChange={onMotion}
-                style={{ minWidth: 48, minHeight: 48 }}
-              />
-            </View>
-          </Card>
-          {motionMessage ? (
-            <CompactText accessibilityRole="alert">{motionMessage}</CompactText>
-          ) : null}
+          {headerSceneMotionAvailable && (
+            <>
+              <SectionHeader title="On this phone" />
+              <Card>
+                <View style={{ padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <CompactText>Motion</CompactText>
+                    <CompactText variant="small" tone="secondary">
+                      Scenes stay still on Android for now. Your Motion preference is kept on this
+                      phone.
+                    </CompactText>
+                  </View>
+                  <Switch
+                    accessibilityLabel="Motion"
+                    value={motion}
+                    onValueChange={onMotion}
+                    style={{ minWidth: 48, minHeight: 48 }}
+                  />
+                </View>
+              </Card>
+              {motionMessage ? (
+                <CompactText accessibilityRole="alert">{motionMessage}</CompactText>
+              ) : null}
+            </>
+          )}
           <SectionHeader title="Who sees what" />
           <CompactText variant="small" tone="secondary">
             Everyone in {group.name} sees the header, scene and time you save. Motion is kept on

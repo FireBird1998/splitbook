@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { buildScenes, generatedFiles, staleOutputs } from './generate';
+import { sceneThumbnails } from '../../../packages/shared/src/header-scenes/thumbnails';
+import { buildScenes, generatedFiles, staleOutputs, thumbnailSource } from './generate';
 import { vectorTree, vectorSvg } from './vectors';
 import type { SceneVector } from '@splitbook/shared/header-scene-art';
 
@@ -106,14 +107,33 @@ it('covers the four scene modules and common styles in a repeatable fresh build'
 });
 
 it('builds a decodable, bounded raster thumbnail for every generated scene', async () => {
-  const { sceneThumbnail } = await import('./generate');
   const { default: sharp } = await import('sharp');
   for (const scene of buildScenes()) {
-    const uri = await sceneThumbnail(scene);
+    const uri = sceneThumbnails[scene.id];
     expect(uri).toMatch(/^data:image\/png;base64,/);
     const data = Buffer.from(uri.split(',')[1], 'base64');
     expect(data.byteLength).toBeLessThan(80_000);
     const metadata = await sharp(data).metadata();
     expect([metadata.width, metadata.height]).toEqual([368, 192]);
   }
+});
+
+it('checks the raster source stamp across platform-specific PNG bytes', async () => {
+  const expected = await generatedFiles(false);
+  const actual = new Map(expected);
+  actual.set('thumbnails.ts', expected.get('thumbnails.ts')! + '\n// different platform PNG bytes');
+  expect(staleOutputs(expected, actual)).toEqual([]);
+  actual.set(
+    'thumbnails.ts',
+    actual.get('thumbnails.ts')!.replace(thumbnailSource(), '0'.repeat(64)),
+  );
+  expect(staleOutputs(expected, actual)).toEqual(['thumbnails.ts']);
+  actual.delete('thumbnails.ts');
+  expect(staleOutputs(expected, actual)).toEqual(['thumbnails.ts']);
+});
+it('changes the raster source stamp when a portable vector changes', () => {
+  const scenes = buildScenes();
+  const before = thumbnailSource(scenes);
+  scenes[0].layers.main.children![0].props.transform = 'translate(1 0)';
+  expect(thumbnailSource(scenes)).not.toBe(before);
 });

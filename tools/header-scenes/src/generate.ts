@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { HeaderSceneArt, SceneLayer } from '@splitbook/shared/header-scene-art';
 import { ecoScene, ecoCss } from './eco-city.ts';
@@ -53,20 +54,34 @@ export function buildScenes(): HeaderSceneArt[] {
     ) as Record<SceneLayer, ReturnType<typeof vectorTree>>,
   }));
 }
-/** Decode once per settings choice instead of mounting four complete native SVG trees. */
-export async function sceneThumbnail(scene: HeaderSceneArt): Promise<string> {
+const thumbnailPngOptions = { compressionLevel: 9 } as const;
+function thumbnailSvg(scene: HeaderSceneArt): string {
   const layers = (['far', 'clouds', 'main', 'front'] as const)
     .map((layer) => vectorSvg({ ...scene.layers[layer], tag: 'g', props: {} }))
     .join('');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="368" height="192" viewBox="70 0 460 240"><rect x="70" width="460" height="240" fill="#d6e7ef"/>${layers}</svg>`;
-  const png = await sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toBuffer();
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="368" height="192" viewBox="70 0 460 240"><rect x="70" width="460" height="240" fill="#d6e7ef"/>${layers}</svg>`;
+}
+/** Inputs include the complete SVG, viewport and the lossless raster encoding recipe. */
+export function thumbnailSource(scenes: HeaderSceneArt[] = buildScenes()): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({ svg: scenes.map(thumbnailSvg), png: thumbnailPngOptions, alpha: 'remove' }),
+    )
+    .digest('hex');
+}
+/** Decode once per settings choice instead of mounting four complete native SVG trees. */
+export async function sceneThumbnail(scene: HeaderSceneArt): Promise<string> {
+  const png = await sharp(Buffer.from(thumbnailSvg(scene)))
+    .removeAlpha()
+    .png(thumbnailPngOptions)
+    .toBuffer();
   return `data:image/png;base64,${png.toString('base64')}`;
 }
-export async function generatedFiles(): Promise<Map<string, string>> {
+export async function generatedFiles(rasterize = true): Promise<Map<string, string>> {
   const files = new Map<string, string>();
   const thumbnails: Record<string, string> = {};
   for (const scene of buildScenes()) {
-    thumbnails[scene.id] = await sceneThumbnail(scene);
+    if (rasterize) thumbnails[scene.id] = await sceneThumbnail(scene);
     files.set(
       `${scene.id}.ts`,
       `${NOTICE}import type { HeaderSceneArt } from '../header-scene-art';\nconst scene: HeaderSceneArt = ${JSON.stringify(scene)};\nexport default scene;\n`,
@@ -74,7 +89,7 @@ export async function generatedFiles(): Promise<Map<string, string>> {
   }
   files.set(
     'thumbnails.ts',
-    `${NOTICE}export const sceneThumbnails = ${JSON.stringify(thumbnails)};\n`,
+    `${NOTICE}// Thumbnail source SHA256: ${thumbnailSource()}\nexport const sceneThumbnails = ${JSON.stringify(thumbnails)};\n`,
   );
   files.set(
     'styles.ts',
@@ -88,6 +103,13 @@ export function staleOutputs(
   actual: ReadonlyMap<string, string>,
 ): string[] {
   return [...new Set([...expected.keys(), ...actual.keys()])]
-    .filter((path) => expected.get(path) !== actual.get(path))
+    .filter((path) => {
+      if (path === 'thumbnails.ts') {
+        const stamp = (text?: string) =>
+          text?.match(/^\/\/ Thumbnail source SHA256: ([a-f0-9]{64})$/m)?.[1];
+        return !stamp(expected.get(path)) || stamp(expected.get(path)) !== stamp(actual.get(path));
+      }
+      return expected.get(path) !== actual.get(path);
+    })
     .sort();
 }

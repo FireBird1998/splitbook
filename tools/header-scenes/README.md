@@ -20,12 +20,12 @@ pnpm --filter @splitbook/header-scenes render /absolute/path/to/review-images
 
 `build` also rasterizes each scene's day layers into a 368 × 192 PNG with the
 pinned Sharp build dependency. `thumbnails.ts` contains their data URIs so native
-settings choices need one Image each. The same fresh rasterization is compared
-by `check`, including missing/changed thumbnails. Full scene layers are unchanged.
+settings choices need one Image each. `check` verifies their source hash. Unit tests decode the committed PNGs and
+verify dimensions and size. Opaque thumbnails omit their unused alpha channel.
 
 `build` owns `packages/shared/src/header-scenes/` and removes obsolete output.
-Never edit that output by hand. `check` builds again in memory and fails on any
-missing, changed or obsolete file. `test:unit` runs the unit tests and that same
+Never edit that output by hand. `check` compares fresh vector output and the
+thumbnail source stamp, and fails on missing, changed or obsolete output. `test:unit` runs the unit tests and that same
 check, so the workspace tests and `pnpm swarm gate` cannot accept stale output.
 CI also runs `check` beside the landing figures check in
 `.github/workflows/landing-figures.yml`, with filters for the models and output.
@@ -90,3 +90,9 @@ references per rendered instance if several copies of the same scene share a DOM
 The 1100 × 240 viewBox is the board's wide frame; the Android renderer can crop
 it to `70 0 460 240`, as the owner's Android prototype does. Cards, settings,
 Group facts, motion preferences and tilt are owned by their renderer tickets.
+
+Thumbnail freshness uses a SHA-256 stamp of the complete raster SVG inputs and
+encoding recipe. PNG bytes can differ between macOS arm64 and Linux x64.
+`check` compares that stamp and the exact vector output. Unit tests decode the
+committed images and verify their dimensions and size. `build` redraws the images
+and stamps their current source. Opaque thumbnails omit the unused alpha channel.
