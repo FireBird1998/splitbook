@@ -34,6 +34,7 @@ it.each([false, true])('shows selected states, unchanged Save and offline=%s', (
         onMotion={() => undefined}
         onChoose={() => undefined}
         onSave={() => undefined}
+        onRetry={() => undefined}
         onClose={() => undefined}
       />,
     );
