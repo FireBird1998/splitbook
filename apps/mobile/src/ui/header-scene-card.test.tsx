@@ -16,7 +16,7 @@ const group = {
   alternateCurrencies: [],
   startDate: new Date('2026-11-03'),
   endDate: new Date('2026-11-06'),
-} as MobileGroup;
+} as unknown as MobileGroup;
 
 it.each(['light', 'dark'] as const)('uses the shared scene-card tone in %s appearance', (mode) => {
   for (const category of ['trip', 'home'] as const) {
@@ -53,7 +53,8 @@ it.each(['light', 'dark'] as const)('uses the shared scene-card tone in %s appea
             flatten(text.props.style).color,
           );
         const dividers = surface[0].findAll(
-          (node) => (node.type as unknown) === 'View' && flatten(node.props.style).borderColor,
+          (node) =>
+            (node.type as unknown) === 'View' && Boolean(flatten(node.props.style).borderColor),
         );
         for (const divider of dividers)
           expect(flatten(divider.props.style).borderColor).toBe(expected.border);
