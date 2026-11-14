@@ -5,22 +5,6 @@ import { cancelAnimationFrame, requestAnimationFrame, resetNative } from './nati
 import { followInjectedClock, releaseInjectedClock } from './query-clock';
 
 // Every test file renders through the same native stand-ins; see `./native.ts`.
-vi.mock('react-native-svg', () =>
-  Object.fromEntries(
-    [
-      'default',
-      'G',
-      'Path',
-      'Polygon',
-      'Circle',
-      'Ellipse',
-      'Rect',
-      'Defs',
-      'RadialGradient',
-      'Stop',
-    ].map((name) => [name, name]),
-  ),
-);
 vi.mock('react-native', async () => (await import('./native')).reactNative);
 vi.mock('react-native-safe-area-context', async () => (await import('./native')).safeAreaContext);
 vi.mock('@expo/vector-icons/Ionicons', async () => (await import('./native')).ionicons);

@@ -304,37 +304,3 @@ export function useStatusFade(text: string, instant = false): StatusChange {
   }, [change]);
   return change;
 }
-
-/** A scene moves as a cached native layer; its many vector paths never update per frame. */
-export function useSceneFloat(enabled: boolean) {
-  const reduced = useReducedMotion();
-  const [offset] = useState(() => new Animated.Value(0));
-  useEffect(() => {
-    offset.setValue(0);
-    if (!enabled || reduced) return;
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(offset, {
-          toValue: -3,
-          duration: 3500,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-          isInteraction: false,
-        }),
-        Animated.timing(offset, {
-          toValue: 0,
-          duration: 3500,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-          isInteraction: false,
-        }),
-      ]),
-    );
-    animation.start();
-    return () => {
-      animation.stop();
-      offset.setValue(0);
-    };
-  }, [enabled, reduced, offset]);
-  return offset;
-}

@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Animated, AppState, Easing } from 'react-native';
-import { startHeaderTilt } from '../data/header-tilt';
+import { Animated, AppState, Easing, Platform } from 'react-native';
+import { startHeaderTilt, tiltSupported } from '../data/header-tilt';
 import { useReducedMotion } from './compact/motion';
 
 export function useHeaderTilt(enabled: boolean) {
   const reduced = useReducedMotion();
   const [position] = useState(() => ({ x: new Animated.Value(0), y: new Animated.Value(0) }));
   useEffect(() => {
-    if (!enabled || reduced) return;
+    if (!enabled || reduced || !tiltSupported(Platform)) return;
     let stop: (() => void) | undefined;
     let animations: ReturnType<typeof Animated.timing>[] = [];
     const reset = () => {

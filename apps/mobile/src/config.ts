@@ -126,5 +126,9 @@ export function headerScenesEnabled(): boolean {
   return process.env.EXPO_PUBLIC_HEADER_SCENES_ENABLED === 'true';
 }
 
-/** #1200 fallback: release scrolling exceeded budget; see ADR 0012 and A1 QA measurements. */
-export const headerSceneMotionAvailable = false;
+/**
+ * Whether Header scenes may move on this build. On since the scene is drawn from pictures moved by
+ * native transforms (ADR 0012); set false to ship still scenes without the phone's Motion and Tilt
+ * card.
+ */
+export const headerSceneMotionAvailable = true;

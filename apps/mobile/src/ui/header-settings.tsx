@@ -1,8 +1,17 @@
 import { headerSceneMotionAvailable } from '../config';
+import { tiltSupported } from '../data/header-tilt';
 import { HeaderScenePlaceholder } from './header-scene-card';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import { lazy, Suspense, type ReactNode } from 'react';
-import { Modal, ScrollView, Switch, View, Pressable, useWindowDimensions } from 'react-native';
+import {
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Switch,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   HEADER_SCENES,
@@ -153,8 +162,7 @@ export function HeaderSettings({
                   <View style={{ flex: 1 }}>
                     <CompactText>Motion</CompactText>
                     <CompactText variant="small" tone="secondary">
-                      Scenes stay still on Android for now. Your Motion preference is kept on this
-                      phone.
+                      Islands float and clouds drift
                     </CompactText>
                   </View>
                   <Switch
@@ -164,30 +172,31 @@ export function HeaderSettings({
                     style={{ minWidth: 48, minHeight: 48 }}
                   />
                 </View>
-                <View
-                  style={{
-                    padding: 14,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 12,
-                    borderTopWidth: 1,
-                    borderColor: theme.border,
-                  }}
-                >
-                  <View style={{ flex: 1 }}>
-                    <CompactText>Tilt with the phone</CompactText>
-                    <CompactText variant="small" tone="secondary">
-                      The scene shifts a little as you move the phone. Scenes stay still on Android
-                      for now.
-                    </CompactText>
+                {tiltSupported(Platform) ? (
+                  <View
+                    style={{
+                      padding: 14,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                      borderTopWidth: 1,
+                      borderColor: theme.border,
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <CompactText>Tilt with the phone</CompactText>
+                      <CompactText variant="small" tone="secondary">
+                        The scene shifts a little as you move the phone
+                      </CompactText>
+                    </View>
+                    <Switch
+                      accessibilityLabel="Tilt with the phone"
+                      value={tilt}
+                      onValueChange={onTilt}
+                      style={{ minWidth: 48, minHeight: 48 }}
+                    />
                   </View>
-                  <Switch
-                    accessibilityLabel="Tilt with the phone"
-                    value={tilt}
-                    onValueChange={onTilt}
-                    style={{ minWidth: 48, minHeight: 48 }}
-                  />
-                </View>
+                ) : null}
               </Card>
               {motionMessage ? (
                 <CompactText accessibilityRole="alert">{motionMessage}</CompactText>
@@ -199,8 +208,8 @@ export function HeaderSettings({
           )}
           <SectionHeader title="Who sees what" />
           <CompactText variant="small" tone="secondary">
-            Everyone in {group.name} sees the header, scene and time you save. Motion and Tilt are
-            kept on this phone only.
+            Everyone in {group.name} sees the header, scene and time you save.{' '}
+            {tiltSupported(Platform) ? 'Motion and Tilt are' : 'Motion is'} kept on this phone only.
           </CompactText>
           {offline ? (
             <NotAvailableOffline

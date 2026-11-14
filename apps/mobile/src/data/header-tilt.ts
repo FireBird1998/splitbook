@@ -4,6 +4,10 @@ export interface TiltSensor {
   setUpdateInterval(milliseconds: number): void;
   addListener(listener: (sample: { x: number; y: number }) => void): { remove(): void };
 }
+/** A change smaller than this share of full tilt is hand tremor: no animation is started for it. */
+export const TILT_STILLNESS = 0.02;
+/** Each sample moves the resting point this far toward the phone's pose, so a held tilt settles back. */
+export const TILT_RECENTRE = 0.01;
 export function startHeaderTilt(
   load: () => Promise<TiltSensor>,
   move: (x: number, y: number) => void,
@@ -11,6 +15,7 @@ export function startHeaderTilt(
   let alive = true;
   let subscription: { remove(): void } | undefined;
   let origin: { x: number; y: number } | undefined;
+  let sent: { x: number; y: number } | undefined;
   void (async () => {
     try {
       const sensor = await load();
@@ -20,7 +25,17 @@ export function startHeaderTilt(
         if (!alive || !Number.isFinite(sample.x) || !Number.isFinite(sample.y)) return;
         origin ??= { x: sample.x, y: sample.y };
         const clamp = (n: number) => Math.max(-1, Math.min(1, n));
-        move(clamp((sample.x - origin.x) * 2), clamp((sample.y - origin.y) * 2));
+        const next = { x: clamp((sample.x - origin.x) * 2), y: clamp((sample.y - origin.y) * 2) };
+        origin.x += clamp(sample.x - origin.x) * TILT_RECENTRE;
+        origin.y += clamp(sample.y - origin.y) * TILT_RECENTRE;
+        if (
+          sent &&
+          Math.abs(next.x - sent.x) < TILT_STILLNESS &&
+          Math.abs(next.y - sent.y) < TILT_STILLNESS
+        )
+          return;
+        sent = next;
+        move(next.x, next.y);
       });
     } catch {
       // Missing/disabled sensors leave a still scene, without a permission prompt.
@@ -31,4 +46,14 @@ export function startHeaderTilt(
     alive = false;
     subscription?.remove();
   };
+}
+
+/**
+ * Tilt reads the accelerometer only on Android 12 (API 31) and later, where the sensor library
+ * samples at the normal native rate. On Android 7–11 it samples at the fastest rate and throttles
+ * afterwards, and that power cost has not been measured on a handset (ADR 0012).
+ */
+export const TILT_MIN_ANDROID_API = 31;
+export function tiltSupported(platform: { OS: string; Version: number | string }): boolean {
+  return platform.OS === 'android' && Number(platform.Version) >= TILT_MIN_ANDROID_API;
 }
