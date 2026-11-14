@@ -152,6 +152,19 @@ it('keeps the chosen name without inventing payments when a copy is missing or l
   expect(loading.payments).toEqual([]);
   expect(loading.layout.sections.some((s) => s.id === 'loading')).toBe(true);
 });
+it('drops the optional Group count in compact headers before it wraps over the payment rows', () => {
+  for (const scale of [1, 1.3, 2]) {
+    const small = view(copy, { width: 172, height: 224 }, scale);
+    expect(small.layout.showGroups).toBe(false);
+    expect(small.layout.subtitleLines).toEqual([]);
+    expect(small.summary).toContain('2\u00a0Groups together');
+    expect(small.name).toBe('Sam');
+  }
+  expect(view().layout.showGroups).toBe(true);
+  const missing = view(null, { width: 172, height: 224 }, 1.3);
+  expect(missing.layout.showGroups).toBe(true);
+  expect(missing.layout.subtitleLines.join(' ')).toBe('Nothing saved yet');
+});
 it('gives two people called Sam their second initial, also in the complete TalkBack lines', () => {
   const second = { id: 'other-sam', firstName: 'Sam', initials: 'ST' };
   const result = view({

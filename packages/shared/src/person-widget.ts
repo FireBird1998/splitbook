@@ -149,7 +149,8 @@ function projectPerson(
     scale,
     (text, optional) => {
       const showSaved = optional && !level && !!read.saved;
-      const showGroups = read.state === 'no-copy' || (optional && level < 2 && !!read.groupsLabel);
+      const showGroups =
+        read.state === 'no-copy' || (optional && !compact && level < 2 && !!read.groupsLabel);
       const avatarSize = Math.max(28, text.line(10) + 8);
       const showAvatar = optional && width > 100;
       const nameFont = 13,
