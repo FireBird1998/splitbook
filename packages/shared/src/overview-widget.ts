@@ -258,7 +258,10 @@ export function overviewWidget(
             : `Pay ${row.firstName}`
           : row.label;
         const amountWidth = text.width(row.amount, 13, true);
-        const stack = text.width(label, paymentFont) + amountWidth + 8 > paymentWidth;
+        // Short rows reserve the complete amount and truncate only the person's name.
+        // Stack only when even the action word and amount cannot share the line.
+        const minimumLabel = compactPayments ? (row.incoming ? 'From' : 'Pay') : label;
+        const stack = text.width(minimumLabel, paymentFont) + amountWidth + 8 > paymentWidth;
         const captionBelow =
           paymentDetails &&
           !compactPayments &&
@@ -295,7 +298,8 @@ export function overviewWidget(
       const paymentMessage =
         normal && tall && !suggested.length && !hasReadGroup ? 'Open the Group to update' : null;
       const paymentMessageLines = paymentMessage ? text.words(paymentMessage, 11) : [];
-      const paymentCountsLines = hiddenPayments.flatMap((label) => text.words(label, 12));      const sections: WidgetSection[] = [
+      const paymentCountsLines = hiddenPayments.flatMap((label) => text.words(label, 12));
+      const sections: WidgetSection[] = [
         ...(showHeader
           ? [{ id: 'header', rows: 1, rowHeight: text.line(small ? 10 : 13), required: true }]
           : []),
@@ -371,7 +375,7 @@ export function overviewWidget(
                 id: 'footer',
                 rows: 1,
                 rowHeight: footer,
-                required: !(normal && tall && availablePayments.length > 0),
+                required: true,
               },
             ]
           : []),

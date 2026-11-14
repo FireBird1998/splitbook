@@ -549,3 +549,48 @@ it.each([1.3, 2])(
     expect(v.summary).toContain('in Maple House');
   },
 );
+
+it.each(['tall row', 'amount too wide'] as const)(
+  'keeps both 130-percent footer actions when the payment has a %s',
+  (reason) => {
+    const c = structuredClone(paymentCopy);
+    c.groups!.maple!.currencies[0]!.payments[0]!.toName = 'Ananthapadmanabhan Balakrishnan';
+    if (reason === 'amount too wide')
+      c.groups!.maple!.currencies[0]!.payments[0]!.amountMinor = 99999999999999;
+    const v = overviewWidget(
+      c,
+      setup,
+      { width: 360, height: 280, pixelRatio: 2.625 },
+      auth,
+      now,
+      1.3,
+    );
+    expect(v.review).toBe('To review\u00a0· 3');
+    expect(v.action).toBe('＋ Add expense');
+    expect(v.layout.sections.at(-1)?.id).toBe('footer');
+    expect(v.layout.fits).toBe(true);
+  },
+);
+it('keeps short incoming labels beside their amounts when the amount fits', () => {
+  const c = structuredClone(paymentCopy);
+  c.groups = { maple: c.groups!.maple! };
+  c.groups!.maple!.currencies = [
+    {
+      currency: 'INR',
+      balanceMinor: 200000,
+      payments: [
+        { from: 'meera', to: 'alex', fromName: 'Meera', toName: 'Alex', amountMinor: 200000 },
+      ],
+    },
+    {
+      currency: 'EUR',
+      balanceMinor: 4000,
+      payments: [{ from: 'ravi', to: 'alex', fromName: 'Ravi', toName: 'Alex', amountMinor: 4000 }],
+    },
+  ];
+  const v = overviewWidget(c, setup, { width: 172, height: 344 }, auth, now);
+  expect(v.payments.map((row) => [row.label, row.amount, row.stack])).toEqual([
+    ['From Meera', '₹2,000.00', false],
+    ['From Ravi', '€40.00', false],
+  ]);
+});

@@ -273,3 +273,16 @@ it('reserves a section heading even when only its count fits, without charging i
     fitWidgetSections(60, sections, 0).sections.find((s) => s.id === 'payments'),
   ).toMatchObject({ rows: 4, more: 0 });
 });
+
+it.each([0, 1])(
+  'reserves the complete footer before an optional payment capped at %s',
+  (maxRows) => {
+    const v = fitWidgetSections(60, [
+      { id: 'payments', rows: 1, maxRows, rowHeight: 72 },
+      { id: 'footer', rows: 1, rowHeight: 49, required: true },
+    ]);
+    expect(v.fits).toBe(true);
+    expect(v.sections.map((section) => section.id)).toEqual(['footer']);
+    expect(v.sections[0].height).toBeGreaterThanOrEqual(49);
+  },
+);

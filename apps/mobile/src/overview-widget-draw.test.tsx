@@ -224,3 +224,81 @@ it.each(['all-square', 'no-copy', 'other-account'] as const)(
     }
   },
 );
+
+const withPayments: WidgetCopy = {
+  ...copy,
+  groups: {
+    maple: {
+      id: 'maple',
+      name: 'Maple House',
+      theme: 'home',
+      archived: false,
+      mainCurrency: 'INR',
+      verifiedAt: now,
+      balancesVerifiedAt: now,
+      currencies: [
+        {
+          currency: 'INR',
+          balanceMinor: -106000,
+          payments: [
+            {
+              from: 'alex',
+              to: 'priya',
+              fromName: 'Alex',
+              toName: 'Priya',
+              fromInitials: 'AR',
+              toInitials: 'PS',
+              amountMinor: 106000,
+            },
+            {
+              from: 'meera',
+              to: 'alex',
+              fromName: 'Meera',
+              toName: 'Alex',
+              fromInitials: 'MI',
+              toInitials: 'AR',
+              amountMinor: 200000,
+            },
+          ],
+        },
+      ],
+    },
+  },
+};
+const nodes = (tree: WidgetTree): WidgetTree[] => [tree, ...(tree.children ?? []).flatMap(nodes)];
+it.each([1, 2])('draws the planned payment rows and settle links at %s text', (scale) => {
+  vi.stubGlobal('__DEV__', false);
+  const view = overviewWidget(
+    withPayments,
+    { kind: 'balances', widgetId: 7 },
+    { width: 360, height: 584 },
+    auth,
+    now,
+    scale,
+  );
+  const tree = buildWidgetTree(drawOverview(view, lightTokens));
+  expect(view.payments).toHaveLength(2);
+  expect(labels(tree)).toContain(scale === 1 ? 'You pay Priya' : 'Pay Priya');
+  expect(labels(tree)).toContain('₹1,060.00');
+  expect(labels(tree)).toContain(scale === 1 ? 'Meera pays you' : 'From Meera');
+  const links = nodes(tree).map(
+    (n) => (n.props as { clickActionData?: { uri?: string } }).clickActionData?.uri,
+  );
+  expect(links).toContain('splitbook://widget/group/maple/settle/alex/priya/INR');
+  expect(links).toContain('splitbook://widget/group/maple/settle/meera/alex/INR');
+});
+it('draws hidden payment counts without any initials names amounts or settle link', () => {
+  vi.stubGlobal('__DEV__', false);
+  const view = overviewWidget(
+    withPayments,
+    { kind: 'balances', widgetId: 7, hideAmounts: true },
+    { width: 360, height: 584 },
+    auth,
+    now,
+  );
+  const tree = buildWidgetTree(drawOverview(view, lightTokens));
+  expect(labels(tree)).toContain('You pay 1 person');
+  expect(labels(tree)).toContain('1 person pays you');
+  expect(labels(tree).join(' ')).not.toMatch(/Priya|Meera|Maple|Alex|PS|MI|AR|₹|1,060|2,000/);
+  expect(JSON.stringify(tree)).not.toContain('/settle/');
+});
