@@ -122,7 +122,7 @@ for (const size of ['2x2', '4x2', '4x3'] as const) {
     });
   });
 }
-it('limits compact to the people count, wide to two payments and tall to Month, keeping Main currency first', () => {
+it('keeps the compact count and the taller payment capacity, with Main currency first', () => {
   const multi = {
     ...part,
     currencies: [
@@ -162,7 +162,7 @@ it('limits compact to the people count, wide to two payments and tall to Month, 
     more: '+5\u00a0more\u00a0· ¥, €',
     payments: [{ label: 'You pay Priya' }, { label: 'You pay Sam' }],
   });
-  expect(groupWidget(multi, setup, widgetDimensions('4x3'), session, now).payments).toHaveLength(2);
+  expect(groupWidget(multi, setup, widgetDimensions('4x3'), session, now).payments).toHaveLength(4);
   expect(groupWidget(part, setup, widgetDimensions('2x2'), session, now)).toMatchObject({
     people: 'to 2\u00a0people',
     payments: [],
