@@ -931,6 +931,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ? widgetRecentCopy(read.value, id, read.refreshedAt, account().accountId)
         : null;
     },
+    dependencies.expenseDrafts,
   );
 
   const savedCopies = savedCopyBudget({
