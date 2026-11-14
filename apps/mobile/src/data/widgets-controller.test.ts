@@ -2559,3 +2559,113 @@ describe('Overview Group balance lifetime', () => {
     expect(cold.getSnapshot().home.restored).toBe(true);
   });
 });
+
+describe('combined Widget copy account and Group rules', () => {
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+  });
+  it.each(['sign-out', 'account-change', '403', '404', '401'] as const)(
+    'keeps Trip dates, Month, payments, Finish later and Home figures together on %s',
+    async (reason) => {
+      const f = fixture();
+      f.trip();
+      f.month();
+      f.groupBalances(paymentBalances);
+      f.home({
+        buckets: [{ currency: 'INR', youOwe: 100, youAreOwed: 0, net: -100 }],
+        groups: [{ groupId, name: 'Maple House', balances: [{ currency: 'INR', balance: -100 }] }],
+      });
+      const c = f.make();
+      await c.signIn('alex');
+      await c.openGroup(groupId);
+      await c.openExpense(groupId);
+      await c.updateExpenseDraft({ description: 'Private phone entry', amount: '100', tagId });
+      await c.closeExpense(true);
+      await c.back();
+      await vi.waitFor(() =>
+        expect(f.record().copy).toMatchObject({
+          accountId: alex.id,
+          groups: {
+            [groupId]: {
+              tripDates: { start: '2026-11-08', end: '2026-11-10' },
+              currencies: [
+                {
+                  currency: 'INR',
+                  balanceMinor: -10000,
+                  payments: [{ from: alex.id, to: sam.id, amountMinor: 10000 }],
+                },
+              ],
+            },
+          },
+          months: { [groupId]: { month: '2026-11', count: 12, shareMinor: 785000 } },
+          finishLater: { groupId, groupName: 'Maple House' },
+          home: { byGroup: { [groupId]: [{ currency: 'INR', balanceMinor: -10000 }] } },
+          savedGroups: { rows: [expect.objectContaining({ id: groupId })] },
+        }),
+      );
+      const before = structuredClone(f.record().copy);
+      expect(JSON.stringify(before)).not.toContain('Private phone entry');
+      f.events.length = 0;
+      if (reason === 'sign-out') await c.signOut();
+      else if (reason === 'account-change') {
+        f.home({
+          buckets: [],
+          groups: [{ groupId, name: 'Maple House', balances: [] }],
+        });
+        await c.signIn('sam');
+      } else if (reason === '401') {
+        f.expire();
+        await c.openGroup(groupId, false);
+      } else {
+        f.refuse(Number(reason));
+        await c.openGroup(groupId, false);
+      }
+      if (reason === '401') {
+        await vi.waitFor(() => expect(f.record().session.status).toBe('expired'));
+        expect(f.events).not.toContain('clear');
+        expect(f.record().copy).toEqual(before);
+        expect(overview(f)).toMatchObject({
+          state: 'expired',
+          payments: [],
+          groups: [],
+          finishLater: null,
+        });
+        expect(
+          groupWidget(
+            f.record().copy?.groups?.[groupId],
+            { kind: 'group', widgetId: 7, accountId: alex.id, groupId },
+            { width: 360, height: 584 },
+            f.record().session,
+            verified,
+            1,
+            f.record().copy?.months?.[groupId],
+          ),
+        ).toMatchObject({ state: 'expired', name: null, tripDay: null, month: null, payments: [] });
+      } else if (reason === '403' || reason === '404') {
+        await vi.waitFor(() => expect(f.record().copy?.lostGroupIds).toContain(groupId));
+        expect(f.record().copy?.groups?.[groupId]).toBeUndefined();
+        expect(f.record().copy?.months?.[groupId]).toBeUndefined();
+        expect(f.record().copy?.finishLater).toBeUndefined();
+        expect(f.record().copy?.home?.byGroup?.[groupId]).toBeUndefined();
+        expect(f.record().copy?.savedGroups?.rows).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: groupId })]),
+        );
+        expect(overview(f)).toMatchObject({ payments: [], groups: [], finishLater: null });
+      } else {
+        expect(f.events.indexOf('clear')).toBeGreaterThanOrEqual(0);
+        expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+        if (reason === 'sign-out') expect(f.record().copy).toBeNull();
+        else {
+          await vi.waitFor(() => expect(f.record().copy?.accountId).toBe(sam.id));
+          expect(f.record().copy?.groups).toEqual({});
+          expect(f.record().copy?.months).toEqual({});
+          expect(f.record().copy?.home?.byGroup).toEqual({ [groupId]: [] });
+          expect(f.record().copy?.finishLater).toBeUndefined();
+          expect(f.events.indexOf('write:' + sam.id)).toBeGreaterThan(f.events.indexOf('clear'));
+        }
+      }
+    },
+  );
+});
