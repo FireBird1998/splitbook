@@ -862,22 +862,23 @@ function groupLayout(
           );
       }
       const fitted = fitWidgetSections(height, sections, gap, ratio);
-      const anotherSection = fitted.sections.some((section) => section.id === 'recent');
-      if (anotherSection && fitted.sections.some((section) => section.id === 'payments')) {
+      const recentFollows = fitted.sections.some((section) => section.id === 'recent');
+      if (recentFollows && fitted.sections.some((section) => section.id === 'payments')) {
         sections = sections.map((section) =>
           section.id === 'payments' ? { ...section, grow: false } : section,
         );
         if (
           !fitted.sections.some((section) => section.id === 'recent' && section.rows && recentCount)
-        )
-          sections.splice(
-            Math.max(
-              0,
-              sections.findIndex((section) => section.id === 'action'),
-            ),
-            0,
-            { id: 'space', rows: 1, rowHeight: 0, required: true, grow: true },
-          );
+        ) {
+          const actionIndex = sections.findIndex((section) => section.id === 'action');
+          sections.splice(actionIndex < 0 ? sections.length : actionIndex, 0, {
+            id: 'space',
+            rows: 1,
+            rowHeight: 0,
+            required: true,
+            grow: true,
+          });
+        }
       }
       return {
         sections,

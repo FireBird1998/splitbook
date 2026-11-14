@@ -353,3 +353,18 @@ it('orders Expense and payment creation instants across midnight in the phone zo
     vi.restoreAllMocks();
   }
 });
+
+it('keeps the archived header first when its Recent prompt leaves spare space and no action', () => {
+  const result = groupWidget(
+    { ...group, archived: true },
+    setup,
+    { width: 360, height: 344 },
+    auth,
+    now,
+    1,
+    month,
+  );
+  expect(result.layout.sections[0].id).toBe('header');
+  expect(result.layout.sections.some((s) => s.id === 'action')).toBe(false);
+  expect(result.layout.sections.at(-1)?.id).toBe('space');
+});
