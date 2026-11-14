@@ -237,7 +237,7 @@ function projectPerson(
                 rows: rows.length,
                 maxRows: paymentFits
                   ? level === 2
-                    ? 1 + Math.floor(Math.max(0, size.height - 224) / 140)
+                    ? 1 + Math.floor(Math.max(0, size.height - 224) / 120)
                     : rows.length
                   : 0,
                 rowHeight,

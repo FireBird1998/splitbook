@@ -222,6 +222,13 @@ it('uses taller space for shared all-square Groups after payments, while TalkBac
   expect(large.layout.showSaved).toBe(false);
   expect(large.layout.fonts.label).toBe(12);
 });
+it('uses an extra launcher row for another full payment at 200% text', () => {
+  expect(view(copy, { width: 360, height: 224 }, 2).payments).toHaveLength(1);
+  const taller = view(copy, { width: 360, height: 344 }, 2);
+  expect(taller.payments.map((payment) => payment.amount)).toEqual(['₹420.00', '€40.00']);
+  expect(taller.more).toBeNull();
+  expect(taller.layout.fits).toBe(true);
+});
 it('treats an old or unreadable copy as absent while keeping setup and a readable explanation', () => {
   const old = view({ version: 1, accountId: 'alex', home: null });
   expect(old.state).toBe('no-copy');
