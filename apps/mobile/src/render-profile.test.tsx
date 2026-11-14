@@ -322,22 +322,28 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
  * unless a journey needs more.
  * `payment`: Alex is in Maple House too, so Sam can record the payment Balances suggest (#333).
  */
-function backend({ expensePages = pages, activityPages = pages, payment = false } = {}) {
+function backend({
+  expensePages = pages,
+  activityPages = pages,
+  payment = false,
+  category = 'home',
+} = {}) {
   let paid = false;
   let draftGate: Promise<void> | undefined;
   const shown = payment
     ? {
         ...group,
+        category,
         members: [
           ...group.members,
           { user: { ...alex, email: 'a@x.test' }, role: 'member', joinedAt: iso },
         ],
       }
-    : group;
+    : { ...group, category };
   const server = fakeSplitbook();
   server.world.people.sam = user;
   server.auth.cookie = () => 'better-auth.session_token=test.signature';
-  server.world.groups = groups;
+  server.world.groups = groups.map((row) => (row._id === groupId ? shown : row));
   // The original profile's figures cover no Group; unknown row balances stay unknown (#333).
   server.world.home = { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }], groups: [] };
   server.reply('*', '*', async ({ path, init }) => {
@@ -529,6 +535,7 @@ const settle = async (pending?: Promise<unknown>) => {
 };
 
 async function renderApp(options?: {
+  category?: string;
   expensePages?: number;
   activityPages?: number;
   payment?: boolean;
@@ -717,6 +724,22 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       () => expect(app.count('You added'), 'Activity rows').toBe(20),
     );
   });
+
+  it.each(['trip', 'other'])(
+    'opens a %s Group with its additional current-Month read',
+    async (category) => {
+      const app = await renderApp({ category });
+      await journey(
+        `Open ${category === 'trip' ? 'a Trip' : 'an Other'} Group on Expenses`,
+        () => app.press('Open Maple House'),
+        () => {
+          expect(app.count('Fictional expense')).toBe(20);
+          expect(app.shows('All time')).toBe(true);
+          expect(app.count('Previous month')).toBe(0);
+        },
+      );
+    },
+  );
 
   it('long lists', async () => {
     const app = await renderApp();

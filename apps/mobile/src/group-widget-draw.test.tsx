@@ -293,3 +293,199 @@ it.each([lightTokens, darkTokens])(
     }
   },
 );
+
+it.each([lightTokens, darkTokens])(
+  'draws Month columns and their saved time in $mode',
+  (tokens) => {
+    vi.stubGlobal('__DEV__', false);
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+    const saved: WidgetCopy = {
+      ...copy,
+      months: {
+        maple: {
+          month: '2026-11',
+          verifiedAt: now - 180_000,
+          count: 12,
+          mainCurrency: 'INR',
+          mainCurrencyOnly: true,
+          totals: [
+            { currency: 'INR', totalMinor: 2354000 },
+            { currency: 'EUR', totalMinor: 32000 },
+            { currency: 'JPY', totalMinor: 42000 },
+          ],
+          shareMinor: 785000,
+        },
+      },
+    };
+    const tree = buildWidgetTree(
+      drawGroup(
+        saved,
+        { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
+        { width: 360, height: 344 },
+        { status: 'authenticated', accountId: 'alex', loading: false },
+        now,
+        tokens,
+      ),
+    );
+    expect(drawnText(tree)).toEqual(
+      expect.arrayContaining([
+        'PAYMENTS',
+        'THIS MONTH',
+        'Group spent',
+        'Your share',
+        '₹23,540.00',
+        '€320.00',
+        '¥42,000',
+        '₹7,850.00',
+        'Main currency only',
+      ]),
+    );
+    for (const label of ['Group spent', 'Your share']) {
+      const panel = allNodes(tree).find((node) =>
+        node.children?.some((child) => (child.props as { text?: string }).text === label),
+      );
+      expect(panel?.props).toMatchObject({
+        backgroundColor: tokens.surfaceMuted,
+        padding: { top: 8, bottom: 8, left: 8, right: 8 },
+      });
+    }
+    const section = tree.children!.find((child) => drawnText(child).includes('THIS MONTH'))!;
+    expect(minimumHeight(section)).toBeLessThanOrEqual(
+      (section.props as { height: number }).height,
+    );
+    expect(drawnText(tree)).toEqual(expect.arrayContaining(['Saved 9:41', 'Saved 9:38']));
+    vi.unstubAllEnvs();
+    expect(drawnText(tree).filter((text) => text === 'PAYMENTS')).toHaveLength(1);
+    expect(drawnText(tree).filter((text) => text === 'THIS MONTH')).toHaveLength(1);
+    vi.unstubAllGlobals();
+  },
+);
+
+it('opens the Group through the missing-Month prompt and hides Month amounts and labels for the count view', () => {
+  vi.stubGlobal('__DEV__', false);
+  const setup = { kind: 'group' as const, accountId: 'alex', groupId: 'maple', widgetId: 7 };
+  const session = { status: 'authenticated' as const, accountId: 'alex', loading: false };
+  const empty = buildWidgetTree(
+    drawGroup(copy, setup, { width: 360, height: 344 }, session, now, lightTokens),
+  );
+  expect(drawnText(empty)).toContain('Open the Group to update');
+  expect(empty.props).toMatchObject({
+    clickAction: 'OPEN_URI',
+    clickActionData: { uri: expect.stringContaining('/group/maple/group') },
+  });
+  const hidden = buildWidgetTree(
+    drawGroup(
+      {
+        ...copy,
+        months: {
+          maple: {
+            month: '2026-11',
+            verifiedAt: now,
+            count: 12,
+            mainCurrency: 'INR',
+            mainCurrencyOnly: false,
+            totals: [{ currency: 'INR', totalMinor: 2354000 }],
+            shareMinor: 785000,
+          },
+        },
+      },
+      { ...setup, hideAmounts: true },
+      { width: 360, height: 344 },
+      session,
+      now,
+      lightTokens,
+    ),
+  );
+  expect(drawnText(hidden).join(' ').replace(/\s/g, ' ')).toContain('12 Expenses this Month');
+  expect(drawnText(hidden).join(' ')).not.toMatch(/₹|Group spent|Your share|Priya|Sam/);
+  vi.unstubAllGlobals();
+});
+
+it.each([310, 330])('fits a partial Month and its overflow words at %s dp height', (height) => {
+  vi.stubGlobal('__DEV__', false);
+  const month = {
+    month: '2026-11',
+    verifiedAt: now,
+    count: 12,
+    mainCurrency: 'INR',
+    mainCurrencyOnly: true,
+    totals: [
+      { currency: 'INR', totalMinor: 1840000 },
+      { currency: 'EUR', totalMinor: 32000 },
+      { currency: 'JPY', totalMinor: 42000 },
+      { currency: 'USD', totalMinor: 50000 },
+      { currency: 'GBP', totalMinor: 30000 },
+    ],
+    ...(height === 330 ? { shareMinor: 610000 } : {}),
+  };
+  const tree = buildWidgetTree(
+    drawGroup(
+      { ...copy, months: { maple: month } },
+      { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
+      { width: 360, height },
+      { status: 'authenticated', accountId: 'alex', loading: false },
+      now,
+      lightTokens,
+    ),
+  );
+  const section = tree.children!.find((node) => drawnText(node).includes('THIS MONTH'))!;
+  expect(section).toBeDefined();
+  expect(drawnText(section).join(' ').replace(/\s/g, ' ')).toContain(
+    height === 330 ? '+4 more' : 'In 5 currencies',
+  );
+  expect(minimumHeight(section)).toBeLessThanOrEqual((section.props as { height: number }).height);
+  vi.unstubAllGlobals();
+});
+
+it.each([lightTokens, darkTokens])(
+  'keeps the multi-currency Month cards at the same height in $mode',
+  (tokens) => {
+    vi.stubGlobal('__DEV__', false);
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+    try {
+      const tree = buildWidgetTree(
+        drawGroup(
+          {
+            ...copy,
+            months: {
+              maple: {
+                month: '2026-11',
+                verifiedAt: now - 180000,
+                count: 12,
+                mainCurrency: 'INR',
+                mainCurrencyOnly: true,
+                totals: [
+                  { currency: 'INR', totalMinor: 1840000 },
+                  { currency: 'EUR', totalMinor: 32000 },
+                  { currency: 'JPY', totalMinor: 42000 },
+                ],
+                shareMinor: 610000,
+              },
+            },
+          },
+          { kind: 'group', widgetId: 7, groupId: 'maple', accountId: 'alex' },
+          { width: 360, height: 584 },
+          { status: 'authenticated', accountId: 'alex', loading: false },
+          now,
+          tokens,
+        ),
+      );
+      const cards = ['Group spent', 'Your share'].map((label) =>
+        allNodes(tree).find(
+          (node) =>
+            node.children?.[0] &&
+            drawnText(node.children[0])[0] === label &&
+            !drawnText(node).includes(label === 'Group spent' ? 'Your share' : 'Group spent'),
+        ),
+      );
+      expect(cards).not.toContain(undefined);
+      const heights = cards.map((card) => (card!.props as { height?: number }).height);
+      expect(heights[0]).toBeGreaterThan(0);
+      expect(heights[1]).toBe(heights[0]);
+      for (const card of cards) expect(minimumHeight(card!)).toBeLessThanOrEqual(heights[0]!);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  },
+);

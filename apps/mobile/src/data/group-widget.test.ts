@@ -122,7 +122,7 @@ for (const size of ['2x2', '4x2', '4x3'] as const) {
     });
   });
 }
-it('limits compact to the people count, wide to two payments and tall to four, keeping Main currency first', () => {
+it('keeps the compact count and the taller payment capacity, with Main currency first', () => {
   const multi = {
     ...part,
     currencies: [

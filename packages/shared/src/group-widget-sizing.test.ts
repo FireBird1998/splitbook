@@ -237,7 +237,7 @@ it('uses a tall real size for more payment rows and shares all leftover height a
   expect(view.layout.sections.map(({ id }) => id)).toEqual(['header', 'payments', 'action']);
   expect(
     view.layout.sections.reduce((sum, s) => sum + s.height, 0) +
-      view.layout.gap * 2 +
+      view.layout.gap * (view.layout.sections.length - 1) +
       view.layout.paddingVertical * 2,
   ).toBe(512);
 });
@@ -296,7 +296,7 @@ it.each([
   [{ width: 182, height: 200 }, 0],
   [{ width: 372, height: 200 }, 2],
   [{ width: 372, height: 304 }, 4],
-] as const)('keeps the former 100% content at %j', (size, rows) => {
+] as const)('keeps payments before the new Month section at %j', (size, rows) => {
   const view = groupWidget(part, setup, size, auth, now);
   expect(view.payments).toHaveLength(rows);
   expect(view.addExpense).toBe(true);

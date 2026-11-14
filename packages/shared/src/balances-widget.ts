@@ -1,7 +1,7 @@
 import { balancesLayout, widgetTextLevel } from './widget-layout';
 import { dayKeyInZone } from './zoned-calendar';
 import { widgetSummary } from './widget-accessibility';
-import type { WidgetGroupPart } from './group-widget';
+import type { WidgetGroupPart, WidgetMonthPart } from './group-widget';
 import type { GroupCategory } from './types';
 /** Saved read available to the Android widget renderer, never a live balance. */
 export interface WidgetCopy {
@@ -13,6 +13,7 @@ export interface WidgetCopy {
     currencies: { currency: string; owedMinor: number; oweMinor: number }[];
   };
   groups?: Record<string, WidgetGroupPart>;
+  months?: Record<string, WidgetMonthPart>;
   lostGroupIds?: string[];
   savedGroups?: {
     verifiedAt: number;

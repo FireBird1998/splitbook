@@ -871,3 +871,36 @@ it.each(['sign-out', '401'] as const)(
     }
   },
 );
+
+it('preserves an archived Group’s Month through query eviction and removes it on refusal or account change', async () => {
+  const copy = savedWidgetCopy();
+  copy.months = {
+    maple: {
+      month: '2026-11',
+      verifiedAt: groupTime,
+      count: 12,
+      mainCurrency: 'INR',
+      mainCurrencyOnly: false,
+      totals: [{ currency: 'INR', totalMinor: 2354000 }],
+      shareMinor: 785000,
+    },
+  };
+  const store = createWidgetsStore('development');
+  await store.write(copy);
+  await store.write({ ...copy, groups: {}, months: {} });
+  expect((await createWidgetsStore('development').read()).copy?.months).toEqual(copy.months);
+  await store.write({
+    version: 1,
+    accountId: 'alex',
+    home: null,
+    groups: {},
+    months: {},
+    lostGroupIds: ['maple'],
+  });
+  expect((await store.read()).copy?.months).toEqual({});
+  await store.write(copy);
+  await store.write({ version: 1, accountId: 'sam', home: null, groups: {}, months: {} });
+  expect((await store.read()).copy?.months).toEqual({});
+  await store.clear();
+  expect((await store.read()).copy).toBeNull();
+});

@@ -346,9 +346,16 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
     failNextRead: (route: RegExp) => {
       failReads.push(route);
     },
+    // These pagination cases show August. G2's independent current-Month read has its own page.
     pagesRead: () =>
       requests()
-        .filter((request) => request.method === 'GET' && /\/expenses\?/.test(request.path))
+        .filter(
+          (request) =>
+            request.method === 'GET' &&
+            /\/expenses\?/.test(request.path) &&
+            new URL(request.path, 'http://local').searchParams.get('dateFrom') ===
+              expenseMonthRange('2026-08').dateFrom,
+        )
         .map((request) => Number(new URL(request.path, 'http://local').searchParams.get('page'))),
     loseNextResponse: () => {
       loseResponses += 1;
@@ -422,13 +429,8 @@ describe('Returning from an Expense', () => {
     expect(shown.detail.id).toBe(householdId);
     expect(shown.financial.month).toBe('2026-08');
     expect(shown.restoreScroll).toMatchObject({ groupId: householdId, y: 640 });
-    // August is shown again; returning never reads another Month (a recent read may be reused).
-    expect(
-      server
-        .monthsRead()
-        .slice(reads)
-        .every((month) => month === '2026-08'),
-    ).toBe(true);
+    // August stays shown; the current Month's recent read is also reused.
+    expect(server.monthsRead().slice(reads)).toEqual([]);
     expect(shown.financial.expenses.data.map((row) => row.description)).toEqual(['Electricity']);
     expect(server.writes()).toEqual([]);
     // The draft stayed on the device: reopening offers it again.

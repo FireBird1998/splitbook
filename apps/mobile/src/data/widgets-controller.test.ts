@@ -6,6 +6,7 @@ import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import { notificationTaskProtected } from './notification-alerts';
 import type { WidgetCopy } from '@splitbook/shared/balances-widget';
 import { groupWidget } from '@splitbook/shared/group-widget';
+import { createWidgetCopy } from './widget-copy';
 import { quickWidget } from '@splitbook/shared/quick-widget';
 
 const alex = { id: 'a00000000000000000000001', name: 'Alex Rivera', email: 'alex@example.test' };
@@ -24,8 +25,10 @@ function fixture(extraMembers: (typeof alex)[] = []) {
   let noGroups = false;
   let archived = false;
   let trip = false;
+  let theme = 'home';
+  let monthStatus = 0;
   let hold: Promise<void> | undefined;
-  const requests: { path: string; method: string }[] = [];
+  const requests: { path: string; method: string; query?: string }[] = [];
   const copies: WidgetCopy[] = [];
   const events: string[] = [];
   const group = () => ({
@@ -33,7 +36,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     name: 'Maple House',
     isArchived: archived,
     createdBy: user.id,
-    category: trip ? 'trip' : 'home',
+    category: trip ? 'trip' : theme,
     startDate: trip ? '2026-11-08T00:00:00Z' : null,
     endDate: trip ? '2026-11-10T00:00:00Z' : null,
     defaultCurrency: 'INR',
@@ -84,13 +87,15 @@ function fixture(extraMembers: (typeof alex)[] = []) {
   };
   backend.reply('*', '*', ({ url, init }) => {
     const path = url.pathname;
-    requests.push({ path, method: init.method ?? 'GET' });
+    requests.push({ path, method: init.method ?? 'GET', query: url.search });
     if (path === '/api/auth/demo-persona/sign-in') {
       user = JSON.parse(String(init.body)).personaId === 'sam' ? sam : alex;
       return undefined;
     }
     if (['/api/auth/get-session', '/api/auth/sign-out'].includes(path)) return undefined;
     if (expired) return Response.json({ error: 'Session expired' }, { status: 401 });
+    if (path.endsWith('/expenses') && url.searchParams.has('dateFrom') && monthStatus)
+      return Response.json({ error: 'Month read failed' }, { status: monthStatus });
     if (path === `/api/groups/${groupId}` && refused)
       return Response.json({ error: 'Not a member' }, { status: refused });
     if (path === `/api/groups/${groupId}`) return Response.json({ status: 200, data: group() });
@@ -179,6 +184,28 @@ function fixture(extraMembers: (typeof alex)[] = []) {
   };
   return {
     make,
+    month: (count = 12) => {
+      backend.world.expenses[groupId] = {
+        expenses: [],
+        pagination: { page: 1, limit: 20, total: count, totalPages: 1 },
+        summary: {
+          count,
+          totalsByCurrency: [
+            { currency: 'INR', totalAmount: 23540 },
+            { currency: 'JPY', totalAmount: 42000 },
+          ],
+          userOwes: 0,
+          userGetsBack: 0,
+          byMember: [{ user: { _id: alex.id, name: alex.name }, paid: 0, share: 7850, net: -7850 }],
+        },
+      };
+    },
+    theme: (value: string) => {
+      theme = value;
+    },
+    monthFails: (status: number) => {
+      monthStatus = status;
+    },
     trip: () => {
       trip = true;
     },
@@ -822,3 +849,300 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
     }
   },
 );
+
+it('saves a Month summary from the existing page read with its own time and exact currency amounts', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  f.month();
+  const c = f.make();
+  await c.signIn('alex');
+  const groupTime = verified + 60_000;
+  clock.mockReturnValue(groupTime);
+  await c.openGroup(groupId);
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.months?.[groupId]).toEqual({
+      month: '2026-11',
+      verifiedAt: groupTime,
+      count: 12,
+      mainCurrency: 'INR',
+      mainCurrencyOnly: true,
+      totals: [
+        { currency: 'INR', totalMinor: 2354000 },
+        { currency: 'JPY', totalMinor: 42000 },
+      ],
+      shareMinor: 785000,
+    }),
+  );
+  expect(f.requests.filter((r) => r.path.endsWith('/expenses'))).toHaveLength(1);
+  expect(f.requests.filter((r) => r.path === `/api/groups/${groupId}`)).toHaveLength(1);
+  clock.mockReturnValue(groupTime + 60_000);
+  await c.refreshBalances();
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.groups?.[groupId]?.balancesVerifiedAt).toBe(groupTime + 60_000),
+  );
+  expect(f.copies.at(-1)?.months?.[groupId]?.verifiedAt).toBe(groupTime);
+});
+
+it('restores the current Month summary with the time of its saved read after restarting offline', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  f.month();
+  const first = f.make();
+  await first.signIn('alex');
+  await first.openGroup(groupId);
+  await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]?.shareMinor).toBe(785000));
+  first.dispose();
+  f.offline();
+  vi.spyOn(Date, 'now').mockReturnValue(verified + 3_600_000);
+  const restarted = f.make();
+  await restarted.restore();
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.months?.[groupId]).toMatchObject({
+      month: '2026-11',
+      shareMinor: 785000,
+      verifiedAt: verified,
+    }),
+  );
+});
+
+it('keeps the current Month copy when another Month is read, without relabelling its figures', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  f.month();
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeDefined());
+  const original = structuredClone(f.copies.at(-1)?.months?.[groupId]);
+  f.month(7);
+  await c.selectMonth('2026-10');
+  expect(c.getSnapshot().financial.month).toBe('2026-10');
+  expect(f.copies.at(-1)?.months?.[groupId]).toEqual(original);
+});
+
+it.each(['sign out', 'account change', '403', '404', '401'] as const)(
+  'applies the Widget copy purge rules to the Month on %s',
+  async (action) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture();
+    f.month();
+    const c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeDefined());
+    f.events.length = 0;
+    if (action === 'sign out' || action === 'account change') {
+      if (action === 'sign out') await c.signOut();
+      else await c.signIn('sam');
+      expect(f.events.indexOf('clear')).toBeGreaterThanOrEqual(0);
+      expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+      if (action === 'account change') {
+        await vi.waitFor(() => expect(f.copies.at(-1)?.accountId).toBe(sam.id));
+        expect(f.copies.at(-1)?.months?.[groupId]).toBeUndefined();
+      }
+    } else if (action === '401') {
+      const saved = structuredClone(f.copies.at(-1));
+      f.expire();
+      await c.openGroup(groupId, false);
+      await vi.waitFor(() => expect(f.events).toContain('expired'));
+      expect(f.events).not.toContain('clear');
+      expect(f.copies.at(-1)).toEqual(saved);
+    } else {
+      f.refuse(Number(action));
+      await c.openGroup(groupId, false);
+      await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeUndefined());
+      expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined();
+      expect(f.copies.at(-1)?.lostGroupIds).toContain(groupId);
+    }
+  },
+);
+
+it('keeps the Month section even if the separate Balances read fails', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  f.month();
+  f.groupBalances({ byCurrency: null });
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]?.shareMinor).toBe(785000));
+  expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined();
+});
+
+it('retires the saved Month after a save until the existing Month read succeeds again', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  f.month();
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeDefined());
+  await c.openExpense(groupId);
+  await c.updateExpenseDraft({ description: 'Groceries', amount: '100', tagId });
+  f.offlineAfterSave();
+  await c.saveExpense();
+  await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeUndefined());
+});
+
+it('saves an empty Month as zero spending and keeps a missing member share absent', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.months?.[groupId]).toMatchObject({
+      count: 0,
+      totals: [{ currency: 'INR', totalMinor: 0 }],
+      verifiedAt: verified,
+    }),
+  );
+  expect(f.copies.at(-1)?.months?.[groupId]).not.toHaveProperty('shareMinor');
+});
+
+it.each(['trip', 'other', 'work', 'couple'] as const)(
+  'reads the current Month for a %s Group and keeps its All time screen',
+  async (theme) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture();
+    f.theme(theme);
+    f.month();
+    const c = f.make();
+    await c.signIn('alex');
+    const before = f.requests.length;
+    await c.openGroup(groupId);
+    await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]?.shareMinor).toBe(785000));
+    expect(c.getSnapshot().financial.month).toBeNull();
+    expect(c.getSnapshot().financial.expenses.month).toBeNull();
+    expect(f.requests.slice(before).filter((r) => r.method === 'GET')).toHaveLength(
+      theme === 'trip' ? 5 : 4,
+    );
+    expect(
+      f.requests
+        .slice(before)
+        .filter((r) => r.path.endsWith('/expenses') && r.query?.includes('dateFrom=2026-11-01')),
+    ).toHaveLength(1);
+    expect(f.copies.at(-1)?.months?.[groupId]?.verifiedAt).toBe(verified);
+  },
+);
+
+it.each(['trip', 'other'] as const)(
+  'keeps the %s Group’s Month time after an offline restart and a failed refresh',
+  async (theme) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture();
+    f.theme(theme);
+    f.month();
+    const first = f.make();
+    await first.signIn('alex');
+    await first.openGroup(groupId);
+    await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeDefined());
+    f.monthFails(500);
+    vi.spyOn(Date, 'now').mockReturnValue(verified + 60_000);
+    await first.openGroup(groupId, false);
+    expect(f.copies.at(-1)?.months?.[groupId]?.verifiedAt).toBe(verified);
+    first.dispose();
+    f.offline();
+    const restarted = f.make();
+    await restarted.restore();
+    await restarted.openGroup(groupId);
+    await vi.waitFor(() =>
+      expect(f.copies.at(-1)?.months?.[groupId]).toMatchObject({
+        verifiedAt: verified,
+        shareMinor: 785000,
+      }),
+    );
+    expect(restarted.getSnapshot().financial.month).toBeNull();
+  },
+);
+
+it.each([true, false])(
+  'does not project a cached Month after the Group is forgotten, denied=%s',
+  async (denied) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture();
+    const c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    const copies: WidgetCopy[] = [];
+    const monthRead = vi.fn(() => ({
+      month: '2026-11',
+      read: {
+        source: 'network' as const,
+        refreshedAt: verified,
+        value: {
+          status: 200,
+          data: {
+            expenses: [],
+            pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+            summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0 },
+          },
+        },
+      },
+    }));
+    const copy = createWidgetCopy(
+      {
+        write: async (value) => {
+          copies.push(value);
+        },
+        clear: async () => {},
+        setSession: async () => {},
+        redraw: async () => {},
+      },
+      () => ({
+        accountId: alex.id,
+        write: (operation) => operation(),
+        writeSavedCopy: (operation) => operation(),
+      }),
+      () => undefined,
+      () => null,
+      undefined,
+      () => verified,
+      () => null,
+      () => true,
+      monthRead,
+    );
+    copy.forgetGroup(groupId, denied);
+    copy.update(c.getSnapshot());
+    await copy.idle();
+    expect(monthRead).not.toHaveBeenCalled();
+    expect(copies.at(-1)?.months?.[groupId]).toBeUndefined();
+  },
+);
+
+it.each(['trip', 'other'] as const)(
+  'purges a %s Group when its additional Month read is refused',
+  async (theme) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture();
+    f.theme(theme);
+    f.month();
+    const c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]).toBeDefined());
+    f.monthFails(403);
+    await c.openGroup(groupId, false);
+    await vi.waitFor(() => expect(f.copies.at(-1)?.lostGroupIds).toContain(groupId));
+    expect(f.copies.at(-1)?.months?.[groupId]).toBeUndefined();
+    expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined();
+  },
+);
+
+it('uses the newly reported phone zone for the app Month read and the saved Widget copy', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-01T00:30:00Z'));
+  const resolve = Intl.DateTimeFormat.prototype.resolvedOptions;
+  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
+    this: Intl.DateTimeFormat,
+  ) {
+    return { ...resolve.call(this), timeZone: 'Pacific/Honolulu' };
+  });
+  const f = fixture();
+  f.theme('other');
+  f.month();
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.copies.at(-1)?.months?.[groupId]?.month).toBe('2026-10'));
+  expect(f.requests.some((r) => r.query?.includes('dateFrom=2026-10-01'))).toBe(true);
+});

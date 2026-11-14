@@ -42,6 +42,7 @@ import { inScope, queryOwner, replaceScopedQueries } from './query-owner';
 import { readProvenance } from './read-provenance';
 import {
   connectedAssistantsKey,
+  expensePageKey,
   groupKey,
   groupBalancesKey,
   groupsKey,
@@ -150,6 +151,7 @@ import {
 import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { getCurrency } from '@splitbook/shared/currency';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
+import { monthKeyInZone } from '@splitbook/shared/zoned-calendar';
 import { currentMonthKey, toDateParam } from '@splitbook/shared/date';
 import {
   groupCurrencies,
@@ -891,11 +893,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const key =
         path === '/api/groups'
           ? groupsKey(account())
-          : path.endsWith('/balances')
-            ? groupBalancesKey(account(), id)
-            : groupKey(account(), id);
+          : path.includes('/expenses?')
+            ? expensePageKey(account(), id)
+            : path.endsWith('/balances')
+              ? groupBalancesKey(account(), id)
+              : groupKey(account(), id);
       return verifiedAt > (scoped(untrusted, key) ?? -Infinity);
     },
+    (id) =>
+      groupQueries.monthRead(
+        id,
+        monthKeyInZone(now(), Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
+      ),
   );
 
   const savedCopies = savedCopyBudget({
@@ -1318,6 +1327,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     route: () => route,
     savable: (key) => savable(key),
     freshness,
+    readSettled: () => widgets.update(snapshot),
     // The phone's zone as it is now: one changed meanwhile reads its own days.
     timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     offline: () => offlineSession || snapshot.offline.active,

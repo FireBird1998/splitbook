@@ -11,7 +11,7 @@ import {
 } from '@tanstack/query-core';
 import { groupCurrenciesPath, tagActionsPath } from '@splitbook/shared/api-paths';
 import { groupCurrencySettingsSchema } from '@splitbook/shared/group-currency-settings';
-import { currentMonthKey } from '@splitbook/shared/date';
+import { monthKeyInZone } from '@splitbook/shared/zoned-calendar';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { groupCurrencies } from '@splitbook/shared/group-currencies';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -203,6 +203,8 @@ export interface GroupSession {
    */
   expensesRead(groupId: string, fresh: boolean): void;
   now(): number;
+  /** Read projections such as the Widget copy observe the completed queries without a UI publish. */
+  readSettled?(): void;
 }
 
 /** This open of a Group view, until the member opens another. */
@@ -319,10 +321,20 @@ export function createGroupQueries(session: GroupSession) {
       // The Expenses dated in the Month, the same for every viewer (#437).
       ...(household && month ? expenseMonthRange(month) : {}),
     });
+  /** The summary-only consumer keeps one page, independent of the visible list's window. */
+  const monthPageKey = (groupId: string, month: string) =>
+    expensePageKey(session.account(), groupId, {
+      page: 1,
+      limit: PAGE_SIZE,
+      includeMemberBreakdown: true,
+      ...expenseMonthRange(month),
+    });
+  const isMonthPage = (key: QueryKey) =>
+    queryKeyPath(key).includes('/expenses?page=1&') && queryKeyPath(key).includes('&dateFrom=');
   /** A page of it, with the page first, as Android has always sent it. */
   const pagePath = (key: QueryKey, page: number) =>
     queryKeyPath(key).replace('/expenses?', `/expenses?page=${page}&`);
-  const isList = (key: QueryKey) => queryKeyPath(key).includes('/expenses?');
+  const isList = (key: QueryKey) => queryKeyPath(key).includes('/expenses?') && !isMonthPage(key);
   const isTrip = (key: QueryKey) => queryKeyPath(key).includes('/trip-summary?');
   /** The Group's currencies, as its Currencies read them: one of its saved reads (#722). */
   const isCurrencies = (key: QueryKey) =>
@@ -403,7 +415,7 @@ export function createGroupQueries(session: GroupSession) {
   const ownsKey = (key: QueryKey) =>
     key[0] === 'group' ||
     key[0] === 'balances' ||
-    (key[0] === 'ledger' && (isList(key) || isTrip(key) || isCurrencies(key)));
+    (key[0] === 'ledger' && (isList(key) || isMonthPage(key) || isTrip(key) || isCurrencies(key)));
   const engine = createSavedReadEngine<GroupRows>(session, {
     path: (key, page) => (page === undefined ? queryKeyPath(key) : pagePath(key, page)),
     readable,
@@ -475,6 +487,19 @@ export function createGroupQueries(session: GroupSession) {
     noteStart(key);
     return engine.read({ key, accept: (value) => void balancesOf(value) });
   };
+  const readMonth = ({ queryKey }: QueryFunctionContext) => {
+    const key = queryKey as QueryKey,
+      groupId = key[3] as string;
+    noteStart(key);
+    session.expensesRead(groupId, true);
+    return engine.read({
+      key,
+      accept: (value) => {
+        if (pageOf(value, groupId, currencyOf(groupId)).pagination.page !== 1)
+          throw new Error('Unexpected expense page.');
+      },
+    });
+  };
   /** A Trip's summary in one currency (#730), checked by its decoder before it is kept. */
   const readTrip = ({ queryKey }: QueryFunctionContext) => {
     const key = queryKey as QueryKey;
@@ -525,10 +550,20 @@ export function createGroupQueries(session: GroupSession) {
   // reconnect and the internet's return read in order, Group then Expenses then Balances.
   // A failed read stays until Retry, a pull or the next open; offline, also until recover (#678).
   const shared = engine.shared;
+  const hasFreshRead = (key: QueryKey) => {
+    const query = held(key);
+    return !!query && !query.isStaleByTime(shared.staleTime(query));
+  };
   const groupOptions = (groupId: string, fresh = false) => ({
     ...shared,
     queryKey: groupQueryKey(groupId),
     queryFn: readGroup,
+    ...(fresh ? { staleTime: STALE } : {}),
+  });
+  const monthOptions = (groupId: string, month: string, fresh = false) => ({
+    ...shared,
+    queryKey: monthPageKey(groupId, month),
+    queryFn: readMonth,
     ...(fresh ? { staleTime: STALE } : {}),
   });
   const balancesOptions = (groupId: string, enabled = true, fresh = false) => ({
@@ -700,7 +735,7 @@ export function createGroupQueries(session: GroupSession) {
     const month = !household
       ? null
       : view.previousMonth === undefined
-        ? currentMonthKey(new Date(session.now()))
+        ? monthKeyInZone(session.now(), session.timeZone())
         : view.previousMonth;
     if (financial.groupId !== group.id || financial.month !== month)
       session.publish({ financial: { ...financial, groupId: group.id, month } });
@@ -813,7 +848,10 @@ export function createGroupQueries(session: GroupSession) {
       ended = await steps(opened, owner, fresh, from, still);
     } finally {
       opened.reading -= 1;
-      if (session.current(owner)) reproject();
+      if (session.current(owner)) {
+        reproject();
+        session.readSettled?.();
+      }
       // The internet returned while they ran: whether to read again waits until all have ended.
       if (!opened.reading && opened.recovering) {
         opened.recovering = false;
@@ -949,6 +987,22 @@ export function createGroupQueries(session: GroupSession) {
     const shown = onScreen();
     if (!shown || !opened.checked || shown.destination === 'activity') return false;
     const list = shownList();
+    // Owner decision, 14 Nov 2026: every Theme reads the current Month. A Household
+    // already showing it reuses its ordinary list. Other views keep their existing lens.
+    const month = monthKeyInZone(session.now(), session.timeZone());
+    const currentMonth = listKey(opened.groupId, true, month);
+    if (
+      from === 'group' &&
+      hashKey(currentMonth) !== hashKey(list ?? []) &&
+      (fresh || !hasFreshRead(currentMonth))
+    ) {
+      try {
+        await readNow<Envelope>(monthOptions(opened.groupId, month, fresh), owner, still);
+      } catch (error) {
+        if (engine.refuses(error) || error instanceof Superseded) throw error;
+      }
+      if (!still() || !session.current(owner)) return false;
+    }
     if (list && from !== 'balances') {
       const reread = rereadOf(list);
       try {
@@ -1535,6 +1589,17 @@ export function createGroupQueries(session: GroupSession) {
      * what another destination reads beside the Group shows from now on (#222).
      */
     checked: (groupId: string) => !!view && view.groupId === groupId && view.checked && !view.lost,
+    /** A Month summary already read by the app, carrying the time of that page's own read. */
+    monthRead(groupId: string, month: string) {
+      const key = listKey(groupId, true, month);
+      const pages = stateOf<Pages>(key)?.data?.pages;
+      const listed = pages?.find((page) => page.source !== 'failed');
+      const separate = stateOf<Envelope>(monthPageKey(groupId, month))?.data;
+      const showingCurrent = hashKey(shownList() ?? []) === hashKey(key);
+      const read =
+        showingCurrent || hasFreshRead(key) ? (listed ?? separate) : (separate ?? listed);
+      return read ? { month, read } : null;
+    },
     /** The first page of the Month's window shown for this Group: past 1 once it has slid. */
     firstPage(groupId: string) {
       const key = view?.groupId === groupId ? shownList() : null;
