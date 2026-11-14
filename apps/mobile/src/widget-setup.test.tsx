@@ -817,3 +817,18 @@ it('does not show stale Tags for a refused saved Quick choice when no Groups rem
   });
   expect(text()).not.toContain('Groceries');
 });
+
+it.each(['Balances', 'Group', 'Quick', 'Person'] as const)(
+  'sets readable status-bar icons in both themes for %s setup',
+  async (kind) => {
+    for (const mode of ['light', 'dark'] as const) {
+      appearance.mode = mode;
+      await render(kind);
+      expect(host('StatusBar').map((n) => n.props.style)).toEqual([
+        mode === 'light' ? 'dark' : 'light',
+      ]);
+      act(() => screen!.unmount());
+      screen = undefined;
+    }
+  },
+);
