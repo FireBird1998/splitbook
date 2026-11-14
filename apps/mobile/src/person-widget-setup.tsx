@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
+import { StatusBar } from 'expo-status-bar';
 import { Outfit_400Regular } from '@expo-google-fonts/outfit/400Regular';
 import { Outfit_700Bold } from '@expo-google-fonts/outfit/700Bold';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -133,6 +134,7 @@ export function PersonWidgetSetupScreen({ widgetInfo, setResult }: WidgetConfigu
   };
   return (
     <SafeAreaProvider>
+      <StatusBar style={t.mode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, gap: 20 }}>
           <Pressable

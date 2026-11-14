@@ -17,6 +17,7 @@ vi.mock('react-native', async () => ({
 vi.mock('./widgets-native', () => ({ createWidgetsStore: () => store }));
 vi.mock('./widgets', () => ({ redrawBalances: redraw }));
 vi.mock('expo-font', () => ({ useFonts: () => [true] }));
+vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
 vi.mock('@expo-google-fonts/outfit/400Regular', () => ({ Outfit_400Regular: 1 }));
 vi.mock('@expo-google-fonts/outfit/700Bold', () => ({ Outfit_700Bold: 2 }));
 import { WidgetSetup } from './widget-setup';
@@ -590,6 +591,15 @@ it('Recent reconfiguration restores the opt-in only for its setup account', asyn
   ).toBe(false);
 });
 
+
+it.each([
+  ['light', 'dark'],
+  ['dark', 'light'],
+] as const)('keeps Person setup status-bar text readable in %s mode', async (mode, style) => {
+  appearance.mode = mode;
+  await render('Person');
+  expect(host('StatusBar').map((node) => node.props.style)).toEqual([style]);
+});
 it('chooses a Person from saved membership, distinguishing the same first name without fetching', async () => {
   const network = vi.spyOn(globalThis, 'fetch');
   store.read.mockResolvedValue({
