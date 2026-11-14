@@ -11,6 +11,7 @@ import {
   TRIP_SUMMARY_MAX_DAYS,
 } from './trip-summary';
 import { expenseDay } from './expense-day';
+import { counted, SEPARATOR } from './separator';
 import type { GroupCategory } from './types';
 
 export const HEADER_SCENE_IDS = ['beach', 'sakura', 'eco-city', 'mountain-village'] as const;
@@ -73,6 +74,22 @@ export function todayTripDay(dates: TripDates, today: string): number | null {
   return tripDayNumber(today, start);
 }
 
+/**
+ * The words beside a Trip's day squares, the same on the web and Android: where the Trip is
+ * today, how soon it starts, or that it is over. Null without both dates or the viewer's day.
+ */
+export function tripDayCaption(dates: TripDates, today: string): string | null {
+  const { start, end } = headerTripDays(dates);
+  // The viewer's day is unknown until their clock is read; say nothing rather than guess.
+  if (!start || !end || !today) return null;
+  const days = dayCount(start, end);
+  if (today > end) return `Trip over${SEPARATOR}${counted(days, 'day')}`;
+  const number = tripDayNumber(today, start);
+  if (number !== null) return `Day ${number} of ${days}`;
+  const wait = dayCount(today, start) - 1;
+  return wait === 1 ? 'Starts tomorrow' : `Starts in ${counted(wait, 'day')}`;
+}
+
 /** Card facts shared by the two renderers. Only a date-bounded Theme gets Trip facts. */
 export function headerCard(
   group: GroupCurrencyList &
@@ -101,6 +118,7 @@ export function headerCard(
                 ? daysBetween(start, end)
                 : [],
             today: todayTripDay(group, today),
+            caption: tripDayCaption(group, today),
           }
         : null,
   };

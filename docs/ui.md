@@ -326,6 +326,25 @@ is its Trip summary, #316); `GROUP_TABS` in `group-tabs.ts` lists them.
 - Members is read-only: names and roles, never an email. Role changes and
   leaving stay in Group settings.
 
+### Header scenes (`src/components/groups/header-scene/`)
+
+Only a Group page whose shared header rule selects Scene loads `GroupSceneHeader`.
+The Classic page, dashboard and landing Group cards do not load the renderer,
+scene styles or artwork. The renderer dynamically imports
+`@splitbook/shared/header-scenes/<id>` and the generated styles; the package's
+scene-folder export lets Webpack discover new generated files without a scene registry.
+Never edit the generated output: use [the scene tool](../tools/header-scenes/README.md).
+
+`HeaderSceneView` shows shared `headerCard` facts as text and `ScenePicture` maps
+portable vectors to inline SVG, with unique gradient ids for each instance. Scene
+colours and animation CSS are generated art; card and control styles use MUI tokens.
+The card follows the visual theme while the sky follows the selected time of day.
+At phone width the picture sits above the card. Trip-day squares are display only.
+
+The browser supplies its local day and hour after hydration, sampling them when the
+page opens or returns to view; there is no clock timer. Reduced motion stops all
+scene animations, transitions and pointer movement.
+
 ### Trip (`src/components/trip/`)
 
 | Component   | Description                                                       |

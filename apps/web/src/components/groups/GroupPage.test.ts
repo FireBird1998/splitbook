@@ -303,3 +303,21 @@ describe('the Group page around its tabs', () => {
     }
   });
 });
+
+it('keeps a stored scene on the Classic header while the feature is off', () => {
+  vi.stubEnv('NEXT_PUBLIC_HEADER_SCENES_ENABLED', 'false');
+  try {
+    read.group = {
+      ...groupRead('trip', 'Goa Friends Trip'),
+      header: { style: 'scene', scene: 'eco-city', time: 'night' },
+    };
+    const html = groupPage(`/groups/${GROUP}/expenses`, () =>
+      createElement('div', null, 'Expense list'),
+    );
+    expect(text(html)).toContain('Goa Friends Trip');
+    expect(html).not.toContain('data-header-scene');
+    expect(html).not.toContain('scene-picture');
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
