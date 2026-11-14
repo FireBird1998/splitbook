@@ -1,3 +1,4 @@
+import { PersonWidgetSetupScreen } from './person-widget-setup';
 import { mobileBuildSettings, widgetKey } from './config';
 import { useEffect, useState } from 'react';
 import {
@@ -46,7 +47,7 @@ const pendingChoices = new Map<
 >();
 const store = createWidgetsStore(widgetKey(mobileBuildSettings, __DEV__));
 /** Android configuration is deliberately independent of runtime.ts and its session/network reads. */
-export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreenProps) {
+function ExistingWidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreenProps) {
   const kind =
     widgetInfo.widgetName === 'Balances'
       ? 'balances'
@@ -652,5 +653,13 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
         </View>
       </SafeAreaView>
     </SafeAreaProvider>
+  );
+}
+
+export function WidgetSetup(props: WidgetConfigurationScreenProps) {
+  return props.widgetInfo.widgetName === 'Person' ? (
+    <PersonWidgetSetupScreen {...props} />
+  ) : (
+    <ExistingWidgetSetup {...props} />
   );
 }

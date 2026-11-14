@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 const device = vi.hoisted(() => ({
   database: undefined as DatabaseSync | undefined,
-  ids: { Balances: [10], Group: [20], Quick: [30] } as Record<string, number[]>,
+  ids: { Balances: [10], Group: [20], Quick: [30], Person: [40] } as Record<string, number[]>,
   unavailable: false,
 }));
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
@@ -22,6 +22,8 @@ vi.mock('expo-sqlite', async () => {
         execAsync: async (sql: string) => db.exec(sql),
         runAsync: async (sql: string, ...values: (number | string)[]) =>
           db.prepare(sql).run(...values),
+        getAllAsync: async (sql: string, ...values: (number | string)[]) =>
+          db.prepare(sql).all(...values),
         getFirstAsync: async (sql: string, ...values: (number | string)[]) =>
           db.prepare(sql).get(...values),
       };
@@ -41,7 +43,7 @@ import { reconcileWidgetSetups } from './widget-lifecycle';
 afterEach(() => {
   device.database?.close();
   device.database = undefined;
-  device.ids = { Balances: [10], Group: [20], Quick: [30] };
+  device.ids = { Balances: [10], Group: [20], Quick: [30], Person: [40] };
   device.unavailable = false;
   vi.unstubAllEnvs();
 });
@@ -55,11 +57,11 @@ const setup = (widgetId: number) => ({
 it('removes only orphan setup rows, keeping every live kind and other environments intact', async () => {
   const store = createWidgetsStore('local');
   const other = createWidgetsStore('other-local');
-  for (const id of [10, 20, 30, 99]) await store.saveSetup(setup(id));
+  for (const id of [10, 20, 30, 40, 99]) await store.saveSetup(setup(id));
   await other.saveSetup(setup(20));
   await other.saveSetup(setup(98));
   await reconcileWidgetSetups();
-  for (const id of [10, 20, 30]) expect(await store.setup(id)).toEqual(setup(id));
+  for (const id of [10, 20, 30, 40]) expect(await store.setup(id)).toEqual(setup(id));
   expect(await other.setup(20)).toEqual(setup(20));
   expect(await store.setup(99)).toBeNull();
   expect(await other.setup(98)).toBeNull();

@@ -23,6 +23,10 @@ it('generates provider bounds that allow four columns and two rows on the device
       join(process.cwd(), 'assets/widgets/quick-preview.png'),
       join(root, 'assets/widgets/quick-preview.png'),
     );
+    copyFileSync(
+      join(process.cwd(), 'assets/widgets/person-preview.png'),
+      join(root, 'assets/widgets/person-preview.png'),
+    );
     writeFileSync(
       join(root, 'android/app/src/main/AndroidManifest.xml'),
       '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:name=".MainApplication" /></manifest>',
@@ -78,6 +82,20 @@ it('generates provider bounds that allow four columns and two rows on the device
     expect(
       readFileSync(join(root, 'android/app/src/main/res/values/widget_balances.xml'), 'utf8'),
     ).toContain('Add an Expense or record a payment in one tap');
+
+    const personXml = readFileSync(
+      join(root, 'android/app/src/main/res/xml/widget_person.xml'),
+      'utf8',
+    );
+    expect(personXml).toContain('android:targetCellWidth="4" android:targetCellHeight="2"');
+    expect(personXml).toContain('android:minResizeWidth="110dp" android:minResizeHeight="110dp"');
+    expect(personXml).toContain('android:resizeMode="horizontal|vertical"');
+    expect(personXml).toContain('android:maxResizeHeight="640dp"');
+    expect(personXml).toContain('android:updatePeriodMillis="0"');
+    expect(personXml).toContain('android:widgetCategory="home_screen|not_keyguard"');
+    expect(
+      readFileSync(join(root, 'android/app/src/main/res/values/widget_balances.xml'), 'utf8'),
+    ).toContain('What’s between you and one person');
     const activity = readFileSync(
       join(root, 'android/app/src/main/java/com/splitbook/app/dev/widget/GroupConfiguration.java'),
       'utf8',
@@ -86,6 +104,7 @@ it('generates provider bounds that allow four columns and two rows on the device
       ['balances', 'Balances'],
       ['group', 'Group'],
       ['quick', 'Quick'],
+      ['person', 'Person'],
     ]) {
       const providerXml = readFileSync(
         join(root, `android/app/src/main/res/xml/widget_${kind}.xml`),

@@ -2,6 +2,8 @@ import { mobileBuildSettings, widgetKey } from './config';
 import { drawOverview } from './overview-widget-draw';
 import { drawQuick } from './quick-widget-draw';
 import { legacyBalancesSetup } from '@splitbook/shared/widget-setup';
+import { personWidget } from '@splitbook/shared/person-widget';
+import { drawPerson } from './person-widget-draw';
 import { drawGroup } from './group-widget-draw';
 // Narrow imports keep unused preview and setup UI out of the widget bundle.
 import { registerWidgetTaskHandler } from 'react-native-android-widget/src/api/register-widget-task-handler';
@@ -41,6 +43,27 @@ async function representation(info: WidgetInfo) {
         info.screenInfo.fontScale,
       ),
     };
+  }
+  if (info.widgetName === 'Person') {
+    const setup = await widgetStore.setup(info.widgetId);
+    const selected =
+      setup?.kind === 'person'
+        ? setup
+        : {
+            kind: 'person' as const,
+            widgetId: info.widgetId,
+            accountId: '',
+            person: { id: '', firstName: '', initials: '' },
+          };
+    const view = personWidget(
+      record.copy,
+      selected,
+      { width: info.width, height: info.height, pixelRatio: info.screenInfo.density },
+      record.session,
+      Date.now(),
+      info.screenInfo.fontScale,
+    );
+    return { light: drawPerson(view, lightTokens), dark: drawPerson(view, darkTokens) };
   }
   if (info.widgetName === 'Group') {
     const setup = await widgetStore.setup(info.widgetId);
@@ -101,7 +124,12 @@ const serializeDraw = (run: () => Promise<void>) => {
 export function redrawBalances() {
   return serializeDraw(async () => {
     const widgets = (
-      await Promise.all([getWidgetInfo('Balances'), getWidgetInfo('Group'), getWidgetInfo('Quick')])
+      await Promise.all([
+        getWidgetInfo('Balances'),
+        getWidgetInfo('Group'),
+        getWidgetInfo('Quick'),
+        getWidgetInfo('Person'),
+      ])
     ).flat();
     await Promise.all(
       widgets.map((info) =>
@@ -122,7 +150,7 @@ export function registerAndroidWidgets() {
       });
       return;
     }
-    if (!['Balances', 'Group', 'Quick'].includes(widgetInfo.widgetName)) return;
+    if (!['Balances', 'Group', 'Quick', 'Person'].includes(widgetInfo.widgetName)) return;
     await serializeDraw(async () => {
       if (widgetInfo.widgetName === 'Balances' && widgetAction === 'WIDGET_UPDATE') {
         const saved = await widgetStore.setup(widgetInfo.widgetId);

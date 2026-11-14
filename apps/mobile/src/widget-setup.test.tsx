@@ -17,6 +17,7 @@ vi.mock('react-native', async () => ({
 vi.mock('./widgets-native', () => ({ createWidgetsStore: () => store }));
 vi.mock('./widgets', () => ({ redrawBalances: redraw }));
 vi.mock('expo-font', () => ({ useFonts: () => [true] }));
+vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
 vi.mock('@expo-google-fonts/outfit/400Regular', () => ({ Outfit_400Regular: 1 }));
 vi.mock('@expo-google-fonts/outfit/700Bold', () => ({ Outfit_700Bold: 2 }));
 import { WidgetSetup } from './widget-setup';
@@ -77,7 +78,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 async function render(
-  kind: 'Quick' | 'Group' | 'Balances',
+  kind: 'Quick' | 'Group' | 'Balances' | 'Person',
   saved: WidgetSetupRecord | null = null,
 ) {
   store.setup.mockResolvedValue(saved);
@@ -588,4 +589,115 @@ it('Recent reconfiguration restores the opt-in only for its setup account', asyn
   expect(
     host('Switch').find((n) => n.props.accessibilityLabel === 'Show recent Expenses')!.props.value,
   ).toBe(false);
+});
+
+it.each([
+  ['light', 'dark'],
+  ['dark', 'light'],
+] as const)('keeps Person setup status-bar text readable in %s mode', async (mode, style) => {
+  appearance.mode = mode;
+  await render('Person');
+  expect(host('StatusBar').map((node) => node.props.style)).toEqual([style]);
+});
+it('chooses a Person from saved membership, distinguishing the same first name without fetching', async () => {
+  const network = vi.spyOn(globalThis, 'fetch');
+  store.read.mockResolvedValue({
+    copy: {
+      ...copy,
+      groupPeople: {
+        maple: {
+          name: 'Maple House',
+          archived: false,
+          verifiedAt: 1,
+          people: [
+            { id: 'alex', firstName: 'Alex', initials: 'AR' },
+            { id: 'sam', firstName: 'Sam', initials: 'SC' },
+            { id: 'other-sam', firstName: 'Sam', initials: 'ST' },
+          ],
+        },
+      },
+    },
+    session,
+  });
+  await render('Person');
+  expect(text()).toContain('Person widget');
+  expect(text()).toContain('People in your Groups');
+  const choices = host('Pressable').filter((n) => n.props.accessibilityRole === 'radio');
+  expect(choices.map((n) => n.props.accessibilityLabel)).toEqual([
+    'Sam C, Maple House',
+    'Sam T, Maple House',
+  ]);
+  await act(async () => choices[1].props.onPress());
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup).toHaveBeenCalledExactlyOnceWith({
+    kind: 'person',
+    widgetId: 989,
+    accountId: 'alex',
+    person: { id: 'other-sam', firstName: 'Sam', initials: 'ST' },
+    hideAmounts: false,
+  });
+  expect(network).not.toHaveBeenCalled();
+  network.mockRestore();
+});
+
+it('makes another account choose its own saved person before saving this Person widget again', async () => {
+  const saved: WidgetSetupRecord = {
+    kind: 'person',
+    widgetId: 989,
+    accountId: 'someone-else',
+    person: { id: 'old', firstName: 'Secret', initials: 'SS' },
+  };
+  store.read.mockResolvedValue({
+    copy: {
+      ...copy,
+      groupPeople: {
+        maple: {
+          name: 'Maple House',
+          archived: false,
+          verifiedAt: 1,
+          people: [{ id: 'sam', firstName: 'Sam', initials: 'SC' }],
+        },
+      },
+    },
+    session,
+  });
+  await render('Person', saved);
+  expect(text()).not.toContain('Secret');
+  expect(text()).toContain('Choose a person for this account.');
+  expect(button().props.disabled).toBe(true);
+  const radio = host('Pressable').find((n) => n.props.accessibilityRole === 'radio')!;
+  expect(radio.props.accessibilityState.checked).toBe(false);
+  await act(async () => radio.props.onPress());
+  expect(button().props.disabled).toBe(false);
+  expect(textOf(button())).toBe('Save');
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup).toHaveBeenCalledExactlyOnceWith({
+    kind: 'person',
+    widgetId: 989,
+    accountId: 'alex',
+    person: { id: 'sam', firstName: 'Sam', initials: 'SC' },
+    hideAmounts: false,
+  });
+});
+it('rechecks saved membership when confirming Person setup and refuses a person who has gone', async () => {
+  store.read.mockResolvedValue({
+    copy: {
+      ...copy,
+      groupPeople: {
+        maple: {
+          name: 'Maple House',
+          archived: false,
+          verifiedAt: 1,
+          people: [{ id: 'sam', firstName: 'Sam', initials: 'SC' }],
+        },
+      },
+    },
+    session,
+  });
+  await render('Person');
+  store.read.mockResolvedValue({ copy: { ...copy, groupPeople: {} }, session });
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup).not.toHaveBeenCalled();
+  expect(text()).toContain('Choose a saved person for this account.');
+  expect(text()).not.toContain('Sam');
 });

@@ -2,7 +2,29 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { lightTokens as t, darkTokens } from '@splitbook/shared/design-tokens';
 
+async function generatePersonPreview() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="720" height="448">
+<rect width="720" height="448" rx="48" fill="${t.surface}"/>
+<rect x="28" y="28" width="64" height="64" rx="20" fill="${t.brand.bg}"/>
+<g font-family="sans-serif" fill="${t.text}">
+<text x="42" y="70" font-size="24" font-weight="bold" fill="${t.brand.main}">SC</text>
+<text x="110" y="55" font-size="28" font-weight="bold">Sam</text>
+<text x="110" y="85" font-size="20" fill="${t.textSecondary}">3 Groups together</text>
+<text x="540" y="55" font-size="20" fill="${t.textMuted}">Saved 9:41</text>
+<rect x="28" y="120" width="664" height="300" rx="28" fill="${t.surfaceMuted}"/>
+<text x="48" y="181" font-size="26">You pay Sam</text><text x="48" y="217" font-size="22" fill="${t.textSecondary}">Maple House</text>
+<text x="510" y="197" font-size="26" font-family="monospace">₹420.00</text>
+<path d="M28 270h664" stroke="${t.border}"/>
+<text x="48" y="329" font-size="26">Sam pays you</text><text x="48" y="365" font-size="22" fill="${t.textSecondary}">Lisbon &amp; Tokyo</text>
+<text x="530" y="345" font-size="26" font-family="monospace" fill="${t.status.positive}">€40.00</text>
+</g></svg>`;
+  await sharp(Buffer.from(svg))
+    .png()
+    .toFile(new URL('../assets/widgets/person-preview.png', import.meta.url).pathname);
+}
 async function generate() {
+  await generatePersonPreview();
+  if (process.argv.includes('--person-only')) return;
   const output = new URL('../assets/widgets/', import.meta.url);
   await mkdir(output, { recursive: true });
   const master = await readFile(

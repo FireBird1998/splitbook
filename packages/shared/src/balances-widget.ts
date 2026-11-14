@@ -1,6 +1,7 @@
 import { dayKeyInZone } from './zoned-calendar';
 import type { WidgetGroupPart, WidgetMonthPart, WidgetRecentPart } from './group-widget';
 import type { GroupCategory } from './types';
+import type { WidgetGroupPeople } from './widget-people';
 /** Saved read available to the Android widget renderer, never a live balance. */
 export interface WidgetCopy {
   version: 1;
@@ -17,6 +18,11 @@ export interface WidgetCopy {
   /** Active Tags from Group reads already made by the app, in their read order. */
   tags?: Record<string, { verifiedAt: number; rows: { id: string; name: string }[] }>;
   recents?: Record<string, WidgetRecentPart>;
+
+  /** Membership reads have their own age; they do not depend on a Balances read. */
+  groupPeople?: Record<string, WidgetGroupPeople>;
+  /** Refusal fences for Person membership restored from older saved reads. */
+  peopleRefusedAt?: Record<string, number>;
   lostGroupIds?: string[];
   savedGroups?: {
     verifiedAt: number;

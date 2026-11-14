@@ -1,3 +1,4 @@
+import { widgetPeople } from '@splitbook/shared/widget-people';
 import { openDatabaseAsync, defaultDatabaseDirectory, type SQLiteDatabase } from 'expo-sqlite';
 import { readWidgetTagIds, type WidgetSetupRecord } from '@splitbook/shared/widget-setup';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
@@ -69,6 +70,24 @@ export function createWidgetsStore(environment: string) {
     await db.runAsync('INSERT OR IGNORE INTO widget_state(environment) VALUES (?)', environment);
     return db;
   };
+  const saveSetup = async (setup: WidgetSetupRecord, overwrite: boolean) => {
+    await (
+      await database()
+    ).runAsync(
+      `WITH incoming(environment, widget_id, setup) AS (VALUES (?, ?, ?))
+       INSERT OR ${overwrite ? 'REPLACE' : 'IGNORE'} INTO widget_setup(environment, widget_id, setup)
+       SELECT environment, widget_id,
+         CASE WHEN json_extract(incoming.setup, '$.kind') = 'person' AND NOT EXISTS (
+           SELECT 1 FROM widget_state WHERE widget_state.environment = incoming.environment
+             AND json_extract(session, '$.status') = 'authenticated'
+             AND json_extract(session, '$.accountId') = json_extract(incoming.setup, '$.accountId')
+         ) THEN json_remove(incoming.setup, '$.person.firstName', '$.person.initials')
+         ELSE incoming.setup END FROM incoming`,
+      environment,
+      setup.widgetId,
+      JSON.stringify(setup),
+    );
+  };
   return {
     async recentGroups(accountId: string, activeIds: number[]) {
       const rows = await (
@@ -120,26 +139,8 @@ export function createWidgetsStore(environment: string) {
         ? { ...setup, tagIds: readWidgetTagIds(setup.tagIds) }
         : setup;
     },
-    async saveSetup(setup: WidgetSetupRecord) {
-      await (
-        await database()
-      ).runAsync(
-        'INSERT OR REPLACE INTO widget_setup(environment, widget_id, setup) VALUES (?, ?, ?)',
-        environment,
-        setup.widgetId,
-        JSON.stringify(setup),
-      );
-    },
-    async saveSetupIfAbsent(setup: WidgetSetupRecord) {
-      await (
-        await database()
-      ).runAsync(
-        'INSERT OR IGNORE INTO widget_setup(environment, widget_id, setup) VALUES (?, ?, ?)',
-        environment,
-        setup.widgetId,
-        JSON.stringify(setup),
-      );
-    },
+    saveSetup: (setup: WidgetSetupRecord) => saveSetup(setup, true),
+    saveSetupIfAbsent: (setup: WidgetSetupRecord) => saveSetup(setup, false),
     async removeSetup(widgetId: number) {
       await (await database()).runAsync('DELETE FROM widget_setup WHERE widget_id = ?', widgetId);
     },
@@ -202,6 +203,33 @@ export function createWidgetsStore(environment: string) {
         JSON.stringify(copy),
         environment,
       );
+      // This write is admitted by the controller's account lease. Refill only this
+      // environment/account's chosen people, from the trusted membership it knows.
+      const people = new Map(
+        widgetPeople(copy, copy.accountId).map((person) => [person.id, person]),
+      );
+      const setups = await db.getAllAsync<{ widget_id: number; person_id: string }>(
+        `SELECT widget_id, json_extract(setup, '$.person.id') AS person_id FROM widget_setup
+         WHERE environment = ? AND json_valid(setup) AND json_extract(setup, '$.kind') = 'person'
+           AND json_extract(setup, '$.accountId') = ?`,
+        environment,
+        copy.accountId,
+      );
+      for (const setup of setups) {
+        const person = people.get(setup.person_id);
+        if (!person) continue;
+        await db.runAsync(
+          `UPDATE widget_setup SET setup = json_set(setup, '$.person.firstName', ?, '$.person.initials', ?)
+           WHERE environment = ? AND widget_id = ? AND json_extract(setup, '$.accountId') = ?
+             AND json_extract(setup, '$.person.id') = ?`,
+          person.firstName,
+          person.initials,
+          environment,
+          setup.widget_id,
+          copy.accountId,
+          person.id,
+        );
+      }
     },
     async clear() {
       if (!opening) {
@@ -210,7 +238,13 @@ export function createWidgetsStore(environment: string) {
       }
       await (
         await database()
-      ).runAsync('DELETE FROM widget_state WHERE environment = ?', environment);
+      ).withExclusiveTransactionAsync(async (transaction) => {
+        // Placement preferences survive a purge; personal labels do not, in any build.
+        await transaction.runAsync(`UPDATE widget_setup
+          SET setup = json_remove(setup, '$.person.firstName', '$.person.initials')
+          WHERE json_valid(setup) AND json_extract(setup, '$.kind') = 'person'`);
+        await transaction.runAsync('DELETE FROM widget_state WHERE environment = ?', environment);
+      });
     },
     async setSession(session: WidgetSession) {
       await (
@@ -233,6 +267,7 @@ export function createWidgetsNative(environment: string): WidgetsNative {
   const store = createWidgetsStore(environment);
   let sessions: Promise<void> = Promise.resolve();
   return {
+    readCopy: async () => (await store.read()).copy,
     recentSelections: async (accountId) => {
       const { getWidgetInfo } = await import('react-native-android-widget/src/api/get-widget-info');
       const activeIds = (await getWidgetInfo('Group')).map((widget) => widget.widgetId);

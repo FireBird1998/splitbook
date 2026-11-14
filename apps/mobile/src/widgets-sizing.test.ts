@@ -7,6 +7,7 @@ const native = vi.hoisted(() => ({
   getWidgetInfo: vi.fn(),
 }));
 vi.mock('./config', () => ({ mobileBuildSettings: {}, widgetKey: () => 'development' }));
+vi.mock('./person-widget-draw', () => ({ drawPerson: vi.fn() }));
 vi.mock('./group-widget-draw', () => ({ drawGroup: native.drawGroup }));
 vi.mock('./overview-widget-draw', () => ({ drawOverview: vi.fn() }));
 vi.mock('./quick-widget-draw', () => ({ drawQuick: native.drawQuick }));

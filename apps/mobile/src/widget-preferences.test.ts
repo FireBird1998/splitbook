@@ -1,35 +1,42 @@
-import { expect, it, vi } from 'vitest';
-// SQLite is the native edge. Keep its rows across new store instances, as on a process restart.
-const rows = vi.hoisted(() => ({
-  setups: new Map<string, string>(),
-  sessions: new Map<string, string>(),
-}));
-vi.mock('expo-sqlite', () => ({
-  openDatabaseAsync: async () => ({
-    execAsync: async () => {},
-    runAsync: async (sql: string, environment: string, id?: number | string, value?: string) => {
-      if (sql.startsWith('INSERT OR REPLACE INTO widget_setup'))
-        rows.setups.set(`${environment}/${id}`, value!);
-      if (
-        sql.startsWith('INSERT OR IGNORE INTO widget_setup') &&
-        !rows.setups.has(`${environment}/${id}`)
-      )
-        rows.setups.set(`${environment}/${id}`, value!);
-      if (sql === 'DELETE FROM widget_setup WHERE widget_id = ?')
-        for (const key of rows.setups.keys())
-          if (key.endsWith(`/${environment}`)) rows.setups.delete(key);
-      if (sql.startsWith('UPDATE widget_state SET session'))
-        rows.sessions.set(String(id), environment);
-      if (sql.startsWith('DELETE FROM widget_state')) rows.sessions.delete(environment);
+import { afterEach, expect, it, vi } from 'vitest';
+import type { DatabaseSync } from 'node:sqlite';
+// The native SQLite boundary keeps actual rows across store instances.
+const edge = vi.hoisted(() => ({ db: undefined as DatabaseSync | undefined }));
+vi.mock('expo-sqlite', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  return {
+    defaultDatabaseDirectory: '/device/SQLite',
+    openDatabaseAsync: async () => {
+      const db = (edge.db ??= new DatabaseSync(':memory:'));
+      const runAsync = async (sql: string, ...values: (number | string | null)[]) =>
+        db.prepare(sql).run(...values);
+      return {
+        execAsync: async (sql: string) => db.exec(sql),
+        runAsync,
+        getFirstAsync: async (sql: string, ...values: (number | string | null)[]) =>
+          db.prepare(sql).get(...values),
+        getAllAsync: async (sql: string, ...values: (number | string | null)[]) =>
+          db.prepare(sql).all(...values),
+        withExclusiveTransactionAsync: async (
+          task: (transaction: { runAsync: typeof runAsync }) => Promise<void>,
+        ) => {
+          db.exec('BEGIN IMMEDIATE');
+          try {
+            await task({ runAsync });
+            db.exec('COMMIT');
+          } catch (error) {
+            db.exec('ROLLBACK');
+            throw error;
+          }
+        },
+      };
     },
-    getFirstAsync: async (sql: string, environment: string, id?: number) =>
-      sql.includes('widget_setup')
-        ? rows.setups.has(`${environment}/${id}`)
-          ? { setup: rows.setups.get(`${environment}/${id}`) }
-          : null
-        : { copy: null, session: rows.sessions.get(environment) ?? null },
-  }),
-}));
+  };
+});
+afterEach(() => {
+  edge.db?.close();
+  edge.db = undefined;
+});
 import { createWidgetsStore } from './widgets-native';
 it('keeps per-widget preferences through a restart, expiry and account purge, until Android removes that widget', async () => {
   const original = createWidgetsStore('local');

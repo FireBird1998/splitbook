@@ -51,11 +51,11 @@ Server data stored on a member's device so a Group can be shown offline. It alwa
 _Avoid_: cache (in product copy), offline data, local data
 
 **Widget copy**:
-The Saved copy a home-screen widget draws from. It holds what the widgets show, including balances, Group names, own Suggested payments, first names and initials, To review counts, Trip dates and current-Month totals per currency with the member's available share. Each part keeps its read's verification time. Recent Expense descriptions, payer and payee first names, amounts and day are held only for Groups where a placed widget has Show recent Expenses on, and are deleted when the last such widget is turned off or removed. The Saved copy purge rules cover every part, including descriptions.
+The Saved copy a home-screen widget draws from. It holds what the widgets show, including balances, Group names, own Suggested payments, each read Group’s people (id, first name and initials), To review counts, Trip dates and current-Month totals per currency with the member's available share. Each part keeps its read's verification time. Recent Expense descriptions, payer and payee first names, amounts and day are held only for Groups where a placed widget has Show recent Expenses on, and are deleted when the last such widget is turned off or removed. The Saved copy purge rules cover every part, including descriptions.
 _Avoid_: widget cache, widget data
 
 **Widget setup**:
-A member's choices for one placed widget, including its Group (or Ask each time, for Add expense), Hide amounts and Show recent Expenses for a Group widget, which is off by default. Hide amounts also hides descriptions. It belongs to the device: it is kept through sign-out and removed when the widget is removed. Another account must set the widget up again.
+A member's choices for one placed widget, including its Group (or Ask each time, for Add expense), or its person id, Hide amounts and Show recent Expenses for a Group widget, which is off by default. Hide amounts also hides descriptions. It belongs to the device: it is kept through sign-out and removed when the widget is removed. The Person choice may keep its first name and initials while signed in; sign-out and account change strip them while keeping the id, switches and setup account. A 401 keeps the labels hidden. Another account must set the widget up again.
 _Avoid_: widget settings, widget configuration
 
 **Expense entry**:
