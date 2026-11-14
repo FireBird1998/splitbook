@@ -3388,3 +3388,43 @@ it('never writes a pre-refusal widget snapshot after a native read finishes late
     held.release();
   }
 });
+
+it.each(['archived', 'pending'] as const)(
+  'dates the catalogue by its latest trusted list while retaining an omitted %s Group',
+  async (state) => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(verified),
+      f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await c.back();
+    await vi.waitFor(() => expect(f.record().copy?.savedGroups?.verifiedAt).toBe(verified));
+    const oldList = await f.phone.stores.savedQueries.load(alex.id, '/api/groups');
+    f.listGroups([]);
+    if (state === 'archived') f.archive();
+    else
+      f.backend.reply('GET', `/api/groups/${groupId}`, () =>
+        Response.json({ error: 'Failed' }, { status: 500 }),
+      );
+    clock.mockReturnValue(verified + 60_000);
+    await c.refresh('pull');
+    await vi.waitFor(() =>
+      expect(f.record().copy?.savedGroups).toMatchObject({
+        verifiedAt: verified + 60_000,
+        rows: [{ id: groupId, archived: state === 'archived' }],
+      }),
+    );
+    c.dispose();
+    await f.phone.stores.savedQueries.save(alex.id, '/api/groups', oldList);
+    f.offline();
+    const restarted = f.make();
+    await restarted.restore();
+    expect(f.record().copy?.savedGroups?.verifiedAt).toBe(verified + 60_000);
+    f.online();
+    clock.mockReturnValue(verified + 120_000);
+    await restarted.refresh('pull');
+    await vi.waitFor(() =>
+      expect(f.record().copy?.savedGroups?.verifiedAt).toBe(verified + 120_000),
+    );
+  },
+);

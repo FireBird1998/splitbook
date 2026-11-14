@@ -1396,7 +1396,7 @@ it('does not restore refused Person membership from the old saved list on an off
     const restarted = phone.open();
     await restarted.restore();
     await vi.waitFor(async () =>
-      expect((await store.read()).copy?.savedGroups?.rows.some((g) => g.id === groupId)).toBe(true),
+      expect((await store.read()).copy?.savedGroups?.rows.some((g) => g.id === groupId)).toBe(false),
     );
     expect((await store.read()).copy?.home).toBeNull();
     expect((await store.read()).copy?.groups?.[groupId]).toBeUndefined();

@@ -146,7 +146,7 @@ export function createWidgetCopy(
     const included = new Set(rows.map((row) => row.id));
     const omitted = previous?.rows.filter((row) => !included.has(row.id)) ?? [];
     savedGroups = {
-      verifiedAt: omitted.length ? Math.min(previous!.verifiedAt, verifiedAt) : verifiedAt,
+      verifiedAt,
       rows: [...rows, ...omitted]
         .filter((row) => !lost.has(row.id))
         .map((row) => ({ ...row, archived: row.archived || archived.has(row.id) })),
@@ -205,10 +205,11 @@ export function createWidgetCopy(
       if (previous.savedGroups && trusted('/api/groups', previous.savedGroups.verifiedAt)) {
         const current = savedGroups;
         savedGroups = previous.savedGroups;
-        rememberCatalogue(
-          current?.rows ?? [],
-          current?.verifiedAt ?? previous.savedGroups.verifiedAt,
-        );
+        if (
+          current &&
+          (groupsRead()?.source === 'network' || current.verifiedAt >= savedGroups.verifiedAt)
+        )
+          rememberCatalogue(current.rows, current.verifiedAt);
       }
     }
     const read = async (path: string) => {
@@ -220,7 +221,7 @@ export function createWidgetCopy(
     if (list) {
       for (const group of parseGroups(list.value)) rememberPeople(group, list.refreshedAt);
     }
-    if (list)
+    if (list && (!savedGroups || list.refreshedAt >= savedGroups.verifiedAt))
       rememberCatalogue(
         parseGroups(list.value)
           .filter((g) => !lost.has(g.id))
@@ -314,7 +315,14 @@ export function createWidgetCopy(
       if (snapshot.groups.loaded && listed && trusted('/api/groups', listed.refreshedAt)) {
         for (const group of parseGroups(listed.value)) rememberPeople(group, listed.refreshedAt);
       }
-      if (snapshot.groups.loaded && listed && trusted('/api/groups', listed.refreshedAt))
+      if (
+        snapshot.groups.loaded &&
+        listed &&
+        trusted('/api/groups', listed.refreshedAt) &&
+        (listed.source === 'network' ||
+          !savedGroups ||
+          listed.refreshedAt >= savedGroups.verifiedAt)
+      )
         rememberCatalogue(
           parseGroups(listed.value).map((g) => ({
             id: g.id,
