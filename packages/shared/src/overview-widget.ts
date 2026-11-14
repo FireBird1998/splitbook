@@ -568,6 +568,8 @@ export function overviewWidget(
         actionPaddingVertical,
         actionPaddingHorizontal,
         footerAcross,
+        footerActionAlign:
+          !footerAcross && leadingHeight ? ('flex-start' as const) : ('flex-end' as const),
         waitingAcross,
         finishLater,
         footerNote,

@@ -439,3 +439,28 @@ it('draws Nothing saved yet as a left-aligned text block without an icon', () =>
     'Open Splitbook to load your balances, payments and Groups.',
   );
 });
+
+it.each([360, 720])(
+  'aligns the large-text footer on one line when it fits, otherwise at the left at %s dp',
+  (width) => {
+    vi.stubGlobal('__DEV__', false);
+    const v = overviewWidget(
+      { ...withPayments, review: { count: 3, verifiedAt: now } },
+      { kind: 'balances', widgetId: 7 },
+      { width, height: 584 },
+      auth,
+      now,
+      2,
+    );
+    const tree = buildWidgetTree(drawOverview(v, lightTokens));
+    const section = tree.children![v.layout.sections.findIndex((s) => s.id === 'footer')];
+    const footer = section.children![0];
+    expect((footer.props as { orientation: string }).orientation).toBe(
+      width === 720 ? 'HORIZONTAL' : 'VERTICAL',
+    );
+    if (width === 360) {
+      const action = footer.children!.at(-1)!;
+      expect((action.props as { gravity: number }).gravity & 7).toBe(3);
+    }
+  },
+);

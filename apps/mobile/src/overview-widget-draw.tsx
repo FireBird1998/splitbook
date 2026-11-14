@@ -208,7 +208,10 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
     ) : null;
   const action = view.action ? (
     <FlexWidget
-      style={{ ...(l.footerAcross ? {} : { width: 'match_parent' }), alignItems: 'flex-end' }}
+      style={{
+        ...(l.footerAcross ? {} : { width: 'match_parent' }),
+        alignItems: l.footerActionAlign,
+      }}
     >
       <FlexWidget
         clickAction="OPEN_URI"
