@@ -139,7 +139,7 @@ export function notificationControls(d: {
     void cleanup.catch(() => undefined);
     return cleanup;
   };
-  let retry: (() => Promise<void>) | null = null;
+  let retry: (() => Promise<unknown>) | null = null;
   const active = (owner: number, task: number) =>
     d.current(owner) && operation === task && d.authenticated();
   const set = (status: NotificationControls['status'], message = '') =>
@@ -157,25 +157,32 @@ export function notificationControls(d: {
         : 'Couldn’t confirm notification settings. Retry.',
     );
   };
-  const read = async () => {
-    if (!d.native || !d.authenticated() || d.state().status === 'pending') return;
-    const owner = d.owner(),
-      task = ++operation;
+  let reading: {
+    owner: number;
+    settle: (confirmed: boolean | PromiseLike<boolean>) => void;
+  } | null = null;
+  const retireRead = () => {
+    reading?.settle(false);
+    reading = null;
+  };
+  const confirmRead = async (owner: number, task: number): Promise<boolean> => {
+    const native = d.native;
+    if (!native) return false;
     set('loading');
     try {
       await cleanup;
-      if (!active(owner, task)) return;
-      const installation = await d.native.installation();
-      if (!active(owner, task)) return;
+      if (!active(owner, task)) return false;
+      const installation = await native.installation();
+      if (!active(owner, task)) return false;
       const value = await d.request(
         '/api/notifications/device?installationId=' + installation.id,
         owner,
         { installationKey: installation.key },
       );
-      if (!active(owner, task)) return;
+      if (!active(owner, task)) return false;
       const confirmed = result(value);
-      const permission = await d.native.permission();
-      if (!active(owner, task)) return;
+      const permission = await native.permission();
+      if (!active(owner, task)) return false;
       d.publish({
         confirmed,
         hasConfirmed: true,
@@ -183,11 +190,35 @@ export function notificationControls(d: {
         message: confirmed.enabled && permission !== 'granted' ? blockedMessage : '',
       });
       retry = null;
+      return true;
     } catch (error) {
       if (active(owner, task)) {
         retry = read;
         failed(error);
       }
+    }
+    return false;
+  };
+  /** Fresh controls may come from this read or a newer read in the same session.
+   * Changes and resets retire the chain; forwarding never sends another request. */
+  const read = async (): Promise<boolean> => {
+    if (!d.native || !d.authenticated() || d.state().status === 'pending') return false;
+    const owner = d.owner(),
+      task = ++operation;
+    let settle!: NonNullable<typeof reading>['settle'];
+    const confirmation = new Promise<boolean>((resolve) => {
+      settle = resolve;
+    });
+    const previous = reading;
+    const pending = { owner, settle };
+    reading = pending;
+    // Resolving with the newer promise locks out the older request's eventual outcome.
+    previous?.settle(previous.owner === owner ? confirmation : false);
+    void confirmRead(owner, task).then(settle, () => settle(false));
+    try {
+      return await confirmation;
+    } finally {
+      if (reading === pending) reading = null;
     }
   };
   /** Resume Settings without reading or changing the server's confirmed registration. */
@@ -218,6 +249,7 @@ export function notificationControls(d: {
     explicit = false,
   ) => {
     if (!d.native || !d.authenticated() || d.state().status === 'pending') return;
+    retireRead();
     const requestedBy = d.owner();
     const repeat = async () => {
       await read();
@@ -413,6 +445,7 @@ export function notificationControls(d: {
     },
     maintain,
     reset: () => {
+      retireRead();
       operation++;
       stopMaintenance();
       maintenanceWanted = false;
