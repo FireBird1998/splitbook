@@ -445,11 +445,7 @@ Its setup reads only the Widget copy. Group-list and Group reads populate
 `groupPeople`, keyed by Group, with a verification time and each member’s id,
 first name and initials. Membership is independent of the saved Balances part,
 so setup can offer anyone in a shared active Group without another request. Old
-copies without this optional field need an app read; there is no migration. A newer
-trusted Groups list prunes omitted people parts. Person also filters older parts
-against that list when reading. Optional `peopleRefusedAt` timestamps in the Widget
-copy fence old saved membership across restarts; a newer trusted Group read retires
-the fence. Other widgets keep their existing list and refusal rules.
+copies without this optional field need an app read; there is no migration. A trusted Groups-list omission prompts a live Group confirmation in the running app, sequentially and at most once per Group per list read. Until an authoritative refusal, widget parts and catalogue rows stay. An archive refusal keeps the Group's verified final state. Offline, timeout and other failures change nothing and wait for the next trusted list. Optional `peopleRefusedAt` timestamps fence refused parts across restarts; a newer trusted Group read clears the fence. Widgets and setup still never fetch.
 
 A Person setup keeps the chosen id for its account. It may keep the first name and
 initials while signed in; sign-out and account change strip those labels before the

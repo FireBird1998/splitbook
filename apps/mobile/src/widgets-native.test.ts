@@ -1331,6 +1331,10 @@ it('does not restore refused Person membership from the old saved list on an off
   const server = fakeSplitbook(),
     environment = 'person-refused';
   const groupId = server.world.groups[0]._id;
+  server.world.home = {
+    buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0, net: -30 }],
+    groups: [{ groupId, balances: [{ currency: 'INR', balance: -30 }] }],
+  };
   const store = createWidgetsStore(environment),
     adapter = createWidgetsNative(environment);
   let redraws = 0;
@@ -1357,6 +1361,15 @@ it('does not restore refused Person membership from the old saved list on an off
       server.world.people.alex.id,
       '/api/groups',
     );
+    await vi.waitFor(async () =>
+      expect((await store.read()).copy?.home?.byGroup?.[groupId]).toEqual([
+        { currency: 'INR', balanceMinor: -3000 },
+      ]),
+    );
+    const savedHome = await phone.stores.savedQueries.load(
+      server.world.people.alex.id,
+      '/api/user/balances',
+    );
     await first.openGroup(groupId);
     await vi.waitFor(async () =>
       expect((await store.read()).copy?.groupPeople?.[groupId]).toBeDefined(),
@@ -1365,19 +1378,30 @@ it('does not restore refused Person membership from the old saved list on an off
     server.reply('GET', `/api/groups/${groupId}`, () =>
       Response.json({ error: 'Not a member' }, { status: 403 }),
     );
-    await first.openGroup(groupId, false);
+    await first.back();
+    server.reply('GET', '/api/groups', () => Response.json({ status: 200, data: [] }));
+    await first.refresh('pull');
     await vi.waitFor(async () =>
       expect((await store.read()).copy?.lostGroupIds).toContain(groupId),
     );
     first.dispose();
     // Surviving disk state when the process ends before a replacement list is saved.
     await phone.stores.savedQueries.save(server.world.people.alex.id, '/api/groups', savedList);
+    await phone.stores.savedQueries.save(
+      server.world.people.alex.id,
+      '/api/user/balances',
+      savedHome,
+    );
     server.online = false;
     const restarted = phone.open();
     await restarted.restore();
     await vi.waitFor(async () =>
       expect((await store.read()).copy?.savedGroups?.rows.some((g) => g.id === groupId)).toBe(true),
     );
+    expect((await store.read()).copy?.home?.byGroup?.[groupId]).toBeUndefined();
+    expect((await store.read()).copy?.groups?.[groupId]).toBeUndefined();
+    expect((await store.read()).copy?.tags?.[groupId]).toBeUndefined();
+    expect((await store.read()).copy?.lostGroupIds).toContain(groupId);
     expect((await store.read()).copy?.groupPeople?.[groupId]).toBeUndefined();
     expect(widgetPeople((await store.read()).copy, server.world.people.alex.id)).toEqual([]);
     const before = redraws;
@@ -1401,3 +1425,179 @@ it('does not restore refused Person membership from the old saved list on an off
     phone.dispose();
   }
 });
+
+it.each([
+  ['Home', 'success'],
+  ['Finish later', 'success'],
+  ['Home', '500'],
+  ['Finish later', '500'],
+] as const)(
+  'confirms an omitted Group held only by a cold native %s part (%s), retaining it until the answer',
+  async (part, outcome) => {
+    vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
+    const server = fakeSplitbook(),
+      environment = 'confirm-cold-' + part,
+      accountId = server.world.people.alex.id,
+      groupId = server.world.groups[0]._id;
+    const store = createWidgetsStore(environment),
+      adapter = createWidgetsNative(environment);
+    const phone = testPhone(server, {
+      now: homeTime,
+      parts: { widgets: { ...adapter, redraw: async () => {} } },
+    });
+    let homeHold: ReturnType<typeof server.hold> | undefined,
+      groupHold: ReturnType<typeof server.hold> | undefined;
+    try {
+      const first = phone.open();
+      await first.signIn('alex');
+      if (part === 'Finish later') {
+        await first.openGroup(groupId);
+        await first.openExpense(groupId);
+        await first.updateExpenseDraft({ description: 'Unfinished groceries', amount: '123' });
+        await first.closeExpense(true);
+        await first.back();
+      }
+      first.dispose();
+      await phone.stores.savedQueries.clear();
+      const saved: WidgetCopy = {
+        version: 1,
+        accountId,
+        home:
+          part === 'Home'
+            ? {
+                verifiedAt: homeTime - 1000,
+                groupCount: 1,
+                byGroup: { [groupId]: [{ currency: 'INR', balanceMinor: -3000 }] },
+                currencies: [{ currency: 'INR', owedMinor: 0, oweMinor: 3000 }],
+              }
+            : null,
+        ...(part === 'Finish later' ? { finishLater: { groupId, groupName: 'Maple House' } } : {}),
+      };
+      await store.write(saved);
+      server.reply('GET', '/api/groups', () => Response.json({ status: 200, data: [] }));
+      if (outcome === '500')
+        server.reply(
+          'GET',
+          `/api/groups/${groupId}`,
+          () => Response.json({ error: 'Failed' }, { status: 500 }),
+          { once: true },
+        );
+      homeHold = server.hold('GET', '/api/user/balances');
+      groupHold = server.hold('GET', `/api/groups/${groupId}`);
+      const start = server.requests.length,
+        restarted = phone.open(),
+        restoring = restarted.restore();
+      await vi.waitFor(() =>
+        expect(
+          server.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`),
+        ).toHaveLength(1),
+      );
+      if (part === 'Home')
+        expect((await store.read()).copy?.home?.byGroup?.[groupId]).toEqual([
+          { currency: 'INR', balanceMinor: -3000 },
+        ]);
+      else expect((await store.read()).copy?.finishLater).toEqual(saved.finishLater);
+      groupHold.release();
+      homeHold.release();
+      await restoring;
+      if (outcome === '500') {
+        await restarted.refresh('pull');
+        expect(
+          server.requests.slice(start).filter((r) => r.path === `/api/groups/${groupId}`),
+        ).toHaveLength(2);
+      }
+      if (part === 'Finish later')
+        await vi.waitFor(async () =>
+          expect((await store.read()).copy?.finishLater).toEqual(saved.finishLater),
+        );
+      expect((await store.read()).copy?.lostGroupIds).not.toContain(groupId);
+    } finally {
+      groupHold?.release();
+      homeHold?.release();
+      phone.dispose();
+    }
+  },
+);
+
+it.each([false, true])(
+  'does not resurrect quarantined native figures or Tags with archived=%s while a durable Tag save is unresolved at cold restore',
+  async (archived) => {
+    const server = fakeSplitbook(),
+      environment = 'confirm-untrusted',
+      accountId = server.world.people.alex.id,
+      groupId = server.world.groups[0]._id;
+    const tagId = 'e00000000000000000000001';
+    server.reply('GET', `/api/groups/${groupId}`, () =>
+      Response.json({
+        status: 200,
+        data: {
+          ...server.world.groups[0],
+          tags: [
+            {
+              _id: tagId,
+              name: 'Groceries',
+              isArchived: false,
+              revision: 0,
+              createdAt: new Date(homeTime).toISOString(),
+            },
+          ],
+        },
+      }),
+    );
+    const store = createWidgetsStore(environment),
+      adapter = createWidgetsNative(environment);
+    const phone = testPhone(server, {
+      now: homeTime,
+      parts: { widgets: { ...adapter, redraw: async () => {} } },
+    });
+    try {
+      const first = phone.open();
+      await first.signIn('alex');
+      await first.openGroup(groupId);
+      await vi.waitFor(async () =>
+        expect((await store.read()).copy?.groups?.[groupId]).toBeDefined(),
+      );
+      expect((await store.read()).copy?.tags?.[groupId]).toBeDefined();
+      if (archived) {
+        const saved = (await store.read()).copy!;
+        await store.write({
+          ...saved,
+          groups: { [groupId]: { ...saved.groups![groupId], archived: true } },
+          months: {
+            [groupId]: {
+              month: '2026-11',
+              verifiedAt: homeTime,
+              count: 12,
+              mainCurrency: 'INR',
+              mainCurrencyOnly: true,
+              totals: [{ currency: 'INR', totalMinor: 3000 }],
+            },
+          },
+        });
+      }
+
+      await phone.stores.tagRequests.save(accountId, groupId, {
+        command: {
+          requestId: '00000000-0000-4000-8000-000000000001',
+          intent: { action: 'rename', tagId, expectedRevision: 0, name: 'Meals' },
+        },
+      });
+      first.dispose();
+      server.online = false;
+      phone.clock.now = homeTime + 1000;
+      const restarted = phone.open();
+      await restarted.restore();
+      await vi.waitFor(async () =>
+        expect((await store.read()).session.status).toBe('authenticated'),
+      );
+      await vi.waitFor(async () =>
+        expect((await store.read()).copy?.groups?.[groupId]).toBeUndefined(),
+      );
+      expect((await store.read()).copy?.tags?.[groupId]).toBeUndefined();
+      expect((await store.read()).copy?.months?.[groupId]).toBeUndefined();
+      expect(await phone.stores.tagRequests.load(accountId, groupId)).not.toBeNull();
+    } finally {
+      phone.dispose();
+    }
+  },
+);

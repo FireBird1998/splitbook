@@ -273,15 +273,15 @@ it('takes the chosen name and initials from the copy when setup keeps only the i
   expect(result.payments[0].label).toBe('You pay Sam');
 });
 
-it('ignores people, lines and all-square rows omitted by a same-age or newer verified list', () => {
+it('keeps people and lines omitted by the list until a Group read confirms loss', () => {
   const dropped: WidgetCopy = { ...copy, savedGroups: { verifiedAt: now, rows: [] } };
-  expect(widgetPeople(dropped, 'alex')).toEqual([]);
-  expect(view(dropped).state).toBe('no-shared-group');
-  expect(view(dropped).payments).toEqual([]);
+  expect(widgetPeople(dropped, 'alex')[0].groups.map((g) => g.id)).toEqual(['maple', 'lisbon']);
+  expect(view(dropped).state).toBe('normal');
+  expect(view(dropped).payments.map((p) => p.groupId)).toEqual(['maple', 'lisbon']);
   expect(view(dropped, { width: 360, height: 344 }).squareGroups).toEqual([]);
 });
 
-it('keeps only the remaining Group for a person shared through a dropped and a listed Group', () => {
+it('keeps an omitted all-square Group beside the listed Group until a confirmed refusal', () => {
   const dropped: WidgetCopy = {
     ...copy,
     groups: { maple: { ...maple, currencies: [] }, lisbon },
@@ -300,15 +300,17 @@ it('keeps only the remaining Group for a person shared through a dropped and a l
     },
   };
   const result = view(dropped, { width: 360, height: 344 });
-  expect(widgetPeople(dropped, 'alex').map((p) => p.groups.map((g) => g.id))).toEqual([['lisbon']]);
+  expect(widgetPeople(dropped, 'alex').map((p) => p.groups.map((g) => g.id))).toEqual([
+    ['maple', 'lisbon'],
+  ]);
   expect(result.payments.map((p) => [p.groupId, p.amount])).toEqual([['lisbon', '€40.00']]);
-  expect(result.squareGroups).toEqual([]);
+  expect(result.squareGroups).toEqual([{ id: 'maple', name: 'Maple House' }]);
 });
 
 it.each([
   [-1, 2],
-  [0, 0],
-  [1, 0],
+  [0, 2],
+  [1, 2],
 ])(
   'a list verified %s ms relative to the Person parts retains %s shared Groups',
   (offset, count) => {
@@ -325,7 +327,7 @@ it('keeps a Group read newer than an omitted list, including a newer Balances pa
     groups: { maple: { ...maple, balancesVerifiedAt: now + 1 }, lisbon },
     savedGroups: { verifiedAt: now, rows: [] },
   };
-  expect(view(newer).payments.map((p) => p.groupId)).toEqual(['maple']);
+  expect(view(newer).payments.map((p) => p.groupId)).toEqual(['maple', 'lisbon']);
 });
 
 it('is all square only when every shared Group has a saved Balances part with nothing suggested with this person', () => {
@@ -499,4 +501,71 @@ it('ages Person figures by the older Group read even when membership and Balance
     },
   };
   expect(view(olderGroup)).toMatchObject({ muted: true, update: 'Open to update' });
+});
+
+it('admits the next all-square line at 4x3 and 130 percent before stretching the two payments', () => {
+  const c: WidgetCopy = {
+    ...copy,
+    groups: {
+      ...copy.groups,
+      football: { ...maple, id: 'football', name: 'Sunday Football', currencies: [] },
+    },
+    groupPeople: {
+      ...copy.groupPeople,
+      football: { name: 'Sunday Football', archived: false, verifiedAt: now, people: [person] },
+    },
+  };
+  const result = view(c, { width: 360, height: 344 }, 1.3);
+  expect(result.rows.map((r) => r.kind)).toEqual(['payment', 'payment', 'square']);
+  expect(result.rows[2].groupName).toBe('Sunday Football');
+  expect(result.more).toBeNull();
+  expect(result.layout.fits).toBe(true);
+});
+
+it.each([1, 1.3, 2])(
+  'keeps the all-square check through 130 percent, dropping it only at 200 percent (%s)',
+  (scale) => {
+    const c: WidgetCopy = {
+      ...copy,
+      groups: { maple: { ...maple, currencies: [] }, lisbon: { ...lisbon, currencies: [] } },
+    };
+    expect(view(c, { width: 360, height: 224 }, scale).layout.showStateTile).toBe(scale < 2);
+  },
+);
+
+it('centres the all-square title in the free 4x2 space and anchors its sentence at the bottom', () => {
+  const c: WidgetCopy = {
+    ...copy,
+    groups: { maple: { ...maple, currencies: [] }, lisbon: { ...lisbon, currencies: [] } },
+  };
+  const result = view(c),
+    sections = result.layout.sections;
+  expect(sections.at(-1)?.id).toBe('description');
+  const before = sections.find((s) => s.id === 'message-before')!,
+    after = sections.find((s) => s.id === 'space')!;
+  expect(before.height).toBeGreaterThan(0);
+  expect(Math.abs(before.height - after.height)).toBeLessThanOrEqual(1);
+  expect(result.layout.fits).toBe(true);
+});
+
+it('projects a warning tile for no shared Group while keeping the established state action', () => {
+  const result = view({
+    ...copy,
+    groups: {},
+    groupPeople: {},
+    savedGroups: { verifiedAt: now, rows: [] },
+  });
+  expect(result.layout).toMatchObject({ stateIcon: 'warning' });
+  expect(result.action).toBe('Choose another');
+});
+
+it('centres the no-copy sentence below the Person header in 4x2', () => {
+  const result = view(null),
+    sections = result.layout.sections;
+  const before = sections.find((s) => s.id === 'message-before')!,
+    after = sections.find((s) => s.id === 'space')!;
+  expect(before?.height).toBeGreaterThan(0);
+  expect(Math.abs(before.height - after.height)).toBeLessThanOrEqual(1);
+  expect(result.layout.descriptionLines.join(' ')).toContain('This phone has no saved copy');
+  expect(result.layout.fits).toBe(true);
 });

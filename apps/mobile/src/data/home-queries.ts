@@ -250,7 +250,7 @@ export interface HomeSession {
   answered(path: string, saved?: number | null): void;
   /** A Groups list from the server holds `listed`, and leaves out `lost`: they go from memory. */
   listed(listed: Set<string>, lost: Set<string>): void;
-  /** Verified omission prompts an access check only for financial records kept on this device. */
+  /** A trusted omission confirms access for kept financial records and Widget copy parts. */
   checkUnlisted?(listed: Set<string>, owner: number): Promise<void>;
   financialBlocked?(accountId: string, groupId: string): boolean;
   /** The persister keeps only these Groups' copies (inside a lease write). */

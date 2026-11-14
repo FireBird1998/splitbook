@@ -1790,12 +1790,14 @@ describe('native Expense creation and editing', () => {
       });
       await controller.signIn('alex');
       expect(controller.getSnapshot().groups.data.map(({ id }) => id)).toEqual([groupId]);
+      await controller.openGroup(groupId);
       await controller.openExpense(groupId);
       await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
       await controller.saveExpense();
 
       const { expense, groups } = controller.getSnapshot();
       expect([expense.status, expense.message]).toEqual(['blocked', archivedMessage]);
+      expect(controller.getSnapshot().detail.message).toBe(archivedMessage);
       expect(groups.data).toEqual([]);
       // Nothing of it stays pending once the form is closed.
       await controller.closeExpense();

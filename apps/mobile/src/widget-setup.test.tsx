@@ -768,3 +768,67 @@ it('keeps the Person Hide amounts choice through reconfigure and saves it with t
     hideAmounts: false,
   });
 });
+
+it.each(['Group', 'Quick'] as const)(
+  'does not offer a refused Group or its Tags in %s setup after a restart',
+  async (kind) => {
+    store.read.mockResolvedValue({
+      copy: {
+        ...copy,
+        savedGroups: {
+          ...copy.savedGroups!,
+          rows: [
+            ...copy.savedGroups!.rows,
+            { ...copy.savedGroups!.rows[0], id: 'goa', name: 'Goa Friends Trip' },
+          ],
+        },
+        tags: { maple: { verifiedAt: Date.now(), rows: [{ id: 'food', name: 'Groceries' }] } },
+        lostGroupIds: ['maple'],
+      },
+      session,
+    });
+    await render(kind, {
+      kind: kind === 'Quick' ? 'quick' : 'group',
+      widgetId: 989,
+      accountId: 'alex',
+      groupId: 'maple',
+      tagIds: ['food'],
+    });
+    expect(text()).not.toContain('Maple House');
+    expect(text()).not.toContain('Groceries');
+  },
+);
+
+it('does not show stale Tags for a refused saved Quick choice when no Groups remain', async () => {
+  store.read.mockResolvedValue({
+    copy: {
+      ...copy,
+      lostGroupIds: ['maple'],
+      tags: { maple: { verifiedAt: Date.now(), rows: [{ id: 'food', name: 'Groceries' }] } },
+    },
+    session,
+  });
+  await render('Quick', {
+    kind: 'quick',
+    widgetId: 989,
+    accountId: 'alex',
+    groupId: 'maple',
+    tagIds: ['food'],
+  });
+  expect(text()).not.toContain('Groceries');
+});
+
+it.each(['Balances', 'Group', 'Quick', 'Person'] as const)(
+  'sets readable status-bar icons in both themes for %s setup',
+  async (kind) => {
+    for (const mode of ['light', 'dark'] as const) {
+      appearance.mode = mode;
+      await render(kind);
+      expect(host('StatusBar').map((n) => n.props.style)).toEqual([
+        mode === 'light' ? 'dark' : 'light',
+      ]);
+      act(() => screen!.unmount());
+      screen = undefined;
+    }
+  },
+);

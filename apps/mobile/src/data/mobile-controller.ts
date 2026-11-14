@@ -195,6 +195,7 @@ import {
   RequestError,
   storageMessage,
   groupRefused,
+  groupArchived,
   singleFlight,
   Superseded,
   type RequestOptions,
@@ -807,6 +808,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     unlistedGroups = new Set();
     confirmation = null;
     lostGroups.clear();
+    unlistedChecks.clear();
     toReviewQueries.reset();
     tagOwners.clear();
     tagFlights.clear();
@@ -907,11 +909,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const key =
         path === '/api/groups'
           ? groupsKey(account())
-          : path.includes('/expenses?')
-            ? expensePageKey(account(), id)
-            : path.endsWith('/balances')
-              ? groupBalancesKey(account(), id)
-              : groupKey(account(), id);
+          : path === '/api/user/balances'
+            ? homeBalancesKey(account())
+            : path.includes('/expenses?')
+              ? expensePageKey(account(), id)
+              : path.endsWith('/balances')
+                ? groupBalancesKey(account(), id)
+                : groupKey(account(), id);
       return verifiedAt > (scoped(untrusted, key) ?? -Infinity);
     },
     (id) =>
@@ -927,6 +931,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ? widgetRecentCopy(read.value, id, read.refreshedAt, account().accountId)
         : null;
     },
+    dependencies.expenseDrafts,
   );
 
   const savedCopies = savedCopyBudget({
@@ -2201,9 +2206,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       : withdrawn;
   };
 
-  const evictGroupContent = (id: string, status: number) => {
+  const evictGroupContent = (id: string, status: number, archived = false) => {
     if (persistentDrafts) toReviewQueries.lose(id);
-    const message = groupRefused(status);
+    const message = archived ? groupArchived : groupRefused(status);
     const expense =
       snapshot.expense.groupId === id
         ? {
@@ -2308,13 +2313,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return false;
     }
   };
+  const unlistedChecks = new Map<string, { owner: number; reading: Promise<void> }>();
   const checkUnlistedRecords = async (listed: Set<string>, owner: number) => {
     const lease = accountStorage();
     if (!lease || !current(owner)) return;
     let ids: string[];
     try {
+      const widgetIds = await widgets.unlistedGroups(listed);
       ids = await lease.write(async () => {
-        const ids = new Set<string>();
+        const ids = new Set<string>(widgetIds);
         for (const records of [
           dependencies.expenseDrafts,
           dependencies.settlementAttempts,
@@ -2339,15 +2346,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         if (!onLostForm(id)) await clearLostRecords(id, owner);
         continue;
       }
-      try {
-        const group = parseGroup(
-          await groupQueries.readGroup(id, owner, { fresh: true, wanted: () => current(owner) }),
-        );
-        if (group.id === id && !group.members.some((member) => member.user.id === lease.accountId))
-          await forgetGroup(id, 403, owner);
-      } catch {
-        /* Only the Group's own authoritative refusal performs cleanup. */
+      const running = unlistedChecks.get(id);
+      if (running?.owner === owner) {
+        await running.reading;
+        continue;
       }
+      const reading = (async () => {
+        try {
+          const group = parseGroup(await request('/api/groups/' + id, owner));
+          if (current(owner)) widgets.confirmedGroup(id);
+          if (
+            current(owner) &&
+            group.id === id &&
+            !group.members.some((member) => member.user.id === lease.accountId)
+          )
+            await forgetGroup(id, 403, owner);
+        } catch {
+          // Only the transport's authoritative refusal changes saved parts. Try on the next list.
+        }
+      })();
+      unlistedChecks.set(id, { owner, reading });
+      await reading;
+      if (unlistedChecks.get(id)?.reading === reading) unlistedChecks.delete(id);
     }
   };
   const onLostForm = (groupId: string) =>
@@ -2432,7 +2452,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // The Group leaves the screen in the publish that shows Home's queries reading again.
     homeQueries.quietly(() => {
       invalidateReads(...scopes.filter((scope) => listed || scope !== 'groups'));
-      evictGroupContent(groupId, status);
+      evictGroupContent(groupId, status, archivedWidget);
     });
     const lease = accountStorage(),
       time = now();

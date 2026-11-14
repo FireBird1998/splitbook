@@ -1,3 +1,5 @@
+import { widgetSetupGroups } from '@splitbook/shared/widget-membership';
+import { StatusBar } from 'expo-status-bar';
 import { PersonWidgetSetupScreen } from './person-widget-setup';
 import { mobileBuildSettings, widgetKey } from './config';
 import { useEffect, useState } from 'react';
@@ -90,7 +92,7 @@ function ExistingWidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScree
                   setup,
                   accountId,
                   value.copy?.accountId === accountId
-                    ? (value.copy?.savedGroups?.rows.find((g) => !g.archived)?.id ?? null)
+                    ? (widgetSetupGroups(value.copy)[0]?.id ?? null)
                     : null,
                 );
           setSelected(quick ? (restored.groupId ?? 'ask') : restored.groupId);
@@ -114,9 +116,11 @@ function ExistingWidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScree
   const signedIn =
     record?.session.status === 'authenticated' &&
     record.copy?.accountId === record.session.accountId;
-  const groups = signedIn ? (record.copy?.savedGroups?.rows.filter((g) => !g.archived) ?? []) : [];
+  const groups = signedIn ? (widgetSetupGroups(record.copy) ?? []) : [];
   const activeTags =
-    selected && selected !== 'ask' && signedIn ? (record?.copy?.tags?.[selected]?.rows ?? []) : [];
+    selected && groups.some((g) => g.id === selected)
+      ? (record?.copy?.tags?.[selected]?.rows ?? [])
+      : [];
   const selectedTagIds = tagIds ?? activeTags.slice(0, 4).map((tag) => tag.id);
   const chosenTags = selectedTagIds.filter((id) => activeTags.some((tag) => tag.id === id));
   const orderedTags = [
@@ -144,7 +148,7 @@ function ExistingWidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScree
           latest.copy?.accountId !== latest.session.accountId ||
           latest.session.accountId !== record?.copy?.accountId ||
           (!(quick && mode !== 'payment' && selected === 'ask') &&
-            !latest.copy.savedGroups?.rows.some((g) => g.id === selected && !g.archived)))
+            !widgetSetupGroups(latest.copy).some((g) => g.id === selected)))
       ) {
         setRecord(latest);
         setError('Choose a saved Group for this account.');
@@ -191,6 +195,7 @@ function ExistingWidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScree
   };
   return (
     <SafeAreaProvider>
+      <StatusBar style={t.mode === 'dark' ? 'light' : 'dark'} />
       <SafeAreaView style={{ flex: 1, backgroundColor: t.bg }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, gap: 20 }}>
           <Pressable
