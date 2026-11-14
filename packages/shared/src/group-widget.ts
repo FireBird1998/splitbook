@@ -556,6 +556,11 @@ function groupLayout(
         4;
       const monthSection: WidgetSection = {
         id: 'month',
+        ...(view.payments.length
+          ? compact
+            ? { whenComplete: 'payments' }
+            : { afterRows: { id: 'payments', rows: view.payments.length } }
+          : {}),
         rows: monthRows,
         rowHeight: view.month?.totals.length ? text.line(monthAmountFont) : monthTextHeight,
         inset: monthInset,
@@ -619,11 +624,6 @@ function groupLayout(
               },
             ]
           : []),
-        // #1187 inserts opt-in Recent between Payments and This Month.
-        ...(monthEligible ? [monthSection] : []),
-        ...(view.hidden && level < 2 && !tiny
-          ? [{ id: 'hidden', rows: 1, rowHeight: text.line(10) + 6 }]
-          : []),
         ...(view.description && optional && level < 2 && !tiny
           ? [
               {
@@ -632,6 +632,11 @@ function groupLayout(
                 rowHeight: descriptionLines.length * text.line(descriptionFont),
               },
             ]
+          : []),
+        // #1187 inserts opt-in Recent between Payments and This Month.
+        ...(monthEligible ? [monthSection] : []),
+        ...(view.hidden && level < 2 && !tiny
+          ? [{ id: 'hidden', rows: 1, rowHeight: text.line(10) + 6 }]
           : []),
         ...(view.action === 'Open to update' && !updateInFooter && !tiny
           ? [
@@ -747,6 +752,10 @@ function groupLayout(
     scale,
     paymentPadding: compact ? 0 : pixels(4),
     monthRows: monthSection?.rows ?? 0,
+    monthCardHeight:
+      !compact && monthSection
+        ? monthSection.height - (view.hidden ? 0 : settings.sectionLabelHeight)
+        : undefined,
     monthMore,
     monthMoreLines: monthMore
       ? text.words(monthMore, settings.fontSizes.small, settings.monthColumnWidth)

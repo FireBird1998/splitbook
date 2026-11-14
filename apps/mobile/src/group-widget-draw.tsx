@@ -286,6 +286,7 @@ export function drawGroup(
             <FlexWidget
               style={{
                 ...(l.compact ? { width: 'match_parent' as const } : { flex: 1 }),
+                height: l.monthCardHeight,
                 padding: l.monthPanelPadding,
                 borderRadius: 12,
                 backgroundColor: color(t.surfaceMuted),
@@ -309,6 +310,7 @@ export function drawGroup(
             <FlexWidget
               style={{
                 ...(l.compact ? { width: 'match_parent' as const } : { flex: 1 }),
+                height: l.monthCardHeight,
                 padding: l.monthPanelPadding,
                 borderRadius: 12,
                 backgroundColor: color(t.surfaceMuted),

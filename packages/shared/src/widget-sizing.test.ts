@@ -197,3 +197,40 @@ it('rounds a minimum section height to physical pixels and reports a required fl
   expect(result.sections[0]?.height).toBe(40.5);
   expect(result.overflow).toBe(10.5);
 });
+
+it('admits a later section after the first three rows of an earlier list, before more rows', () => {
+  const sections = [
+    { id: 'payments', rows: 2, rowHeight: 10 },
+    { id: 'recent', rows: 8, rowHeight: 10 },
+    { id: 'month', rows: 1, rowHeight: 20, afterRows: { id: 'recent', rows: 3 } },
+  ];
+  const short = fitWidgetSections(65, sections, 0);
+  expect(short.sections.map(({ id, rows }) => ({ id, rows }))).toEqual([
+    { id: 'payments', rows: 2 },
+    { id: 'recent', rows: 4 },
+  ]);
+  const tall = fitWidgetSections(80, sections, 0);
+  expect(tall.sections.map(({ id, rows }) => ({ id, rows }))).toEqual([
+    { id: 'payments', rows: 2 },
+    { id: 'recent', rows: 4 },
+    { id: 'month', rows: 1 },
+  ]);
+  expect(tall.fits).toBe(true);
+});
+
+it('admits the next section after a complete Recent list shorter than its threshold', () => {
+  const fit = fitWidgetSections(
+    60,
+    [
+      { id: 'payments', rows: 2, rowHeight: 10 },
+      { id: 'recent', rows: 2, rowHeight: 10 },
+      { id: 'month', rows: 1, rowHeight: 20, afterRows: { id: 'recent', rows: 3 } },
+    ],
+    0,
+  );
+  expect(fit.sections.map(({ id, rows }) => ({ id, rows }))).toEqual([
+    { id: 'payments', rows: 2 },
+    { id: 'recent', rows: 2 },
+    { id: 'month', rows: 1 },
+  ]);
+});

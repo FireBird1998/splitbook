@@ -16,7 +16,7 @@ const group: WidgetGroupPart = {
     {
       currency: 'INR',
       balanceMinor: -148000,
-      payments: Array.from({ length: 6 }, (_, index) => ({
+      payments: Array.from({ length: 2 }, (_, index) => ({
         from: 'alex',
         to: `person${index}`,
         fromName: 'Alex',
@@ -146,13 +146,13 @@ it.each([1.3, 2])(
   },
 );
 
-it('keeps the 4×2 payments unlabelled and admits Month before expanding a tall payment list', () => {
+it('keeps the 4×2 payments unlabelled and admits Month after both payments fit', () => {
   const short = groupWidget(group, setup, { width: 360, height: 224 }, auth, now, 1, month);
   expect(short.layout.paymentLabel).toBeNull();
   expect(short.layout.sections.some((s) => s.id === 'month')).toBe(false);
   const tall = groupWidget(group, setup, { width: 360, height: 344 }, auth, now, 1, month);
   expect(tall.layout.sections.some((s) => s.id === 'month')).toBe(true);
-  expect(tall.payments.length).toBeLessThan(group.currencies[0]!.payments.length);
+  expect(tall.payments).toHaveLength(group.currencies[0]!.payments.length);
 });
 
 it.each([
@@ -223,7 +223,7 @@ it('continues to show a stored legacy currency separately', () => {
   ).toEqual(['₹23,540.00', 'DEM 123.45']);
 });
 
-it('admits a partial Month before filling more payment rows at an in-between height', () => {
+it('admits a partial Month after the payment rows at an in-between height', () => {
   const many = {
     ...month,
     mainCurrencyOnly: true,
@@ -235,12 +235,12 @@ it('admits a partial Month before filling more payment rows at an in-between hei
       { currency: 'GBP', totalMinor: 30000 },
     ],
   };
-  const view = groupWidget(group, setup, { width: 360, height: 286 }, auth, now, 1, many);
+  const view = groupWidget(group, setup, { width: 360, height: 330 }, auth, now, 1, many);
   expect(view.layout.sections.some((s) => s.id === 'month')).toBe(true);
   expect(view.month?.totals.length).toBeGreaterThan(0);
   expect(view.month?.totals.length).toBeLessThan(5);
   expect(view.month?.more).toMatch(/^\+\d+\s+more$/);
-  expect(view.payments).toHaveLength(1);
+  expect(view.payments).toHaveLength(2);
   expect(view.summary).toContain('£300.00');
 });
 
@@ -250,7 +250,7 @@ it('uses currency words instead of a more hint when no Month amount row fits', (
     totals: Array.from({ length: 5 }, () => month.totals[0]!),
   };
   delete many.shareMinor;
-  const view = groupWidget(group, setup, { width: 360, height: 266 }, auth, now, 1, many);
+  const view = groupWidget(group, setup, { width: 360, height: 310 }, auth, now, 1, many);
   expect(view.layout.sections.find((s) => s.id === 'month')?.rows).toBe(0);
   expect(view.month?.totals).toEqual([]);
   expect(view.month?.more).toBe('In 5\u00a0currencies');
@@ -287,4 +287,35 @@ it('includes the Month panels padding in the measured section', () => {
       4 +
       view.layout.monthAmountFontSize * 1.3,
   );
+});
+
+it.each([
+  { width: 172, height: 344 },
+  { width: 360, height: 270 },
+])('preserves both payments before adding Month at $width×$height', (size) => {
+  const view = groupWidget(group, setup, { ...size, pixelRatio: 2.625 }, auth, now, 1, month);
+  expect(view.payments).toHaveLength(2);
+  expect(view.layout.sections.some((s) => s.id === 'month')).toBe(false);
+});
+it('never trades a baseline payment row for a Month section', () => {
+  const many = {
+    ...group,
+    currencies: [
+      {
+        ...group.currencies[0]!,
+        payments: Array.from({ length: 12 }, () => group.currencies[0]!.payments[0]!),
+      },
+    ],
+  };
+  for (const height of [224, 270, 344, 464, 584]) {
+    const baseline = groupWidget(many, setup, { width: 360, height }, auth, now, 1.3);
+    const withMonth = groupWidget(many, setup, { width: 360, height }, auth, now, 1.3, month);
+    expect(withMonth.payments).toHaveLength(baseline.payments.length);
+  }
+});
+it('places the all-square balance sentence before the missing Month prompt', () => {
+  const square = { ...group, currencies: [] };
+  const view = groupWidget(square, setup, { width: 360, height: 344 }, auth, now);
+  const ids = view.layout.sections.map((s) => s.id);
+  expect(ids.indexOf('description')).toBeLessThan(ids.indexOf('month'));
 });

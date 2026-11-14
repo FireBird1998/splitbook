@@ -234,12 +234,7 @@ it('keeps an unbroken Group name for single-line ellipsis at the readable floor'
 it('uses a tall real size for more payment rows and shares all leftover height among them', () => {
   const view = groupWidget(part, setup, { width: 372, height: 512 }, auth, now);
   expect(view.payments.length).toBeGreaterThan(4);
-  expect(view.layout.sections.map(({ id }) => id)).toEqual([
-    'header',
-    'payments',
-    'month',
-    'action',
-  ]);
+  expect(view.layout.sections.map(({ id }) => id)).toEqual(['header', 'payments', 'action']);
   expect(
     view.layout.sections.reduce((sum, s) => sum + s.height, 0) +
       view.layout.gap * (view.layout.sections.length - 1) +
@@ -300,7 +295,7 @@ it.each(dimensions.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scal
 it.each([
   [{ width: 182, height: 200 }, 0],
   [{ width: 372, height: 200 }, 2],
-  [{ width: 372, height: 304 }, 2],
+  [{ width: 372, height: 304 }, 4],
 ] as const)('keeps payments before the new Month section at %j', (size, rows) => {
   const view = groupWidget(part, setup, size, auth, now);
   expect(view.payments).toHaveLength(rows);

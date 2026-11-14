@@ -18,6 +18,8 @@ export interface WidgetSection {
   grow?: boolean;
   /** A lower-priority prompt is admitted only after this list is complete. */
   whenComplete?: string;
+  /** Admit a later section after this many rows of an earlier list, or its complete short list. */
+  afterRows?: { id: string; rows: number };
 }
 
 /** Input order admits sections; rounds expand admitted lists. Overflow hints belong to
@@ -69,7 +71,7 @@ export function fitWidgetSections(
     return false;
   };
   for (const [i, section] of sections.entries()) {
-    if (section.required || !section.rows || section.whenComplete) continue;
+    if (section.required || !section.rows || section.whenComplete || section.afterRows) continue;
     visible[i] = true;
     // All rows can be cheaper than one row plus a tall hint. Do not reject that fit.
     const cap = section.maxRows ?? section.rows;
@@ -85,6 +87,24 @@ export function fitWidgetSections(
   while (added) {
     added = false;
     for (const [i, section] of sections.entries()) {
+      if (section.afterRows && !visible[i] && section.rows) {
+        const target = sections.findIndex((s) => s.id === section.afterRows!.id);
+        if (
+          target >= 0 &&
+          visible[target] &&
+          chosen[target] >= Math.min(sections[target].rows, section.afterRows.rows)
+        ) {
+          visible[i] = true;
+          const cap = section.maxRows ?? section.rows;
+          if (
+            (cap > 0 && (tryRows(i, 1) || tryRows(i, cap))) ||
+            (section.moreHeight !== undefined && tryRows(i, 0))
+          )
+            added = true;
+          else visible[i] = false;
+        }
+        continue;
+      }
       if (
         section.required ||
         section.whenComplete ||

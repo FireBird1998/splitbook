@@ -401,7 +401,7 @@ it('opens the Group through the missing-Month prompt and hides Month amounts and
   vi.unstubAllGlobals();
 });
 
-it.each([266, 286])('fits a partial Month and its overflow words at %s dp height', (height) => {
+it.each([310, 330])('fits a partial Month and its overflow words at %s dp height', (height) => {
   vi.stubGlobal('__DEV__', false);
   const month = {
     month: '2026-11',
@@ -416,7 +416,7 @@ it.each([266, 286])('fits a partial Month and its overflow words at %s dp height
       { currency: 'USD', totalMinor: 50000 },
       { currency: 'GBP', totalMinor: 30000 },
     ],
-    ...(height === 286 ? { shareMinor: 610000 } : {}),
+    ...(height === 330 ? { shareMinor: 610000 } : {}),
   };
   const tree = buildWidgetTree(
     drawGroup(
@@ -431,8 +431,61 @@ it.each([266, 286])('fits a partial Month and its overflow words at %s dp height
   const section = tree.children!.find((node) => drawnText(node).includes('THIS MONTH'))!;
   expect(section).toBeDefined();
   expect(drawnText(section).join(' ').replace(/\s/g, ' ')).toContain(
-    height === 286 ? '+4 more' : 'In 5 currencies',
+    height === 330 ? '+4 more' : 'In 5 currencies',
   );
   expect(minimumHeight(section)).toBeLessThanOrEqual((section.props as { height: number }).height);
   vi.unstubAllGlobals();
 });
+
+it.each([lightTokens, darkTokens])(
+  'keeps the multi-currency Month cards at the same height in $mode',
+  (tokens) => {
+    vi.stubGlobal('__DEV__', false);
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+    try {
+      const tree = buildWidgetTree(
+        drawGroup(
+          {
+            ...copy,
+            months: {
+              maple: {
+                month: '2026-11',
+                verifiedAt: now - 180000,
+                count: 12,
+                mainCurrency: 'INR',
+                mainCurrencyOnly: true,
+                totals: [
+                  { currency: 'INR', totalMinor: 1840000 },
+                  { currency: 'EUR', totalMinor: 32000 },
+                  { currency: 'JPY', totalMinor: 42000 },
+                ],
+                shareMinor: 610000,
+              },
+            },
+          },
+          { kind: 'group', widgetId: 7, groupId: 'maple', accountId: 'alex' },
+          { width: 360, height: 584 },
+          { status: 'authenticated', accountId: 'alex', loading: false },
+          now,
+          tokens,
+        ),
+      );
+      const cards = ['Group spent', 'Your share'].map((label) =>
+        allNodes(tree).find(
+          (node) =>
+            node.children?.[0] &&
+            drawnText(node.children[0])[0] === label &&
+            !drawnText(node).includes(label === 'Group spent' ? 'Your share' : 'Group spent'),
+        ),
+      );
+      expect(cards).not.toContain(undefined);
+      const heights = cards.map((card) => (card!.props as { height?: number }).height);
+      expect(heights[0]).toBeGreaterThan(0);
+      expect(heights[1]).toBe(heights[0]);
+      for (const card of cards) expect(minimumHeight(card!)).toBeLessThanOrEqual(heights[0]!);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  },
+);
