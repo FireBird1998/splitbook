@@ -217,6 +217,112 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       {[leading, action].filter(Boolean)}
     </FlexWidget>
   );
+  const paymentHeader = l.paymentHeaderHeight ? (
+    <FlexWidget
+      style={{
+        width: 'match_parent',
+        height: l.paymentHeaderHeight,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}
+    >
+      {text('Payments', t.textSecondary, f.small, true)}
+      {view.paymentMore ? (
+        <FlexWidget clickAction="OPEN_URI" clickActionData={link(view.paymentMoreTarget)}>
+          {text(view.paymentMore, t.brand.main, f.small)}
+        </FlexWidget>
+      ) : view.paymentCount ? (
+        text(view.paymentCount, t.textSecondary, f.small)
+      ) : null}
+    </FlexWidget>
+  ) : null;
+  const payments = (
+    <FlexWidget style={{ width: 'match_parent' }}>
+      {paymentHeader}
+      <FlexWidget
+        style={{
+          width: 'match_parent',
+          ...(l.compactPayments || !view.payments.length
+            ? {}
+            : { backgroundColor: color(t.surfaceMuted), borderRadius: 14, paddingVertical: 4 }),
+        }}
+      >
+        {view.payments.map((row, i) => (
+          <FlexWidget key={i} style={{ width: 'match_parent', height: row.rowHeight }}>
+            {row.dividerHeight ? (
+              <FlexWidget
+                style={{
+                  width: 'match_parent',
+                  height: row.dividerHeight,
+                  backgroundColor: color(t.border),
+                }}
+              />
+            ) : null}
+            <FlexWidget
+              clickAction="OPEN_URI"
+              clickActionData={link(row.target)}
+              style={{
+                width: 'match_parent',
+                height: row.contentHeight,
+                flexDirection: 'row',
+                alignItems: 'center',
+                flexGap: 8,
+                ...(l.compactPayments ? {} : { paddingHorizontal: 8 }),
+              }}
+            >
+              {!l.compactPayments ? (
+                <FlexWidget
+                  style={{
+                    width: l.paymentAvatarSize,
+                    height: l.paymentAvatarSize,
+                    borderRadius: l.paymentAvatarSize / 2,
+                    backgroundColor: color(t.brand.bg),
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
+                  {text(row.initials, t.brand.main, f.small, true)}
+                </FlexWidget>
+              ) : null}
+              <FlexWidget style={{ flex: 1 }}>
+                <FlexWidget
+                  style={{
+                    width: 'match_parent',
+                    flexDirection: row.stack ? 'column' : 'row',
+                    justifyContent: 'space-between',
+                    alignItems: row.stack ? 'flex-start' : 'center',
+                    flexGap: 2,
+                  }}
+                >
+                  <FlexWidget
+                    style={{
+                      flex: row.stack ? undefined : 1,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {text(row.label, t.text, l.paymentLabelFont, true)}
+                    {!l.compactPayments && row.inlineCaption && !row.captionBelow
+                      ? text(row.inlineCaption, t.textSecondary, f.small)
+                      : null}
+                  </FlexWidget>
+                  {text(
+                    row.amount,
+                    row.muted ? t.textMuted : row.incoming ? t.status.positive : t.text,
+                    l.paymentAmountFont,
+                    true,
+                    true,
+                  )}
+                </FlexWidget>
+                {row.captionBelow ? text(row.groupName, t.textSecondary, f.small) : null}
+              </FlexWidget>
+            </FlexWidget>
+          </FlexWidget>
+        ))}
+      </FlexWidget>
+    </FlexWidget>
+  );
   const content: Record<string, React.ReactNode> = {
     header: (
       <FlexWidget
@@ -241,6 +347,14 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       </FlexWidget>
     ),
     balance,
+    payments,
+    'payments-message': (
+      <FlexWidget style={{ width: 'match_parent' }}>
+        {paymentHeader}
+        {lines(l.paymentCountsLines, t.textSecondary, f.body)}
+        {lines(l.paymentMessageLines, t.textSecondary, f.small)}
+      </FlexWidget>
+    ),
     message,
     footer,
     privacy: hiddenLabel(view.hidden ?? '', t, f.privacy),

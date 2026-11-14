@@ -54,7 +54,7 @@ const copy: WidgetCopy = {
 };
 it('summarizes Balances with complete amounts and their verification time', () => {
   expect(overviewAt(copy, { kind: 'balances' }, '2x2', auth, now).summary).toBe(
-    'Balances. You’re owed ₹2,400.00 and €40.00. You owe ₹1,480.00. To review 3. Saved 9:41.',
+    'Balances. You’re owed ₹2,400.00 and €40.00. You owe ₹1,480.00. You pay Priya ₹1,480.00 in Maple House. To review 3. Saved 9:41.',
   );
 });
 it('summarizes a Group with first names only', () => {

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { overviewWidget } from './overview-widget';
 import { widgetText } from './widget-sizing';
 import type { WidgetCopy } from './balances-widget';
+const clone = (value: WidgetCopy): WidgetCopy => JSON.parse(JSON.stringify(value));
 const now = Date.parse('2026-11-13T04:11:00Z');
 beforeAll(() => vi.stubEnv('TZ', 'Asia/Kolkata'));
 afterAll(() => vi.unstubAllEnvs());
@@ -200,12 +201,6 @@ it.each([1, 1.3, 2])(
   (scale) => {
     const v = overviewWidget(copy, setup, { width: 360, height: 584 }, auth, now + 86400001, scale),
       l = v.layout;
-    if (scale === 2) {
-      expect(v.action).toBeNull();
-      expect(l.footerNote).toBeNull();
-      expect(l.sections.some((s) => s.id === 'footer')).toBe(false);
-      return;
-    }
     expect(l.footerNote).toBe('Open to update');
     expect(v.action).toBe('＋ Add expense');
     const text = widgetText(l.width, scale);
@@ -264,6 +259,7 @@ it.each([
     );
   },
 );
+
 it('keeps fitting compact balance amounts at 200 percent without testing an undrawn secondary line', () => {
   const v = overviewWidget(
     copy,
@@ -277,12 +273,23 @@ it('keeps fitting compact balance amounts at 200 percent without testing an undr
   expect(v.layout.compactFallback).toBeNull();
 });
 
-it.each([344, 584])('has no ordinary footer at 200 percent, including height %s', (height) => {
-  const v = overviewWidget(copy, setup, { width: 360, height, pixelRatio: 2.625 }, auth, now, 2);
-  expect(v.action).toBeNull();
-  expect(v.review).toBeNull();
-  expect(v.layout.sections.some((s) => s.id === 'footer')).toBe(false);
-});
+it.each([
+  [344, false],
+  [584, true],
+] as const)(
+  'drops the 200-percent footer only when it does not fit whole at %s dp',
+  (height, shown) => {
+    const c = clone(paymentCopy);
+    c.groups = { maple: c.groups!.maple! };
+    c.groups.maple.currencies[0].payments = c.groups.maple.currencies[0].payments.slice(0, 2);
+    const v = overviewWidget(c, setup, { width: 360, height, pixelRatio: 2.625 }, auth, now, 2);
+    expect(v.payments).toHaveLength(2);
+    expect(v.action).toBe(shown ? '＋ Add expense' : null);
+    expect(v.review).toBe(shown ? 'To review\u00a0· 3' : null);
+    expect(v.layout.sections.some((s) => s.id === 'footer')).toBe(shown);
+    expect(v.layout.fits).toBe(true);
+  },
+);
 it('restores Across N Groups beside the review chip in the small wide layout', () => {
   const v = overviewWidget(copy, setup, { width: 360, height: 224, pixelRatio: 2.625 }, auth, now);
   expect(v.review).toBe('To review\u00a0· 3');
@@ -315,3 +322,314 @@ it.each(['signed-out', 'expired', 'no-groups'] as const)(
     expect(v.layout.sections.at(-1)?.id).toBe('footer');
   },
 );
+const paymentCopy: WidgetCopy = {
+  ...copy,
+  groups: {
+    maple: {
+      id: 'maple',
+      name: 'Maple House',
+      theme: 'home',
+      archived: false,
+      mainCurrency: 'INR',
+      verifiedAt: now,
+      balancesVerifiedAt: now - 86400001,
+      currencies: [
+        {
+          currency: 'INR',
+          balanceMinor: -140000,
+          payments: Array.from({ length: 4 }, (_, i) => ({
+            from: i === 4 ? 'sam' : 'alex',
+            to: i === 4 ? 'alex' : ['sam', 'priya', 'ravi', 'kai'][i]!,
+            fromName: i === 4 ? 'Sam Chen' : 'Alex Rao',
+            toName: i === 4 ? 'Alex Rao' : ['Sam Chen', 'Priya Shah', 'Ravi Kapoor', 'Kai Tan'][i]!,
+            fromInitials: i === 4 ? 'SC' : 'AR',
+            toInitials: i === 4 ? 'AR' : ['SC', 'PS', 'RK', 'KT'][i]!,
+            amountMinor: (5 - i) * 10000,
+          })),
+        },
+      ],
+    },
+    goa: {
+      id: 'goa',
+      name: 'Goa Friends Trip',
+      theme: 'trip',
+      archived: false,
+      mainCurrency: 'EUR',
+      verifiedAt: now,
+      balancesVerifiedAt: now,
+      currencies: [
+        {
+          currency: 'EUR',
+          balanceMinor: 10000,
+          payments: [
+            {
+              from: 'sam',
+              to: 'alex',
+              fromName: 'Sam Chen',
+              toName: 'Alex Rao',
+              fromInitials: 'SC',
+              toInitials: 'AR',
+              amountMinor: 10000,
+            },
+          ],
+        },
+      ],
+    },
+  },
+};
+it('shows across-Group payments after balances with a Home overflow link and independent old time', () => {
+  const v = overviewWidget(paymentCopy, setup, { width: 360, height: 344 }, auth, now);
+  expect(v.payments).toHaveLength(2);
+  expect(v.payments[0]).toMatchObject({
+    label: 'You pay Sam',
+    groupName: 'Maple House',
+    amount: '₹500.00',
+    initials: 'SC',
+    muted: true,
+    target: {
+      kind: 'settle',
+      groupId: 'maple',
+      payment: { from: 'alex', to: 'sam', currency: 'INR' },
+    },
+  });
+  expect(v.paymentMore).toBe('+3\u00a0more');
+  expect(v.paymentMoreTarget).toBe('home');
+  expect(v.layout.sections.map((s) => s.id)).toEqual([
+    'header',
+    'balance',
+    'payments',
+    'space',
+    'footer',
+  ]);
+  expect(v.summary.indexOf('You pay Sam')).toBeGreaterThan(v.summary.indexOf('You owe'));
+  expect(v.summary.indexOf('You pay Sam')).toBeLessThan(v.summary.indexOf('To review'));
+  expect(v.summary).toContain('in Maple House');
+});
+it('shortens narrow payments and replaces hidden rows with counts without names or money', () => {
+  const v = overviewWidget(paymentCopy, setup, { width: 172, height: 464 }, auth, now);
+  expect(v.payments[0]?.label).toBe('Pay Sam');
+  const h = overviewWidget(
+    paymentCopy,
+    { ...setup, hideAmounts: true },
+    { width: 360, height: 584 },
+    auth,
+    now,
+  );
+  expect(h.payments).toEqual([]);
+  expect(h.layout.paymentCountsLines).toEqual(['You pay 4 people', '1 person pays you']);
+  expect(JSON.stringify(h)).not.toMatch(/Sam|Maple|500/);
+  const incoming = clone(paymentCopy);
+  incoming.groups!.maple!.currencies[0]!.payments =
+    incoming.groups!.maple!.currencies[0]!.payments.slice(4);
+  expect(
+    overviewWidget(incoming, setup, { width: 172, height: 464 }, auth, now).payments[0]?.label,
+  ).toBe('From Sam');
+});
+it.each(sizes.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scale }))))(
+  'fits payment text and section heights at $width×$height with $scale text',
+  ({ width, height, scale }) => {
+    const v = overviewWidget(
+        paymentCopy,
+        setup,
+        { width, height, pixelRatio: 2.625 },
+        auth,
+        now,
+        scale,
+      ),
+      l = v.layout;
+    expect(l.fits).toBe(true);
+    expect(
+      l.sections.reduce((n, s) => n + s.height, 0) +
+        Math.max(0, l.sections.length - 1) * l.gap +
+        l.padding * 2,
+    ).toBeLessThanOrEqual(height + 0.00001);
+    for (const row of v.payments) expect(row.textHeight).toBeLessThanOrEqual(row.contentHeight);
+    if (!v.payments.length) expect(v.paymentMore).toBeNull();
+    if (!l.compactPayments)
+      for (const row of v.payments)
+        expect(row.groupName).toBe(row.groupId === 'maple' ? 'Maple House' : 'Goa Friends Trip');
+  },
+);
+it('keeps payments out of small and all-square layouts and asks for an unread Group without a new request', () => {
+  expect(
+    overviewWidget(paymentCopy, setup, { width: 360, height: 224 }, auth, now).payments,
+  ).toEqual([]);
+  expect(
+    overviewWidget(
+      { ...paymentCopy, home: { ...copy.home!, currencies: [] } },
+      setup,
+      { width: 360, height: 584 },
+      auth,
+      now,
+    ).payments,
+  ).toEqual([]);
+  expect(
+    overviewWidget(copy, setup, { width: 360, height: 344 }, auth, now).layout.paymentMessageLines,
+  ).toEqual(['Open the Group to update']);
+});
+
+it('uses the Group spoken-name rule when two people share initials and another differs', () => {
+  const c = clone(paymentCopy);
+  const rows = c.groups!.maple!.currencies[0]!.payments;
+  rows.splice(3);
+  for (const [i, row] of rows.entries()) {
+    row.toName = 'Priya';
+    row.toInitials = i === 2 ? 'PK' : 'PS';
+  }
+  const v = overviewWidget(c, setup, { width: 360, height: 584 }, auth, now);
+  expect(v.summary).toContain('You pay Priya ₹500.00 in Maple House');
+  expect(v.summary).toContain('You pay Priya ₹400.00 in Maple House');
+  expect(v.summary).toContain('You pay Priya K ₹300.00 in Maple House');
+  expect(v.summary).not.toContain('Priya S');
+});
+
+it('uses a count without a link or padded rows when no full-style payment row fits', () => {
+  const c = clone(paymentCopy);
+  c.home!.currencies = [{ currency: 'INR', owedMinor: 0, oweMinor: 100000 }];
+  delete c.groups!.goa;
+  const g = c.groups!.maple!;
+  g.currencies[0].payments = [
+    {
+      from: 'alex',
+      to: 'sam',
+      fromName: 'Alex',
+      toName: 'Ananthapadmanabhan',
+      fromInitials: 'AR',
+      toInitials: 'AS',
+      amountMinor: 9007199254740991,
+    },
+  ];
+  g.currencies[0].currency = 'JPY';
+  const v = overviewWidget(c, setup, { width: 240, height: 280, pixelRatio: 2.625 }, auth, now);
+  expect(v.payments).toEqual([]);
+  expect(v.paymentMore).toBeNull();
+  expect(v.paymentCount).toBe('1\u00a0payment');
+  expect(v.layout.compactPayments).toBe(false);
+  expect(
+    v.layout.sections.find((s) => s.id === 'payments')!.height - v.layout.paymentHeaderHeight,
+  ).toBeLessThan(1);
+});
+
+it.each([390, 390.5, 391])(
+  'reserves the drawn divider for stacked payment text at %s dp',
+  (height) => {
+    const c = clone(paymentCopy);
+    c.home!.currencies = [{ currency: 'INR', owedMinor: 240000, oweMinor: 200000 }];
+    delete c.groups!.goa;
+    c.groups!.maple!.currencies[0].payments = [0, 1].map((i) => ({
+      from: 'alex',
+      to: i ? 'sam' : 'priya',
+      fromName: 'Alex',
+      toName: 'Ananthapadmanabhan',
+      fromInitials: 'AR',
+      toInitials: i ? 'AS' : 'AK',
+      amountMinor: 100000,
+    }));
+    const v = overviewWidget(c, setup, { width: 172, height, pixelRatio: 2.625 }, auth, now, 2);
+    expect(v.payments).not.toHaveLength(0);
+    for (const row of v.payments) expect(row.textHeight).toBeLessThanOrEqual(row.contentHeight);
+  },
+);
+it('keeps full-row initials readable at 200 percent on the maximum width', () => {
+  const view = overviewWidget(
+    paymentCopy,
+    setup,
+    { width: 640, height: 640, pixelRatio: 2.625 },
+    auth,
+    now,
+    2,
+  );
+  expect(view.layout.compactPayments).toBe(false);
+  expect(view.layout.paymentAvatarSize).toBeGreaterThanOrEqual(26);
+});
+it.each([1.3, 2])(
+  'gives up the Payments heading, more link and Group captions before type at %s text',
+  (scale) => {
+    const v = overviewWidget(paymentCopy, setup, { width: 360, height: 344 }, auth, now, scale);
+    expect(v.payments.length).toBeGreaterThan(0);
+    expect(v.layout.paymentHeaderHeight).toBe(0);
+    expect(v.paymentMore).toBeNull();
+    for (const row of v.payments) {
+      expect(row.inlineCaption).toBe('');
+      expect(row.captionBelow).toBe(false);
+    }
+    expect(v.summary).toContain('in Maple House');
+  },
+);
+
+it.each(['tall row', 'amount too wide'] as const)(
+  'keeps both 130-percent footer actions when the payment has a %s',
+  (reason) => {
+    const c = clone(paymentCopy);
+    c.groups!.maple!.currencies[0]!.payments[0]!.toName = 'Ananthapadmanabhan Balakrishnan';
+    if (reason === 'amount too wide')
+      c.groups!.maple!.currencies[0]!.payments[0]!.amountMinor = 99999999999999;
+    const v = overviewWidget(
+      c,
+      setup,
+      { width: 360, height: 280, pixelRatio: 2.625 },
+      auth,
+      now,
+      1.3,
+    );
+    expect(v.review).toBe('To review\u00a0· 3');
+    expect(v.action).toBe('＋ Add expense');
+    expect(v.layout.sections.at(-1)?.id).toBe('footer');
+    expect(v.layout.fits).toBe(true);
+  },
+);
+it('keeps short incoming labels beside their amounts when the amount fits', () => {
+  const c = clone(paymentCopy);
+  c.groups = { maple: c.groups!.maple! };
+  c.groups!.maple!.currencies = [
+    {
+      currency: 'INR',
+      balanceMinor: 200000,
+      payments: [
+        { from: 'meera', to: 'alex', fromName: 'Meera', toName: 'Alex', amountMinor: 200000 },
+      ],
+    },
+    {
+      currency: 'EUR',
+      balanceMinor: 4000,
+      payments: [{ from: 'ravi', to: 'alex', fromName: 'Ravi', toName: 'Alex', amountMinor: 4000 }],
+    },
+  ];
+  const v = overviewWidget(c, setup, { width: 172, height: 344 }, auth, now);
+  expect(v.payments.map((row) => [row.label, row.amount, row.stack])).toEqual([
+    ['From Meera', '₹2,000.00', false],
+    ['From Ravi', '€40.00', false],
+  ]);
+});
+
+it.each([
+  [344, 1],
+  [584, 2],
+] as const)('fits %s dp with %s natural payment rows at 130 percent', (height, rows) => {
+  const c = clone(paymentCopy);
+  c.groups = { maple: c.groups!.maple! };
+  c.groups.maple.currencies[0].payments = c.groups.maple.currencies[0].payments.slice(0, 2);
+  const v = overviewWidget(c, setup, { width: 360, height, pixelRatio: 2.625 }, auth, now, 1.3);
+  expect(v.review).toBe('To review\u00a0· 3');
+  expect(v.action).toBe('＋ Add expense');
+  expect(v.payments).toHaveLength(rows);
+  expect(v.payments.map((p) => p.amount)).toEqual(
+    rows === 1 ? ['₹500.00'] : ['₹500.00', '₹400.00'],
+  );
+});
+
+it('uses all five natural rows when a 130-percent tall Overview has room', () => {
+  const c = clone(paymentCopy);
+  const v = overviewWidget(
+    c,
+    setup,
+    { width: 360, height: 584, pixelRatio: 2.625 },
+    auth,
+    now,
+    1.3,
+  );
+  expect(v.payments).toHaveLength(5);
+  expect(v.layout.fits).toBe(true);
+  expect(v.review).toBe('To review\u00a0· 3');
+  expect(v.action).toBe('＋ Add expense');
+});
