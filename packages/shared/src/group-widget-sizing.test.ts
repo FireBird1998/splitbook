@@ -580,3 +580,30 @@ it('uses the fresh phone zone for the saved clock and weekday', () => {
   expect(widgetSavedTime(saved, Date.parse('2026-11-14T10:30:00Z'))).toBe('Saved Fri');
   vi.restoreAllMocks();
 });
+
+it('fits both incoming mini payments on one line at the real launcher 2×2 size', () => {
+  const incoming = {
+    ...part,
+    currencies: [
+      {
+        currency: 'INR',
+        balanceMinor: 240000,
+        payments: [
+          { from: 'meera', to: 'alex', fromName: 'Meera', toName: 'Alex', amountMinor: 145000 },
+          { from: 'rohan', to: 'alex', fromName: 'Rohan', toName: 'Alex', amountMinor: 95000 },
+        ],
+      },
+    ],
+  };
+  const view = groupWidget(
+    incoming,
+    setup,
+    { width: 172, height: 224, pixelRatio: 2.625 },
+    auth,
+    now,
+  );
+  expect(view.payments.map((p) => p.displayLabel)).toEqual(['From Meera', 'From Rohan']);
+  expect(view.layout.stackPayments).toBe(false);
+  expect(view.more).toBeNull();
+  expect(view.summary).toContain('Meera pays you');
+});

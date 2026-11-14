@@ -407,10 +407,17 @@ function groupLayout(
               (showCurrencyOverflow ? text.line(10) + 4 : 0)
             : balanceLines.length * text.line(balanceFont)
           : 0;
-      const paymentFont = compact ? 13 : 12;
       const label = (p: (typeof view.payments)[number]) =>
-        compact ? (p.incoming ? `${p.firstName} pays you` : `Pay ${p.firstName}`) : p.label;
+        compact ? (p.incoming ? `From ${p.firstName}` : `Pay ${p.firstName}`) : p.label;
       const rowWidth = width - (compact ? 0 : 14 + 2 * 8 + 10 + text.width('WW', 10));
+      const paymentFont = compact
+        ? Math.min(
+            13,
+            ...view.payments.map((p) =>
+              text.fit(label(p), 13, rowWidth - text.width(p.amount, 13, true) - 8),
+            ),
+          )
+        : 12;
       const stackPayments = view.payments.some(
         (p) => text.width(label(p), paymentFont) + text.width(p.amount, 13, true) + 8 > rowWidth,
       );
@@ -621,7 +628,7 @@ function projectGroupWidget(
       ...p,
       displayLabel: layout.compact
         ? p.incoming
-          ? `${p.firstName} pays you`
+          ? `From ${p.firstName}`
           : `Pay ${p.firstName}`
         : p.label,
     })),
