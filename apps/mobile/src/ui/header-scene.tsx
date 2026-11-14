@@ -1,14 +1,6 @@
 import { SEPARATOR } from '@splitbook/shared/separator';
-import { createElement, memo, useEffect, useState, useRef, type ComponentType } from 'react';
-import {
-  Animated,
-  AppState,
-  Image,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-  type LayoutChangeEvent,
-} from 'react-native';
+import { createElement, memo, useEffect, useState, type ComponentType } from 'react';
+import { Animated, AppState, StyleSheet, View } from 'react-native';
 import Svg, {
   G,
   Path,
@@ -26,6 +18,7 @@ import type { HeaderSceneArt, SceneVector } from '@splitbook/shared/header-scene
 import type { MobileGroup } from '../data/types';
 import { CompactText } from './compact';
 import { useSceneFloat } from './compact/motion';
+import { headerSceneMotionAvailable } from '../config';
 import { useTheme, fonts } from './theme';
 
 const loaders = {
@@ -61,56 +54,8 @@ const Art = memo(function Art({
   art: HeaderSceneArt;
   time: ReturnType<typeof headerTimeOfDay>;
 }) {
-  const svg = useRef<Svg>(null);
-  const { scale } = useWindowDimensions();
-  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
-  const [picture, setPicture] = useState<{ key: string; uri: string } | null>(null);
-  const key = `${art.id}:${time}:${size?.width}:${size?.height}:${scale}`;
-  const onLayout = ({ nativeEvent: { layout } }: LayoutChangeEvent) => {
-    if (layout.width > 0 && layout.height > 0)
-      setSize((previous) =>
-        previous?.width === layout.width && previous?.height === layout.height
-          ? previous
-          : { width: layout.width, height: layout.height },
-      );
-  };
-  useEffect(() => {
-    if (!size || picture?.key === key) return;
-    let active = true;
-    const frame = requestAnimationFrame(() =>
-      svg.current?.toDataURL(
-        (data) => {
-          if (active && data) setPicture({ key, uri: `data:image/png;base64,${data}` });
-        },
-        { width: Math.round(size.width * scale), height: Math.round(size.height * scale) },
-      ),
-    );
-    return () => {
-      active = false;
-      cancelAnimationFrame(frame);
-    };
-  }, [key, size, scale, picture?.key]);
-  // Draw the generated vectors once with native SVG, then release their native views.
-  // Scrolling and native-driver motion composite the resulting phone-resolution image.
-  if (picture?.key === key)
-    return (
-      <Image
-        source={{ uri: picture.uri }}
-        onLayout={onLayout}
-        fadeDuration={0}
-        resizeMode="stretch"
-        style={{ width: '100%', height: '100%' }}
-      />
-    );
   return (
-    <Svg
-      ref={svg}
-      onLayout={onLayout}
-      width="100%"
-      height="100%"
-      viewBox="70 0 460 240"
-      preserveAspectRatio="xMidYMid slice"
-    >
+    <Svg width="100%" height="100%" viewBox="70 0 460 240" preserveAspectRatio="xMidYMid slice">
       {(['far', 'clouds', 'main', 'front'] as const).map((layer) =>
         vector(art.layers[layer], layer),
       )}
@@ -239,7 +184,7 @@ export default function HeaderScene({
 }) {
   const [art, setArt] = useState<HeaderSceneArt | null>(null);
   const [hour, setHour] = useState(() => new Date().getHours());
-  const translateY = useSceneFloat(motion);
+  const translateY = useSceneFloat(motion && headerSceneMotionAvailable);
   useEffect(() => {
     let active = true;
     loaders[header.scene]().then((value) => {

@@ -18,12 +18,18 @@ Only a Scene header behind `EXPO_PUBLIC_HEADER_SCENES_ENABLED` evaluates the nat
 renderer; only the chosen art module is evaluated. Classic, Home and widgets keep
 their existing rendering. Generated data is never copied or edited.
 
-The vector tree is memoized. After the native SVG has drawn, its `toDataURL`
-result becomes a phone-resolution native Image and the SVG views are released.
-The snapshot is replaced when the scene, lighting or layout changes; it is never
-written into account storage. This avoids redrawing thousands of native paths
-while scrolling. A native-driver floating transform moves the rendered
+The vector tree is memoized. A native-driver floating transform moves the rendered
 scene without React renders per frame. The existing reduce-motion watcher wins
 over the device Motion preference. Detailed per-vector animation and tilt are
 separate from this initial rendering adapter. Device frame measurements and the
 release run are recorded in the QA handoff report.
+
+## Android performance fallback
+
+The main Mac's spare release emulator exceeded the scene-on scrolling budget
+(UI p90 117–167 ms with the native float). Rasterizing the native SVG did not
+bring it within budget. Header scenes therefore render still on Android under
+#1200's explicit fallback; `headerSceneMotionAvailable` is false. The device
+Motion preference is retained for a renderer that meets the budget. Remove
+animations still takes precedence through the existing motion helper. The
+measurements and comparison are in the A1 QA handoff report.
