@@ -66,7 +66,11 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
             fontWeight: 'bold',
           }}
         />
-        {l.showGroups ? lines(l.subtitleLines, t.textSecondary, f.small) : null}
+        {l.showGroups ? (
+          <FlexWidget style={{ width: 'match_parent' }}>
+            {lines(l.subtitleLines, t.textSecondary, f.small)}
+          </FlexWidget>
+        ) : null}
         {l.showSaved && !l.savedBeside ? text(view.saved ?? '', t.textMuted, f.saved) : null}
       </FlexWidget>
       {l.savedBeside ? text(view.saved ?? '', t.textMuted, f.saved) : null}
@@ -186,8 +190,16 @@ export function drawPerson(view: PersonWidgetView, t: SemanticTokens) {
         </FlexWidget>
       ) : null}
       <FlexWidget style={{ flex: 1, flexGap: 8 }}>
-        {lines(l.titleLines, t.text, f.title, true)}
-        {lines(l.descriptionLines, t.textSecondary, f.body)}
+        {l.titleLines.length ? (
+          <FlexWidget style={{ width: 'match_parent' }}>
+            {lines(l.titleLines, t.text, f.title, true)}
+          </FlexWidget>
+        ) : null}
+        {l.descriptionLines.length ? (
+          <FlexWidget style={{ width: 'match_parent' }}>
+            {lines(l.descriptionLines, t.textSecondary, f.body)}
+          </FlexWidget>
+        ) : null}
       </FlexWidget>
     </FlexWidget>
   );
