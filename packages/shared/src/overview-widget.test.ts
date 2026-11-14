@@ -440,7 +440,9 @@ it.each(sizes.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scale }))
     ).toBeLessThanOrEqual(height + 0.00001);
     for (const row of v.payments) expect(row.textHeight).toBeLessThanOrEqual(row.contentHeight);
     if (!v.payments.length) expect(v.paymentMore).toBeNull();
-    if (!l.compactPayments) for (const row of v.payments) expect(row.groupName).toBe('Maple House');
+    if (!l.compactPayments)
+      for (const row of v.payments)
+        expect(row.groupName).toBe(row.groupId === 'maple' ? 'Maple House' : 'Goa Friends Trip');
   },
 );
 it('keeps payments out of small and all-square layouts and asks for an unread Group without a new request', () => {
@@ -593,4 +595,36 @@ it('keeps short incoming labels beside their amounts when the amount fits', () =
     ['From Meera', '₹2,000.00', false],
     ['From Ravi', '€40.00', false],
   ]);
+});
+
+it.each([
+  [344, 1],
+  [584, 2],
+] as const)('fits %s dp with %s natural payment rows at 130 percent', (height, rows) => {
+  const c = clone(paymentCopy);
+  c.groups = { maple: c.groups!.maple! };
+  c.groups.maple.currencies[0].payments = c.groups.maple.currencies[0].payments.slice(0, 2);
+  const v = overviewWidget(c, setup, { width: 360, height, pixelRatio: 2.625 }, auth, now, 1.3);
+  expect(v.review).toBe('To review\u00a0· 3');
+  expect(v.action).toBe('＋ Add expense');
+  expect(v.payments).toHaveLength(rows);
+  expect(v.payments.map((p) => p.amount)).toEqual(
+    rows === 1 ? ['₹500.00'] : ['₹500.00', '₹400.00'],
+  );
+});
+
+it('uses all five natural rows when a 130-percent tall Overview has room', () => {
+  const c = clone(paymentCopy);
+  const v = overviewWidget(
+    c,
+    setup,
+    { width: 360, height: 584, pixelRatio: 2.625 },
+    auth,
+    now,
+    1.3,
+  );
+  expect(v.payments).toHaveLength(5);
+  expect(v.layout.fits).toBe(true);
+  expect(v.review).toBe('To review\u00a0· 3');
+  expect(v.action).toBe('＋ Add expense');
 });

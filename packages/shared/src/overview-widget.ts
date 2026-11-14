@@ -283,12 +283,17 @@ export function overviewWidget(
               : Math.max(text.line(paymentFont), text.line(13)),
         };
       });
+      // Large full rows keep a readable avatar/tap-height base; short rows keep their 28 dp base.
       const paymentRowHeight = Math.max(
-        (compactPayments ? 28 : 36) * scale * text.factor,
+        (compactPayments ? 28 : level ? 48 : 36) * scale * text.factor,
         ...measuredPayments.map((row) => row.textHeight + Math.ceil(ratio) / ratio),
       );
       const paymentLimit =
-        level > 0 ? (level === 1 ? 1 : 2) : 2 + Math.floor(Math.max(0, size.height - 464) / 120);
+        level === 1
+          ? availablePayments.length
+          : level === 2
+            ? 2
+            : 2 + Math.floor(Math.max(0, size.height - 464) / 120);
       const paymentFits = availablePayments.every(
         (row) => text.width(row.amount, 13, true) <= paymentWidth,
       );
