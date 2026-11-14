@@ -18,7 +18,11 @@ Only a Scene header behind `EXPO_PUBLIC_HEADER_SCENES_ENABLED` evaluates the nat
 renderer; only the chosen art module is evaluated. Classic, Home and widgets keep
 their existing rendering. Generated data is never copied or edited.
 
-The vector tree is memoized. A native-driver floating transform moves the rendered
+The vector tree is memoized. After the native SVG has drawn, its `toDataURL`
+result becomes a phone-resolution native Image and the SVG views are released.
+The snapshot is replaced when the scene, lighting or layout changes; it is never
+written into account storage. This avoids redrawing thousands of native paths
+while scrolling. A native-driver floating transform moves the rendered
 scene without React renders per frame. The existing reduce-motion watcher wins
 over the device Motion preference. Detailed per-vector animation and tilt are
 separate from this initial rendering adapter. Device frame measurements and the
