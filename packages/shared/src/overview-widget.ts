@@ -264,11 +264,14 @@ export function overviewWidget(
             ? acrossGroups
             : null;
       const chipPaddingHorizontal = 8;
-      const reviewWidth = review ? text.width(review, 11) + chipPaddingHorizontal * 2 + 18 : 0;
+      const chipIconSize = Math.ceil(14 * scale * text.factor * ratio) / ratio;
+      const reviewWidth = review
+        ? text.width(review, 11) + chipPaddingHorizontal * 2 + chipIconSize + 4
+        : 0;
       const draftWidth = finishLater
         ? text.width(finishLater.label, 11) +
           chipPaddingHorizontal * 2 +
-          (finishLater.icon ? 18 : 0)
+          (finishLater.icon ? chipIconSize + 4 : 0)
         : 0;
       const waitingAcross = reviewWidth + draftWidth + (reviewWidth && draftWidth ? 6 : 0) <= width;
       const waitingWidth = waitingAcross
@@ -276,7 +279,7 @@ export function overviewWidget(
         : Math.max(reviewWidth, draftWidth);
       const waitingHeight =
         review || finishLater
-          ? (Math.max(text.line(11), 14) + 10) *
+          ? (Math.max(text.line(11), chipIconSize) + 10) *
               (waitingAcross || !review || !finishLater ? 1 : 2) +
             (waitingAcross ? 0 : 4)
           : 0;
@@ -617,6 +620,7 @@ export function overviewWidget(
           !footerAcross && leadingHeight ? ('flex-start' as const) : ('flex-end' as const),
         waitingAcross,
         chipPaddingHorizontal,
+        chipIconSize,
         finishLater,
         footerNote,
         privacyLines,

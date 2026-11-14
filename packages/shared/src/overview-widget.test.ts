@@ -1077,3 +1077,18 @@ it('keeps two payments and two Groups when taller Group content cannot admit a t
   expect(v.layout.fits).toBe(true);
   expect(v.layout.sections.find((s) => s.id === 'payments')!.rowHeight).toBeLessThan(40);
 });
+
+it('scales the footer chip icons and their measured footprint with 200-percent text', () => {
+  const v = overviewWidget(
+    { ...copy, review: { count: 3, verifiedAt: now } },
+    setup,
+    { width: 360, height: 584, pixelRatio: 2.625 },
+    auth,
+    now,
+    2,
+  );
+  expect(v.layout).toMatchObject({ chipIconSize: 28.19047619047619 });
+  expect(v.layout.sections.find((s) => s.id === 'footer')!.height).toBeGreaterThanOrEqual(
+    28.19047619047619 + 10,
+  );
+});

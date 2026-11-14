@@ -172,7 +172,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
   const chipIcon = (path: string, ink: string) => (
     <SvgWidget
       svg={`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path d="${path}" fill="none" stroke="${ink}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
-      style={{ width: 14, height: 14 }}
+      style={{ width: l.chipIconSize, height: l.chipIconSize }}
     />
   );
   const reviewChip = view.review ? (
