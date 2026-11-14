@@ -868,13 +868,12 @@ it.each(sizes.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scale }))
 );
 it('orders Groups by the first nonzero Home currency, compares only that currency, then preserves recent Home order', () => {
   const c = clone(groupsCopy);
-  c.home!.byGroup !=
-    {
-      maple: [{ currency: 'INR', balanceMinor: -100 }],
-      goa: [{ currency: 'INR', balanceMinor: 2000 }],
-      lisbon: [{ currency: 'EUR', balanceMinor: 999999999 }],
-      football: [],
-    };
+  c.home!.byGroup = {
+    maple: [{ currency: 'INR', balanceMinor: -100 }],
+    goa: [{ currency: 'INR', balanceMinor: 2000 }],
+    lisbon: [{ currency: 'EUR', balanceMinor: 999999999 }],
+    football: [],
+  };
   const v = overviewWidget(c, setup, { width: 640, height: 640 }, auth, now);
   expect(v.groups.map((g) => g.id)).toEqual(['goa', 'maple', 'lisbon', 'football']);
   c.home!.byGroup = { maple: [], goa: [], lisbon: [], football: [] };
