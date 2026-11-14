@@ -139,7 +139,7 @@ export function notificationControls(d: {
     void cleanup.catch(() => undefined);
     return cleanup;
   };
-  let retry: (() => Promise<void>) | null = null;
+  let retry: (() => Promise<unknown>) | null = null;
   const active = (owner: number, task: number) =>
     d.current(owner) && operation === task && d.authenticated();
   const set = (status: NotificationControls['status'], message = '') =>
@@ -157,25 +157,26 @@ export function notificationControls(d: {
         : 'Couldn’t confirm notification settings. Retry.',
     );
   };
-  const read = async () => {
-    if (!d.native || !d.authenticated() || d.state().status === 'pending') return;
+  /** True only when this call obtained fresh controls for its still-current session. */
+  const read = async (): Promise<boolean> => {
+    if (!d.native || !d.authenticated() || d.state().status === 'pending') return false;
     const owner = d.owner(),
       task = ++operation;
     set('loading');
     try {
       await cleanup;
-      if (!active(owner, task)) return;
+      if (!active(owner, task)) return false;
       const installation = await d.native.installation();
-      if (!active(owner, task)) return;
+      if (!active(owner, task)) return false;
       const value = await d.request(
         '/api/notifications/device?installationId=' + installation.id,
         owner,
         { installationKey: installation.key },
       );
-      if (!active(owner, task)) return;
+      if (!active(owner, task)) return false;
       const confirmed = result(value);
       const permission = await d.native.permission();
-      if (!active(owner, task)) return;
+      if (!active(owner, task)) return false;
       d.publish({
         confirmed,
         hasConfirmed: true,
@@ -183,12 +184,14 @@ export function notificationControls(d: {
         message: confirmed.enabled && permission !== 'granted' ? blockedMessage : '',
       });
       retry = null;
+      return true;
     } catch (error) {
       if (active(owner, task)) {
         retry = read;
         failed(error);
       }
     }
+    return false;
   };
   /** Resume Settings without reading or changing the server's confirmed registration. */
   const recheckPermission = async () => {
