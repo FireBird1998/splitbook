@@ -1304,6 +1304,7 @@ templates are materialized on read while recurring Expenses are switched on.
 &amountMax=1249.50             // inclusive (#310)
 &includeRecurringCount=1       // opt-in; adds summary.recurringCount (#310)
 &includeUserByCurrency=1       // opt-in; adds summary.userByCurrency (#759)
+&includeRecent=1               // opt-in; adds recent for a placed Group widget (#1187)
 ```
 
 **Added by #310, all additive.** A request that sends none of them answers
@@ -1368,6 +1369,18 @@ requests Android and the web made with answers recorded before #310):
 `summary` is aggregated over the **whole filtered set**, not just the current
 page. `byMember` appears only when `includeMemberBreakdown=1`; `net` is
 `share - paid`, so positive means under-contributed for the window.
+
+`includeRecent=1` adds `recent.expenses` and `recent.settlements`, each capped at
+20 saved rows across the Group, ordered by creation instant, newest first. Expense rows exclude deleted
+items, notes, creator and edit history. Each Expense contains only its identity, Group,
+description, stored money/currency, calendar date, creation time and payer allocations.
+Populated people contain only identity, name and image. Settlement rows contain payer, recipient, saved
+amounts and currencies, and creation time. The ordinary filtered list, pagination
+and summary retain their selected window. Android asks for this addition on an
+existing Expense read only while a placed Group widget has Recent enabled: the
+unfiltered All time first page, or the current-Month first page for a Household
+using its Month lens. Load-more, search, other filters and historical Months omit it. The
+addition uses the same Group access check and adds database work within that request.
 
 **A currency Splitbook no longer supports (#810).** Stored money outlives today's
 currency list, as in Activity (#779). An Expense in such a currency, such as a

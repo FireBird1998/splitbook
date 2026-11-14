@@ -35,6 +35,14 @@ export function widgetSetupChoices(
         }
       : {}),
     hideAmounts: current && 'hideAmounts' in current ? current.hideAmounts === true : false,
+    ...(kind === 'group'
+      ? {
+          showRecentExpenses:
+            current?.kind === 'group' &&
+            current.accountId === accountId &&
+            current.showRecentExpenses === true,
+        }
+      : {}),
   };
 }
 /** A saved setup belongs to an already placed widget, including one from another account. */

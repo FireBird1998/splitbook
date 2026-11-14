@@ -191,13 +191,17 @@ it.each(['light', 'dark'] as const)(
           : 'What you owe and are owed across your Groups.',
       );
       expect(textOf(button())).toBe('Save');
-      expect(host('Switch')[0].props).toMatchObject({
+      expect(
+        host('Switch').find((n) => n.props.accessibilityLabel === 'Hide amounts')!.props,
+      ).toMatchObject({
         value: true,
         thumbColor: tokens.brand.main,
         trackColor: { false: tokens.borderStrong, true: `${tokens.brand.main}80` },
       });
       await act(async () => button().props.onPress());
-      expect(store.saveSetup).toHaveBeenLastCalledWith(saved);
+      expect(store.saveSetup).toHaveBeenLastCalledWith(
+        kind === 'Group' ? { ...saved, showRecentExpenses: false } : saved,
+      );
       act(() => screen!.unmount());
       screen = undefined;
     }
@@ -309,7 +313,11 @@ it.each(setupChanges)(
       hideAmounts: false,
     });
     expect(textOf(button())).toBe('Save');
-    act(() => host('Switch')[0].props.onValueChange(true));
+    act(() =>
+      host('Switch')
+        .find((n) => n.props.accessibilityLabel === 'Hide amounts')!
+        .props.onValueChange(true),
+    );
     store.read.mockResolvedValue(changedSetupRead(state));
 
     await act(async () => button().props.onPress());
@@ -538,4 +546,46 @@ it('an authoritative empty active Tag read drops absent choices on Save', async 
   expect(text()).toContain('0 of 4 chosen');
   await act(async () => button().props.onPress());
   expect(store.saveSetup.mock.calls.at(-1)![0].tagIds).toEqual([]);
+});
+
+it.each(['light', 'dark'] as const)(
+  'Group Recent is opt-in in %s and setup reads only the Widget copy',
+  async (mode) => {
+    appearance.mode = mode;
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    const done = await render('Group');
+    const recent = () =>
+      host('Switch').find((node) => node.props.accessibilityLabel === 'Show recent Expenses')!;
+    expect(recent().props.value).toBe(false);
+    expect(text()).toContain('Descriptions, who paid and amounts');
+    expect(text()).toContain('Counts only: no amounts, names or descriptions');
+    act(() => recent().props.onValueChange(true));
+    await act(async () => button().props.onPress());
+    expect(store.saveSetup).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'group', groupId: 'maple', showRecentExpenses: true }),
+    );
+    expect(done).toHaveBeenCalledWith('ok');
+    expect(fetch).not.toHaveBeenCalled();
+    fetch.mockRestore();
+  },
+);
+
+it('Recent reconfiguration restores the opt-in only for its setup account', async () => {
+  const saved = {
+    kind: 'group' as const,
+    widgetId: 989,
+    accountId: 'alex',
+    groupId: 'maple',
+    showRecentExpenses: true,
+  };
+  await render('Group', saved);
+  expect(
+    host('Switch').find((n) => n.props.accessibilityLabel === 'Show recent Expenses')!.props.value,
+  ).toBe(true);
+  act(() => screen!.unmount());
+  screen = undefined;
+  await render('Group', { ...saved, accountId: 'sam' });
+  expect(
+    host('Switch').find((n) => n.props.accessibilityLabel === 'Show recent Expenses')!.props.value,
+  ).toBe(false);
 });

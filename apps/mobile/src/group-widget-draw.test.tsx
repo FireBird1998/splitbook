@@ -489,3 +489,70 @@ it.each([lightTokens, darkTokens])(
     }
   },
 );
+
+it.each([lightTokens, darkTokens])(
+  'draws two-line Recent rows and Group Expenses tap targets in $mode',
+  (tokens) => {
+    vi.stubGlobal('__DEV__', false);
+    // The Expense's calendar day and the phone's current local day are both November 13.
+    const recentNow = new Date(2026, 10, 13, 9, 41).getTime();
+    const recent = {
+      verifiedAt: recentNow - 180000,
+      rows: [
+        {
+          id: 'private-expense-identity',
+          kind: 'expense' as const,
+          description: 'Beach shack lunch',
+          payer: 'Meera',
+          payerId: 'meera',
+          amountMinor: 280000,
+          currency: 'INR',
+          date: '2026-11-13',
+        },
+        {
+          id: 'private-payment-identity',
+          kind: 'settlement' as const,
+          description: 'Rohan paid Meera',
+          payer: 'Rohan',
+          payerId: 'rohan',
+          amountMinor: 50000,
+          currency: 'INR',
+          date: new Date(2026, 10, 13, 9, 40).toISOString(),
+        },
+      ],
+    };
+    const tree = buildWidgetTree(
+      drawGroup(
+        { ...copy, recents: { maple: recent } },
+        {
+          kind: 'group',
+          accountId: 'alex',
+          groupId: 'maple',
+          widgetId: 7,
+          showRecentExpenses: true,
+        },
+        { width: 360, height: 584 },
+        { status: 'authenticated', accountId: 'alex', loading: false },
+        recentNow,
+        tokens,
+      ),
+    );
+    expect(drawnText(tree)).toContain('Beach shack lunch');
+    expect(drawnText(tree)).toContain('Meera paid\u00a0· Today');
+    expect(drawnText(tree)).toContain('Payment\u00a0· Today');
+    const rows = allNodes(tree).filter(
+      (n) =>
+        n.children?.some((child) => drawnText(child).includes('Beach shack lunch')) &&
+        (n.props as { clickActionData?: { uri?: string } }).clickActionData?.uri?.includes(
+          '/group/maple/expenses',
+        ),
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      const uri = (row.props as { clickActionData: { uri: string } }).clickActionData.uri;
+      expect(new URL(uri).pathname).toBe('/group/maple/expenses');
+      expect(uri).not.toContain('private-expense-identity');
+    }
+    vi.unstubAllGlobals();
+  },
+);

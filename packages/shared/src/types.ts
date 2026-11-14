@@ -222,6 +222,8 @@ export interface ExpenseFilters {
   limit?: number;
   /** Opt-in: include the per-member paid/share/net breakdown in the summary. */
   includeMemberBreakdown?: boolean;
+  /** Include the latest saved Expenses and Settlements for an opted-in Group widget. */
+  includeRecent?: boolean;
   /** Only the Expenses this member paid part of or has a share of (#310). */
   involvesUser?: string;
   /**

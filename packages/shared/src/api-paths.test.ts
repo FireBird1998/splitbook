@@ -260,6 +260,7 @@ describe('Expense page filters', () => {
     amountMax: '1249.50',
     includeRecurringCount: true,
     includeUserByCurrency: true,
+    includeRecent: true,
   };
 
   it('sends every filter the server reads', () => {
@@ -283,6 +284,7 @@ describe('Expense page filters', () => {
       amountMax: '1249.50',
       includeRecurringCount: '1',
       includeUserByCurrency: '1',
+      includeRecent: '1',
     });
   });
 

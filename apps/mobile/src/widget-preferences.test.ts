@@ -15,7 +15,9 @@ vi.mock('expo-sqlite', () => ({
         !rows.setups.has(`${environment}/${id}`)
       )
         rows.setups.set(`${environment}/${id}`, value!);
-      if (sql.startsWith('DELETE FROM widget_setup')) rows.setups.delete(`${environment}/${id}`);
+      if (sql === 'DELETE FROM widget_setup WHERE widget_id = ?')
+        for (const key of rows.setups.keys())
+          if (key.endsWith(`/${environment}`)) rows.setups.delete(key);
       if (sql.startsWith('UPDATE widget_state SET session'))
         rows.sessions.set(String(id), environment);
       if (sql.startsWith('DELETE FROM widget_state')) rows.sessions.delete(environment);

@@ -8,6 +8,7 @@ import { headerChanged } from './header-settings';
 import { createHeldUpdate, type HeldAdmission } from './held-update';
 import type { WidgetTarget } from '@splitbook/shared/balances-widget';
 import { createWidgetCopy } from './widget-copy';
+import { widgetRecentGroup } from './widget-recent-request';
 import {
   parseNotificationEnvelope,
   notificationAuthorized,
@@ -159,6 +160,7 @@ import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { getCurrency } from '@splitbook/shared/currency';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { monthKeyInZone } from '@splitbook/shared/zoned-calendar';
+import { widgetRecentCopy } from './widget-recent-copy';
 import { currentMonthKey, toDateParam } from '@splitbook/shared/date';
 import {
   groupCurrencies,
@@ -917,6 +919,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         id,
         monthKeyInZone(now(), Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
       ),
+    (id) => {
+      const read = groupQueries.recentRead(id);
+      // On restart the existing native Recent is the last accepted snapshot. A saved page
+      // from another Month must not replace it before a successful live Expense read.
+      return read?.source === 'network'
+        ? widgetRecentCopy(read.value, id, read.refreshedAt, account().accountId)
+        : null;
+    },
   );
 
   const savedCopies = savedCopyBudget({
@@ -1335,6 +1345,32 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** A Group's own view: the Group, its Expenses and its Balances (ADR 0006, M1-1, #219). */
   const groupQueries = createGroupQueries({
     ...session,
+    read: async (path, owner, signal) => {
+      const expense = dependencies.widgets?.recentSelections
+        ? widgetRecentGroup(
+            path,
+            monthKeyInZone(now(), Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
+            snapshot.financial.month === null ? null : snapshot.financial.groupId,
+          )
+        : null;
+      if (expense && dependencies.widgets?.recentSelections) {
+        try {
+          const selected = await dependencies.widgets.recentSelections(account().accountId);
+          if (Object.hasOwn(selected, expense)) path += '&includeRecent=1';
+        } catch {
+          // A widget preference cannot prevent the member reading the Group's ledger.
+        }
+      }
+      return session.read(path, owner, signal);
+    },
+    ...(dependencies.widgets?.recentSelections
+      ? {
+          recentRequested: async (id: string) => {
+            const selected = await dependencies.widgets!.recentSelections!(account().accountId);
+            return Object.hasOwn(selected, id);
+          },
+        }
+      : {}),
     answered: (path, saved) => answered(path, saved, true),
     route: () => route,
     savable: (key) => savable(key),
@@ -8378,7 +8414,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             },
           });
       } else {
-        await openGroup(target.groupId, false, 'balances');
+        await openGroup(
+          target.groupId,
+          false,
+          target.kind === 'expenses' ? 'expenses' : 'balances',
+        );
         if (!owns() || heldTaskProtected()) return;
         if (
           target.kind === 'record-payment' &&

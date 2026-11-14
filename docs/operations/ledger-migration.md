@@ -67,6 +67,8 @@ After the combined audit succeeds, the command:
 
 Index creation may reject pre-existing duplicate request keys or recurring periods. Keep writers stopped if it fails and review the duplicates. Do not delete financial records merely to satisfy a unique index.
 
+The Recent widget read also declares the non-unique Expense index `{ group: 1, isDeleted: 1, createdAt: -1, _id: -1 }`. Normal model initialization builds schema indexes asynchronously, including on existing collections (#856). Verify this index has finished building after deploying the compatible application. Where automatic index creation is disabled, the existing `--apply` path above explicitly creates it through `createLedgerIndexes`; follow the same audit, backup and maintenance procedure. This index does not change ledger data.
+
 Rerun the read-only audit independently. Compare Expense, Settlement and template counts, per-currency totals, balances, soft-deletion state, recurring periods, edit history and Activity counts with the backup/rehearsal. Exercise create, edit, retry, restore, settlement and recurring flows using the compatible application before ending maintenance. Confirm indexes exist before claiming retry or recurring uniqueness guarantees.
 
 ## Interruption and recovery

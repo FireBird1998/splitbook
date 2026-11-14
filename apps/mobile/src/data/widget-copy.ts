@@ -9,13 +9,14 @@ import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { parseGroupBalances } from './financial-dto';
 import type { SavedQueryRecords } from './saved-copy-budget';
 import { widgetGroupCopy } from './widget-group-copy';
-import type { WidgetGroupPart } from '@splitbook/shared/group-widget';
+import type { WidgetGroupPart, WidgetRecentPart } from '@splitbook/shared/group-widget';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
 import { createSavedCopyQueue, parseOnce, type Envelope } from './saved-read-engine';
 import type { AccountStorageLease, MobileSnapshot } from './types';
 
 export interface WidgetsNative {
+  recentSelections?(accountId: string): Promise<Record<string, WidgetRecentPart | null>>;
   openSetup?(widgetId: number): Promise<void>;
   write(copy: WidgetCopy): Promise<void>;
   clear(): Promise<void>;
@@ -34,6 +35,7 @@ export function createWidgetCopy(
   groupReads: (id: string) => { group: Envelope; balances?: Envelope } | null = () => null,
   trusted: (path: string, verifiedAt: number) => boolean = () => true,
   monthRead: (id: string) => { month: string; read: Envelope } | null = () => null,
+  recentRead: (id: string) => WidgetRecentPart | null = () => null,
 ) {
   const queue = createSavedCopyQueue();
   let signature = '';
@@ -69,6 +71,7 @@ export function createWidgetCopy(
   const lost = new Set<string>();
   const refusedAt = new Map<string, number>();
   const retired = new Set<string>();
+  const retiredRecent = new Set<string>();
   const archived = new Set<string>();
   let restored = false;
   const restore = async (accountId: string) => {
@@ -281,9 +284,6 @@ export function createWidgetCopy(
         accountId: held.accountId,
         loading: data.status === 'loading' && !copy.home,
       };
-      const next = JSON.stringify([copy, state]);
-      if (next === signature) return;
-      signature = next;
       queue.push('widget', async () => {
         await held.writeSavedCopy(() => restore(held.accountId));
         copy.groups = { ...groups };
@@ -291,9 +291,32 @@ export function createWidgetCopy(
         copy.tags = { ...tags };
         copy.lostGroupIds = [...lost];
         if (savedGroups) copy.savedGroups = savedGroups;
+        if (native.recentSelections) {
+          copy.recents = {};
+          try {
+            await held.writeSavedCopy(async () => {
+              const selected = await native.recentSelections!(held.accountId);
+              const recents: NonNullable<WidgetCopy['recents']> = {};
+              for (const id of Object.keys(selected)) {
+                if (lost.has(id)) continue;
+                const current = recentRead(id);
+                if (current) retiredRecent.delete(id);
+                const saved = current ?? (!retiredRecent.has(id) ? selected[id] : null);
+                if (saved) recents[id] = saved;
+              }
+              copy.recents = recents;
+            });
+          } catch {
+            // Optional private rows cannot prevent the other saved parts or session redrawing.
+            copy.recents = {};
+          }
+        }
+        const next = JSON.stringify([copy, state]);
+        if (next === signature) return;
         await held.writeSavedCopy(() => native.write(copy));
         await held.writeSavedCopy(() => native.setSession(state));
         await held.writeSavedCopy(() => native.redraw());
+        signature = next;
       });
     },
     archiveGroup(id: string) {
@@ -309,6 +332,7 @@ export function createWidgetCopy(
       delete months[id];
       archived.delete(id);
       retired.add(id);
+      retiredRecent.add(id);
       queue.cancel();
       if (denied) {
         delete tags[id];
@@ -329,6 +353,7 @@ export function createWidgetCopy(
       lost.clear();
       refusedAt.clear();
       retired.clear();
+      retiredRecent.clear();
       archived.clear();
       restored = false;
     },

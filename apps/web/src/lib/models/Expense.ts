@@ -213,6 +213,7 @@ ExpenseSchema.pre('validate', function () {
 
 // Indexes
 ExpenseSchema.index({ group: 1, isDeleted: 1, date: -1, createdAt: -1 });
+ExpenseSchema.index({ group: 1, isDeleted: 1, createdAt: -1, _id: -1 });
 ExpenseSchema.index(
   { group: 1, createdBy: 1, 'creationRequest.key': 1 },
   { unique: true, partialFilterExpression: { 'creationRequest.key': { $type: 'string' } } },

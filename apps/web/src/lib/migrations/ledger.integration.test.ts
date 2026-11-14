@@ -117,6 +117,7 @@ describe('combined ledger migration', () => {
           key: { group: 1, createdBy: 1, 'creationRequest.key': 1 },
         }),
         expect.objectContaining({ unique: true, key: { recurringExpense: 1, period: 1 } }),
+        expect.objectContaining({ key: { group: 1, isDeleted: 1, createdAt: -1, _id: -1 } }),
       ]),
     );
     const rerun = await migrateLedger(db, { apply: true });

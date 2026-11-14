@@ -30,6 +30,7 @@ it('round trips fixed Group destinations and setup without arbitrary route input
     { kind: 'group', groupId: 'b00000000000000000000001' },
     { kind: 'settle', groupId: 'b00000000000000000000001' },
     { kind: 'expense', groupId: 'b00000000000000000000001' },
+    { kind: 'expenses', groupId: 'b00000000000000000000001' },
     { kind: 'setup', widgetId: 7 },
   ] as const)
     expect(widgetLinkTarget(widgetLink(target))).toEqual(target);

@@ -74,6 +74,7 @@ function expenseQuery(filters: ExpenseFilters): {
     amountMax: filters.amountMax,
     includeRecurringCount: filters.includeRecurringCount ? '1' : undefined,
     includeUserByCurrency: filters.includeUserByCurrency ? '1' : undefined,
+    includeRecent: filters.includeRecent ? '1' : undefined,
   };
 }
 

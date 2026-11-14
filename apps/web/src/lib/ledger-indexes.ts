@@ -42,6 +42,7 @@ async function createLedgerWriteIndexes(db: LedgerIndexDatabase): Promise<void> 
 export async function createLedgerIndexes(db: Db): Promise<void> {
   await createLedgerWriteIndexes(db);
   await db.collection('expenses').createIndex({ group: 1, isDeleted: 1, date: -1, createdAt: -1 });
+  await db.collection('expenses').createIndex({ group: 1, isDeleted: 1, createdAt: -1, _id: -1 });
   await db.collection('expenses').createIndex({ group: 1, tagId: 1 });
   await db.collection('activities').createIndex({ group: 1, createdAt: -1, _id: -1 });
 }

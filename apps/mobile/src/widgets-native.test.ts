@@ -12,6 +12,7 @@ import { expenseReceipt } from './test-utils/expense-receipt';
 const native = vi.hoisted(() => ({
   databases: new Map<string, DatabaseSync>(),
   exists: true,
+  failMigration: false,
   copyWrite: null as null | {
     when(value: string): boolean;
     arrive(): void;
@@ -30,7 +31,15 @@ vi.mock('expo-sqlite', async () => {
         native.databases.set(file, db);
       }
       return {
-        execAsync: async (sql: string) => db.exec(sql),
+        execAsync: async (sql: string) => {
+          if (native.failMigration && sql.startsWith('BEGIN IMMEDIATE')) {
+            native.failMigration = false;
+            db.exec(
+              'BEGIN IMMEDIATE; DROP TRIGGER IF EXISTS widget_recent_copy; SELECT * FROM missing_migration_table;',
+            );
+          }
+          return db.exec(sql);
+        },
         runAsync: async (sql: string, ...values: (string | number | null)[]) => {
           const held =
             sql.startsWith('UPDATE widget_state SET copy =') &&
@@ -49,6 +58,8 @@ vi.mock('expo-sqlite', async () => {
         },
         getFirstAsync: async (sql: string, ...values: (string | number | null)[]) =>
           db.prepare(sql).get(...values),
+        getAllAsync: async (sql: string, ...values: (string | number | null)[]) =>
+          db.prepare(sql).all(...values),
       };
     },
   };
@@ -56,6 +67,7 @@ vi.mock('expo-sqlite', async () => {
 afterEach(() => {
   for (const db of native.databases.values()) db.close();
   native.databases.clear();
+  native.failMigration = false;
   native.copyWrite = null;
   vi.unstubAllEnvs();
 });
@@ -70,6 +82,9 @@ vi.mock('expo-file-system', () => ({
   },
 }));
 import { createWidgetsNative, createWidgetsStore } from './widgets-native';
+vi.mock('react-native-android-widget/src/api/get-widget-info', () => ({
+  getWidgetInfo: async () => [],
+}));
 
 it('purges an existing copy after a cold start using an absolute file URI', async () => {
   const store = createWidgetsStore('development');
@@ -954,4 +969,181 @@ it('reads duplicate stored Tag ids once, keeping chosen order across store insta
     tagIds: ['a', 'a', 'b', 'c', 'b', 'd'],
   });
   expect(await createWidgetsStore('q5').setup(5)).toMatchObject({ tagIds: ['a', 'b', 'c', 'd'] });
+});
+
+const recentCopy: WidgetCopy = {
+  version: 1,
+  accountId: 'alex',
+  home: null,
+  recents: {
+    maple: {
+      verifiedAt: 1234,
+      rows: [
+        {
+          id: 'lunch',
+          kind: 'expense',
+          description: 'Private beach lunch',
+          payer: 'Meera',
+          payerId: 'meera',
+          amountMinor: 280000,
+          currency: 'INR',
+          date: '2026-11-14',
+        },
+      ],
+    },
+  },
+};
+const recentSetup = (widgetId: number, showRecentExpenses = true) => ({
+  kind: 'group' as const,
+  widgetId,
+  accountId: 'alex',
+  groupId: 'maple',
+  showRecentExpenses,
+});
+const descriptionOnDisk = () =>
+  JSON.stringify(
+    native.databases.get('splitbook-widgets.db')!.prepare('SELECT copy FROM widget_state').all(),
+  ).includes('Private beach lunch');
+
+it('SQLite stores descriptions only for the setup account’s opt-in Groups', async () => {
+  const store = createWidgetsStore('recent');
+  await store.write(recentCopy);
+  expect(descriptionOnDisk()).toBe(false);
+  await store.saveSetup(recentSetup(7));
+  await store.write(recentCopy);
+  expect(descriptionOnDisk()).toBe(true);
+  expect(await store.recentGroups('alex', [7])).toEqual(['maple']);
+  expect(await store.recentGroups('alex', [])).toEqual([]);
+  expect(await store.recentGroups('sam', [7])).toEqual([]);
+  await store.write({ ...recentCopy, accountId: 'sam' });
+  expect(descriptionOnDisk()).toBe(false);
+});
+
+it.each(['off', 'remove', 'reconcile'] as const)(
+  'SQLite deletes descriptions when the last opt-in is gone through %s',
+  async (operation) => {
+    const store = createWidgetsStore('recent');
+    await store.saveSetup(recentSetup(7));
+    await store.saveSetup(recentSetup(8));
+    await store.write(recentCopy);
+    const remove = async (id: number) => {
+      if (operation === 'off') await store.saveSetup(recentSetup(id, false));
+      else if (operation === 'remove') await store.removeSetup(id);
+      else await store.reconcileSetups(id === 7 ? [8] : []);
+    };
+    await remove(7);
+    expect(descriptionOnDisk()).toBe(true);
+    await remove(8);
+    expect(descriptionOnDisk()).toBe(false);
+    await store.write(recentCopy);
+    expect(descriptionOnDisk()).toBe(false);
+  },
+);
+
+it('SQLite consults the current preference when a delayed copy write completes', async () => {
+  const store = createWidgetsStore('recent');
+  await store.saveSetup(recentSetup(7));
+  let arrive!: () => void, release!: () => void;
+  const arrived = new Promise<void>((resolve) => {
+    arrive = resolve;
+  });
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  native.copyWrite = {
+    when: (value) => value.includes('Private beach lunch'),
+    arrive,
+    waiting,
+    complete() {},
+  };
+  const writing = store.write(recentCopy);
+  await arrived;
+  await store.saveSetup(recentSetup(7, false));
+  release();
+  await writing;
+  expect(descriptionOnDisk()).toBe(false);
+});
+
+it('SQLite retains descriptions for an expired session and deletes them with the account copy', async () => {
+  const store = createWidgetsStore('recent');
+  await store.saveSetup(recentSetup(7));
+  await store.write(recentCopy);
+  await store.setSession({ status: 'expired' });
+  expect(descriptionOnDisk()).toBe(true);
+  await store.clear();
+  expect(descriptionOnDisk()).toBe(false);
+  expect(await store.setup(7)).toMatchObject({ showRecentExpenses: true });
+});
+
+it('SQLite removes a Group’s descriptions from every widget copy when its read is refused', async () => {
+  const store = createWidgetsStore('recent');
+  await store.saveSetup(recentSetup(7));
+  await store.write(recentCopy);
+  expect(descriptionOnDisk()).toBe(true);
+  await store.write({ ...recentCopy, lostGroupIds: ['maple'] });
+  expect(descriptionOnDisk()).toBe(false);
+});
+
+it('reconfiguring a physical widget replaces an older build’s opt-in and purges its descriptions', async () => {
+  const oldBuild = createWidgetsStore('old-api');
+  const currentBuild = createWidgetsStore('new-api');
+  await oldBuild.saveSetup(recentSetup(7));
+  await oldBuild.write(recentCopy);
+  expect(descriptionOnDisk()).toBe(true);
+  await currentBuild.saveSetup(recentSetup(7, false));
+  expect(descriptionOnDisk()).toBe(false);
+  expect(await oldBuild.setup(7)).toBeNull();
+  expect(await currentBuild.setup(7)).toMatchObject({ showRecentExpenses: false });
+  await currentBuild.removeSetup(7);
+  expect(await currentBuild.setup(7)).toBeNull();
+});
+
+it('an unreadable setup cannot authorize descriptions or block another widget’s valid preference', async () => {
+  const store = createWidgetsStore('recent');
+  await store.saveSetup(recentSetup(7));
+  native.databases
+    .get('splitbook-widgets.db')!
+    .prepare('INSERT INTO widget_setup(environment,widget_id,setup) VALUES (?,?,?)')
+    .run('recent', 8, '{unreadable');
+  await store.write(recentCopy);
+  expect(descriptionOnDisk()).toBe(true);
+  expect(await store.recentGroups('alex', [7, 8])).toEqual(['maple']);
+  await store.saveSetup(recentSetup(7, false));
+  expect(descriptionOnDisk()).toBe(false);
+});
+
+it('replaces the unversioned Recent triggers on upgrade, then keeps versioned triggers on reopen', async () => {
+  const store = createWidgetsStore('development');
+  await store.saveSetup(recentSetup(7));
+  await store.write(recentCopy);
+  const db = native.databases.get('splitbook-widgets.db')!;
+  db.exec(
+    'DROP TRIGGER widget_recent_setup_removed; CREATE TRIGGER widget_recent_setup_removed AFTER DELETE ON widget_setup BEGIN SELECT 1; END; PRAGMA user_version = 0;',
+  );
+  const upgraded = createWidgetsStore('development');
+  await upgraded.read();
+  expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 1 });
+  expect(
+    db.prepare("SELECT sql FROM sqlite_master WHERE name = 'widget_recent_setup_removed'").get(),
+  ).toMatchObject({ sql: expect.stringContaining('UPDATE widget_state') });
+  await upgraded.removeSetup(7);
+  expect((await upgraded.read()).copy?.recents).toEqual({});
+  await createWidgetsStore('development').read();
+  expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 1 });
+});
+
+it('rolls back a failed trigger migration and retries it on the next store open', async () => {
+  const store = createWidgetsStore('development');
+  await store.read();
+  const db = native.databases.get('splitbook-widgets.db')!;
+  db.exec('PRAGMA user_version = 0');
+  native.failMigration = true;
+  const upgrading = createWidgetsStore('development');
+  await expect(upgrading.read()).rejects.toThrow('missing_migration_table');
+  expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 0 });
+  expect(
+    db.prepare("SELECT name FROM sqlite_master WHERE name = 'widget_recent_copy'").get(),
+  ).toBeDefined();
+  await upgrading.read();
+  expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 1 });
 });
