@@ -362,7 +362,7 @@ export function drawGroup(
           <FlexWidget
             key={row.id}
             clickAction="OPEN_URI"
-            clickActionData={action(group)}
+            clickActionData={action({ kind: 'expenses', groupId: setup.groupId })}
             style={{ width: 'match_parent', height: l.recentRowSizes[index]!.height }}
           >
             {l.recentRowSizes[index]!.dividerHeight ? (
@@ -412,7 +412,7 @@ export function drawGroup(
         {l.recentMessageLines.length ? (
           <FlexWidget
             clickAction="OPEN_URI"
-            clickActionData={action(group)}
+            clickActionData={action({ kind: 'expenses', groupId: setup.groupId })}
             style={{
               paddingHorizontal: l.compact ? 0 : 12,
               height: l.recentPanelHeight,
@@ -430,7 +430,7 @@ export function drawGroup(
         {view.recent?.more ? (
           <FlexWidget
             clickAction="OPEN_URI"
-            clickActionData={action(group)}
+            clickActionData={action({ kind: 'expenses', groupId: setup.groupId })}
             style={{ height: l.recentMoreHeight, justifyContent: 'center' }}
           >
             {text(

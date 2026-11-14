@@ -2185,3 +2185,12 @@ it('unsaved To review descriptions never enter the opted-in Widget copy', async 
   await vi.waitFor(() => expect(f.currentCopy()?.recents?.[groupId]?.rows).toHaveLength(1));
   expect(JSON.stringify(f.currentCopy())).not.toContain('Unsaved To review secret');
 });
+
+it('a Recent widget tap opens the Group Expenses without an individual Expense or editor', async () => {
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openWidget({ kind: 'expenses', groupId });
+  expect(c.getSnapshot()).toMatchObject({ screen: 'group', destination: 'expenses' });
+  expect(c.getSnapshot().detail.data?.id).toBe(groupId);
+});

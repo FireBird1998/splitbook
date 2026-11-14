@@ -38,7 +38,7 @@ export type WidgetTarget =
   | 'create-group'
   | 'choose-group'
   | {
-      kind: 'group' | 'settle' | 'expense' | 'record-payment';
+      kind: 'group' | 'settle' | 'expense' | 'record-payment' | 'expenses';
       groupId: string;
       payment?: { from: string; to: string; currency: string };
     }

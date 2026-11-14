@@ -491,7 +491,7 @@ it.each([lightTokens, darkTokens])(
 );
 
 it.each([lightTokens, darkTokens])(
-  'draws two-line Recent rows and Group-only tap targets in $mode',
+  'draws two-line Recent rows and Group Expenses tap targets in $mode',
   (tokens) => {
     vi.stubGlobal('__DEV__', false);
     const recent = {
@@ -541,12 +541,14 @@ it.each([lightTokens, darkTokens])(
     const rows = allNodes(tree).filter(
       (n) =>
         n.children?.some((child) => drawnText(child).includes('Beach shack lunch')) &&
-        (n.props as { clickAction?: string }).clickAction === 'OPEN_URI',
+        (n.props as { clickActionData?: { uri?: string } }).clickActionData?.uri?.includes(
+          '/group/maple/expenses',
+        ),
     );
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
       const uri = (row.props as { clickActionData: { uri: string } }).clickActionData.uri;
-      expect(new URL(uri).pathname).toBe('/group/maple/group');
+      expect(new URL(uri).pathname).toBe('/group/maple/expenses');
       expect(uri).not.toContain('private-expense-identity');
     }
     vi.unstubAllGlobals();

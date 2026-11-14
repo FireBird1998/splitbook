@@ -8399,7 +8399,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             },
           });
       } else {
-        await openGroup(target.groupId, false, 'balances');
+        await openGroup(
+          target.groupId,
+          false,
+          target.kind === 'expenses' ? 'expenses' : 'balances',
+        );
         if (!owns() || heldTaskProtected()) return;
         if (
           target.kind === 'record-payment' &&
