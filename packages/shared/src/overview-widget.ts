@@ -136,6 +136,7 @@ export function overviewWidget(
       const columnWidth = columns ? (width - 8) / 2 - (panel ? 20 : 0) : width;
       const showSaved = optional && !level && !!read.saved;
       const showHeader = !small || (normal && !level);
+      const headerMarkSize = Math.ceil(16 * scale * text.factor * ratio) / ratio;
       const showOverflow = optional && level < 2;
       const primaryOverflow = owed.length ? owedOverflow : oweOverflow;
       const moneyRoom = small
@@ -262,11 +263,14 @@ export function overviewWidget(
             ? acrossGroups
             : null;
       const chipPaddingHorizontal = 8;
-      const reviewWidth = review ? text.width(review, 11) + chipPaddingHorizontal * 2 + 18 : 0;
+      const chipIconSize = Math.ceil(14 * scale * text.factor * ratio) / ratio;
+      const reviewWidth = review
+        ? text.width(review, 11) + chipPaddingHorizontal * 2 + chipIconSize + 4
+        : 0;
       const draftWidth = finishLater
         ? text.width(finishLater.label, 11) +
           chipPaddingHorizontal * 2 +
-          (finishLater.icon ? 18 : 0)
+          (finishLater.icon ? chipIconSize + 4 : 0)
         : 0;
       const waitingAcross = reviewWidth + draftWidth + (reviewWidth && draftWidth ? 6 : 0) <= width;
       const waitingWidth = waitingAcross
@@ -274,7 +278,7 @@ export function overviewWidget(
         : Math.max(reviewWidth, draftWidth);
       const waitingHeight =
         review || finishLater
-          ? (Math.max(text.line(11), 14) + 10) *
+          ? (Math.max(text.line(11), chipIconSize) + 10) *
               (waitingAcross || !review || !finishLater ? 1 : 2) +
             (waitingAcross ? 0 : 4)
           : 0;
@@ -439,11 +443,21 @@ export function overviewWidget(
       });
       const groupRowHeight = Math.max(
         (compactGroups ? 36 : 42) * scale * text.factor,
-        ...measuredGroups.map((row) => row.textHeight + Math.ceil(ratio) / ratio),
+        ...measuredGroups.map(
+          (row) =>
+            row.textHeight + (!compactGroups && row.stack ? 12 : 0) + Math.ceil(ratio) / ratio,
+        ),
       );
       const sections: WidgetSection[] = [
         ...(showHeader
-          ? [{ id: 'header', rows: 1, rowHeight: text.line(small ? 10 : 13), required: true }]
+          ? [
+              {
+                id: 'header',
+                rows: 1,
+                rowHeight: Math.max(headerMarkSize, text.line(small ? 10 : 13)),
+                required: true,
+              },
+            ]
           : []),
         ...(normal ? [{ id: 'balance', rows: 1, rowHeight: balanceHeight, required: true }] : []),
         ...(normal && tall && availablePayments.length
@@ -456,7 +470,7 @@ export function overviewWidget(
                 headingHeight: paymentHeaderHeight,
                 inset: compactPayments ? 0 : 8,
                 moreHeight: paymentDetails ? 0 : undefined,
-                grow: true,
+                grow: showGroups ? false : ('when-complete' as const),
               },
             ]
           : []),
@@ -503,7 +517,7 @@ export function overviewWidget(
                   ? availablePayments.length && paymentFits
                     ? level
                       ? 1
-                      : 2 + Math.floor(Math.max(0, size.height - 464) / 120) * 2
+                      : 3 + Math.floor(Math.max(0, size.height - 464) / 120) * 2
                     : groupRows.length
                   : 0,
                 rowHeight: groupRowHeight,
@@ -594,6 +608,7 @@ export function overviewWidget(
         panel,
         small,
         showHeader,
+        headerMarkSize,
         showSaved,
         showStateTile,
         messageBesideTile,
@@ -612,6 +627,7 @@ export function overviewWidget(
           !footerAcross && leadingHeight ? ('flex-start' as const) : ('flex-end' as const),
         waitingAcross,
         chipPaddingHorizontal,
+        chipIconSize,
         finishLater,
         footerNote,
         privacyLines,

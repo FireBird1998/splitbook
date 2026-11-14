@@ -200,7 +200,7 @@ function projectPerson(
       payment,
       groupName: payment.groupName,
     })),
-    ...(size.height >= 300 && !level
+    ...(size.height >= 300 && level < 2
       ? read.squareGroups.map((group) => ({ kind: 'square' as const, groupName: group.name }))
       : []),
   ];
@@ -270,20 +270,29 @@ function projectPerson(
       const titleFont = compact ? 13 : 15,
         bodyFont = 12,
         actionFont = 12;
-      const showStateTile = !!read.title && optional && !level && !compact;
+      const showStateTile =
+        !!read.title &&
+        optional &&
+        level < 2 &&
+        (read.state === 'all-square' || (!level && !compact));
       const stateTileSize = read.state === 'all-square' ? 22 : 48;
       const messageGap = read.state === 'all-square' ? 8 : 12;
+      const separateDescription = read.state === 'all-square' && size.height < 300;
+      const centerMessage = separateDescription || (read.state === 'no-copy' && size.height < 300);
       const messageWidth = width - (showStateTile ? stateTileSize + messageGap : 0);
       const titleLines = read.title ? text.words(read.title, titleFont, messageWidth) : [];
       const descriptionLines =
         read.description && optional && level < 2
-          ? text.words(read.description, bodyFont, messageWidth)
+          ? text.words(read.description, bodyFont, separateDescription ? width : messageWidth)
           : [];
       const actionLines = read.action ? text.words(read.action, actionFont, width - 24) : [];
       const showPrivacy = !!read.hidden && optional && level < 2;
       const privacyLines = showPrivacy ? text.words(read.hidden!, 10, width - 18) : [];
       const sections: WidgetSection[] = [
         ...(read.name ? [{ id: 'header', rows: 1, rowHeight: headerHeight, required: true }] : []),
+        ...(centerMessage
+          ? [{ id: 'message-before', rows: 1, rowHeight: 0, required: true, grow: true }]
+          : []),
         ...(read.title || descriptionLines.length
           ? [
               {
@@ -294,7 +303,7 @@ function projectPerson(
                     showStateTile ? stateTileSize : 0,
                     titleLines.length * text.line(titleFont),
                   ) +
-                  (descriptionLines.length
+                  (!separateDescription && descriptionLines.length
                     ? (titleLines.length ? 8 : 0) + descriptionLines.length * text.line(bodyFont)
                     : 0),
                 required: true,
@@ -317,11 +326,28 @@ function projectPerson(
                 rowHeight,
                 inset: compact ? 0 : 8,
                 moreHeight: text.line(10) + 4,
-                grow: true,
+                grow: 'when-complete' as const,
               },
             ]
           : []),
-        { id: 'space', rows: 1, rowHeight: 0, required: true, fallbackGrow: true },
+        {
+          id: 'space',
+          rows: 1,
+          rowHeight: 0,
+          required: true,
+          grow: centerMessage,
+          fallbackGrow: !centerMessage,
+        },
+        ...(separateDescription && descriptionLines.length
+          ? [
+              {
+                id: 'description',
+                rows: 1,
+                rowHeight: descriptionLines.length * text.line(bodyFont),
+                required: true,
+              },
+            ]
+          : []),
         ...(read.update
           ? [{ id: 'update', rows: 1, rowHeight: text.line(10), required: true }]
           : []),
@@ -359,8 +385,10 @@ function projectPerson(
         measured,
         titleLines,
         descriptionLines,
+        separateDescription,
         actionLines,
         showStateTile,
+        stateIcon: read.state === 'no-shared-group' ? ('warning' as const) : null,
         stateTileSize,
         stateIconSize: read.state === 'all-square' ? 22 : 28,
         messageGap,

@@ -556,3 +556,21 @@ it.each([lightTokens, darkTokens])(
     vi.unstubAllGlobals();
   },
 );
+
+it('keeps drawing an omitted Group until confirmed, then uses the lost or archived state', () => {
+  vi.stubGlobal('__DEV__', false);
+  const setup = { kind: 'group' as const, widgetId: 8, accountId: 'alex', groupId: 'maple' };
+  const session = { status: 'authenticated' as const, accountId: 'alex', loading: false };
+  const omitted = { ...copy, savedGroups: { verifiedAt: now, rows: [] } };
+  const texts = (c: WidgetCopy) =>
+    drawnText(
+      buildWidgetTree(drawGroup(c, setup, { width: 360, height: 224 }, session, now, lightTokens)),
+    );
+  expect(texts(omitted).join(' ')).toContain('Maple House');
+  expect(texts({ ...omitted, lostGroupIds: ['maple'] }).join(' ')).toContain(
+    'You’re no longer in this Group',
+  );
+  expect(
+    texts({ ...omitted, groups: { maple: { ...copy.groups!.maple, archived: true } } }).join(' '),
+  ).toContain('Maple House');
+});

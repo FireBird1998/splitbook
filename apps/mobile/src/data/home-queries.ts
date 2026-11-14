@@ -250,8 +250,10 @@ export interface HomeSession {
   answered(path: string, saved?: number | null): void;
   /** A Groups list from the server holds `listed`, and leaves out `lost`: they go from memory. */
   listed(listed: Set<string>, lost: Set<string>): void;
-  /** Verified omission prompts an access check only for financial records kept on this device. */
+  /** A trusted omission confirms access for kept financial records and Widget copy parts. */
   checkUnlisted?(listed: Set<string>, owner: number): Promise<void>;
+  homeVerified?(): void;
+  listVerified?(groups: MobileGroup[]): void;
   financialBlocked?(accountId: string, groupId: string): boolean;
   /** The persister keeps only these Groups' copies (inside a lease write). */
   retain(accountId: string, listed: string[]): Promise<void> | undefined;
@@ -547,7 +549,6 @@ export function createHomeQueries(session: HomeSession) {
         'home',
       ]);
     }
-    if (session.current(owner)) await session.checkUnlisted?.(listed, owner);
   };
   const options = (): QueryObserverOptions<Envelope, Error, Envelope, Envelope, QueryKey>[] => [
     {
@@ -843,7 +844,36 @@ export function createHomeQueries(session: HomeSession) {
             (scope !== 'groups' && scope !== 'home')
           )
             return;
+          if (
+            scope === 'home' &&
+            event.action.type === 'success' &&
+            !event.action.manual &&
+            (query.state.data as Envelope | undefined)?.source === 'network'
+          )
+            session.homeVerified?.();
+          if (
+            scope === 'groups' &&
+            event.action.type === 'success' &&
+            !event.action.manual &&
+            (query.state.data as Envelope | undefined)?.source === 'network'
+          )
+            session.listVerified?.(listOf((query.state.data as Envelope).value));
           if (project(session.snapshot()) !== session.snapshot()) session.publish({});
+          if (scope === 'groups' && event.action.type === 'success' && !event.action.manual) {
+            const answer = query.state.data as Envelope | undefined;
+            if (answer?.source === 'network') {
+              const owner = session.generation(),
+                listed = new Set(listOf(answer.value).map((g) => g.id));
+              // Publication above and the saved list land before access checks. Their network
+              // work never joins the list query, a refresh, or the next list read.
+              void engine
+                .idle()
+                .then(() => {
+                  if (session.current(owner)) return session.checkUnlisted?.(listed, owner);
+                })
+                .catch(() => undefined);
+            }
+          }
         }),
         focus.subscribe((focused) => focused && client.getQueryCache().onFocus()),
         online.subscribe((connected) => connected && client.getQueryCache().onOnline()),

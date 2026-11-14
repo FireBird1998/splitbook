@@ -369,7 +369,7 @@ export function quickWidget(
       kind: 'setup',
       widgetId: setup.widgetId,
     });
-  if (setup.groupId && copy?.lostGroupIds?.includes(setup.groupId))
+  if (setup.groupId && copy && copy.lostGroupIds?.includes(setup.groupId))
     return blocked('lost-access', 'Not in this Group', 'Choose a Group', {
       kind: 'setup',
       widgetId: setup.widgetId,

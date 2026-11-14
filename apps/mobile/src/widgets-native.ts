@@ -2,7 +2,11 @@ import { widgetPeople } from '@splitbook/shared/widget-people';
 import { openDatabaseAsync, defaultDatabaseDirectory, type SQLiteDatabase } from 'expo-sqlite';
 import { readWidgetTagIds, type WidgetSetupRecord } from '@splitbook/shared/widget-setup';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
-import type { WidgetsNative } from './data/widget-copy';
+import type {
+  WidgetsNative,
+  WidgetCopyWriteOptions,
+  WidgetGroupEviction,
+} from './data/widget-copy';
 
 // SQLite checks the current setup in the same statement that stores a copy. A delayed app
 // write cannot put descriptions back after setup was switched off or its widget removed.
@@ -24,6 +28,34 @@ const pruneRecents = `UPDATE widget_state SET copy = ${permittedRecents}
   WHERE json_valid(copy) AND json_type(copy, '$.recents') = 'object'
     AND copy != ${permittedRecents};`;
 
+interface StoredEviction {
+  group_id: string;
+  eviction: string;
+  home_pending: number;
+  restored: number;
+}
+/** Legacy fences have the same meaning; reads never write while an account purge can run. */
+function legacyEvictions(copy: WidgetCopy): StoredEviction[] {
+  return [
+    ...new Set([...(copy.lostGroupIds ?? []), ...Object.keys(copy.peopleRefusedAt ?? {})]),
+  ].map((id) => {
+    const at = copy.peopleRefusedAt?.[id] ?? 0,
+      home = copy.home;
+    const pending =
+      !home ||
+      home.verifiedAt < at ||
+      !home.byGroup ||
+      id in home.byGroup ||
+      Object.keys(home.byGroup).length < home.groupCount;
+    return {
+      group_id: id,
+      eviction: JSON.stringify({ kind: 'lost', at }),
+      home_pending: pending ? 1 : 0,
+      restored: 0,
+    };
+  });
+}
+
 /** Separate saved read in app-private SQLite, readable by the headless widget renderer. */
 export function createWidgetsStore(environment: string) {
   let opening: Promise<SQLiteDatabase> | undefined;
@@ -33,6 +65,11 @@ export function createWidgetsStore(environment: string) {
       await db.execAsync(`PRAGMA secure_delete = ON;
       PRAGMA journal_mode = DELETE;
       CREATE TABLE IF NOT EXISTS widget_state (environment TEXT PRIMARY KEY, copy TEXT, session TEXT);
+      CREATE TABLE IF NOT EXISTS widget_group_evictions (
+        environment TEXT, account_id TEXT, group_id TEXT, eviction TEXT,
+        home_pending INTEGER NOT NULL DEFAULT 1, restored INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(environment, account_id, group_id)
+      );
       CREATE TABLE IF NOT EXISTS widget_setup (environment TEXT, widget_id INTEGER, setup TEXT, PRIMARY KEY(environment, widget_id));`);
       const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
       if ((version?.user_version ?? 0) < 1) {
@@ -157,34 +194,147 @@ export function createWidgetsStore(environment: string) {
       } catch {
         // An unreadable copy is absent for this draw; do not wipe setup or block the next read.
       }
+      if (copy) {
+        const records = await (
+          await database()
+        ).getAllAsync<StoredEviction>(
+          'SELECT group_id, eviction, home_pending, restored FROM widget_group_evictions WHERE environment = ? AND account_id = ?',
+          environment,
+          copy.accountId,
+        );
+        const held = new Set(records.map((row) => row.group_id));
+        records.push(...legacyEvictions(copy).filter((row) => !held.has(row.group_id)));
+        if (records.length) {
+          copy = {
+            ...copy,
+            groups: { ...copy.groups },
+            months: { ...copy.months },
+            tags: { ...copy.tags },
+            groupPeople: { ...copy.groupPeople },
+            recents: { ...copy.recents },
+            peopleRefusedAt: { ...copy.peopleRefusedAt },
+          };
+          const lost = new Set(copy.lostGroupIds ?? []);
+          const archived = new Set(copy.archivedGroupIds ?? []);
+          try {
+            for (const row of records) {
+              const id = row.group_id,
+                eviction = JSON.parse(row.eviction) as WidgetGroupEviction;
+              if (!Number.isFinite(eviction.at) || !['lost', 'archived'].includes(eviction.kind))
+                throw new Error('Unreadable widget eviction');
+              if (row.home_pending) copy.home = null;
+              if (row.restored) {
+                archived.delete(id);
+                lost.delete(id);
+                delete copy.peopleRefusedAt![id];
+                continue;
+              }
+              if (eviction.kind === 'lost') {
+                archived.delete(id);
+                lost.add(id);
+                copy.peopleRefusedAt![id] = eviction.at;
+                delete copy.groups![id];
+                delete copy.months![id];
+                delete copy.tags![id];
+                delete copy.groupPeople![id];
+                delete copy.recents![id];
+                if (copy.savedGroups)
+                  copy.savedGroups = {
+                    ...copy.savedGroups,
+                    rows: copy.savedGroups.rows.filter((g) => g.id !== id),
+                  };
+              } else {
+                archived.add(id);
+                lost.delete(id);
+                delete copy.peopleRefusedAt![id];
+                const final = eviction.group ?? copy.groups![id];
+                if (final) copy.groups![id] = { ...final, archived: true };
+                if (eviction.month) copy.months![id] = eviction.month;
+                if (copy.groupPeople![id])
+                  copy.groupPeople![id] = { ...copy.groupPeople![id], archived: true };
+                if (copy.savedGroups)
+                  copy.savedGroups = {
+                    ...copy.savedGroups,
+                    rows: copy.savedGroups.rows.map((g) =>
+                      g.id === id ? { ...g, archived: true } : g,
+                    ),
+                  };
+              }
+              if (copy.finishLater?.groupId === id) delete copy.finishLater;
+            }
+            copy.lostGroupIds = [...lost];
+            copy.archivedGroupIds = [...archived];
+          } catch {
+            // An unreadable access record must not expose a provisional copy.
+            copy = null;
+          }
+        }
+      }
       return {
         copy,
         session: row?.session ? JSON.parse(row.session) : { status: 'signed-out' },
       };
     },
-    async write(copy: WidgetCopy) {
+    async evictGroup(accountId: string, id: string, eviction: WidgetGroupEviction) {
       const db = await ensure();
+      await db.runAsync(
+        'INSERT OR REPLACE INTO widget_group_evictions(environment, account_id, group_id, eviction, home_pending, restored) VALUES (?, ?, ?, ?, 1, 0)',
+        environment,
+        accountId,
+        id,
+        JSON.stringify(eviction),
+      );
+    },
+    async write(copy: WidgetCopy, options: WidgetCopyWriteOptions = {}) {
+      const db = await ensure();
+      if (options.current?.() === false) return;
       const previous = (await this.read()).copy;
       if (previous?.accountId === copy.accountId) {
+        // An admitted write upgrades legacy fences before it can replace their copy. Keep
+        // Home's pending invalidation even if this write legitimately restores membership.
+        for (const record of legacyEvictions(previous)) {
+          if (options.current?.() === false) return;
+          await db.runAsync(
+            'INSERT OR IGNORE INTO widget_group_evictions(environment, account_id, group_id, eviction, home_pending, restored) VALUES (?, ?, ?, ?, ?, 0)',
+            environment,
+            copy.accountId,
+            record.group_id,
+            record.eviction,
+            record.home_pending,
+          );
+        }
         // App queries deliberately evict archived Groups. Their verified final widget balance
         // survives that eviction and a restart, until access is genuinely lost or the copy purged.
         const finalGroups = Object.fromEntries(
           Object.entries(previous.groups ?? {}).filter(
-            ([id, group]) => group.archived && !copy.lostGroupIds?.includes(id),
+            ([id, group]) =>
+              group.archived &&
+              !copy.lostGroupIds?.includes(id) &&
+              !options.trustedGroups?.includes(id),
           ),
         );
         const finalMonths = Object.fromEntries(
           Object.entries(previous.months ?? {}).filter(([id]) => finalGroups[id]),
+        );
+        const retainedTags = Object.fromEntries(
+          Object.entries(previous.tags ?? {}).filter(
+            ([id]) =>
+              !options.tags?.includes(id) &&
+              !(
+                options.trustedGroups?.includes(id) &&
+                (previous.groups?.[id]?.archived || previous.archivedGroupIds?.includes(id))
+              ),
+          ),
         );
         copy = {
           ...copy,
           groups: { ...finalGroups, ...copy.groups },
           months: { ...finalMonths, ...copy.months },
           tags: Object.fromEntries(
-            [...new Set([...Object.keys(previous.tags ?? {}), ...Object.keys(copy.tags ?? {})])]
+            [...new Set([...Object.keys(retainedTags), ...Object.keys(copy.tags ?? {})])]
               .filter((id) => !copy.lostGroupIds?.includes(id))
               .map((id) => {
-                const old = previous.tags?.[id],
+                const old = retainedTags[id],
                   fresh = copy.tags?.[id];
                 return [id, old && (!fresh || old.verifiedAt > fresh.verifiedAt) ? old : fresh!];
               }),
@@ -198,11 +348,36 @@ export function createWidgetsStore(environment: string) {
         )
           copy = { ...copy, review: previous.review };
       }
+      if (options.current?.() === false) return;
       await db.runAsync(
         'UPDATE widget_state SET copy = ? WHERE environment = ?',
         JSON.stringify(copy),
         environment,
       );
+      if (options.current?.() === false) return;
+      // Only the writer's newly admitted own Group/Home answers can release these fences.
+      for (const id of options.trustedGroups ?? []) {
+        if (options.current?.() === false) return;
+        await db.runAsync(
+          'UPDATE widget_group_evictions SET restored = 1 WHERE environment = ? AND account_id = ? AND group_id = ?',
+          environment,
+          copy.accountId,
+          id,
+        );
+      }
+      if (options.homeVerified && options.current?.() !== false)
+        await db.runAsync(
+          'UPDATE widget_group_evictions SET home_pending = 0 WHERE environment = ? AND account_id = ?',
+          environment,
+          copy.accountId,
+        );
+      if (options.current?.() === false) return;
+      await db.runAsync(
+        'DELETE FROM widget_group_evictions WHERE environment = ? AND account_id = ? AND restored = 1 AND home_pending = 0',
+        environment,
+        copy.accountId,
+      );
+      if (options.current?.() === false) return;
       // This write is admitted by the controller's account lease. Refill only this
       // environment/account's chosen people, from the trusted membership it knows.
       const people = new Map(
@@ -244,6 +419,10 @@ export function createWidgetsStore(environment: string) {
           SET setup = json_remove(setup, '$.person.firstName', '$.person.initials')
           WHERE json_valid(setup) AND json_extract(setup, '$.kind') = 'person'`);
         await transaction.runAsync('DELETE FROM widget_state WHERE environment = ?', environment);
+        await transaction.runAsync(
+          'DELETE FROM widget_group_evictions WHERE environment = ?',
+          environment,
+        );
       });
     },
     async setSession(session: WidgetSession) {
@@ -268,6 +447,7 @@ export function createWidgetsNative(environment: string): WidgetsNative {
   let sessions: Promise<void> = Promise.resolve();
   return {
     readCopy: async () => (await store.read()).copy,
+    evictGroup: (accountId, id, eviction) => store.evictGroup(accountId, id, eviction),
     recentSelections: async (accountId) => {
       const { getWidgetInfo } = await import('react-native-android-widget/src/api/get-widget-info');
       const activeIds = (await getWidgetInfo('Group')).map((widget) => widget.widgetId);
@@ -289,7 +469,7 @@ export function createWidgetsNative(environment: string): WidgetsNative {
         { key: 'appWidgetId', value: widgetId },
       ]);
     },
-    write: (copy) => store.write(copy),
+    write: (copy, options) => store.write(copy, options),
     clear: () => store.clear(),
     setSession: (state) => {
       const next = sessions.catch(() => undefined).then(() => store.setSession(state));
