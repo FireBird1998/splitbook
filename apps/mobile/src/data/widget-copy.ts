@@ -1,4 +1,4 @@
-import { personGroupWasDropped } from '@splitbook/shared/widget-people';
+import { widgetGroupWasDropped } from '@splitbook/shared/widget-membership';
 import { parseGroupListResponse, type GroupReadTag } from '@splitbook/shared/group-read';
 import { expenseDraftChanged, parseExpenseContext } from './expense-draft';
 import { cachedRead } from './offline-cache';
@@ -51,7 +51,11 @@ export function createWidgetCopy(
     rows: { id: string; name: string; isArchived: boolean; isDeleted: boolean }[],
     verifiedAt: number,
   ) => {
-    if ((tags[id]?.verifiedAt ?? -Infinity) > verifiedAt) return;
+    if (
+      (tags[id]?.verifiedAt ?? -Infinity) > verifiedAt ||
+      verifiedAt <= (peopleRefusedAt[id] ?? -Infinity)
+    )
+      return;
     tags[id] = {
       verifiedAt,
       rows: rows
@@ -72,15 +76,30 @@ export function createWidgetCopy(
   let groupPeople: NonNullable<WidgetCopy['groupPeople']> = {};
   let peopleRefusedAt: NonNullable<WidgetCopy['peopleRefusedAt']> = {};
   let peopleList: Pick<Envelope, 'refreshedAt' | 'value'> | null = null;
-  const prunePeople = () => {
+  const pruneGroups = (copy: WidgetCopy) => {
     if (!peopleList) return;
     const parts = {
+      ...copy,
       groups,
       groupPeople,
+      tags,
+      months,
       savedGroups: { verifiedAt: peopleList.refreshedAt, rows: parseGroups(peopleList.value) },
     };
-    for (const id of Object.keys(groupPeople))
-      if (personGroupWasDropped(parts, id)) delete groupPeople[id];
+    const ids = new Set([
+      ...Object.keys(groups),
+      ...Object.keys(groupPeople),
+      ...Object.keys(tags),
+      ...Object.keys(months),
+    ]);
+    for (const id of ids)
+      if (widgetGroupWasDropped(parts, id)) {
+        delete groups[id];
+        delete groupPeople[id];
+        delete tags[id];
+        delete months[id];
+        retiredRecent.add(id);
+      }
   };
 
   const rememberPeople = (
@@ -120,6 +139,7 @@ export function createWidgetCopy(
         if (!Number.isFinite(at)) continue;
         if ((groupPeople[id]?.verifiedAt ?? -Infinity) > at) continue;
         peopleRefusedAt[id] = Math.max(peopleRefusedAt[id] ?? -Infinity, at);
+        refusedAt.set(id, at);
         delete groupPeople[id];
       }
     }
@@ -152,7 +172,10 @@ export function createWidgetCopy(
       const id = path.split('/').at(-1)!;
       if (retired.has(id)) continue;
       const detail = await read(path);
-      if (!detail || retired.has(id)) continue;
+      if (!detail || retired.has(id) || detail.refreshedAt <= (refusedAt.get(id) ?? -Infinity))
+        continue;
+      delete peopleRefusedAt[id];
+      refusedAt.delete(id);
       if (!lost.has(id)) {
         try {
           rememberPeople(parseGroup(detail.value), detail.refreshedAt, true);
@@ -277,7 +300,6 @@ export function createWidgetCopy(
           month.read.refreshedAt,
         );
       }
-      prunePeople();
       const copy: WidgetCopy = {
         version: 1,
         accountId: held.accountId,
@@ -286,7 +308,7 @@ export function createWidgetCopy(
         tags: { ...tags },
         groupPeople: { ...groupPeople },
         peopleRefusedAt: { ...peopleRefusedAt },
-        lostGroupIds: [...lost],
+        lostGroupIds: [...new Set([...lost, ...Object.keys(peopleRefusedAt)])],
         ...(savedGroups ? { savedGroups } : {}),
         home:
           data.data !== null && data.refreshedAt !== null
@@ -364,10 +386,9 @@ export function createWidgetCopy(
         copy.groups = { ...groups };
         copy.months = { ...months };
         copy.tags = { ...tags };
-        prunePeople();
         copy.groupPeople = { ...groupPeople };
         copy.peopleRefusedAt = { ...peopleRefusedAt };
-        copy.lostGroupIds = [...lost];
+        copy.lostGroupIds = [...new Set([...lost, ...Object.keys(peopleRefusedAt)])];
         if (savedGroups) copy.savedGroups = savedGroups;
         if (native.recentSelections) {
           copy.recents = {};
@@ -376,7 +397,7 @@ export function createWidgetCopy(
               const selected = await native.recentSelections!(held.accountId);
               const recents: NonNullable<WidgetCopy['recents']> = {};
               for (const id of Object.keys(selected)) {
-                if (lost.has(id)) continue;
+                if (copy.lostGroupIds?.includes(id)) continue;
                 const current = recentRead(id);
                 if (current) retiredRecent.delete(id);
                 const saved = current ?? (!retiredRecent.has(id) ? selected[id] : null);
@@ -389,6 +410,28 @@ export function createWidgetCopy(
             copy.recents = {};
           }
         }
+        const dropped = new Set(
+          [...Object.keys(copy.groups ?? {}), ...Object.keys(copy.home?.byGroup ?? {})].filter(
+            (id) => copy.lostGroupIds?.includes(id) || widgetGroupWasDropped(copy, id),
+          ),
+        );
+        pruneGroups(copy);
+        if (copy.home?.byGroup)
+          copy.home = {
+            ...copy.home,
+            byGroup: Object.fromEntries(
+              Object.entries(copy.home.byGroup).filter(([id]) => !dropped.has(id)),
+            ),
+          };
+        copy.groups = { ...groups };
+        copy.months = { ...months };
+        copy.tags = { ...tags };
+        copy.groupPeople = { ...groupPeople };
+        if (copy.recents)
+          for (const id of Object.keys(copy.recents))
+            if (widgetGroupWasDropped(copy, id)) delete copy.recents[id];
+        if (copy.finishLater && widgetGroupWasDropped(copy, copy.finishLater.groupId))
+          delete copy.finishLater;
         const next = JSON.stringify([copy, state]);
         if (next === signature) return;
         await held.writeSavedCopy(() => native.write(copy));

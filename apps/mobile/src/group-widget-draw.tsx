@@ -1,3 +1,4 @@
+import { readWidgetGroup } from '@splitbook/shared/widget-membership';
 import lightMark from '../assets/widgets/mark-light.svg';
 import darkMark from '../assets/widgets/mark-dark.svg';
 import { FlexWidget } from 'react-native-android-widget/src/widgets/FlexWidget';
@@ -19,12 +20,7 @@ export function drawGroup(
   t: SemanticTokens,
   fontScale = 1,
 ) {
-  const part =
-    copy?.accountId === setup.accountId
-      ? copy.lostGroupIds?.includes(setup.groupId)
-        ? null
-        : copy.groups?.[setup.groupId]
-      : undefined;
+  const part = readWidgetGroup(copy, setup.accountId, setup.groupId);
   const view = groupWidget(
       part,
       setup,

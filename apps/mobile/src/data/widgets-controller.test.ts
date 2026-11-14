@@ -2890,12 +2890,23 @@ it('prunes Person membership when a newer trusted list drops its only shared Gro
     c = f.make();
   await c.signIn('alex');
   await vi.waitFor(() => expect(f.record().copy?.groupPeople?.[groupId]).toBeDefined());
+  await c.openGroup(groupId);
+  await vi.waitFor(() => expect(f.record().copy?.groups?.[groupId]).toBeDefined());
+  await c.back();
   f.listGroups([]);
   clock.mockReturnValue(verified + 1000);
   await c.refresh('pull');
   await vi.waitFor(() => expect(f.record().copy?.savedGroups?.rows).toEqual([]));
   expect(f.record().copy?.groupPeople?.[groupId]).toBeUndefined();
   expect(widgetPeople(f.record().copy, alex.id)).toEqual([]);
+  expect(f.record().copy?.groups?.[groupId]).toBeUndefined();
+  expect(f.record().copy?.tags?.[groupId]).toBeUndefined();
+  expect(f.record().copy?.months?.[groupId]).toBeUndefined();
+  expect(f.record().copy?.home?.byGroup?.[groupId]).toBeUndefined();
+  expect(f.record().copy?.home?.currencies).toEqual([
+    { currency: 'INR', owedMinor: 240000, oweMinor: 148000 },
+    { currency: 'EUR', owedMinor: 4000, oweMinor: 0 },
+  ]);
 });
 
 it('retires a departed person’s lines from a fresh Group read even when the older Groups list and Balances still name them, and Choose another opens setup', async () => {

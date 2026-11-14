@@ -449,7 +449,7 @@ copies without this optional field need an app read; there is no migration. A ne
 trusted Groups list prunes omitted people parts. Person also filters older parts
 against that list when reading. Optional `peopleRefusedAt` timestamps in the Widget
 copy fence old saved membership across restarts; a newer trusted Group read retires
-the fence. Other widgets keep their existing list and refusal rules.
+the fence. The same verified-list retirement and persisted refusal fences apply to every widget. Archived final Group reads remain available; list absence alone never labels a Group archived.
 
 A Person setup keeps the chosen id for its account. It may keep the first name and
 initials while signed in; sign-out and account change strip those labels before the
