@@ -953,3 +953,58 @@ it('moves square Groups up as one message block with a bottom action and speaks 
   expect(message.height).toBe(message.rowHeight);
   expect(v.summary.indexOf('Sunday Football')).toBeLessThan(v.summary.indexOf('To review'));
 });
+
+it.each([1, 1.3, 2])(
+  'keeps a 4×3 Overview unchanged before the Groups section fits at %s text',
+  (scale) => {
+    const without = clone(groupsCopy);
+    delete without.savedGroups;
+    const before = overviewWidget(
+      without,
+      setup,
+      { width: 360, height: 344, pixelRatio: 2.625 },
+      auth,
+      now,
+      scale,
+    );
+    const after = overviewWidget(
+      groupsCopy,
+      setup,
+      { width: 360, height: 344, pixelRatio: 2.625 },
+      auth,
+      now,
+      scale,
+    );
+    expect(after.groups).toEqual([]);
+    expect(after.payments.map((p) => p.label)).toEqual(before.payments.map((p) => p.label));
+    expect(after.action).toBe(before.action);
+    expect(after.review).toBe(before.review);
+    expect(after.layout.textFactor).toBe(before.layout.textFactor);
+  },
+);
+
+it('does not spend the footer budget on a Groups section that is not drawn at in-between heights', () => {
+  const without = clone(groupsCopy);
+  delete without.savedGroups;
+  for (const width of [172, 231, 301, 360])
+    for (const height of [280, 300, 344, 390])
+      for (const scale of [1, 1.3, 2]) {
+        const size = { width, height, pixelRatio: 2.625 };
+        const a = overviewWidget(without, setup, size, auth, now, scale),
+          b = overviewWidget(groupsCopy, setup, size, auth, now, scale);
+        expect(
+          {
+            payments: b.payments.map((p) => p.label),
+            action: b.action,
+            review: b.review,
+            factor: b.layout.textFactor,
+          },
+          `${width}x${height}/${scale}`,
+        ).toEqual({
+          payments: a.payments.map((p) => p.label),
+          action: a.action,
+          review: a.review,
+          factor: a.layout.textFactor,
+        });
+      }
+});
