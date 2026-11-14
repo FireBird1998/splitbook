@@ -38,7 +38,6 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
   let groupTags = [
     { _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: false },
   ];
-  let storedCopy: WidgetCopy | null = null;
   const requests: { path: string; method: string; query?: string }[] = [];
   const copies: WidgetCopy[] = [];
   let widgetSession: WidgetSession = { status: 'signed-out' };
@@ -191,17 +190,15 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
           await hold;
           nativeCopy = structuredClone(copy);
           copies.push(structuredClone(copy));
-          storedCopy = structuredClone(copy);
           events.push('write:' + copy.accountId);
         },
         clear: async () => {
           nativeCopy = null;
           privacyEvents.push({ event: 'clear', copy: null });
           events.push('clear');
-          storedCopy = null;
         },
         setSession: async (state) => {
-          sessionCopies.push({ status: state.status, copy: structuredClone(storedCopy) });
+          sessionCopies.push({ status: state.status, copy: structuredClone(nativeCopy) });
           privacyEvents.push({ event: state.status, copy: structuredClone(nativeCopy) });
           events.push(state.status);
           widgetSession = structuredClone(state);
@@ -358,11 +355,11 @@ function fixture(extraMembers: (typeof alex)[] = [], recentAdapter = false) {
       return release;
     },
     copies,
-    storedCopy: () => storedCopy,
+    storedCopy: () => nativeCopy,
     groupTags: (value: typeof groupTags) => {
       groupTags = value;
     },
-    record: () => ({ copy: storedCopy, session: widgetSession }),
+    record: () => ({ copy: nativeCopy, session: widgetSession }),
     requests,
     events,
     sessionCopies,
@@ -1136,14 +1133,25 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
 );
 
 it.each(['sign out', 'account change', '403', '404', '401'] as const)(
-  'keeps Tags, Trip dates, Months, payments and Finish later under the same purge rule on %s',
+  'keeps Tags, Trip dates, Months, payments, Finish later and Recent under the same purge rule on %s',
   async (action) => {
     vi.spyOn(Date, 'now').mockReturnValue(verified);
     vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
-    const f = fixture();
+    const f = fixture([], true);
     f.trip();
+    f.expenses();
+    const recent = parseExpensePageResponse({
+      status: 200,
+      data: f.backend.world.expenses[groupId],
+    }).recent;
     f.month();
     f.groupBalances(paymentBalances);
+    const month = parseExpensePageResponse({
+      status: 200,
+      data: f.backend.world.expenses[groupId],
+    });
+    f.backend.world.expenses[groupId] = { ...month, recent };
+    f.recentPlacements(1);
     const c = f.make();
     await c.signIn('alex');
     await c.openGroup(groupId);
@@ -1167,6 +1175,7 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
       expect(f.storedCopy()?.finishLater).toEqual({ groupId, groupName: 'Maple House' });
       expect(overview(f).payments).toHaveLength(1);
       expect(overview(f).finishLater?.groupName).toBe('Maple House');
+      expect(f.storedCopy()?.recents?.[groupId]?.rows[0]?.description).toBe('Private beach lunch');
     });
     const saved = structuredClone(f.storedCopy());
     f.events.length = 0;
@@ -1184,6 +1193,7 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
         expect(f.storedCopy()?.months?.[groupId]).toBeUndefined();
         expect(f.storedCopy()?.groups?.[groupId]).toBeUndefined();
         expect(f.storedCopy()?.finishLater).toBeUndefined();
+        expect(f.storedCopy()?.recents?.[groupId]).toBeUndefined();
       }
     } else if (action === '401') {
       f.expire();
@@ -1202,6 +1212,7 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
         expect(f.storedCopy()?.months?.[groupId]).toBeUndefined();
         expect(f.storedCopy()?.groups?.[groupId]).toBeUndefined();
         expect(f.storedCopy()?.finishLater).toBeUndefined();
+        expect(f.storedCopy()?.recents?.[groupId]).toBeUndefined();
       });
     }
     await vi.waitFor(() => {

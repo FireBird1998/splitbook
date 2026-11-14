@@ -292,6 +292,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                           hideAmounts: false,
                           mode: value,
                           tagIds,
+                          showRecentExpenses: false,
                         });
                       }}
                       style={{
@@ -476,6 +477,7 @@ export function WidgetSetup({ widgetInfo, setResult }: WidgetConfigurationScreen
                             hideAmounts: false,
                             mode,
                             tagIds: next,
+                            showRecentExpenses: false,
                           });
                         }}
                         style={{

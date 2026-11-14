@@ -1,7 +1,4 @@
-import {
-  widgetPaymentVerifiedAt,
-  groupWidgetPayments,
-} from './widget-payments';
+import { widgetPaymentVerifiedAt, groupWidgetPayments } from './widget-payments';
 import {
   fitWidgetLayout,
   fitWidgetSections,
