@@ -123,10 +123,15 @@ island), two runs each, and again in a second session with the same result:
 | Float and clouds only  | 16 swipes | 234, 247 | 25–27% | 36, 34 ms | 109, 125 ms |
 | With in-scene movement | 16 swipes | 289, 241 | 22%    | 34, 36 ms | 69, 121 ms  |
 
+During a third session the emulator ran at full speed for one pair of runs, on
+Eco city by day (38 parts on its main island): without in-scene movement 604
+frames idle with 0 janky and 616 while tilting with 1; with it 607 with 2 and
+622 with 1, p50 20 to 22 ms. The other scenes in that session were slow for both
+builds alike (Beach idle 433 against 443 frames, 20% janky each).
+
 In-scene movement is no slower than the scene without it under the same load.
-The absolute numbers belong to that session, not the app: repeat the first
-table's runs with someone at the Mac before quoting a frame rate for this
-version.
+Mountain village, Sakura and Beach have no full-speed run yet: repeat the first
+table's runs for them with someone at the Mac before quoting a frame rate.
 Remove animations leaves no changed pixel between two captures, and the app in
 the background draws no frame. The release APK grew from 30.46 MB to 30.81 MB.
 
