@@ -136,6 +136,7 @@ export function overviewWidget(
       const columnWidth = columns ? (width - 8) / 2 - (panel ? 20 : 0) : width;
       const showSaved = optional && !level && !!read.saved;
       const showHeader = !small || (normal && !level);
+      const headerMarkSize = Math.ceil(16 * scale * text.factor * ratio) / ratio;
       const showOverflow = optional && level < 2;
       const primaryOverflow = owed.length ? owedOverflow : oweOverflow;
       const moneyRoom = small
@@ -449,7 +450,14 @@ export function overviewWidget(
       );
       const sections: WidgetSection[] = [
         ...(showHeader
-          ? [{ id: 'header', rows: 1, rowHeight: text.line(small ? 10 : 13), required: true }]
+          ? [
+              {
+                id: 'header',
+                rows: 1,
+                rowHeight: Math.max(headerMarkSize, text.line(small ? 10 : 13)),
+                required: true,
+              },
+            ]
           : []),
         ...(normal ? [{ id: 'balance', rows: 1, rowHeight: balanceHeight, required: true }] : []),
         ...(normal && tall && availablePayments.length
@@ -600,6 +608,7 @@ export function overviewWidget(
         panel,
         small,
         showHeader,
+        headerMarkSize,
         showSaved,
         showStateTile,
         messageBesideTile,

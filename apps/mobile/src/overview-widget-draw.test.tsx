@@ -563,3 +563,25 @@ it('paints the footer inbox at its measured scaled size while the plus follows t
   expect(icons[0].props).toMatchObject({ width: 28, height: 28 });
   expect(labels(footer)).toContain('＋ Add expense');
 });
+
+it.each([1, 1.3, 2])(
+  'draws and measures the Overview mark at the title text scale (%s)',
+  (scale) => {
+    vi.stubGlobal('__DEV__', false);
+    const v = overviewWidget(
+      copy,
+      { kind: 'balances', widgetId: 7 },
+      { width: 360, height: 584, pixelRatio: 2.625 },
+      auth,
+      now,
+      scale,
+    );
+    const header = buildWidgetTree(drawOverview(v, lightTokens)).children![0];
+    const mark = nodes(header).find(
+      (n) => !!n.props && typeof n.props === 'object' && 'svgString' in n.props,
+    )!;
+    const expected = scale === 1 ? 16 : scale === 1.3 ? 20.952380952380953 : 32;
+    expect(mark.props).toMatchObject({ width: expected, height: expected });
+    expect(v.layout.sections[0].height).toBeGreaterThanOrEqual(expected);
+  },
+);
