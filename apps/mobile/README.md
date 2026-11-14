@@ -427,3 +427,11 @@ copy only. The pure `quickWidget(copy, setup, dimensions, session, fontScale)` v
 launcher dp through the shared widget fitter; its native drawing only paints that projection.
 The `record-payment` widget destination opens an unselected Record payment entry. Choosing a
 payment then uses the app's existing checked flow; opening a widget never records a payment.
+
+Quick actions Tag shortcuts (#1184) store up to four ordered `tagIds` in Widget setup. The Widget
+copy keeps active Tag ids and names for every Group the app reads, independently of balances or
+widget placement. Both the existing Groups list and individual Group reads supply Tags, with
+verification times so an older read cannot replace newer Tags. Copies survive a restart; sign-out/account change purge them before redraw,
+refused Group reads remove that Group, and a 401 hides them without deletion. Existing reads
+provide no Tag usage ranking, so new selections prefill the first four active Tags in Group order.
+A Tag destination opens a fresh Expense with its Tag; an unfinished draft takes precedence.

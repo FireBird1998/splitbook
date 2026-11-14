@@ -39,6 +39,7 @@ function fixture({ nativeHttpCache = false } = {}) {
     receipts: new Map<string, unknown>(),
     /** Reads of the Tags wait for this before they're answered. */
     holdRead: null as Promise<void> | null,
+    holdGroupRead: null as Promise<void> | null,
     /** How long this phone takes to read a kept Tag change, in ms. */
     tagLoadDelay: 0,
     /** This phone can't remove saved copies. */
@@ -108,6 +109,7 @@ function fixture({ nativeHttpCache = false } = {}) {
     }
     if (path.startsWith(maplePath) && !member)
       return json({ error: 'Forbidden', status: 403 }, 403);
+    if (path === maplePath) await server.holdGroupRead;
     if (path === tagsPath && method === 'POST') {
       const command = JSON.parse(String(init.body)) as TagCommand;
       const { intent } = command;
@@ -967,6 +969,8 @@ describe('a new Expense offline takes one of the Group’s saved Tags (#638)', (
         contextCheck: { status: 'saved', tagChange: true },
       });
       expect(expenseTagPending(expense, true)).toBe(true);
+      expect(expense.draft?.tagId).toBe('');
+      expect(expense.blank?.tagId).toBe('');
       await controller.updateExpenseDraft({ tagId: foodId, description: 'Market run' });
       expect(controller.getSnapshot().expense.draft).toMatchObject({
         tagId: '',
@@ -1077,5 +1081,68 @@ it('shows newly read Tags after clock rollback even when Android kept an HTTP re
     reopened.close();
   } finally {
     clock.mockRestore();
+  }
+});
+
+it('a shortcut does not select a Tag while this phone has an unresolved Tag change', async () => {
+  const f = fixture(),
+    c = f.create();
+  try {
+    await c.signIn('alex');
+    await c.openGroup(mapleId);
+    await vi.waitFor(() => expect(f.cache.has(alex.id + maplePath)).toBe(true));
+    await keepRename(f);
+    expect(await c.groupTags(mapleId).recovery()).not.toBeNull();
+    f.server.offline = true;
+    await c.refresh();
+    expect(c.getSnapshot().tagManager.recovery).toBeNull();
+    await c.openWidget({ kind: 'expense-tag', groupId: mapleId, tagId: foodId });
+    const { expense, offline } = c.getSnapshot();
+    expect(expense.contextCheck).toMatchObject({ tagChange: true });
+    expect(expense.context?.tags.some((tag) => tag.id === foodId)).toBe(true);
+    expect(expenseTagPending(expense, offline.active)).toBe(true);
+    expect(expense.draft?.tagId).toBe('');
+    expect(expense.blank?.tagId).toBe('');
+  } finally {
+    c.dispose();
+  }
+});
+it('a shortcut stays untagged while a saved Group waits for its live check', async () => {
+  const f = fixture();
+  const c = f.create();
+  await c.signIn('alex');
+  await c.openGroup(mapleId);
+  await vi.waitFor(() => expect(f.cache.has(alex.id + maplePath)).toBe(true));
+  const restarted = await restartOffline(f, c);
+  let release!: () => void;
+  try {
+    await restarted.openGroup(mapleId);
+    f.server.offline = false;
+    await restarted.back();
+    await restarted.refreshHome();
+    expect(restarted.getSnapshot().offline.active).toBe(false);
+    f.server.holdGroupRead = new Promise<void>((r) => {
+      release = r;
+    });
+    const opening = restarted.openWidget({ kind: 'expense-tag', groupId: mapleId, tagId: foodId });
+    await vi.waitFor(() =>
+      expect(restarted.getSnapshot().expense.contextCheck).toMatchObject({
+        status: 'checking',
+        saved: true,
+      }),
+    );
+    const state = restarted.getSnapshot();
+    expect(state.expense.context?.tags.some((tag) => tag.id === foodId)).toBe(true);
+    expect(expenseTagPending(state.expense, state.offline.active)).toBe(true);
+    expect(state.expense.draft?.tagId).toBe('');
+    expect(state.expense.blank?.tagId).toBe('');
+    await restarted.updateExpenseDraft({ tagId: foodId });
+    expect(restarted.getSnapshot().expense.draft?.tagId).toBe('');
+    release();
+    await opening;
+    expect(restarted.getSnapshot().expense.contextCheck).toBeUndefined();
+  } finally {
+    release?.();
+    restarted.dispose();
   }
 });

@@ -54,3 +54,14 @@ it('round trips the blank Record payment destination without changing existing S
     groupId: target.groupId,
   });
 });
+
+it('round trips an Expense Tag shortcut and rejects incomplete or arbitrary Tag paths', () => {
+  const target = {
+    kind: 'expense-tag' as const,
+    groupId: 'b00000000000000000000001',
+    tagId: 'e00000000000000000000001',
+  };
+  expect(widgetLinkTarget(widgetLink(target))).toEqual(target);
+  expect(widgetLinkTarget(widgetLink(target).replace(target.tagId, 'arbitrary'))).toBeNull();
+  expect(widgetLinkTarget(widgetLink(target).replace('/' + target.tagId, ''))).toBeNull();
+});

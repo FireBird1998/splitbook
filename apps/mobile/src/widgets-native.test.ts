@@ -904,3 +904,54 @@ it('preserves an archived Group’s Month through query eviction and removes it 
   await store.clear();
   expect((await store.read()).copy).toBeNull();
 });
+
+it('retains Tags for every previously read Group across restarts, while fresh reads and refusals replace them', async () => {
+  const first = createWidgetsStore('development');
+  await first.write({
+    version: 1,
+    accountId: 'alex',
+    home: null,
+    tags: {
+      maple: { verifiedAt: 1, rows: [{ id: 'rent', name: 'Rent' }] },
+      trip: { verifiedAt: 1, rows: [{ id: 'taxi', name: 'Taxi' }] },
+    },
+  });
+  const restarted = createWidgetsStore('development');
+  await restarted.write({
+    version: 1,
+    accountId: 'alex',
+    home: null,
+    tags: { maple: { verifiedAt: 2, rows: [] } },
+  });
+  expect((await restarted.read()).copy?.tags).toEqual({
+    maple: { verifiedAt: 2, rows: [] },
+    trip: { verifiedAt: 1, rows: [{ id: 'taxi', name: 'Taxi' }] },
+  });
+  await restarted.write({
+    version: 1,
+    accountId: 'alex',
+    home: null,
+    tags: { maple: { verifiedAt: 1, rows: [{ id: 'rent', name: 'Rent' }] } },
+  });
+  expect((await restarted.read()).copy?.tags?.maple).toEqual({ verifiedAt: 2, rows: [] });
+  await restarted.write({ version: 1, accountId: 'alex', home: null, lostGroupIds: ['trip'] });
+  expect((await restarted.read()).copy?.tags).toEqual({ maple: { verifiedAt: 2, rows: [] } });
+  await restarted.setSession({ status: 'expired' });
+  expect((await restarted.read()).copy?.tags).toEqual({ maple: { verifiedAt: 2, rows: [] } });
+  await restarted.write({ version: 1, accountId: 'sam', home: null });
+  expect((await restarted.read()).copy?.tags).toBeUndefined();
+  await restarted.clear();
+  expect((await restarted.read()).copy).toBeNull();
+});
+
+it('reads duplicate stored Tag ids once, keeping chosen order across store instances', async () => {
+  const store = createWidgetsStore('q5');
+  await store.saveSetup({
+    kind: 'quick',
+    widgetId: 5,
+    accountId: 'alex',
+    groupId: 'maple',
+    tagIds: ['a', 'a', 'b', 'c', 'b', 'd'],
+  });
+  expect(await createWidgetsStore('q5').setup(5)).toMatchObject({ tagIds: ['a', 'b', 'c', 'd'] });
+});

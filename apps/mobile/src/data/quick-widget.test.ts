@@ -1,3 +1,5 @@
+import { widgetText } from '@splitbook/shared/widget-sizing';
+import { widgetSetupChoices } from '@splitbook/shared/widget-setup';
 import { expect, it } from 'vitest';
 import { quickWidget, type QuickWidgetSetup } from '@splitbook/shared/quick-widget';
 import type { WidgetCopy } from '@splitbook/shared/balances-widget';
@@ -293,4 +295,222 @@ it('blocked summaries retain the action and only name an available Group', () =>
   expect(quickWidget(copy, chosen, size, { ...session, accountId: 'sam' }).summary).toBe(
     'Set up again. Another account',
   );
+});
+
+it('draws ordered Tag shortcuts in a row or grid and drops the header before the last Tags at large text', () => {
+  const tags = ['Groceries', 'Rent', 'Bills', 'Dining'].map((name, i) => ({ id: `tag${i}`, name }));
+  const tagged = { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } };
+  const chosen = { ...setup, groupId: 'maple', tagIds: tags.map((tag) => tag.id) };
+  for (const size of [
+    { width: 360, height: 104 },
+    { width: 172, height: 224 },
+    { width: 360, height: 224 },
+  ]) {
+    const view = quickWidget(tagged, chosen, size, session);
+    const layout = view.shortcuts!;
+    expect(
+      layout.headerHeight +
+        layout.rows.reduce((sum, row) => sum + row.height, 0) +
+        layout.gap * (layout.rows.length + (layout.header ? 1 : 0) - 1) +
+        layout.padding * 2,
+    ).toBeCloseTo(size.height, 0);
+    if (size.width === 360 && size.height === 224)
+      expect(layout).toMatchObject({ headerFontSize: 15, headerSubtitleFontSize: 12 });
+    expect(
+      view.shortcuts?.rows.flatMap((row) => row.buttons).map((button) => button.label),
+    ).toEqual(
+      size.height < 180
+        ? ['＋', 'Groceries', 'Rent', 'Bills', 'Dining']
+        : ['＋ Add expense', 'Groceries', 'Rent', 'Bills', 'Dining'],
+    );
+    expect(
+      view.shortcuts?.rows
+        .flatMap((row) => row.buttons)
+        .slice(1)
+        .map((button) => button.summary),
+    ).toEqual(tags.map((tag) => `Add expense in Maple House with ${tag.name}`));
+    if (size.width < 200)
+      expect(view.shortcuts?.rows.map((row) => row.buttons.length)).toEqual([1, 2, 2]);
+  }
+  for (const [scale, count] of [
+    [1.3, 3],
+    [2, 1],
+  ]) {
+    const view = quickWidget(tagged, chosen, { width: 360, height: 104 }, session, scale);
+    expect(view.shortcuts?.header).toBeNull();
+    expect(
+      view.shortcuts?.rows
+        .flatMap((row) => row.buttons)
+        .slice(1)
+        .map((button) => button.label),
+    ).toEqual(tags.slice(0, count).map((tag) => tag.name));
+  }
+  const archived = quickWidget(
+    {
+      ...tagged,
+      tags: { maple: { verifiedAt: 2, rows: tags.filter((tag) => tag.id !== 'tag1') } },
+    },
+    chosen,
+    { width: 360, height: 104 },
+    session,
+  );
+  expect(
+    archived.shortcuts?.rows
+      .flatMap((row) => row.buttons)
+      .slice(1)
+      .map((button) => button.label),
+  ).toEqual(['Groceries', 'Bills', 'Dining']);
+  expect(
+    quickWidget(
+      { ...tagged, tags: { maple: { verifiedAt: 2, rows: [] } } },
+      chosen,
+      { width: 360, height: 104 },
+      session,
+    ).shortcuts,
+  ).toBeNull();
+});
+
+it('fits three ordered Tags at real 3×1 bounds and keeps a long Group name for ellipsis', () => {
+  const tags = ['Groceries', 'Rent', 'Bills', 'Dining'].map((name, i) => ({ id: String(i), name }));
+  const view = quickWidget(
+    { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
+    { ...setup, groupId: 'maple', tagIds: ['0', '1', '2', '3'] },
+    { width: 266, height: 104 },
+    session,
+  );
+  expect(view.shortcuts?.rows[0].buttons.map((button) => button.label)).toEqual([
+    '＋',
+    'Groceries',
+    'Rent',
+    'Bills',
+  ]);
+  const long = 'Maple House with a very long Group name';
+  const named = quickWidget(
+    {
+      ...copy,
+      savedGroups: { ...copy.savedGroups!, rows: [{ ...copy.savedGroups!.rows[0], name: long }] },
+    },
+    { ...setup, groupId: 'maple' },
+    { width: 172, height: 104 },
+    session,
+  );
+  expect(named.subtitle).toBe(long);
+  expect(named.summary).toContain(long);
+});
+
+it('uses one Tag column in a narrow tall cell and keeps the plain action as a plus when words cannot fit', () => {
+  const tags = ['Groceries', 'Rent', 'Bills', 'Dining'].map((name, i) => ({ id: String(i), name }));
+  const tagged = { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
+    chosen = { ...setup, groupId: 'maple', tagIds: tags.map((tag) => tag.id) };
+  const narrow = quickWidget(tagged, chosen, { width: 78, height: 224 }, session);
+  expect(narrow.shortcuts?.rows.map((row) => row.buttons.length)).toEqual([1]);
+  expect(
+    narrow.shortcuts?.rows.flatMap((row) => row.buttons).map((button) => button.label),
+  ).toEqual(['＋']);
+  expect(
+    narrow.shortcuts?.rows.flatMap((row) => row.buttons).every((button) => button.width >= 44),
+  ).toBe(true);
+  const large = quickWidget(tagged, chosen, { width: 172, height: 224 }, session, 2);
+  expect(large.shortcuts?.rows[0].buttons[0].label).toBe('＋');
+  expect(large.shortcuts?.rows[0].buttons[0].summary).toBe('Add expense in Maple House');
+});
+
+it.each([null, 'tag0', 3, {}, true])('malformed stored tagIds %j means no Tags', (value) => {
+  const chosen = { ...setup, groupId: 'maple', tagIds: value } as unknown as QuickWidgetSetup;
+  expect(quickWidget(copy, chosen, { width: 360, height: 224 }, session).shortcuts).toBeNull();
+  expect(widgetSetupChoices('quick', chosen, 'alex', 'maple').tagIds).toEqual([]);
+});
+
+it.each([1, 1.3, 2])(
+  'fits full Tag names by reducing columns and drops only the ordered tail at %s',
+  (scale) => {
+    for (const width of [78, 172, 360])
+      for (const names of [
+        ['Groceries', 'Rent', 'Bills', 'Dining'],
+        ['Tea', 'Bus', 'Oil', 'TV'],
+        ['An exceptionally long groceries Tag', 'Rent', 'Bills', 'Dining'],
+      ]) {
+        const tags = names.map((name, i) => ({ id: String(i), name }));
+        const view = quickWidget(
+          { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
+          { ...setup, groupId: 'maple', tagIds: tags.map((t) => t.id) },
+          { width, height: 224, pixelRatio: 2.625 },
+          session,
+          scale,
+        );
+        const rows = view.shortcuts!.rows.slice(1);
+        const visible = rows.flatMap((row) => row.buttons);
+        if (widgetText(width, scale, 1, 2.625).width(names[0], 12) + 8 > width - 24)
+          expect(visible).toHaveLength(width === 78 ? 0 : 1);
+        expect(visible.map((b) => b.label)).toEqual(names.slice(0, visible.length));
+        for (const row of rows)
+          for (const button of row.buttons) {
+            const measured = widgetText(width, scale, 1, 2.625).width(
+              button.label,
+              button.fontSize,
+            );
+            if (measured + 8 > button.width) {
+              expect(row.buttons).toHaveLength(1);
+              expect(button.width).toBeCloseTo(width - 24, 0);
+            }
+          }
+        if (width === 172 && scale === 2 && names[0] === 'Groceries')
+          expect(rows.every((row) => row.buttons.length === 1)).toBe(true);
+      }
+  },
+);
+
+it('fills 1×2 with the plain action when the first Tag cannot fit, preserving speech', () => {
+  const tags = [
+    { id: 'long', name: 'Groceries' },
+    { id: 'short', name: 'Tea' },
+  ];
+  for (const scale of [1.3, 2]) {
+    const view = quickWidget(
+      { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
+      { ...setup, groupId: 'maple', tagIds: ['long', 'short'] },
+      { width: 78, height: 224, pixelRatio: 2.625 },
+      session,
+      scale,
+    );
+    expect(view.summary).toBe('Add expense in Maple House');
+    expect(view.shortcuts!.rows).toHaveLength(1);
+    expect(view.shortcuts!.rows[0].buttons.map((b) => b.label)).toEqual(['＋']);
+    expect(view.shortcuts!.rows[0].height + 2 * view.shortcuts!.padding).toBeCloseTo(224, 0);
+  }
+});
+it('balances four Tags into two equal rows when three columns would leave a single Tag', () => {
+  const tags = ['Groceries', 'Rent', 'Bills', 'Dining'].map((name, i) => ({ id: String(i), name }));
+  for (const scale of [1.3, 2]) {
+    const view = quickWidget(
+      { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
+      { ...setup, groupId: 'maple', tagIds: tags.map((t) => t.id) },
+      { width: 360, height: 224, pixelRatio: 2.625 },
+      session,
+      scale,
+    );
+    expect(view.shortcuts!.rows.map((row) => row.buttons.length)).toEqual([1, 2, 2]);
+    expect(
+      view
+        .shortcuts!.rows.slice(1)
+        .flatMap((row) => row.buttons)
+        .map((b) => b.label),
+    ).toEqual(tags.map((t) => t.name));
+  }
+});
+it('deduplicates stored Tag ids in first-chosen order before applying the limit', () => {
+  const tags = ['Groceries', 'Rent', 'Bills', 'Dining'].map((name, i) => ({ id: String(i), name }));
+  const chosen = { ...setup, groupId: 'maple', tagIds: ['0', '0', '1', '2', '1', '3'] };
+  expect(widgetSetupChoices('quick', chosen, 'alex', 'maple').tagIds).toEqual(['0', '1', '2', '3']);
+  expect(
+    quickWidget(
+      { ...copy, tags: { maple: { verifiedAt: 1, rows: tags } } },
+      chosen,
+      { width: 360, height: 224 },
+      session,
+    )
+      .shortcuts!.rows.flatMap((r) => r.buttons)
+      .slice(1)
+      .map((b) => b.id),
+  ).toEqual(['0', '1', '2', '3']);
 });

@@ -1,5 +1,5 @@
 import { openDatabaseAsync, defaultDatabaseDirectory, type SQLiteDatabase } from 'expo-sqlite';
-import type { WidgetSetupRecord } from '@splitbook/shared/widget-setup';
+import { readWidgetTagIds, type WidgetSetupRecord } from '@splitbook/shared/widget-setup';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
 import type { WidgetsNative } from './data/widget-copy';
 
@@ -47,7 +47,11 @@ export function createWidgetsStore(environment: string) {
         environment,
         widgetId,
       );
-      return row ? JSON.parse(row.setup) : null;
+      if (!row) return null;
+      const setup: WidgetSetupRecord = JSON.parse(row.setup);
+      return setup.kind === 'quick' && setup.tagIds !== undefined
+        ? { ...setup, tagIds: readWidgetTagIds(setup.tagIds) }
+        : setup;
     },
     async saveSetup(setup: WidgetSetupRecord) {
       await (
@@ -114,6 +118,15 @@ export function createWidgetsStore(environment: string) {
           ...copy,
           groups: { ...finalGroups, ...copy.groups },
           months: { ...finalMonths, ...copy.months },
+          tags: Object.fromEntries(
+            [...new Set([...Object.keys(previous.tags ?? {}), ...Object.keys(copy.tags ?? {})])]
+              .filter((id) => !copy.lostGroupIds?.includes(id))
+              .map((id) => {
+                const old = previous.tags?.[id],
+                  fresh = copy.tags?.[id];
+                return [id, old && (!fresh || old.verifiedAt > fresh.verifiedAt) ? old : fresh!];
+              }),
+          ),
         };
         // To review has its own verification time. Offline Home restoration must not erase it.
         if (

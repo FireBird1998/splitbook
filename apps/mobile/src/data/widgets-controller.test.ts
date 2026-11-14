@@ -4,7 +4,7 @@ import type { MobileController } from './mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import { notificationTaskProtected } from './notification-alerts';
-import type { WidgetCopy } from '@splitbook/shared/balances-widget';
+import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
 import { groupWidget } from '@splitbook/shared/group-widget';
 import { createWidgetCopy } from './widget-copy';
 import { quickWidget } from '@splitbook/shared/quick-widget';
@@ -28,9 +28,14 @@ function fixture(extraMembers: (typeof alex)[] = []) {
   let theme = 'home';
   let monthStatus = 0;
   let hold: Promise<void> | undefined;
+  let groupTags = [
+    { _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: false },
+  ];
+  let storedCopy: WidgetCopy | null = null;
   const requests: { path: string; method: string; query?: string }[] = [];
   const copies: WidgetCopy[] = [];
   const events: string[] = [];
+  const sessionCopies: { status: WidgetSession['status']; copy: WidgetCopy | null }[] = [];
   const group = () => ({
     _id: groupId,
     name: 'Maple House',
@@ -40,7 +45,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     startDate: trip ? '2026-11-08T00:00:00Z' : null,
     endDate: trip ? '2026-11-10T00:00:00Z' : null,
     defaultCurrency: 'INR',
-    tags: [{ _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: false }],
+    tags: groupTags,
     members: [
       { user: { ...user, _id: user.id }, role: 'admin', joinedAt: '2026-11-01T00:00:00Z' },
       ...[
@@ -59,14 +64,15 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     createdAt: '2026-11-01T00:00:00Z',
     updatedAt: '2026-11-01T00:00:00Z',
   });
+  const additionalGroups: ReturnType<typeof group>[] = [];
   const backend = fakeSplitbook();
   backend.world.people.alex = { ...alex, image: null };
   backend.world.people.sam = { ...sam, image: null };
   backend.auth.cookie = () => 'better-auth.session_token=fictional.signature';
-  Object.defineProperty(backend.world, 'groups', { get: () => [group()] });
+  Object.defineProperty(backend.world, 'groups', { get: () => [group(), ...additionalGroups] });
   for (const id of [alex.id, sam.id])
     Object.defineProperty(backend.world.groupsByAccount, id, {
-      get: () => (noGroups || archived ? [] : [group()]),
+      get: () => (noGroups || archived ? [] : [group(), ...additionalGroups]),
     });
   Object.defineProperty(backend.world.balances, groupId, { get: () => groupBalances });
   Object.defineProperty(backend.world, 'home', {
@@ -156,12 +162,15 @@ function fixture(extraMembers: (typeof alex)[] = []) {
         write: async (copy) => {
           await hold;
           copies.push(structuredClone(copy));
+          storedCopy = structuredClone(copy);
           events.push('write:' + copy.accountId);
         },
         clear: async () => {
           events.push('clear');
+          storedCopy = null;
         },
         setSession: async (state) => {
+          sessionCopies.push({ status: state.status, copy: structuredClone(storedCopy) });
           events.push(state.status);
         },
         redraw: async () => {
@@ -209,6 +218,9 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     trip: () => {
       trip = true;
     },
+    group,
+    addGroup: (value: ReturnType<typeof group>) => additionalGroups.push(value),
+    drafts: native.stores.expenseDrafts,
     archive: () => {
       archived = true;
     },
@@ -232,8 +244,13 @@ function fixture(extraMembers: (typeof alex)[] = []) {
       return release;
     },
     copies,
+    storedCopy: () => storedCopy,
+    groupTags: (value: typeof groupTags) => {
+      groupTags = value;
+    },
     requests,
     events,
+    sessionCopies,
     offline: () => {
       backend.online = false;
     },
@@ -446,10 +463,12 @@ for (const status of [403, 404])
     await c.openGroup(groupId);
     await c.refreshBalances();
     await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeDefined());
+    expect(f.copies.at(-1)?.tags?.[groupId]?.rows).toEqual([{ id: tagId, name: 'Groceries' }]);
     f.refuse(status);
     await c.openGroup(groupId, false);
     await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined());
     expect(f.copies.at(-1)?.lostGroupIds).toContain(groupId);
+    expect(f.copies.at(-1)?.tags?.[groupId]).toBeUndefined();
   });
 it('restores Group widget parts and offline setup with their original saved verification times', async () => {
   vi.spyOn(Date, 'now').mockReturnValue(verified);
@@ -614,7 +633,10 @@ it.each(
       'Leave Group',
     ] as const
   ).flatMap((task) =>
-    (['home', 'record-payment'] as const).map((destination) => ({ task, destination })),
+    (['home', 'record-payment', 'expense-tag'] as const).map((destination) => ({
+      task,
+      destination,
+    })),
   ),
 )(
   'holds $destination with the entire protected $task task unchanged',
@@ -671,7 +693,13 @@ it.each(
     const before = c.getSnapshot();
     expect(notificationTaskProtected(before)).toBe(true);
     const count = f.requests.length;
-    await c.openWidget(destination === 'home' ? 'home' : { kind: 'record-payment', groupId });
+    await c.openWidget(
+      destination === 'home'
+        ? 'home'
+        : destination === 'expense-tag'
+          ? { kind: 'expense-tag', groupId, tagId }
+          : { kind: 'record-payment', groupId },
+    );
     const after = c.getSnapshot();
     expect(after.screen).toBe(before.screen);
     expect(after.detail).toBe(before.detail);
@@ -703,7 +731,12 @@ it.each(['sign out', 'account change'] as const)(
     await c.openWidget('home');
     const owner = c.getSnapshot().heldNotification!;
     if (action === 'sign out') await c.signOut();
-    else await c.signIn('sam');
+    else {
+      f.groupTags([
+        { _id: tagId, name: 'Sam only Tag', isArchived: false, createdAt: '2026-11-01T00:00:00Z' },
+      ]);
+      await c.signIn('sam');
+    }
     expect(c.getSnapshot().heldNotification).toBeNull();
     expect(c.getSnapshot().notificationOpening.status).toBe('idle');
     c.dismissPendingNotification(owner);
@@ -968,6 +1001,59 @@ it.each(['sign out', 'account change', '403', '404', '401'] as const)(
   },
 );
 
+it.each(['sign out', 'account change', '403', '404', '401'] as const)(
+  'keeps Tags, Trip dates and Month parts under the same purge rule on %s',
+  async (action) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture();
+    f.trip();
+    f.month();
+    const c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await vi.waitFor(() => {
+      expect(f.storedCopy()?.tags?.[groupId]?.rows).toEqual([{ id: tagId, name: 'Groceries' }]);
+      expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toEqual({
+        start: '2026-11-08',
+        end: '2026-11-10',
+      });
+      expect(f.storedCopy()?.months?.[groupId]?.shareMinor).toBe(785000);
+    });
+    const saved = structuredClone(f.storedCopy());
+    f.events.length = 0;
+    f.sessionCopies.length = 0;
+    if (action === 'sign out' || action === 'account change') {
+      if (action === 'sign out') await c.signOut();
+      else await c.signIn('sam');
+      expect(f.sessionCopies.find((event) => event.status === 'signed-out')?.copy).toBeNull();
+      expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+      expect(f.events.lastIndexOf('redraw')).toBeGreaterThan(f.events.indexOf('signed-out'));
+      if (action === 'sign out') expect(f.storedCopy()).toBeNull();
+      else {
+        await vi.waitFor(() => expect(f.storedCopy()?.accountId).toBe(sam.id));
+        expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toBeUndefined();
+        expect(f.storedCopy()?.months?.[groupId]).toBeUndefined();
+      }
+    } else if (action === '401') {
+      f.expire();
+      await c.openGroup(groupId, false);
+      await vi.waitFor(() => expect(f.events).toContain('expired'));
+      expect(f.events).not.toContain('clear');
+      expect(f.storedCopy()).toEqual(saved);
+      expect(f.sessionCopies.find((event) => event.status === 'expired')?.copy).toEqual(saved);
+    } else {
+      f.refuse(Number(action));
+      await c.openGroup(groupId, false);
+      await vi.waitFor(() => {
+        expect(f.storedCopy()?.lostGroupIds).toContain(groupId);
+        expect(f.storedCopy()?.tags?.[groupId]).toBeUndefined();
+        expect(f.storedCopy()?.groups?.[groupId]?.tripDates).toBeUndefined();
+        expect(f.storedCopy()?.months?.[groupId]).toBeUndefined();
+      });
+    }
+  },
+);
+
 it('keeps the Month section even if the separate Balances read fails', async () => {
   vi.spyOn(Date, 'now').mockReturnValue(verified);
   const f = fixture();
@@ -1183,3 +1269,252 @@ it('Quick actions Record payment opens Settle up with nothing filled, including 
     f.requests.filter((r) => r.method !== 'GET' && r.path !== '/api/auth/demo-persona/sign-in'),
   ).toEqual([]);
 });
+
+it('keeps active Tags in the Widget copy after a Group read, without reading balances or making another request', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  f.groupTags([{ _id: tagId, name: 'Food', isArchived: false, createdAt: '2026-11-01T00:00:00Z' }]);
+  vi.spyOn(Date, 'now').mockReturnValue(verified + 1000);
+  const before = f.requests.length;
+  await c.openExpense(groupId);
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.tags?.[groupId]?.rows).toEqual([{ id: tagId, name: 'Food' }]),
+  );
+  expect(f.requests.slice(before).filter((r) => r.path === `/api/groups/${groupId}`)).toHaveLength(
+    1,
+  );
+  expect(f.requests.slice(before).some((r) => r.path.endsWith('/balances'))).toBe(false);
+});
+
+it('a Tag shortcut sets a new Expense Tag and never replaces an unfinished draft', async () => {
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openWidget({ kind: 'expense-tag', groupId, tagId });
+  expect(c.getSnapshot().expense.draft?.tagId).toBe(tagId);
+  await c.updateExpenseDraft({ description: 'Kept draft', tagId: '' });
+  await c.back();
+  await c.openWidget({ kind: 'expense-tag', groupId, tagId });
+  expect(c.getSnapshot().expense.draft).toMatchObject({ description: 'Kept draft', tagId: '' });
+});
+
+it.each(['sign out', 'account change', '401'] as const)(
+  'active Tag copies follow the account purge rule on %s',
+  async (action) => {
+    vi.spyOn(Date, 'now').mockReturnValue(verified);
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await c.openExpense(groupId);
+    await c.closeExpense();
+    await vi.waitFor(() =>
+      expect(f.storedCopy()?.tags?.[groupId]?.rows).toEqual([{ id: tagId, name: 'Groceries' }]),
+    );
+    f.events.length = 0;
+    if (action === '401') {
+      f.expire();
+      await c.refreshHome();
+      await vi.waitFor(() => expect(f.events).toContain('expired'));
+      expect(f.storedCopy()?.tags?.[groupId]?.rows).toHaveLength(1);
+      expect(f.events).not.toContain('clear');
+      const view = quickWidget(
+        f.storedCopy(),
+        { kind: 'quick', widgetId: 8, accountId: alex.id, groupId, tagIds: [tagId] },
+        { width: 360, height: 104 },
+        { status: 'expired' },
+      );
+      expect(JSON.stringify(view)).not.toContain('Groceries');
+    } else {
+      if (action === 'sign out') await c.signOut();
+      else {
+        f.groupTags([
+          {
+            _id: tagId,
+            name: 'Sam only Tag',
+            isArchived: false,
+            createdAt: '2026-11-01T00:00:00Z',
+          },
+        ]);
+        await c.signIn('sam');
+      }
+      expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+      if (action === 'sign out') expect(f.storedCopy()).toBeNull();
+      else {
+        await vi.waitFor(() =>
+          expect(f.storedCopy()?.tags?.[groupId]?.rows).toEqual([
+            { id: tagId, name: 'Sam only Tag' },
+          ]),
+        );
+      }
+    }
+  },
+);
+
+it('a fresh Group read replaces active Tags, removing archived and deleted Tags', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId, false);
+  await vi.waitFor(() => expect(f.storedCopy()?.tags?.[groupId]?.rows).toHaveLength(1));
+  clock.mockReturnValue(verified + 1000);
+  f.groupTags([
+    { _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: true },
+  ]);
+  await c.openGroup(groupId, false);
+  await vi.waitFor(() => expect(f.storedCopy()?.tags?.[groupId]?.rows).toEqual([]));
+});
+
+it('keeps the active Tags supplied by the existing Groups list before any Group is opened', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await vi.waitFor(() =>
+    expect(f.storedCopy()?.tags?.[groupId]).toEqual({
+      verifiedAt: verified,
+      rows: [{ id: tagId, name: 'Groceries' }],
+    }),
+  );
+  expect(f.requests.filter((request) => request.path === `/api/groups/${groupId}`)).toEqual([]);
+});
+
+it('a newer Groups list retires a Tag without an older open Group read restoring it', async () => {
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture(),
+    c = f.make();
+  await c.signIn('alex');
+  await c.openExpense(groupId);
+  await c.closeExpense();
+  clock.mockReturnValue(verified + 1000);
+  f.groupTags([
+    { _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: true },
+  ]);
+  await c.checkCreatedGroups();
+  await vi.waitFor(() =>
+    expect(f.storedCopy()?.tags?.[groupId]).toEqual({ verifiedAt: verified + 1000, rows: [] }),
+  );
+});
+
+it('Tag-only entry leaves no stored draft or protected task and the next shortcut applies', async () => {
+  const f = fixture(),
+    c = f.make();
+  const second = 'e00000000000000000000002';
+  f.groupTags(
+    [tagId, second].map((id, i) => ({
+      _id: id,
+      name: i ? 'Rent' : 'Food',
+      isArchived: false,
+      createdAt: '2026-11-01T00:00:00Z',
+    })),
+  );
+  await c.signIn('alex');
+  await c.openWidget({ kind: 'expense-tag', groupId, tagId });
+  expect(c.getSnapshot().expense.draft?.tagId).toBe(tagId);
+  await c.back();
+  expect(await f.drafts.load(alex.id, groupId)).toBeNull();
+  expect(notificationTaskProtected(c.getSnapshot())).toBe(false);
+  await c.openWidget({ kind: 'expense-tag', groupId, tagId: second });
+  expect(c.getSnapshot().expense.draft?.tagId).toBe(second);
+  await c.back();
+  await c.openWidget({ kind: 'expense', groupId });
+  expect(c.getSnapshot().expense.draft?.tagId).toBe('');
+  expect(await f.drafts.load(alex.id, groupId)).toBeNull();
+});
+
+it.each(['archived', 'another Group'])(
+  'a shortcut for %s Tag opens without assigning or storing it',
+  async (kind) => {
+    const f = fixture(),
+      c = f.make();
+    if (kind === 'archived')
+      f.groupTags([
+        { _id: tagId, name: 'Old', isArchived: true, createdAt: '2026-11-01T00:00:00Z' },
+      ]);
+    if (kind === 'another Group')
+      f.addGroup({
+        ...f.group(),
+        _id: 'b00000000000000000000002',
+        name: 'Another Group',
+        tags: [
+          {
+            _id: 'e00000000000000000000099',
+            name: 'Foreign Tag',
+            isArchived: false,
+            createdAt: '2026-11-01T00:00:00Z',
+          },
+        ],
+      });
+    await c.signIn('alex');
+    await c.openWidget({
+      kind: 'expense-tag',
+      groupId,
+      tagId: kind === 'archived' ? tagId : 'e00000000000000000000099',
+    });
+    expect(c.getSnapshot().screen).toBe('expense');
+    expect(c.getSnapshot().expense.draft?.tagId).toBe('');
+    await c.back();
+    expect(await f.drafts.load(alex.id, groupId)).toBeNull();
+  },
+);
+
+it.each(['older', 'equal'] as const)(
+  'a refused Group stays lost with an %s trusted read until a newer one arrives',
+  async (age) => {
+    let time = verified;
+    vi.spyOn(Date, 'now').mockImplementation(() => time);
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await c.openExpense(groupId);
+    const envelope = {
+      source: 'network' as const,
+      refreshedAt: time,
+      value: { status: 200, data: f.group() },
+    };
+    const copies: WidgetCopy[] = [];
+    const write = async <T>(operation: () => Promise<T>) => operation();
+    const projection = createWidgetCopy(
+      {
+        write: async (copy) => {
+          copies.push(copy);
+        },
+        clear: async () => {},
+        setSession: async () => {},
+        redraw: async () => {},
+      },
+      () => ({ accountId: alex.id, write, writeSavedCopy: write }),
+      () => undefined,
+      () => null,
+      undefined,
+      () => time,
+      () => ({
+        group: envelope,
+        balances: {
+          source: 'network',
+          refreshedAt: time,
+          value: { status: 200, data: { byCurrency: [] } },
+        },
+      }),
+    );
+    projection.update(c.getSnapshot());
+    await projection.idle();
+    expect(copies.at(-1)?.tags?.[groupId]?.rows).toHaveLength(1);
+    time += 1000;
+    projection.forgetGroup(groupId, true);
+    if (age === 'equal') envelope.refreshedAt = time;
+    projection.update(c.getSnapshot());
+    await projection.idle();
+    expect(copies.at(-1)?.lostGroupIds).toContain(groupId);
+    expect(copies.at(-1)?.tags?.[groupId]).toBeUndefined();
+    expect(copies.at(-1)?.groups?.[groupId]).toBeUndefined();
+    time += 1;
+    envelope.refreshedAt = time;
+    projection.update(c.getSnapshot());
+    await projection.idle();
+    expect(copies.at(-1)?.lostGroupIds).not.toContain(groupId);
+    expect(copies.at(-1)?.tags?.[groupId]?.rows).toHaveLength(1);
+  },
+);

@@ -11,7 +11,7 @@ export function widgetLink(target: WidgetTarget, developmentServer?: string) {
       ? target
       : target.kind === 'setup'
         ? `setup/${target.widgetId}`
-        : `group/${target.groupId}/${target.kind}${target.kind === 'settle' && target.payment ? `/${target.payment.from}/${target.payment.to}/${target.payment.currency}` : ''}`;
+        : `group/${target.groupId}/${target.kind}${target.kind === 'expense-tag' ? `/${target.tagId}` : target.kind === 'settle' && target.payment ? `/${target.payment.from}/${target.payment.to}/${target.payment.currency}` : ''}`;
   const url = new URL(`${widgetScheme()}://widget/${path}`);
   if (process.env.EXPO_PUBLIC_APP_ENV === 'development' && developmentServer)
     url.searchParams.set(
@@ -33,6 +33,8 @@ export function widgetLinkTarget(url: string): WidgetTarget | null {
       parsed.hash
     )
       return null;
+    const tag = /^\/group\/([a-f0-9]{24})\/expense-tag\/([a-f0-9]{24})$/.exec(parsed.pathname);
+    if (tag) return { kind: 'expense-tag', groupId: tag[1], tagId: tag[2] };
     const payment =
       /^\/group\/([a-f0-9]{24})\/settle\/([a-f0-9]{24})\/([a-f0-9]{24})\/([A-Z]{3})$/.exec(
         parsed.pathname,

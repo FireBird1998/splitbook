@@ -2171,3 +2171,37 @@ describe('Payment alerts and an unresolved payment (#842)', () => {
     expect(records.size).toBe(0);
   });
 });
+
+it('in-app Check payment keeps the widget selector flag false after recovery resolves', async () => {
+  const f = setup();
+  const c = f.controller;
+  try {
+    await c.signIn('alex');
+    await f.store.save(actor, groupId, {
+      version: 1,
+      accountId: actor,
+      groupId,
+      key: 'q5-check-payment',
+      body: settlementBody({
+        paidBy: actor,
+        paidTo: recipient,
+        amount: '10',
+        currency: 'INR',
+        note: '',
+      }),
+    });
+    await c.openGroup(groupId, true, 'balances');
+    expect(c.getSnapshot().pendingPayment?.groupId).toBe(groupId);
+    await f.store.remove(actor, groupId);
+    await c.openPendingPayment();
+    expect(c.getSnapshot().settlement).toMatchObject({
+      status: 'ready',
+      chosen: null,
+      attempt: null,
+      message: 'Nothing is waiting to be retried. Close this to see the latest balances.',
+    });
+    expect(c.getSnapshot().settlement.widgetEntry).toBeFalsy();
+  } finally {
+    c.dispose();
+  }
+});
