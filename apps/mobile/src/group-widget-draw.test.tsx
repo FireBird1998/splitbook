@@ -3,14 +3,14 @@ import {
   buildWidgetTree,
   type WidgetTree,
 } from 'react-native-android-widget/src/api/build-widget-tree';
-import { lightTokens } from '@splitbook/shared/design-tokens';
+import { lightTokens, darkTokens } from '@splitbook/shared/design-tokens';
 import type { WidgetCopy } from '@splitbook/shared/balances-widget';
 import { drawGroup } from './group-widget-draw';
 vi.mock('expo-constants', () => ({ default: {} }));
 
 // Measure the converted native tree, including the spacers the widget library inserts for
 // space-between. Those extra children must fit the view's fixed-height action section.
-function minimumHeight(tree: WidgetTree): number {
+function minimumHeight(tree: WidgetTree, pixelRatio = 1): number {
   const p = tree.props as {
     fontSize?: number;
     text?: string;
@@ -19,9 +19,9 @@ function minimumHeight(tree: WidgetTree): number {
     padding?: { top: number; bottom: number };
   };
   const children = tree.children ?? [];
-  const heights = children.map(minimumHeight);
+  const heights = children.map((child) => minimumHeight(child, pixelRatio));
   const content = p.text
-    ? Math.ceil((p.fontSize ?? 12) * 1.3)
+    ? Math.ceil((p.fontSize ?? 12) * 1.3 * pixelRatio) / pixelRatio
     : p.orientation === 'HORIZONTAL'
       ? Math.max(0, ...heights)
       : heights.reduce((sum, h) => sum + h, 0) +
@@ -168,39 +168,46 @@ it.each([
   },
 );
 
-it('draws the people count when no full payment amount fits an in-between width', () => {
-  vi.stubGlobal('__DEV__', false);
-  const large: WidgetCopy = {
-    ...copy,
-    groups: {
-      maple: {
-        ...copy.groups!.maple!,
-        currencies: [
-          {
-            ...copy.groups!.maple!.currencies[0]!,
-            payments: copy.groups!.maple!.currencies[0]!.payments.map((p) => ({
-              ...p,
-              amountMinor: 123456789012345,
-            })),
-          },
-        ],
+it.each([225, 240])(
+  'draws the people count in secondary grey when no payment amount fits at %s dp',
+  (width) => {
+    vi.stubGlobal('__DEV__', false);
+    const large: WidgetCopy = {
+      ...copy,
+      groups: {
+        maple: {
+          ...copy.groups!.maple!,
+          currencies: [
+            {
+              ...copy.groups!.maple!.currencies[0]!,
+              payments: copy.groups!.maple!.currencies[0]!.payments.map((p) => ({
+                ...p,
+                amountMinor: 123456789012345,
+              })),
+            },
+          ],
+        },
       },
-    },
-  };
-  const tree = buildWidgetTree(
-    drawGroup(
-      large,
-      { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
-      { width: 225, height: 344 },
-      { status: 'authenticated', accountId: 'alex', loading: false },
-      now,
-      lightTokens,
-      2,
-    ),
-  );
-  expect(drawnText(tree)).toContain('to 2\u00a0people');
-  vi.unstubAllGlobals();
-});
+    };
+    const tree = buildWidgetTree(
+      drawGroup(
+        large,
+        { kind: 'group', accountId: 'alex', groupId: 'maple', widgetId: 7 },
+        { width, height: 344 },
+        { status: 'authenticated', accountId: 'alex', loading: false },
+        now,
+        lightTokens,
+        width === 240 ? 1 : 2,
+      ),
+    );
+    expect(drawnText(tree)).toContain('to 2\u00a0people');
+    expect(
+      allNodes(tree).find((node) => (node.props as { text?: string }).text === 'to 2\u00a0people')
+        ?.props,
+    ).toMatchObject({ color: lightTokens.textSecondary });
+    vi.unstubAllGlobals();
+  },
+);
 
 it('gives the stacked archived name and tag the full width of their header column', () => {
   vi.stubGlobal('__DEV__', false);
@@ -248,3 +255,41 @@ it('keeps the Group name in a width-constrained single-line native text view for
   expect(drawnText(tree)).not.toContain('Group');
   vi.unstubAllGlobals();
 });
+
+it.each([lightTokens, darkTokens])(
+  'fits the Trip badge and balance within the native header in $mode',
+  (tokens) => {
+    vi.stubGlobal('__DEV__', false);
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+    try {
+      const tree = buildWidgetTree(
+        drawGroup(
+          {
+            ...copy,
+            groups: {
+              maple: {
+                ...copy.groups!.maple!,
+                name: 'Goa Friends Trip',
+                theme: 'trip',
+                tripDates: { start: '2026-11-13', end: '2026-11-15' },
+              },
+            },
+          },
+          { kind: 'group', widgetId: 7, groupId: 'maple', accountId: 'alex' },
+          { width: 360, height: 344, pixelRatio: 2.625 },
+          { status: 'authenticated', accountId: 'alex', loading: false },
+          now,
+          tokens,
+        ),
+      );
+      const header = tree.children!.find((node) => drawnText(node).includes('Day 1 of 3'))!;
+      expect(header).toBeDefined();
+      expect(minimumHeight(header, 2.625)).toBeLessThanOrEqual(
+        (header.props as { height: number }).height,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  },
+);

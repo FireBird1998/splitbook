@@ -108,6 +108,18 @@ export function drawGroup(
               />
             ))}
           </FlexWidget>
+          {l.tripDay ? (
+            <FlexWidget
+              style={{
+                backgroundColor: color(t.surfaceMuted),
+                borderRadius: 12,
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+              }}
+            >
+              {text(l.tripDay, t.textSecondary, l.fontSizes.secondary, true)}
+            </FlexWidget>
+          ) : null}
           {l.showArchivedTag ? (
             <FlexWidget
               style={{ backgroundColor: color(t.surfaceMuted), borderRadius: 6, padding: 3 }}
@@ -214,7 +226,7 @@ export function drawGroup(
       ))}
       {l.showMore && !l.moreInFooter && view.more ? (
         <FlexWidget style={{ height: payments?.moreHeight, justifyContent: 'center' }}>
-          {lines(l.moreLines, t.brand.main, l.fontSizes.small, true)}
+          {lines(l.moreLines, t.textSecondary, l.fontSizes.small, true)}
         </FlexWidget>
       ) : null}
     </FlexWidget>
@@ -273,7 +285,12 @@ export function drawGroup(
           clickAction="OPEN_URI"
           clickActionData={action({ kind: 'settle', groupId: setup.groupId })}
         >
-          {text(view.more, t.brand.main, l.fontSizes.small, true)}
+          {text(
+            view.more,
+            l.paymentLines ? t.brand.main : t.textSecondary,
+            l.fontSizes.small,
+            true,
+          )}
         </FlexWidget>
       ) : l.showUpdateInFooter ? (
         text(view.action!, t.textSecondary, l.fontSizes.secondary)

@@ -11,6 +11,8 @@ import { toMajorAmount } from './exact-money';
 import { counted, SEPARATOR } from './separator';
 import { widgetSavedTime, type WidgetSession } from './balances-widget';
 import type { GroupCategory } from './types';
+import { dayCount } from './trip-summary';
+import { dayKeyInZone } from './zoned-calendar';
 export interface GroupWidgetSetup {
   kind: 'group';
   hideAmounts?: boolean;
@@ -26,6 +28,8 @@ export interface WidgetGroupPart {
   mainCurrency: string;
   verifiedAt: number;
   balancesVerifiedAt: number;
+  /** Calendar days from the Group read. Absent in copies saved before Trip day support. */
+  tripDates?: { start: string | null; end: string | null };
   currencies: {
     currency: string;
     balanceMinor: number;
@@ -40,6 +44,18 @@ export interface WidgetGroupPart {
     }[];
   }[];
 }
+function tripDay(part: WidgetGroupPart, now: number): string | null {
+  const start = part.tripDates?.start;
+  const end = part.tripDates?.end;
+  const today = dayKeyInZone(now, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  if (part.theme !== 'trip' || !start || !end || today < start || today > end) return null;
+  try {
+    return `Day ${dayCount(start, today)} of ${dayCount(start, end)}`;
+  } catch {
+    return null;
+  }
+}
+
 function groupWidgetView(
   part: WidgetGroupPart | null | undefined,
   setup: GroupWidgetSetup,
@@ -50,6 +66,7 @@ function groupWidgetView(
     state: 'no-copy',
     hidden: null as string | null,
     name: null as string | null,
+    tripDay: null as string | null,
     theme: null as GroupCategory | null,
     balance: '',
     compactLabel: null as string | null,
@@ -178,6 +195,7 @@ function groupWidgetView(
     ...empty,
     state: part.archived ? 'archived' : allSquare ? 'all-square' : 'normal',
     name: part.name,
+    tripDay: tripDay(part, now),
     hidden: setup.hideAmounts ? 'Amounts and names hidden' : null,
     theme: part.theme,
     compactLabel:
@@ -329,21 +347,35 @@ function groupLayout(
         : [];
       const descriptionFont = compact ? 10 : 12;
       const descriptionLines = text.words(view.description, descriptionFont);
+      const showTripDay =
+        optional &&
+        level === 0 &&
+        !compact &&
+        !!view.tripDay &&
+        width -
+          (showTile ? 40 : 0) -
+          (showSaved && view.saved ? text.width(view.saved, 9) + 8 : 0) -
+          text.width(view.tripDay, 11) -
+          22 >=
+          100;
       const nameRoom =
         width -
         (showTile ? 40 : 0) -
         (!compact && showSaved && view.saved ? text.width(view.saved, 9) + 8 : 0) -
-        (showArchivedTag && !stackHeader ? text.width('Archived', 9) + 12 : 0);
+        (showArchivedTag && !stackHeader ? text.width('Archived', 9) + 12 : 0) -
+        (showTripDay ? text.width(view.tripDay!, 11) + 22 : 0);
       const name = view.name ?? '';
       const nameFont = text.fit(
         name.split(/\s+/).sort((a, b) => text.width(b, 13) - text.width(a, 13))[0] ?? '',
         13,
         nameRoom,
       );
-      const nameLines =
+      const wrappedName =
         tiny || name.split(/\s+/).some((word) => text.width(word, nameFont) > nameRoom)
           ? [name]
           : text.words(name, nameFont, nameRoom);
+      const nameLines =
+        wrappedName.length > 2 ? [wrappedName[0], wrappedName.slice(1).join(' ')] : wrappedName;
       const balanceFont = tiny ? 10 : 14;
       const balanceLabelLines = text.words(
         tiny && view.final
@@ -363,7 +395,7 @@ function groupLayout(
       );
       const showCurrencyOverflow = optional && level === 0 && !tiny && !!view.currencyOverflow;
       const headerHeight =
-        nameLines.length * text.line(nameFont) +
+        Math.max(nameLines.length * text.line(nameFont), showTripDay ? text.line(11) + 6 : 0) +
         (stackHeader ? text.line(9) + 12 : 0) +
         (compact ? (showSaved ? text.line(9) + 3 : 0) : text.line(11) + 3);
       const balanceHeight =
@@ -375,10 +407,17 @@ function groupLayout(
               (showCurrencyOverflow ? text.line(10) + 4 : 0)
             : balanceLines.length * text.line(balanceFont)
           : 0;
-      const paymentFont = compact ? 13 : 12;
       const label = (p: (typeof view.payments)[number]) =>
-        compact ? (p.incoming ? `${p.firstName} pays you` : `Pay ${p.firstName}`) : p.label;
+        compact ? (p.incoming ? `From ${p.firstName}` : `Pay ${p.firstName}`) : p.label;
       const rowWidth = width - (compact ? 0 : 14 + 2 * 8 + 10 + text.width('WW', 10));
+      const paymentFont = compact
+        ? Math.min(
+            13,
+            ...view.payments.map((p) =>
+              text.fit(label(p), 13, rowWidth - text.width(p.amount, 13, true) - 8),
+            ),
+          )
+        : 12;
       const stackPayments = view.payments.some(
         (p) => text.width(label(p), paymentFont) + text.width(p.amount, 13, true) + 8 > rowWidth,
       );
@@ -493,6 +532,7 @@ function groupLayout(
           paymentAmount: text.font(13),
         },
         showSaved,
+        tripDay: showTripDay ? view.tripDay : null,
         showTile,
         showStateTile,
         showArchivedTag,
@@ -588,7 +628,7 @@ function projectGroupWidget(
       ...p,
       displayLabel: layout.compact
         ? p.incoming
-          ? `${p.firstName} pays you`
+          ? `From ${p.firstName}`
           : `Pay ${p.firstName}`
         : p.label,
     })),
@@ -596,6 +636,7 @@ function projectGroupWidget(
       'Group',
       full.state === 'loading' ? 'Loading' : null,
       full.name,
+      full.tripDay,
       full.title,
       full.balance,
       size.width < 280 && full.currencyOverflow

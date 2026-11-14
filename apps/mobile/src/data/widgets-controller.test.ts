@@ -23,6 +23,7 @@ function fixture(extraMembers: (typeof alex)[] = []) {
   let offlineAfterSave = false;
   let noGroups = false;
   let archived = false;
+  let trip = false;
   let hold: Promise<void> | undefined;
   const requests: { path: string; method: string }[] = [];
   const copies: WidgetCopy[] = [];
@@ -32,7 +33,9 @@ function fixture(extraMembers: (typeof alex)[] = []) {
     name: 'Maple House',
     isArchived: archived,
     createdBy: user.id,
-    category: 'home',
+    category: trip ? 'trip' : 'home',
+    startDate: trip ? '2026-11-08T00:00:00Z' : null,
+    endDate: trip ? '2026-11-10T00:00:00Z' : null,
     defaultCurrency: 'INR',
     tags: [{ _id: tagId, name: 'Groceries', createdAt: '2026-11-01T00:00:00Z', isArchived: false }],
     members: [
@@ -176,6 +179,9 @@ function fixture(extraMembers: (typeof alex)[] = []) {
   };
   return {
     make,
+    trip: () => {
+      trip = true;
+    },
     archive: () => {
       archived = true;
     },
@@ -766,3 +772,53 @@ it('stores first names and two initials so members with the same first name rema
     { firstName: 'Priya', initials: 'PK' },
   ]);
 });
+
+it('keeps Trip calendar dates from the existing Group read and its verification time', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(verified);
+  const f = fixture();
+  f.trip();
+  const c = f.make();
+  await c.signIn('alex');
+  await c.openGroup(groupId);
+  await vi.waitFor(() =>
+    expect(f.copies.at(-1)?.groups?.[groupId]?.tripDates).toEqual({
+      start: '2026-11-08',
+      end: '2026-11-10',
+    }),
+  );
+  expect(f.copies.at(-1)?.groups?.[groupId]?.verifiedAt).toBe(verified);
+  expect(f.requests.filter((r) => r.path === `/api/groups/${groupId}`)).toHaveLength(1);
+});
+
+it.each(['sign out', 'account change', '403', '404', '401'] as const)(
+  'applies the Widget copy purge rules to Trip dates on %s',
+  async (action) => {
+    const f = fixture();
+    f.trip();
+    const c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    await vi.waitFor(() =>
+      expect(f.copies.at(-1)?.groups?.[groupId]?.tripDates?.start).toBe('2026-11-08'),
+    );
+    f.events.length = 0;
+    if (action === 'sign out' || action === 'account change') {
+      if (action === 'sign out') await c.signOut();
+      else await c.signIn('sam');
+      expect(f.events.indexOf('clear')).toBeGreaterThanOrEqual(0);
+      expect(f.events.indexOf('signed-out')).toBeGreaterThan(f.events.indexOf('clear'));
+    } else if (action === '401') {
+      const saved = structuredClone(f.copies.at(-1));
+      f.expire();
+      await c.openGroup(groupId, false);
+      await vi.waitFor(() => expect(f.events).toContain('expired'));
+      expect(f.events).not.toContain('clear');
+      expect(f.copies.at(-1)).toEqual(saved);
+    } else {
+      f.refuse(Number(action));
+      await c.openGroup(groupId, false);
+      await vi.waitFor(() => expect(f.copies.at(-1)?.groups?.[groupId]).toBeUndefined());
+      expect(f.copies.at(-1)?.lostGroupIds).toContain(groupId);
+    }
+  },
+);

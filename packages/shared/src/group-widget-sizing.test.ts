@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { groupWidget, type WidgetGroupPart } from './group-widget';
 import type { WidgetSession } from './balances-widget';
+import { widgetSavedTime } from './balances-widget';
 import { widgetText } from './widget-sizing';
 beforeAll(() => {
   vi.stubEnv('TZ', 'Asia/Kolkata');
@@ -469,4 +470,140 @@ it('uses people without a payment row on a narrow tall widget', () => {
   const view = groupWidget(part, setup, { width: 110, height: 224 }, auth, now, 2);
   expect(view.payments).toHaveLength(0);
   expect(view.more).toBe('to 12\u00a0people');
+});
+
+it.each([
+  ['2026-11-07T18:29:59Z', null],
+  ['2026-11-07T18:30:00Z', 'Day 1 of 3'],
+  ['2026-11-08T18:30:00Z', 'Day 2 of 3'],
+  ['2026-11-09T18:30:00Z', 'Day 3 of 3'],
+  ['2026-11-10T18:30:00Z', null],
+])('uses the phone calendar day in Asia/Kolkata at %s', (instant, day) => {
+  const copy = {
+    ...part,
+    theme: 'trip' as const,
+    tripDates: { start: '2026-11-08', end: '2026-11-10' },
+  };
+  const time = Date.parse(instant);
+  const view = groupWidget(copy, setup, { width: 360, height: 224 }, auth, time);
+  expect(view.tripDay).toBe(day);
+  expect(view.layout.tripDay).toBe(day);
+  if (day) expect(view.summary).toContain(day);
+  else expect(view.summary).not.toContain('Day ');
+});
+
+it('keeps the Group name and omits the optional Trip badge at large text and compact widths', () => {
+  const copy = {
+    ...part,
+    theme: 'trip' as const,
+    name: 'Goa Friends Trip',
+    tripDates: { start: '2026-11-13', end: '2026-11-15' },
+  };
+  for (const scale of [1.3, 2]) {
+    const view = groupWidget(copy, setup, { width: 360, height: 344 }, auth, now, scale);
+    expect(view.layout.tripDay).toBeNull();
+    expect(view.layout.nameLines.join(' ')).toBe(copy.name);
+    expect(view.summary).toContain('Day 1 of 3');
+    expect(view.layout.textFactor).toBe(1);
+  }
+  expect(
+    groupWidget(copy, setup, { width: 172, height: 224 }, auth, now).layout.tripDay,
+  ).toBeNull();
+});
+
+it('omits Trip day for other Themes, older copies, incomplete and invalid dates', () => {
+  for (const copy of [
+    part,
+    { ...part, tripDates: { start: '2026-11-13', end: '2026-11-15' } },
+    { ...part, theme: 'trip' as const, tripDates: { start: '2026-11-13', end: null } },
+    { ...part, theme: 'trip' as const, tripDates: { start: '2026-11-00', end: '2026-11-15' } },
+  ]) {
+    const view = groupWidget(copy, setup, { width: 360, height: 224 }, auth, now);
+    expect(view.tripDay).toBeNull();
+    expect(view.name).toBe(part.name);
+  }
+});
+
+it('uses the newly reported phone zone while Date keeps its former local day', () => {
+  const resolve = Intl.DateTimeFormat.prototype.resolvedOptions;
+  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
+    this: Intl.DateTimeFormat,
+  ) {
+    return { ...resolve.call(this), timeZone: 'Pacific/Honolulu' };
+  });
+  const instant = Date.parse('2026-11-01T00:30:00Z');
+  const copy = {
+    ...part,
+    theme: 'trip' as const,
+    tripDates: { start: '2026-10-31', end: '2026-11-02' },
+  };
+  expect(new Date(instant).getDate()).toBe(1);
+  expect(groupWidget(copy, setup, { width: 360, height: 224 }, auth, instant).tripDay).toBe(
+    'Day 1 of 3',
+  );
+  vi.restoreAllMocks();
+});
+
+it('reserves the Trip capsule padding above the balance and bounds long names', () => {
+  const copy = {
+    ...part,
+    theme: 'trip' as const,
+    tripDates: { start: '2026-11-13', end: '2026-11-15' },
+  };
+  const view = groupWidget(copy, setup, { width: 360, height: 224 }, auth, now);
+  const text = widgetText(332);
+  expect(view.layout.sections.find((s) => s.id === 'header')!.height).toBeGreaterThanOrEqual(
+    text.line(11) * 2 + 9,
+  );
+  const long = groupWidget(
+    { ...copy, name: 'Goa Friends Trip with a very long Group name' },
+    setup,
+    { width: 172, height: 224 },
+    auth,
+    now,
+    2,
+  );
+  expect(long.layout.nameLines).toHaveLength(2);
+  expect(long.summary).toContain('Goa Friends Trip with a very long Group name');
+  expect(long.layout.fits).toBe(true);
+});
+
+it('uses the fresh phone zone for the saved clock and weekday', () => {
+  const resolve = Intl.DateTimeFormat.prototype.resolvedOptions;
+  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
+    this: Intl.DateTimeFormat,
+  ) {
+    return { ...resolve.call(this), timeZone: 'Pacific/Honolulu' };
+  });
+  const saved = Date.parse('2026-11-14T02:04:00Z');
+  expect(widgetSavedTime(saved, Date.parse('2026-11-14T04:30:00Z'))).toBe('Saved 4:04');
+  expect(widgetSavedTime(saved, Date.parse('2026-11-14T10:30:00Z'))).toBe('Saved Fri');
+  vi.restoreAllMocks();
+});
+
+it('fits both incoming mini payments on one line at the real launcher 2×2 size', () => {
+  const incoming = {
+    ...part,
+    currencies: [
+      {
+        currency: 'INR',
+        balanceMinor: 240000,
+        payments: [
+          { from: 'meera', to: 'alex', fromName: 'Meera', toName: 'Alex', amountMinor: 145000 },
+          { from: 'rohan', to: 'alex', fromName: 'Rohan', toName: 'Alex', amountMinor: 95000 },
+        ],
+      },
+    ],
+  };
+  const view = groupWidget(
+    incoming,
+    setup,
+    { width: 172, height: 224, pixelRatio: 2.625 },
+    auth,
+    now,
+  );
+  expect(view.payments.map((p) => p.displayLabel)).toEqual(['From Meera', 'From Rohan']);
+  expect(view.layout.stackPayments).toBe(false);
+  expect(view.more).toBeNull();
+  expect(view.summary).toContain('Meera pays you');
 });
