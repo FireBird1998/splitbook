@@ -142,7 +142,8 @@ export function HeaderSettings({
               <View style={{ flex: 1 }}>
                 <CompactText>Motion</CompactText>
                 <CompactText variant="small" tone="secondary">
-                  Gentle scene motion. Android’s Remove animations always wins.
+                  Scenes stay still on Android for now. Your Motion preference is kept on this
+                  phone.
                 </CompactText>
               </View>
               <Switch
