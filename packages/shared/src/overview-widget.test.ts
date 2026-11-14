@@ -929,7 +929,7 @@ it('does not invent a square balance on an older copy without per-Group figures,
   const v = overviewWidget(c, setup, { width: 360, height: 584 }, auth, now);
   expect(v.groups[0]).toMatchObject({
     name: 'Sunday Football',
-    labels: ['Open to update'],
+    labels: ['Open the Group to update'],
     amounts: [],
     verifiedAt: null,
   });

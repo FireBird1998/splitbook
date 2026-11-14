@@ -348,7 +348,7 @@ export function overviewWidget(
         const visible = group.balances?.slice(0, groupLimit) ?? [];
         const labels =
           group.balances === null
-            ? ['Open to update']
+            ? ['Open the Group to update']
             : !group.balances.length
               ? ['All square']
               : visible.map((row) => (row.balanceMinor > 0 ? 'You’re owed' : 'You owe'));
@@ -399,7 +399,10 @@ export function overviewWidget(
           textHeight,
           balanceWidth: Math.max(balanceWidth, moreCurrencies ? text.width(moreCurrencies, 9) : 0),
           positive: visible.map((row) => row.balanceMinor > 0),
-          fits: amounts.every((amount) => text.width(amount, 12, true) <= contentWidth),
+          fits:
+            amounts.every((amount) => text.width(amount, 12, true) <= contentWidth) &&
+            labels.every((label) => text.width(label, 9) <= contentWidth) &&
+            (!moreCurrencies || text.width(moreCurrencies, 9) <= contentWidth),
         };
       });
       const groupRowHeight = Math.max(
@@ -636,7 +639,7 @@ export function overviewWidget(
       group.name +
       '. ' +
       (group.balances === null
-        ? 'Open to update'
+        ? 'Open the Group to update'
         : !group.balances.length
           ? 'All square'
           : group.balances
