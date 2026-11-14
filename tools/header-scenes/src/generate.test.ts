@@ -1,6 +1,12 @@
 import { expect, it } from 'vitest';
 import { sceneThumbnails } from '../../../packages/shared/src/header-scenes/thumbnails';
-import { buildScenes, generatedFiles, staleOutputs, thumbnailSource } from './generate';
+import {
+  buildScenes,
+  generatedFiles,
+  staleOutputs,
+  thumbnailSource,
+  sceneThumbnail,
+} from './generate';
 import { vectorTree, vectorSvg } from './vectors';
 import type { SceneVector } from '@splitbook/shared/header-scene-art';
 
@@ -118,10 +124,23 @@ it('builds a decodable, bounded raster thumbnail for every generated scene', asy
   }
 });
 
-it('checks the raster source stamp across platform-specific PNG bytes', async () => {
+it('checks the raster source stamp while accepting different PNG encoding of the same pixels', async () => {
+  const { default: sharp } = await import('sharp');
   const expected = await generatedFiles(false);
-  const actual = new Map(expected);
-  actual.set('thumbnails.ts', expected.get('thumbnails.ts')! + '\n// different platform PNG bytes');
+  const actual = await generatedFiles();
+  const original = await sceneThumbnail(buildScenes()[0]);
+  const originalBytes = Buffer.from(original.split(',')[1], 'base64');
+  const encoded = await sharp(originalBytes).png({ compressionLevel: 0 }).toBuffer();
+  expect(encoded.equals(originalBytes)).toBe(false);
+  expect(await sharp(encoded).raw().toBuffer()).toEqual(
+    await sharp(originalBytes).raw().toBuffer(),
+  );
+  const file = actual.get('thumbnails.ts')!;
+  expect(file).toContain(original);
+  actual.set(
+    'thumbnails.ts',
+    file.replace(original, `data:image/png;base64,${encoded.toString('base64')}`),
+  );
   expect(staleOutputs(expected, actual)).toEqual([]);
   actual.set(
     'thumbnails.ts',
