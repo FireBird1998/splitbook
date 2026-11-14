@@ -2,22 +2,6 @@ import { act, create } from 'react-test-renderer';
 import { expect, it, vi } from 'vitest';
 import { HeaderSceneCard } from './header-scene';
 import type { MobileGroup } from '../data/types';
-vi.mock('react-native-svg', () =>
-  Object.fromEntries(
-    [
-      'default',
-      'G',
-      'Path',
-      'Polygon',
-      'Circle',
-      'Ellipse',
-      'Rect',
-      'Defs',
-      'RadialGradient',
-      'Stop',
-    ].map((name) => [name, name]),
-  ),
-);
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const group = {

@@ -9,11 +9,11 @@ const load = vi.hoisted(() => {
   });
   return { waiting, resolve };
 });
-vi.mock('@splitbook/shared/header-scenes/beach', async (original) => {
+vi.mock('./header-scene-sprites/beach', async (original) => {
   await load.waiting;
   return original();
 });
-vi.mock('@splitbook/shared/header-scenes/sakura', () => {
+vi.mock('./header-scene-sprites/sakura', () => {
   throw Error('Art import failed');
 });
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));

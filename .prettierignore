@@ -6,3 +6,5 @@ apps/web/src/components/landing-figures/generated/
 .agents/skills/
 # Generated shared Header scene vectors; tools/header-scenes owns them.
 packages/shared/src/header-scenes/
+# Generated Android Header scene picture lists; tools/header-scenes owns them.
+apps/mobile/src/ui/header-scene-sprites/

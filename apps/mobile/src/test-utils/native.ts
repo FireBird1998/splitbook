@@ -261,6 +261,7 @@ export const reactNative = {
   Alert: { alert: spies.alert },
   Animated: {
     View: 'AnimatedView',
+    Image: 'AnimatedImage',
     // Not 'Text': only what a reader sees is text to a test.
     Text: 'AnimatedText',
     Value: AnimatedValue,

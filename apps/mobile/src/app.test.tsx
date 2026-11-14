@@ -3854,7 +3854,7 @@ describe('source-specific held copy', () => {
   });
 });
 
-it('mounts one selected preview and releases the Group SVG while Header settings are open', async () => {
+it('mounts one selected preview and releases the Group scene while Header settings are open', async () => {
   vi.stubEnv('EXPO_PUBLIC_HEADER_SCENES_ENABLED', 'true');
   try {
     const app = await renderApp((path) =>
@@ -3866,7 +3866,12 @@ it('mounts one selected preview and releases the Group SVG while Header settings
         : undefined,
     );
     await app.press('Open Maple House');
-    const scenes = () => app.root().findAll((node) => (node.type as unknown) === 'default');
+    const scenes = () =>
+      app
+        .root()
+        .findAll(
+          (node) => (node.type as unknown) === 'View' && node.props.accessibilityRole === 'image',
+        );
     await vi.waitFor(
       async () => {
         await settle();

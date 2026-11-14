@@ -1,23 +1,19 @@
 import { SceneVisibility } from './scene-visibility';
 import { useHeaderTilt } from './use-header-tilt';
-import { createElement, memo, useContext, useEffect, useState, type ComponentType } from 'react';
-import { Animated, AppState, StyleSheet, View } from 'react-native';
-import Svg, {
-  G,
-  Path,
-  Polygon,
-  Circle,
-  Ellipse,
-  Rect,
-  Defs,
-  RadialGradient,
-  Stop,
-} from 'react-native-svg';
+import { memo, useContext, useEffect, useState } from 'react';
+import { Animated, AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { headerTimeOfDay, type GroupHeader } from '@splitbook/shared/group-header';
-import type { HeaderSceneArt, SceneVector } from '@splitbook/shared/header-scene-art';
 import type { MobileGroup } from '../data/types';
-import { useSceneFloat } from './compact/motion';
+import {
+  FLOAT_RISE,
+  SCENE_CENTRE,
+  SCENE_UNIT,
+  TILT_DEPTH,
+  useCloudDrift,
+  useSceneRise,
+} from './header-scene-motion';
+import type { HeaderSceneSprites, SceneSprite } from './header-scene-sprite';
 import { headerSceneMotionAvailable } from '../config';
 import { currentDayKey } from './list-day-header';
 import {
@@ -28,74 +24,69 @@ import {
 } from './header-scene-card';
 export { HeaderSceneCard } from './header-scene-card';
 
+// Each scene is a handful of pictures drawn by tools/header-scenes from the traced art. They are
+// moved only by native-driver transforms, so nothing is redrawn while the scene floats or tilts.
 const loaders = {
-  beach: () => import('@splitbook/shared/header-scenes/beach'),
-  sakura: () => import('@splitbook/shared/header-scenes/sakura'),
-  'eco-city': () => import('@splitbook/shared/header-scenes/eco-city'),
-  'mountain-village': () => import('@splitbook/shared/header-scenes/mountain-village'),
+  beach: () => import('./header-scene-sprites/beach'),
+  sakura: () => import('./header-scene-sprites/sakura'),
+  'eco-city': () => import('./header-scene-sprites/eco-city'),
+  'mountain-village': () => import('./header-scene-sprites/mountain-village'),
 };
-const primitives = {
-  svg: G,
-  g: G,
-  path: Path,
-  polygon: Polygon,
-  circle: Circle,
-  ellipse: Ellipse,
-  rect: Rect,
-  defs: Defs,
-  radialGradient: RadialGradient,
-  stop: Stop,
-};
-function vector(node: SceneVector, key: number | string): React.ReactNode {
-  return createElement(
-    primitives[node.tag] as ComponentType<Record<string, string>>,
-    { ...node.props, key: String(key) },
-    node.children?.map((child, index) => vector(child, index)),
-  );
-}
-// The path tree is built once per scene/time, never once per animation frame or scroll event.
-const Art = memo(function Art({
-  art,
-  time,
-  layer,
+type Rises = Record<7 | 9 | 11, Animated.Value>;
+const place = (sprite: SceneSprite) =>
+  ({
+    position: 'absolute',
+    left: (sprite.x - SCENE_CENTRE) * SCENE_UNIT,
+    top: sprite.y * SCENE_UNIT,
+    width: sprite.w * SCENE_UNIT,
+    height: sprite.h * SCENE_UNIT,
+  }) as const;
+const lift = (rise: Animated.Value) =>
+  rise.interpolate({ inputRange: [0, 1], outputRange: [0, -FLOAT_RISE * SCENE_UNIT] });
+
+const Piece = memo(function Piece({
+  sprite,
+  rises,
+  moving,
+  frameWidth,
 }: {
-  layer?: 'far' | 'clouds' | 'main' | 'front';
-  art: HeaderSceneArt;
-  time: ReturnType<typeof headerTimeOfDay>;
+  sprite: SceneSprite;
+  rises: Rises;
+  moving: boolean;
+  frameWidth: number;
 }) {
+  const drift = useCloudDrift(moving && sprite.kind === 'cloud', sprite, frameWidth);
+  const rise = rises[sprite.seconds as 7 | 9 | 11] ?? rises[7];
   return (
-    <Svg width="100%" height="100%" viewBox="70 0 460 240" preserveAspectRatio="xMidYMid slice">
-      {(layer ? [layer] : (['far', 'clouds', 'main', 'front'] as const)).map((layer) =>
-        vector(art.layers[layer], layer),
-      )}
-      <Rect
-        x="0"
-        y="0"
-        width="1100"
-        height="240"
-        fill={time === 'night' ? '#28386e' : time === 'sunset' ? '#faaa8c' : '#ffd6ba'}
-        opacity={
-          layer && layer !== 'front'
-            ? 0
-            : time === 'night'
-              ? 0.52
-              : time === 'sunset'
-                ? 0.22
-                : time === 'morning'
-                  ? 0.12
-                  : 0
-        }
-      />
-      <G
-        opacity={
-          layer && layer !== 'front' ? 0 : time === 'night' ? 0.92 : time === 'sunset' ? 0.55 : 0
-        }
-      >
-        {vector(art.layers.glow, 'glow')}
-      </G>
-    </Svg>
+    <Animated.Image
+      accessible={false}
+      fadeDuration={0}
+      resizeMode="stretch"
+      source={sprite.image}
+      style={[
+        place(sprite),
+        sprite.kind === 'cloud'
+          ? { transform: [{ translateX: drift }] }
+          : sprite.kind === 'shadow'
+            ? {
+                // The shadow tightens and fades as the island rises away from it.
+                opacity: rise.interpolate({ inputRange: [0, 1], outputRange: [1, 0.8] }),
+                transform: [
+                  { scale: rise.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) },
+                ],
+              }
+            : { transform: [{ translateY: lift(rise) }] },
+      ]}
+    />
   );
 });
+const tint = {
+  morning: { backgroundColor: '#ffd6ba', opacity: 0.12 },
+  day: null,
+  sunset: { backgroundColor: '#faaa8c', opacity: 0.22 },
+  night: { backgroundColor: '#28386e', opacity: 0.52 },
+} as const;
+const glow = { morning: 0, day: 0, sunset: 0.55, night: 0.92 } as const;
 const sky = {
   morning: ['#c8d9ed', '#f9dfc1'],
   day: ['#a9d3ec', '#e5edf4'],
@@ -121,16 +112,31 @@ export default function HeaderScene({
   visible?: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
-  const [art, setArt] = useState<HeaderSceneArt | null>(null);
+  const [art, setArt] = useState<HeaderSceneSprites | null>(null);
   const [, setHour] = useState(() => new Date().getHours());
   const visibility = useContext(SceneVisibility);
   const moving = motion && headerSceneMotionAvailable && visible && visibility.visible && !preview;
   const position = useHeaderTilt(moving && tilt);
-  const translateY = useSceneFloat(moving);
-  const transform = (depth: number) => [
-    { translateX: Animated.multiply(position.x, depth) },
-    { translateY: Animated.multiply(position.y, depth * 0.6) },
-  ];
+  const frameWidth = useWindowDimensions().width;
+  const rise7 = useSceneRise(moving, 7);
+  const rise9 = useSceneRise(moving, 9);
+  const rise11 = useSceneRise(moving, 11);
+  const [rises] = useState<Rises>(() => ({ 7: rise7, 9: rise9, 11: rise11 }));
+  // One set of animated nodes for the life of the scene, not one per render.
+  const [shifts] = useState(
+    () =>
+      Object.fromEntries(
+        Object.entries(TILT_DEPTH).map(([layer, depth]) => [
+          layer,
+          {
+            transform: [
+              { translateX: Animated.multiply(position.x, depth) },
+              { translateY: Animated.multiply(position.y, depth * 0.6) },
+            ],
+          },
+        ]),
+      ) as Record<keyof typeof TILT_DEPTH, object>,
+  );
   useEffect(() => {
     let active = true;
     loaders[header.scene]()
@@ -171,13 +177,8 @@ export default function HeaderScene({
         accessibilityLabel={art?.id === header.scene ? art.description : 'Loading Header scene'}
         style={{ height: 208, overflow: 'hidden' }}
       >
-        <Animated.View
-          style={[
-            { position: 'absolute', top: -4, bottom: -4, left: -4, right: -4 },
-            { transform: transform(-3) },
-          ]}
-        >
-          <LinearGradient colors={sky[time]} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={sky[time]} style={StyleSheet.absoluteFill} />
+        <Animated.View style={[StyleSheet.absoluteFill, shifts.sky]}>
           {time === 'night'
             ? [6, 14, 22, 33, 47, 58, 66, 78, 88, 94].map((left, index) => (
                 <View
@@ -206,30 +207,41 @@ export default function HeaderScene({
             }}
           />
         </Animated.View>
-        <Animated.View
-          renderToHardwareTextureAndroid
-          importantForAccessibility="no-hide-descendants"
-          style={[StyleSheet.absoluteFill, { transform: [{ translateY }] }]}
-        >
-          {art?.id === header.scene ? (
-            headerSceneMotionAvailable && tilt && !preview ? (
-              (['far', 'clouds', 'main', 'front'] as const).map((layer, index) => (
-                <Animated.View
-                  key={layer}
-                  renderToHardwareTextureAndroid
-                  style={[
-                    StyleSheet.absoluteFill,
-                    { transform: transform([-4, -3, -2, 5][index]) },
-                  ]}
-                >
-                  <Art art={art} time={time} layer={layer} />
-                </Animated.View>
-              ))
-            ) : (
-              <Art art={art} time={time} />
-            )
+        <View importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
+          {(['far', 'clouds', 'main', 'front'] as const).map((layer) => (
+            <Animated.View key={layer} style={[styles.world, shifts[layer]]}>
+              {art.sprites.map((sprite) =>
+                sprite.layer === layer ? (
+                  <Piece
+                    key={`${sprite.kind}:${sprite.x}:${sprite.y}`}
+                    sprite={sprite}
+                    rises={rises}
+                    moving={moving}
+                    frameWidth={frameWidth}
+                  />
+                ) : null,
+              )}
+            </Animated.View>
+          ))}
+          {tint[time] ? (
+            <View pointerEvents="none" style={[StyleSheet.absoluteFill, tint[time]]} />
           ) : null}
-        </Animated.View>
+          {glow[time] ? (
+            <Animated.View style={[styles.world, shifts.glow, { opacity: glow[time] }]}>
+              {art.sprites.map((sprite) =>
+                sprite.layer === 'glow' ? (
+                  <Piece
+                    key={`glow:${sprite.x}:${sprite.y}`}
+                    sprite={sprite}
+                    rises={rises}
+                    moving={moving}
+                    frameWidth={frameWidth}
+                  />
+                ) : null,
+              )}
+            </Animated.View>
+          ) : null}
+        </View>
       </View>
       {preview ? (
         <HeaderScenePreviewCaption scene={header.scene} time={time} />
@@ -239,3 +251,9 @@ export default function HeaderScene({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  // A zero-width column down the middle of the picture: pieces are placed left and right of it,
+  // so a wider screen shows more of the scene instead of cropping its top and bottom.
+  world: { position: 'absolute', left: '50%', top: 0, width: 0, height: 208 },
+});
