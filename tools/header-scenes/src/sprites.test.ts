@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { buildScenes } from './generate';
 import {
   listFiles,
@@ -10,6 +10,9 @@ import {
   spriteSource,
   thumbnailList,
 } from './sprites';
+
+// These tests draw pictures with sharp; CI's runners are several times slower than a laptop.
+vi.setConfig({ testTimeout: 30_000 });
 
 const scenes = buildScenes();
 
