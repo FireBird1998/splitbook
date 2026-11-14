@@ -1322,6 +1322,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     drafts: dependencies.expenseDrafts,
     checkUnlisted: (listed, owner) => checkUnlistedRecords(listed, owner),
     homeVerified: () => widgets.homeVerified(),
+    listVerified: (groups) => widgets.listVerified(groups),
     financialBlocked: financialCleanup.blocked,
     shows: () => route.screen === 'groups' && snapshot.auth.status === 'authenticated',
     listed: (listed, lost) => {

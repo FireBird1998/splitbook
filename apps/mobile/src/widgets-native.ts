@@ -309,14 +309,24 @@ export function createWidgetsStore(environment: string) {
         // survives that eviction and a restart, until access is genuinely lost or the copy purged.
         const finalGroups = Object.fromEntries(
           Object.entries(previous.groups ?? {}).filter(
-            ([id, group]) => group.archived && !copy.lostGroupIds?.includes(id),
+            ([id, group]) =>
+              group.archived &&
+              !copy.lostGroupIds?.includes(id) &&
+              !options.trustedGroups?.includes(id),
           ),
         );
         const finalMonths = Object.fromEntries(
           Object.entries(previous.months ?? {}).filter(([id]) => finalGroups[id]),
         );
         const retainedTags = Object.fromEntries(
-          Object.entries(previous.tags ?? {}).filter(([id]) => !options.tags?.includes(id)),
+          Object.entries(previous.tags ?? {}).filter(
+            ([id]) =>
+              !options.tags?.includes(id) &&
+              !(
+                options.trustedGroups?.includes(id) &&
+                (previous.groups?.[id]?.archived || previous.archivedGroupIds?.includes(id))
+              ),
+          ),
         );
         copy = {
           ...copy,

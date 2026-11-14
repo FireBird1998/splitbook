@@ -1699,7 +1699,7 @@ it.each(['older', 'equal'] as const)(
       c = f.make();
     await c.signIn('alex');
     await c.openExpense(groupId);
-    const envelope = {
+    let envelope = {
       source: 'network' as const,
       refreshedAt: time,
       value: { status: 200, data: f.group() },
@@ -1741,7 +1741,7 @@ it.each(['older', 'equal'] as const)(
     expect(copies.at(-1)?.tags?.[groupId]).toBeUndefined();
     expect(copies.at(-1)?.groups?.[groupId]).toBeUndefined();
     time += 1;
-    envelope.refreshedAt = time;
+    envelope = { ...envelope, refreshedAt: time };
     projection.update(c.getSnapshot());
     await projection.idle();
     expect(copies.at(-1)?.lostGroupIds).not.toContain(groupId);
@@ -2956,9 +2956,11 @@ it.each([403, 404])(
     expect(f.record().copy?.groups?.[groupId]).toBeUndefined();
     expect(f.record().copy?.tags?.[groupId]).toBeUndefined();
     expect(f.record().copy?.months?.[groupId]).toBeUndefined();
-    expect(f.record().copy?.home?.byGroup?.[groupId]).toBeUndefined();
-    // Totals that still cover the refused Group are withheld whole, never netted or recomputed.
-    expect(f.record().copy?.home).toBeNull();
+    // A new live Home is authoritative even while Group membership remains fenced.
+    expect(f.record().copy?.home?.currencies).toEqual([
+      { currency: 'INR', owedMinor: 240000, oweMinor: 148000 },
+      { currency: 'EUR', owedMinor: 4000, oweMinor: 0 },
+    ]);
   },
 );
 
