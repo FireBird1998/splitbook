@@ -442,7 +442,10 @@ export function overviewWidget(
       });
       const groupRowHeight = Math.max(
         (compactGroups ? 36 : 42) * scale * text.factor,
-        ...measuredGroups.map((row) => row.textHeight + Math.ceil(ratio) / ratio),
+        ...measuredGroups.map(
+          (row) =>
+            row.textHeight + (!compactGroups && row.stack ? 12 : 0) + Math.ceil(ratio) / ratio,
+        ),
       );
       const sections: WidgetSection[] = [
         ...(showHeader
