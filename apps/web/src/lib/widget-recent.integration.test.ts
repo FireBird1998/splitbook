@@ -171,3 +171,17 @@ it('projects the reused unfiltered first page to the exact Recent fields', async
     }),
   ).toThrow();
 });
+
+it('includes a newly saved backdated Expense beyond the visible first twenty rows', async () => {
+  for (let index = 0; index < 21; index++)
+    await addExpense(`Earlier saved meal ${index}`, '2026-11-10');
+  const backdated = await addExpense('Newest saved backdated meal', '2026-11-01');
+  const answer = await page('&includeRecent=1');
+  expect(answer.status).toBe(200);
+  expect(answer.body.data.expenses).toHaveLength(20);
+  expect(
+    answer.body.data.expenses.some((row: { _id: string }) => row._id === String(backdated._id)),
+  ).toBe(false);
+  expect(answer.body.data.recent.expenses).toHaveLength(20);
+  expect(answer.body.data.recent.expenses[0]._id).toBe(String(backdated._id));
+});

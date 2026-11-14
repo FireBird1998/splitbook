@@ -173,14 +173,7 @@ export interface WidgetGroupPart {
 function tripDay(part: WidgetGroupPart, now: number): string | null {
   const start = part.tripDates?.start;
   const end = part.tripDates?.end;
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const today = dayKeyInZone(now, zone);
-  // New copies compare the saved creation instants. Legacy copies keep their phone-calendar order.
-  const recentTime = (row: WidgetRecentPart['rows'][number]) =>
-    Date.parse(
-      row.createdAt ??
-        (row.kind === 'settlement' ? dayKeyInZone(row.date, zone) : row.date.slice(0, 10)),
-    );
+  const today = dayKeyInZone(now, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   if (part.theme !== 'trip' || !start || !end || today < start || today > end) return null;
   try {
     return `Day ${dayCount(start, today)} of ${dayCount(start, end)}`;

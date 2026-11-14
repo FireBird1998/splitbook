@@ -30,7 +30,6 @@ export function widgetRecentCopy(
       const payer = payers.length === 1 ? payers[0].user : null;
       return {
         sortDate: Date.parse(row.createdAt),
-        createdAt: Date.parse(row.createdAt),
         row: {
           id: row._id,
           kind: 'expense' as const,
@@ -56,7 +55,6 @@ export function widgetRecentCopy(
     )
     .map((row) => ({
       sortDate: Date.parse(row.createdAt),
-      createdAt: Date.parse(row.createdAt),
       row: {
         id: row._id,
         kind: 'settlement' as const,
@@ -81,7 +79,7 @@ export function widgetRecentCopy(
   return {
     verifiedAt,
     rows: [...expenses, ...settlements]
-      .sort((a, b) => b.sortDate - a.sortDate || b.createdAt - a.createdAt)
+      .sort((a, b) => b.sortDate - a.sortDate)
       .slice(0, 20)
       .map((entry) => entry.row),
   };

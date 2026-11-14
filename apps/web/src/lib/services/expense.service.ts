@@ -417,6 +417,7 @@ export class ExpenseService {
     const firstUnfilteredPage =
       page === 1 &&
       limit >= 20 &&
+      total <= 20 &&
       Object.keys(query).every((key) => key === 'group' || key === 'isDeleted') &&
       sortField === 'date' &&
       sortOrder === -1;
@@ -428,7 +429,7 @@ export class ExpenseService {
                 .select(
                   'group description amount amountMinor moneyVersion currency date createdAt paidBy',
                 )
-                .sort({ date: -1, createdAt: -1 })
+                .sort({ createdAt: -1, _id: -1 })
                 .limit(20)
                 .populate('paidBy.user', PERSON_FIELDS)
                 .populate('splitBetween.user', PERSON_FIELDS)
@@ -443,35 +444,37 @@ export class ExpenseService {
             .populate('paidTo', PERSON_FIELDS)
             .lean(),
         ]).then(([expenses, settlements]) => ({
-          expenses: expenses.map(
-            ({
-              _id,
-              group,
-              description,
-              amount,
-              amountMinor,
-              moneyVersion,
-              currency,
-              date,
-              createdAt,
-              paidBy,
-            }) => ({
-              _id,
-              group,
-              description,
-              amount,
-              amountMinor,
-              moneyVersion,
-              currency,
-              date,
-              createdAt,
-              paidBy: paidBy.map(({ user, amount, amountMinor }) => ({
-                user,
+          expenses: [...expenses]
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .map(
+              ({
+                _id,
+                group,
+                description,
                 amount,
                 amountMinor,
-              })),
-            }),
-          ),
+                moneyVersion,
+                currency,
+                date,
+                createdAt,
+                paidBy,
+              }) => ({
+                _id,
+                group,
+                description,
+                amount,
+                amountMinor,
+                moneyVersion,
+                currency,
+                date,
+                createdAt,
+                paidBy: paidBy.map(({ user, amount, amountMinor }) => ({
+                  user,
+                  amount,
+                  amountMinor,
+                })),
+              }),
+            ),
           settlements,
         }))
       : undefined;

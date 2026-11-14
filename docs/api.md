@@ -1371,7 +1371,7 @@ page. `byMember` appears only when `includeMemberBreakdown=1`; `net` is
 `share - paid`, so positive means under-contributed for the window.
 
 `includeRecent=1` adds `recent.expenses` and `recent.settlements`, each capped at
-20 saved rows across the Group, ordered newest first. Expense rows exclude deleted
+20 saved rows across the Group, ordered by creation instant, newest first. Expense rows exclude deleted
 items, notes, creator and edit history. Each Expense contains only its identity, Group,
 description, stored money/currency, calendar date, creation time and payer allocations.
 Populated people contain only identity, name and image. Settlement rows contain payer, recipient, saved
