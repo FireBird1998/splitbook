@@ -273,15 +273,15 @@ it('takes the chosen name and initials from the copy when setup keeps only the i
   expect(result.payments[0].label).toBe('You pay Sam');
 });
 
-it('ignores people, lines and all-square rows omitted by a same-age or newer verified list', () => {
+it('keeps people and lines omitted by the list until a Group read confirms loss', () => {
   const dropped: WidgetCopy = { ...copy, savedGroups: { verifiedAt: now, rows: [] } };
-  expect(widgetPeople(dropped, 'alex')).toEqual([]);
-  expect(view(dropped).state).toBe('no-shared-group');
-  expect(view(dropped).payments).toEqual([]);
+  expect(widgetPeople(dropped, 'alex')[0].groups.map((g) => g.id)).toEqual(['maple', 'lisbon']);
+  expect(view(dropped).state).toBe('normal');
+  expect(view(dropped).payments.map((p) => p.groupId)).toEqual(['maple', 'lisbon']);
   expect(view(dropped, { width: 360, height: 344 }).squareGroups).toEqual([]);
 });
 
-it('keeps only the remaining Group for a person shared through a dropped and a listed Group', () => {
+it('keeps an omitted all-square Group beside the listed Group until a confirmed refusal', () => {
   const dropped: WidgetCopy = {
     ...copy,
     groups: { maple: { ...maple, currencies: [] }, lisbon },
@@ -300,15 +300,17 @@ it('keeps only the remaining Group for a person shared through a dropped and a l
     },
   };
   const result = view(dropped, { width: 360, height: 344 });
-  expect(widgetPeople(dropped, 'alex').map((p) => p.groups.map((g) => g.id))).toEqual([['lisbon']]);
+  expect(widgetPeople(dropped, 'alex').map((p) => p.groups.map((g) => g.id))).toEqual([
+    ['maple', 'lisbon'],
+  ]);
   expect(result.payments.map((p) => [p.groupId, p.amount])).toEqual([['lisbon', '€40.00']]);
-  expect(result.squareGroups).toEqual([]);
+  expect(result.squareGroups).toEqual([{ id: 'maple', name: 'Maple House' }]);
 });
 
 it.each([
   [-1, 2],
-  [0, 0],
-  [1, 0],
+  [0, 2],
+  [1, 2],
 ])(
   'a list verified %s ms relative to the Person parts retains %s shared Groups',
   (offset, count) => {
@@ -325,7 +327,7 @@ it('keeps a Group read newer than an omitted list, including a newer Balances pa
     groups: { maple: { ...maple, balancesVerifiedAt: now + 1 }, lisbon },
     savedGroups: { verifiedAt: now, rows: [] },
   };
-  expect(view(newer).payments.map((p) => p.groupId)).toEqual(['maple']);
+  expect(view(newer).payments.map((p) => p.groupId)).toEqual(['maple', 'lisbon']);
 });
 
 it('is all square only when every shared Group has a saved Balances part with nothing suggested with this person', () => {

@@ -1,4 +1,3 @@
-import { widgetGroupWasDropped } from './widget-membership';
 import { widgetGroups } from './widget-groups';
 import { formatCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
@@ -62,8 +61,7 @@ export function overviewWidget(
     copy?.accountId === session.accountId &&
     setup.reviewEnabled !== false &&
     !!copy.home &&
-    !copy.lostGroupIds?.includes(copy.finishLater?.groupId ?? '') &&
-    !widgetGroupWasDropped(copy, copy.finishLater?.groupId ?? '')
+    !copy.lostGroupIds?.includes(copy.finishLater?.groupId ?? '')
       ? copy.finishLater
       : undefined;
   const normal = state === 'normal';
@@ -361,10 +359,7 @@ export function overviewWidget(
         (row) => text.width(row.amount, 13, true) <= paymentWidth,
       );
       const hasReadGroup = Object.values(copy?.groups ?? {}).some(
-        (group) =>
-          !group.archived &&
-          !copy?.lostGroupIds?.includes(group.id) &&
-          !widgetGroupWasDropped(copy ?? {}, group.id),
+        (group) => !group.archived && !copy?.lostGroupIds?.includes(group.id),
       );
       const paymentMessage =
         normal && tall && !suggested.length && !hasReadGroup ? 'Open the Group to update' : null;

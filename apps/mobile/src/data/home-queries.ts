@@ -250,7 +250,7 @@ export interface HomeSession {
   answered(path: string, saved?: number | null): void;
   /** A Groups list from the server holds `listed`, and leaves out `lost`: they go from memory. */
   listed(listed: Set<string>, lost: Set<string>): void;
-  /** Verified omission prompts an access check only for financial records kept on this device. */
+  /** A trusted omission confirms access for kept financial records and Widget copy parts. */
   checkUnlisted?(listed: Set<string>, owner: number): Promise<void>;
   financialBlocked?(accountId: string, groupId: string): boolean;
   /** The persister keeps only these Groups' copies (inside a lease write). */
@@ -470,6 +470,8 @@ export function createHomeQueries(session: HomeSession) {
     const { snapshot } = session,
       listed = new Set(groups.map((group) => group.id)),
       lost = new Set<string>();
+    if (session.current(owner)) await session.checkUnlisted?.(listed, owner);
+    if (!session.current(owner)) throw new Superseded();
     answers += 1;
     latest = listed;
     const reading = client.getQueryCache().findAll({
@@ -547,7 +549,6 @@ export function createHomeQueries(session: HomeSession) {
         'home',
       ]);
     }
-    if (session.current(owner)) await session.checkUnlisted?.(listed, owner);
   };
   const options = (): QueryObserverOptions<Envelope, Error, Envelope, Envelope, QueryKey>[] => [
     {

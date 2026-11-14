@@ -1378,7 +1378,9 @@ it('does not restore refused Person membership from the old saved list on an off
     server.reply('GET', `/api/groups/${groupId}`, () =>
       Response.json({ error: 'Not a member' }, { status: 403 }),
     );
-    await first.openGroup(groupId, false);
+    await first.back();
+    server.reply('GET', '/api/groups', () => Response.json({ status: 200, data: [] }));
+    await first.refresh('pull');
     await vi.waitFor(async () =>
       expect((await store.read()).copy?.lostGroupIds).toContain(groupId),
     );

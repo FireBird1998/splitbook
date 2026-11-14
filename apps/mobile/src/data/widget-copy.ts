@@ -1,4 +1,4 @@
-import { widgetGroupWasDropped } from '@splitbook/shared/widget-membership';
+import { widgetGroupsToConfirm } from '@splitbook/shared/widget-membership';
 import { parseGroupListResponse, type GroupReadTag } from '@splitbook/shared/group-read';
 import { expenseDraftChanged, parseExpenseContext } from './expense-draft';
 import { cachedRead } from './offline-cache';
@@ -75,33 +75,7 @@ export function createWidgetCopy(
   };
   let groupPeople: NonNullable<WidgetCopy['groupPeople']> = {};
   let peopleRefusedAt: NonNullable<WidgetCopy['peopleRefusedAt']> = {};
-  let peopleList: Pick<Envelope, 'refreshedAt' | 'value'> | null = null;
-  const pruneGroups = (copy: WidgetCopy) => {
-    if (!peopleList) return;
-    const parts = {
-      ...copy,
-      groups,
-      groupPeople,
-      tags,
-      months,
-      savedGroups: { verifiedAt: peopleList.refreshedAt, rows: parseGroups(peopleList.value) },
-    };
-    const ids = new Set([
-      ...Object.keys(groups),
-      ...Object.keys(groupPeople),
-      ...Object.keys(tags),
-      ...Object.keys(months),
-    ]);
-    for (const id of ids)
-      if (widgetGroupWasDropped(parts, id)) {
-        delete groups[id];
-        delete groupPeople[id];
-        delete tags[id];
-        delete months[id];
-        retiredRecent.add(id);
-      }
-  };
-
+  let written: WidgetCopy | null = null;
   const rememberPeople = (
     group: Parameters<typeof widgetGroupPeople>[0],
     verifiedAt: number,
@@ -121,6 +95,20 @@ export function createWidgetCopy(
     };
   };
   let savedGroups: WidgetCopy['savedGroups'];
+  const rememberCatalogue = (
+    rows: NonNullable<WidgetCopy['savedGroups']>['rows'],
+    verifiedAt: number,
+  ) => {
+    const previous = savedGroups;
+    const included = new Set(rows.map((row) => row.id));
+    const omitted = previous?.rows.filter((row) => !included.has(row.id)) ?? [];
+    savedGroups = {
+      verifiedAt: omitted.length ? Math.min(previous!.verifiedAt, verifiedAt) : verifiedAt,
+      rows: [...rows, ...omitted]
+        .filter((row) => !lost.has(row.id))
+        .map((row) => ({ ...row, archived: row.archived || archived.has(row.id) })),
+    };
+  };
   const lost = new Set<string>();
   const refusedAt = new Map<string, number>();
   const retired = new Set<string>();
@@ -143,19 +131,37 @@ export function createWidgetCopy(
         delete groupPeople[id];
       }
     }
+    if (previous?.accountId === accountId) {
+      const allowed = (id: string) =>
+        !lost.has(id) && !retired.has(id) && peopleRefusedAt[id] === undefined;
+      for (const [id, part] of Object.entries(previous.groups ?? {}))
+        if (allowed(id) && !groups[id]) groups[id] = part;
+      for (const [id, part] of Object.entries(previous.groupPeople ?? {}))
+        if (allowed(id) && !groupPeople[id]) groupPeople[id] = part;
+      for (const [id, part] of Object.entries(previous.tags ?? {}))
+        if (allowed(id) && !tags[id]) tags[id] = part;
+      for (const [id, part] of Object.entries(previous.months ?? {}))
+        if (allowed(id) && !months[id]) months[id] = part;
+      if (previous.savedGroups) {
+        const current = savedGroups;
+        savedGroups = previous.savedGroups;
+        rememberCatalogue(
+          current?.rows ?? [],
+          current?.verifiedAt ?? previous.savedGroups.verifiedAt,
+        );
+      }
+    }
     const read = async (path: string) => {
       const row = cachedRead(await rows.load(accountId, path), accountId, path, now());
       return row && trusted(path, row.refreshedAt) ? row : null;
     };
     const list = await read('/api/groups');
     if (list) {
-      if (!peopleList || list.refreshedAt > peopleList.refreshedAt) peopleList = list;
       for (const group of parseGroups(list.value)) rememberPeople(group, list.refreshedAt);
     }
-    if (list && !savedGroups)
-      savedGroups = {
-        verifiedAt: list.refreshedAt,
-        rows: parseGroups(list.value)
+    if (list)
+      rememberCatalogue(
+        parseGroups(list.value)
           .filter((g) => !lost.has(g.id))
           .map((g) => ({
             id: g.id,
@@ -165,7 +171,8 @@ export function createWidgetCopy(
             members: g.members.length,
             currencies: 1 + g.alternateCurrencies.length,
           })),
-      };
+        list.refreshedAt,
+      );
     if (list) rememberListTags(list);
     const keys = (await rows.keys?.(accountId)) ?? [];
     for (const path of keys.filter((path) => /^\/api\/groups\/[^/]+$/.test(path))) {
@@ -239,13 +246,11 @@ export function createWidgetCopy(
       const data = snapshot.home;
       const listed = groupsRead();
       if (snapshot.groups.loaded && listed && trusted('/api/groups', listed.refreshedAt)) {
-        if (!peopleList || listed.refreshedAt > peopleList.refreshedAt) peopleList = listed;
         for (const group of parseGroups(listed.value)) rememberPeople(group, listed.refreshedAt);
       }
-      if (snapshot.groups.loaded && listed !== null)
-        savedGroups = {
-          verifiedAt: listed.refreshedAt,
-          rows: snapshot.groups.data.map((g) => ({
+      if (snapshot.groups.loaded && listed && trusted('/api/groups', listed.refreshedAt))
+        rememberCatalogue(
+          parseGroups(listed.value).map((g) => ({
             id: g.id,
             name: g.name,
             theme: g.category,
@@ -253,7 +258,8 @@ export function createWidgetCopy(
             members: g.members.length,
             currencies: 1 + g.alternateCurrencies.length,
           })),
-        };
+          listed.refreshedAt,
+        );
       if (snapshot.groups.loaded && listed && trusted('/api/groups', listed.refreshedAt))
         rememberListTags(listed);
       const ids = new Set([
@@ -410,35 +416,35 @@ export function createWidgetCopy(
             copy.recents = {};
           }
         }
-        const dropped = new Set(
-          [...Object.keys(copy.groups ?? {}), ...Object.keys(copy.home?.byGroup ?? {})].filter(
-            (id) => copy.lostGroupIds?.includes(id) || widgetGroupWasDropped(copy, id),
-          ),
-        );
-        pruneGroups(copy);
         if (copy.home?.byGroup)
           copy.home = {
             ...copy.home,
             byGroup: Object.fromEntries(
-              Object.entries(copy.home.byGroup).filter(([id]) => !dropped.has(id)),
+              Object.entries(copy.home.byGroup).filter(([id]) => !copy.lostGroupIds?.includes(id)),
             ),
           };
-        copy.groups = { ...groups };
-        copy.months = { ...months };
-        copy.tags = { ...tags };
-        copy.groupPeople = { ...groupPeople };
-        if (copy.recents)
-          for (const id of Object.keys(copy.recents))
-            if (widgetGroupWasDropped(copy, id)) delete copy.recents[id];
-        if (copy.finishLater && widgetGroupWasDropped(copy, copy.finishLater.groupId))
+        if (copy.finishLater && copy.lostGroupIds?.includes(copy.finishLater.groupId))
           delete copy.finishLater;
         const next = JSON.stringify([copy, state]);
         if (next === signature) return;
         await held.writeSavedCopy(() => native.write(copy));
+        written = copy;
         await held.writeSavedCopy(() => native.setSession(state));
         await held.writeSavedCopy(() => native.redraw());
         signature = next;
       });
+    },
+    async unlistedGroups(listed: ReadonlySet<string>) {
+      const held = lease();
+      if (!held || !native) return [];
+      const before = widgetGroupsToConfirm(written, listed);
+      await queue.idle();
+      const copy = await held.writeSavedCopy(async () => (await native.readCopy?.()) ?? written);
+      return copy?.accountId === held.accountId
+        ? [...new Set([...before, ...widgetGroupsToConfirm(copy, listed)])].filter(
+            (id) => !lost.has(id) && !archived.has(id) && peopleRefusedAt[id] === undefined,
+          )
+        : [];
     },
     archiveGroup(id: string) {
       if (groups[id]) groups[id] = { ...groups[id], archived: true };
@@ -475,7 +481,7 @@ export function createWidgetCopy(
       tags = {};
       groupPeople = {};
       peopleRefusedAt = {};
-      peopleList = null;
+      written = null;
       savedGroups = undefined;
       lost.clear();
       refusedAt.clear();
