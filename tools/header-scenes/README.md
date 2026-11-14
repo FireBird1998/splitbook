@@ -18,11 +18,26 @@ pnpm --filter @splitbook/header-scenes test
 pnpm --filter @splitbook/header-scenes render /absolute/path/to/review-images
 ```
 
-`build` also draws Android's pictures with the pinned Sharp build dependency: for
-each scene, one trimmed PNG per layer body, the ground shadow and each cloud, in
+`build` also draws Android's pictures with the pinned Sharp build dependency, in
 `apps/mobile/assets/header-scenes/`, with a list per scene in
-`apps/mobile/src/ui/header-scene-sprites/` that places them in scene units. The
-settings thumbnails reuse each scene's main island picture.
+`apps/mobile/src/ui/header-scene-sprites/` that places them in scene units. For
+each scene it draws:
+
+- one trimmed PNG per layer body, without anything that moves on its own;
+- the ground shadow and each cloud;
+- one PNG per moving part (`src/sprites.ts`): every element the CSS animates,
+  such as a waterfall streak, a koi, a walker or a turbine. Equal neighbours
+  share a picture. Its movement is read from the same CSS the web plays
+  (`src/motion.ts` bakes each `@keyframes` rule, with its easing, delay and
+  direction, into straight stops) and written into the list, so timing is never
+  typed twice;
+- a cover, where static art is drawn after a part and overlaps the part's reach:
+  that art again, cut to the reach, so it stays in front;
+- a small whole-island thumbnail for the settings choices.
+
+A new moving element needs no change here if its animation is a slide, fade,
+scale or turn written as a CSS rule ending in its class. Anything else (a skew,
+a positive delay, a part inside a turning group) stops the build with a message.
 
 `build` owns `packages/shared/src/header-scenes/` and removes obsolete output.
 Never edit that output by hand. `check` compares fresh vector output and the

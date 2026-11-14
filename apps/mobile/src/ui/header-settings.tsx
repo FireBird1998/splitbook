@@ -170,7 +170,7 @@ export function HeaderSettings({
                   <View style={{ flex: 1 }}>
                     <CompactText>Motion</CompactText>
                     <CompactText variant="small" tone="secondary">
-                      Islands float and clouds drift
+                      Clouds, water and people move
                     </CompactText>
                   </View>
                   <Switch

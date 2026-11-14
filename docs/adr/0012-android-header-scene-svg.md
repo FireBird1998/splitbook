@@ -7,13 +7,14 @@ date: 2026-11-14
 
 The Group screen and the settings preview draw a Header scene from pictures that
 `tools/header-scenes` generates from the same traced art as the web's vectors:
-one picture per layer body (far, main, front, night glow), one for the ground
-shadow and one per cloud, each trimmed to its content. There are 47 PNG files,
-641 KB in all, under `apps/mobile/assets/header-scenes`, drawn at 3 pixels per
+one picture per layer body (far, main, front, night glow) without anything that
+moves on its own, one for the ground shadow, one per cloud, and one per moving
+part of an island (below), each trimmed to its content. There are 260 PNG files,
+813 KB in all, under `apps/mobile/assets/header-scenes`, drawn at 3 pixels per
 scene unit so no supported density scales one up; a picture longer than 2,048
 pixels is scaled down to that, the texture limit of the oldest GPUs (two wide far
 layers). A generated list per scene
-places them in scene units. The settings choices show each scene's main island
+places them in scene units. The settings choices show a small whole-island
 picture. No native drawing library is needed; `react-native-svg` is removed.
 
 Freshness is a SHA-256 of the drawing input recorded in each list, never a
@@ -30,8 +31,38 @@ and no React render happens per frame. Layer bodies rise 3 scene units on the
 web's 7, 9 and 11 second periods, clouds drift and re-enter from the left, the
 shadow tightens as the main island rises, and tilt shifts the layers (below).
 The sky does not move and no picture is cut by its own edge, so no offset can
-uncover a blank strip. Movement inside an island (water, people, boat, turbines,
-smoke, lanterns) is not drawn on Android.
+uncover a blank strip.
+
+Everything the web animates inside an island moves on Android too (#1240; the
+owner's decision of 15 Nov 2026, replacing the first version's cut): waterfall
+streaks, drops and mist, shimmer and ripples, koi, crab, gull, fox, walkers,
+hiker, cyclist, birds, boat, turbines, smoke, snow, petals, swaying plants, and
+at night the window flicker, lantern bob and halo pulse. The rules:
+
+- **One source of timing.** The generator reads the web's own CSS (`scene.css`
+  and each scene's rules) and bakes every `@keyframes` rule into straight stops,
+  with its easing, steps, delay and direction drawn in. The list carries those
+  stops; the app never restates a period or a path. An animation the generator
+  cannot play stops the build.
+- **Parts.** Each animated element is cut out of its layer body into a picture of
+  its own; equal neighbours share one. A part is a child of its layer, so it
+  rises and tilts with its island.
+- **Clocks.** The app runs one linear 0-to-1 loop per period on the native
+  driver (13 to 26 per scene) and each part reads its slide, fade, scale or turn
+  from its period's clock by interpolation. No part has a loop of its own.
+- **Covers.** Where static art is drawn after a part and overlaps the part's
+  reach, that art is drawn again, cut to the reach, on top of the part. The
+  generator derives this from drawing order; nothing is placed by hand. The glow
+  layer has no covers: its lights are see-through and would brighten if drawn
+  twice.
+- **Turbines.** Eco city's rotors turn inside a slanted group. Android has no
+  skew, so the picture holds the rotor unslanted and a holder applies the slant
+  as a fixed turn, stretch and turn (its singular values), which Android can
+  draw exactly.
+- **Stopping.** Motion off, Remove animations, off screen and background stop
+  every clock. A stopped part rests where the web's still scene has it; one that
+  is only seen while it moves (a drop, a snowflake, a ripple) is not drawn.
+- **Night.** Night-only movement is mounted only when the scene shows night.
 
 The existing reduce-motion watcher wins over the phone's Motion choice. React
 Native reports reduce motion on Android only when the transition animation scale
@@ -66,6 +97,30 @@ with pictures), a scene is about 12 images instead of 720 to 1,490 vector nodes,
 clouds, shadow and islands can move separately, and the release APK is slightly
 smaller (32.19 MB against 32.24 MB) with one native library fewer. Removing
 `react-native-svg` changes the native build: a new APK is required.
+
+## In-scene movement, measured (2026-11-15)
+
+Same emulator and build type. The host was busy during this run (a second
+emulator held a core), so the unchanged scene measured far below the table
+above. The two builds were therefore alternated on Mountain village by day, the
+scene with the most parts (61 on its main island), two runs each:
+
+| Build                  | Run       | Frames   | Janky  | p50       | p90         |
+| ---------------------- | --------- | -------- | ------ | --------- | ----------- |
+| Float and clouds only  | idle 10 s | 330, 321 | 26%    | 36, 32 ms | 117, 125 ms |
+| With in-scene movement | idle 10 s | 417, 421 | 17%    | 32 ms     | 77, 69 ms   |
+| Float and clouds only  | 16 swipes | 234, 247 | 25–27% | 36, 34 ms | 109, 125 ms |
+| With in-scene movement | 16 swipes | 289, 241 | 22%    | 34, 36 ms | 69, 121 ms  |
+
+In-scene movement is no slower than the scene without it under the same load.
+The absolute numbers are the busy host's, not the app's: repeat the first
+table's runs on a quiet host before quoting a frame rate for this version.
+Remove animations leaves no changed pixel between two captures, and the app in
+the background draws no frame. The release APK grew from 30.46 MB to 30.81 MB.
+
+If a scene ever cannot hold its frame rate, thin it in this order and say so:
+snowflakes, petals and drops; then shimmer; then smoke. People, animals, the
+waterfall, the boat and the turbines need the owner's decision.
 
 ## Phone tilt and the sensor dependency (#1208)
 

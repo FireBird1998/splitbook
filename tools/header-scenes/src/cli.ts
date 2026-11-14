@@ -4,12 +4,11 @@ import { buildScenes, generatedFiles, OUTPUT, staleOutputs } from './generate.ts
 import {
   listFiles,
   listSource,
-  renderSprite,
+  renderScene,
   SPRITE_IMAGES,
   SPRITE_LISTS,
   spriteList,
   thumbnailList,
-  spritePlans,
   spriteSource,
 } from './sprites.ts';
 
@@ -49,20 +48,20 @@ const wanted = new Set<string>();
 for (const scene of buildScenes()) {
   const list = resolve(lists, `${scene.id}.ts`);
   const text = existsSync(list) ? readFileSync(list, 'utf8') : '';
+  // The thumbnail is listed in thumbnails.ts, so it is checked by name here.
+  const thumbnail = `${scene.id}-thumb.png`;
   const fresh =
     listSource(text) === spriteSource(scene) &&
-    listFiles(text).length === spritePlans(scene).length &&
-    listFiles(text).every((file) => existsSync(resolve(images, file)));
+    [...listFiles(text), thumbnail].every((file) => existsSync(resolve(images, file)));
   if (fresh) {
-    listFiles(text).forEach((file) => wanted.add(file));
+    [...listFiles(text), thumbnail].forEach((file) => wanted.add(file));
     continue;
   }
   staleSprites.push(`${scene.id}.ts`);
   if (command !== 'build') continue;
   mkdirSync(images, { recursive: true });
   mkdirSync(lists, { recursive: true });
-  const sprites = [];
-  for (const plan of spritePlans(scene)) sprites.push(await renderSprite(plan));
+  const sprites = await renderScene(scene);
   for (const sprite of sprites) {
     writeFileSync(resolve(images, sprite.file), sprite.png);
     wanted.add(sprite.file);

@@ -1,6 +1,6 @@
 import { SceneVisibility } from './scene-visibility';
 import { useHeaderTilt } from './use-header-tilt';
-import { memo, useContext, useEffect, useState } from 'react';
+import { memo, useContext, useEffect, useMemo, useState } from 'react';
 import { Animated, AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { headerTimeOfDay, type GroupHeader } from '@splitbook/shared/group-header';
@@ -12,11 +12,13 @@ import {
   TILT_DEPTH,
   useCloudDrift,
   useForeground,
+  useSceneClocks,
   useSceneRise,
 } from './header-scene-motion';
 import type { HeaderSceneSprites, SceneSprite } from './header-scene-sprite';
 import { headerSceneMotionAvailable } from '../config';
 import { currentDayKey } from './list-day-header';
+import { useReducedMotion } from './compact/motion';
 import {
   HeaderSceneCard,
   HeaderScenePreviewCaption,
@@ -42,22 +44,110 @@ const place = (sprite: SceneSprite) =>
     width: sprite.w * SCENE_UNIT,
     height: sprite.h * SCENE_UNIT,
   }) as const;
+/** The same box, for a picture inside a holder already placed there. */
+const fill = (sprite: SceneSprite) =>
+  ({
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: sprite.w * SCENE_UNIT,
+    height: sprite.h * SCENE_UNIT,
+  }) as const;
 const lift = (rise: Animated.Value) =>
   rise.interpolate({ inputRange: [0, 1], outputRange: [0, -FLOAT_RISE * SCENE_UNIT] });
+
+type Clocks = Map<number, Animated.Value>;
+/** A part's own movement as native-driver styles: slides and fades from its tracks' clocks. */
+function partMotion(sprite: SceneSprite, clocks: Clocks, night: boolean) {
+  const slide: object[] = [];
+  const turn: object[] = [];
+  let opacity: Animated.AnimatedNode | number = 1;
+  for (const track of sprite.tracks ?? []) {
+    const clock = clocks.get(track.seconds);
+    if (!clock || (track.time === 'night' && !night)) continue;
+    const read = (curve: { at: number[]; to: number[] }, unit = 1) =>
+      clock.interpolate({ inputRange: curve.at, outputRange: curve.to.map((to) => to * unit) });
+    if (track.x) slide.push({ translateX: read(track.x, SCENE_UNIT) });
+    if (track.y) slide.push({ translateY: read(track.y, SCENE_UNIT) });
+    if (track.scale) turn.push({ scale: read(track.scale) });
+    if (track.rotate)
+      turn.push({
+        rotate: clock.interpolate({
+          inputRange: track.rotate.at,
+          outputRange: track.rotate.to.map((to) => `${to + (sprite.slant?.start ?? 0)}deg`),
+        }),
+      });
+    if (track.opacity)
+      opacity =
+        typeof opacity === 'number'
+          ? read(track.opacity)
+          : Animated.multiply(opacity as Animated.Value, read(track.opacity));
+  }
+  return { slide, turn, opacity };
+}
 
 const Piece = memo(function Piece({
   sprite,
   rises,
+  clocks,
   moving,
+  night,
   frameWidth,
 }: {
   sprite: SceneSprite;
   rises: Rises;
+  clocks: Clocks;
   moving: boolean;
+  night: boolean;
   frameWidth: number;
 }) {
   const drift = useCloudDrift(moving && sprite.kind === 'cloud', sprite, frameWidth);
   const rise = rises[sprite.seconds as 7 | 9 | 11] ?? rises[7];
+  const motion = useMemo(
+    () => (sprite.kind === 'part' && moving ? partMotion(sprite, clocks, night) : null),
+    [sprite, clocks, moving, night],
+  );
+  const floats = sprite.still ? [] : [{ translateY: lift(rise) }];
+  if (sprite.kind === 'part') {
+    // At rest a part stands where the web's still scene has it; one that only shows while it
+    // moves (a falling drop, a snowflake) is not drawn at all.
+    if (!motion && sprite.rest === 0) return null;
+    const { slant } = sprite;
+    const placed = [
+      ...floats,
+      ...(motion?.slide ?? []),
+      ...(slant
+        ? [{ rotate: `${slant.turn}deg` }, { scaleX: slant.scaleX }, { scaleY: slant.scaleY }]
+        : []),
+    ];
+    const turned = motion?.turn.length
+      ? motion.turn
+      : slant
+        ? [{ rotate: `${slant.start}deg` }]
+        : [];
+    const opacity = motion ? motion.opacity : (sprite.rest ?? 1);
+    const picture = (
+      <Animated.Image
+        accessible={false}
+        fadeDuration={0}
+        resizeMode="stretch"
+        source={sprite.image}
+        style={
+          slant
+            ? [fill(sprite), { transform: turned }]
+            : [place(sprite), { opacity, transform: [...placed, ...turned] }]
+        }
+      />
+    );
+    // A slanted part turns inside a holder that carries the slant, so the turn itself stays round.
+    return slant ? (
+      <Animated.View style={[place(sprite), { opacity, transform: placed }]}>
+        {picture}
+      </Animated.View>
+    ) : (
+      picture
+    );
+  }
   return (
     <Animated.Image
       accessible={false}
@@ -76,7 +166,7 @@ const Piece = memo(function Piece({
                   { scale: rise.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) },
                 ],
               }
-            : { transform: [{ translateY: lift(rise) }] },
+            : { transform: floats },
       ]}
     />
   );
@@ -117,6 +207,7 @@ export default function HeaderScene({
   const [, setHour] = useState(() => new Date().getHours());
   const visibility = useContext(SceneVisibility);
   const foreground = useForeground();
+  const reduced = useReducedMotion();
   // Nothing moves, and no sensor is read, until this scene's pictures are the ones on screen.
   const moving =
     motion &&
@@ -125,6 +216,8 @@ export default function HeaderScene({
     // The settings preview is pinned on its own page, outside any Group scroll.
     (preview || visibility.visible) &&
     foreground &&
+    // Parts rest where the web's still scene has them, not frozen mid-cycle.
+    !reduced &&
     art?.id === header.scene;
   const position = useHeaderTilt(moving && tilt);
   const frameWidth = useWindowDimensions().width;
@@ -132,6 +225,18 @@ export default function HeaderScene({
   const rise9 = useSceneRise(moving, 9);
   const rise11 = useSceneRise(moving, 11);
   const [rises] = useState<Rises>(() => ({ 7: rise7, 9: rise9, 11: rise11 }));
+  const periods = useMemo(
+    () =>
+      [
+        ...new Set(
+          (art?.sprites ?? []).flatMap((sprite) =>
+            (sprite.tracks ?? []).map((track) => track.seconds),
+          ),
+        ),
+      ].sort((a, b) => a - b),
+    [art],
+  );
+  const clocks = useSceneClocks(moving, periods);
   // One set of animated nodes for the life of the scene, not one per render.
   const [shifts] = useState(
     () =>
@@ -220,13 +325,15 @@ export default function HeaderScene({
         <View importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
           {(['far', 'clouds', 'main', 'front'] as const).map((layer) => (
             <Animated.View key={layer} style={[styles.world, shifts[layer]]}>
-              {art.sprites.map((sprite) =>
+              {art.sprites.map((sprite, index) =>
                 sprite.layer === layer ? (
                   <Piece
-                    key={`${sprite.kind}:${sprite.x}:${sprite.y}`}
+                    key={index}
                     sprite={sprite}
                     rises={rises}
+                    clocks={clocks}
                     moving={moving}
+                    night={time === 'night'}
                     frameWidth={frameWidth}
                   />
                 ) : null,
@@ -238,13 +345,15 @@ export default function HeaderScene({
           ) : null}
           {glow[time] ? (
             <Animated.View style={[styles.world, shifts.glow, { opacity: glow[time] }]}>
-              {art.sprites.map((sprite) =>
+              {art.sprites.map((sprite, index) =>
                 sprite.layer === 'glow' ? (
                   <Piece
-                    key={`glow:${sprite.x}:${sprite.y}`}
+                    key={index}
                     sprite={sprite}
                     rises={rises}
+                    clocks={clocks}
                     moving={moving}
+                    night={time === 'night'}
                     frameWidth={frameWidth}
                   />
                 ) : null,

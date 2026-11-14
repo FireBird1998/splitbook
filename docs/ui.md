@@ -578,7 +578,8 @@ Never edit `packages/shared/src/header-scenes/` by hand. The web imports these
 portable vector layers through `@splitbook/shared/header-scenes/<scene>`. Android
 draws the same art from generated pictures (`apps/mobile/assets/header-scenes/`,
 placed by `apps/mobile/src/ui/header-scene-sprites/`; ADR 0012), which are
-generated output too. Renderers own Group cards, settings and device motion
+generated output too. Each moving part of an island is a picture of its own, and
+its movement is baked from the web's CSS, so the two platforms keep one timing. Renderers own Group cards, settings and device motion
 preferences.
 
 The web Group page loads a Scene header only for a Group that selects one and

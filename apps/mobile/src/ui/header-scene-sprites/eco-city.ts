@@ -2,35 +2,135 @@
 // Do not edit by hand.
 import type { HeaderSceneSprites } from '../header-scene-sprite';
 import s0 from '../../../assets/header-scenes/eco-city-far-body.png';
-import s1 from '../../../assets/header-scenes/eco-city-far-cloud-1.png';
-import s2 from '../../../assets/header-scenes/eco-city-far-cloud-2.png';
-import s3 from '../../../assets/header-scenes/eco-city-clouds-cloud-1.png';
-import s4 from '../../../assets/header-scenes/eco-city-clouds-cloud-2.png';
-import s5 from '../../../assets/header-scenes/eco-city-clouds-cloud-3.png';
-import s6 from '../../../assets/header-scenes/eco-city-main-shadow.png';
-import s7 from '../../../assets/header-scenes/eco-city-main-body.png';
-import s8 from '../../../assets/header-scenes/eco-city-front-body.png';
-import s9 from '../../../assets/header-scenes/eco-city-front-cloud-1.png';
-import s10 from '../../../assets/header-scenes/eco-city-front-cloud-2.png';
-import s11 from '../../../assets/header-scenes/eco-city-glow-body.png';
+import s1 from '../../../assets/header-scenes/eco-city-far-part-1.png';
+import s2 from '../../../assets/header-scenes/eco-city-far-part-2.png';
+import s3 from '../../../assets/header-scenes/eco-city-far-part-3.png';
+import s4 from '../../../assets/header-scenes/eco-city-far-part-4.png';
+import s5 from '../../../assets/header-scenes/eco-city-far-part-5.png';
+import s6 from '../../../assets/header-scenes/eco-city-far-part-6.png';
+import s7 from '../../../assets/header-scenes/eco-city-far-cloud-1.png';
+import s8 from '../../../assets/header-scenes/eco-city-far-cloud-2.png';
+import s9 from '../../../assets/header-scenes/eco-city-clouds-cloud-1.png';
+import s10 from '../../../assets/header-scenes/eco-city-clouds-cloud-2.png';
+import s11 from '../../../assets/header-scenes/eco-city-clouds-cloud-3.png';
+import s12 from '../../../assets/header-scenes/eco-city-main-shadow.png';
+import s13 from '../../../assets/header-scenes/eco-city-main-body.png';
+import s14 from '../../../assets/header-scenes/eco-city-main-part-1.png';
+import s15 from '../../../assets/header-scenes/eco-city-main-part-2.png';
+import s16 from '../../../assets/header-scenes/eco-city-main-part-3.png';
+import s17 from '../../../assets/header-scenes/eco-city-main-part-4.png';
+import s18 from '../../../assets/header-scenes/eco-city-main-part-5.png';
+import s19 from '../../../assets/header-scenes/eco-city-main-part-6.png';
+import s20 from '../../../assets/header-scenes/eco-city-main-part-7.png';
+import s21 from '../../../assets/header-scenes/eco-city-main-part-8.png';
+import s22 from '../../../assets/header-scenes/eco-city-main-part-9.png';
+import s23 from '../../../assets/header-scenes/eco-city-main-part-10.png';
+import s24 from '../../../assets/header-scenes/eco-city-main-part-11.png';
+import s25 from '../../../assets/header-scenes/eco-city-main-part-12.png';
+import s26 from '../../../assets/header-scenes/eco-city-main-part-13.png';
+import s27 from '../../../assets/header-scenes/eco-city-main-part-14.png';
+import s28 from '../../../assets/header-scenes/eco-city-main-part-15.png';
+import s29 from '../../../assets/header-scenes/eco-city-main-part-16.png';
+import s30 from '../../../assets/header-scenes/eco-city-main-part-17.png';
+import s31 from '../../../assets/header-scenes/eco-city-main-part-18.png';
+import s32 from '../../../assets/header-scenes/eco-city-main-part-19.png';
+import s33 from '../../../assets/header-scenes/eco-city-main-part-20.png';
+import s34 from '../../../assets/header-scenes/eco-city-main-part-21.png';
+import s35 from '../../../assets/header-scenes/eco-city-main-part-22.png';
+import s36 from '../../../assets/header-scenes/eco-city-main-part-23.png';
+import s37 from '../../../assets/header-scenes/eco-city-main-part-24.png';
+import s38 from '../../../assets/header-scenes/eco-city-main-part-25.png';
+import s39 from '../../../assets/header-scenes/eco-city-main-part-26.png';
+import s40 from '../../../assets/header-scenes/eco-city-main-part-27.png';
+import s41 from '../../../assets/header-scenes/eco-city-main-part-28.png';
+import s42 from '../../../assets/header-scenes/eco-city-main-part-29.png';
+import s43 from '../../../assets/header-scenes/eco-city-main-part-30.png';
+import s44 from '../../../assets/header-scenes/eco-city-main-part-31.png';
+import s45 from '../../../assets/header-scenes/eco-city-main-part-32.png';
+import s46 from '../../../assets/header-scenes/eco-city-main-part-33.png';
+import s47 from '../../../assets/header-scenes/eco-city-main-part-34.png';
+import s48 from '../../../assets/header-scenes/eco-city-main-part-35.png';
+import s49 from '../../../assets/header-scenes/eco-city-main-part-36.png';
+import s50 from '../../../assets/header-scenes/eco-city-main-part-37.png';
+import s51 from '../../../assets/header-scenes/eco-city-main-part-38.png';
+import s52 from '../../../assets/header-scenes/eco-city-front-body.png';
+import s53 from '../../../assets/header-scenes/eco-city-front-part-1.png';
+import s54 from '../../../assets/header-scenes/eco-city-front-cloud-1.png';
+import s55 from '../../../assets/header-scenes/eco-city-front-cloud-2.png';
+import s56 from '../../../assets/header-scenes/eco-city-glow-body.png';
+import s57 from '../../../assets/header-scenes/eco-city-glow-part-1.png';
+import s58 from '../../../assets/header-scenes/eco-city-glow-part-2.png';
+import s59 from '../../../assets/header-scenes/eco-city-glow-part-3.png';
+import s60 from '../../../assets/header-scenes/eco-city-glow-part-4.png';
+import s61 from '../../../assets/header-scenes/eco-city-glow-part-5.png';
 
 const scene: HeaderSceneSprites = {
   id: 'eco-city',
   description: "A floating green city with planted towers, solar roofs, a pond, turning wind turbines and a waterfall.",
-  source: '9fe23c7b19836495b67600281347f1fddcdb4d65b6913a95d4316f1c10c617dd',
+  source: '48c1e6c1ed0dd2224fb3e940ec4c95463f31ecb8cb5ead582ea58801d5b8038a',
   sprites: [
-    { layer: 'far', kind: 'body', seconds: 9, x: -16.67, y: 42.33, w: 699.33, h: 153.33, image: s0 },
-    { layer: 'far', kind: 'cloud', seconds: 260, x: 397.33, y: 24.33, w: 47.33, h: 28.33, image: s1 },
-    { layer: 'far', kind: 'cloud', seconds: 320, x: 161.33, y: 11.33, w: 35.33, h: 21.33, image: s2 },
-    { layer: 'clouds', kind: 'cloud', seconds: 140, x: 56.33, y: 21.33, w: 67.33, h: 39, image: s3 },
-    { layer: 'clouds', kind: 'cloud', seconds: 180, x: 492.33, y: 134.33, w: 55.33, h: 33, image: s4 },
-    { layer: 'clouds', kind: 'cloud', seconds: 160, x: 302.33, y: 10.33, w: 55.33, h: 30, image: s5 },
-    { layer: 'main', kind: 'shadow', seconds: 7, x: 171.33, y: 219, w: 257.33, h: 26, image: s6 },
-    { layer: 'main', kind: 'body', seconds: 7, x: 155.33, y: 13.33, w: 289.33, h: 205.33, image: s7 },
-    { layer: 'front', kind: 'body', seconds: 11, x: 3.33, y: 169.33, w: 85.33, h: 85.33, image: s8 },
-    { layer: 'front', kind: 'cloud', seconds: 210, x: 213.33, y: 193.67, w: 76.33, h: 42, image: s9 },
-    { layer: 'front', kind: 'cloud', seconds: 210, x: 489.33, y: 205.33, w: 61.33, h: 36, image: s10 },
-    { layer: 'glow', kind: 'body', seconds: 7, x: 179.33, y: 39.33, w: 241.33, h: 132.33, image: s11 },
+    { layer: 'far', kind: 'body', seconds: 9, x: 131.33, y: 44.33, w: 551.33, h: 151.33, image: s0 },
+    { layer: 'far', kind: 'part', seconds: 9, x: 647.33, y: 46.33, w: 13.33, h: 13.33, image: s1, tracks: [{"seconds":5.5,"x":{"at":[0,0.0438,0.0875,0.1312,0.2188,0.2625,0.3062,0.35,0.3938,0.4375,0.4813,0.525,0.5688,0.6125,0.6563,0.7,0.7375,0.775,0.8125,0.8875,0.925,0.9625,1],"to":[0,0.0436,0.1808,0.4099,0.9901,1.2192,1.3564,1.4,1.3378,1.1417,0.8145,0.4,-0.0145,-0.3417,-0.5378,-0.6,-0.5813,-0.5225,-0.4243,-0.1757,-0.0775,-0.0187,0]},"y":{"at":[0,0.0438,0.0875,0.1312,0.2188,0.2625,0.3062,0.35,0.3938,0.4375,0.4813,0.5688,0.6125,0.6563,0.7,1],"to":[0,0.0093,0.0387,0.0878,0.2122,0.2613,0.2907,0.3,0.2907,0.2613,0.2122,0.0878,0.0387,0.0093,0,0]}}] },
+    { layer: 'far', kind: 'part', seconds: 9, x: 650.33, y: 42.67, w: 17.67, h: 20.33, image: s2, tracks: [{"seconds":12,"rotate":{"at":[0,0.6667,0.6672,1],"to":[120,360,0,120]}}], still: true, slant: {"turn":52.018,"scaleX":1.2808,"scaleY":0.7808,"start":-37.982} },
+    { layer: 'far', kind: 'part', seconds: 9, x: 141.33, y: 81.33, w: 15.33, h: 13.33, image: s3, tracks: [{"seconds":5.5,"x":{"at":[0,0.0438,0.0875,0.1312,0.2188,0.2625,0.3062,0.35,0.3938,0.4375,0.4813,0.525,0.5688,0.6125,0.6563,0.7,0.7375,0.775,0.8125,0.8875,0.925,0.9625,1],"to":[0,0.0436,0.1808,0.4099,0.9901,1.2192,1.3564,1.4,1.3378,1.1417,0.8145,0.4,-0.0145,-0.3417,-0.5378,-0.6,-0.5813,-0.5225,-0.4243,-0.1757,-0.0775,-0.0187,0]},"y":{"at":[0,0.0438,0.0875,0.1312,0.2188,0.2625,0.3062,0.35,0.3938,0.4375,0.4813,0.5688,0.6125,0.6563,0.7,1],"to":[0,0.0093,0.0387,0.0878,0.2122,0.2613,0.2907,0.3,0.2907,0.2613,0.2122,0.0878,0.0387,0.0093,0,0]}}] },
+    { layer: 'far', kind: 'part', seconds: 9, x: -16.67, y: 68.33, w: 24.33, h: 9.33, image: s4, tracks: [{"seconds":80,"x":{"at":[0,0.725,0.7255,1],"to":[290,1160,-40,290]},"y":{"at":[0,0.725,0.7255,1],"to":[-9.9,-36,0,-9.9]}}], still: true },
+    { layer: 'far', kind: 'part', seconds: 9, x: -14.67, y: 64.33, w: 19.33, h: 12.33, image: s5, tracks: [{"seconds":80,"x":{"at":[0,0.725,0.7255,1],"to":[290,1160,-40,290]},"y":{"at":[0,0.725,0.7255,1],"to":[-9.9,-36,0,-9.9]}},{"seconds":0.7,"opacity":{"at":[0,0.4995,0.5,1],"to":[1,1,0,0]}}], still: true },
+    { layer: 'far', kind: 'part', seconds: 9, x: -14.67, y: 69.33, w: 19.33, h: 11.33, image: s6, tracks: [{"seconds":80,"x":{"at":[0,0.725,0.7255,1],"to":[290,1160,-40,290]},"y":{"at":[0,0.725,0.7255,1],"to":[-9.9,-36,0,-9.9]}},{"seconds":0.7,"opacity":{"at":[0,0.4995,0.5,1],"to":[0,0,1,1]}}], rest: 0, still: true },
+    { layer: 'far', kind: 'cloud', seconds: 260, x: 397.33, y: 24.33, w: 47.33, h: 28.33, image: s7 },
+    { layer: 'far', kind: 'cloud', seconds: 320, x: 161.33, y: 11.33, w: 35.33, h: 21.33, image: s8 },
+    { layer: 'clouds', kind: 'cloud', seconds: 140, x: 56.33, y: 21.33, w: 67.33, h: 39, image: s9 },
+    { layer: 'clouds', kind: 'cloud', seconds: 180, x: 492.33, y: 134.33, w: 55.33, h: 33, image: s10 },
+    { layer: 'clouds', kind: 'cloud', seconds: 160, x: 302.33, y: 10.33, w: 55.33, h: 30, image: s11 },
+    { layer: 'main', kind: 'shadow', seconds: 7, x: 171.33, y: 219, w: 257.33, h: 26, image: s12 },
+    { layer: 'main', kind: 'body', seconds: 7, x: 155.33, y: 13.33, w: 289.33, h: 205.33, image: s13 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 187.33, y: 45.33, w: 49.33, h: 93.33, image: s14, tracks: [{"seconds":5.5,"x":{"at":[0,0.0438,0.0875,0.1312,0.2188,0.2625,0.3062,0.35,0.3938,0.4375,0.4813,0.525,0.5688,0.6125,0.6563,0.7,0.7375,0.775,0.8125,0.8875,0.925,0.9625,1],"to":[0,0.0436,0.1808,0.4099,0.9901,1.2192,1.3564,1.4,1.3378,1.1417,0.8145,0.4,-0.0145,-0.3417,-0.5378,-0.6,-0.5813,-0.5225,-0.4243,-0.1757,-0.0775,-0.0187,0]},"y":{"at":[0,0.0438,0.0875,0.1312,0.2188,0.2625,0.3062,0.35,0.3938,0.4375,0.4813,0.5688,0.6125,0.6563,0.7,1],"to":[0,0.0093,0.0387,0.0878,0.2122,0.2613,0.2907,0.3,0.2907,0.2613,0.2122,0.0878,0.0387,0.0093,0,0]}}] },
+    { layer: 'main', kind: 'part', seconds: 7, x: 203.33, y: 89.33, w: 69.33, h: 35.33, image: s15, tracks: [{"seconds":4.5,"x":{"at":[0,0.0368,0.0806,0.1243,0.1681,0.2118,0.2556,0.2931,0.3306,0.3681,0.4431,0.4806,0.5181,0.5556,0.5993,0.6431,0.6868,0.7306,0.7743,0.8181,0.8618,0.9056,0.9493,0.9931,1],"to":[1.0897,0.8145,0.4,-0.0145,-0.3417,-0.5378,-0.6,-0.5813,-0.5225,-0.4243,-0.1757,-0.0775,-0.0187,0,0.0436,0.1808,0.4099,0.7,0.9901,1.2192,1.3564,1.4,1.3378,1.1417,1.0897]},"y":{"at":[0,0.0368,0.1243,0.1681,0.2118,0.2556,0.5556,0.5993,0.6431,0.6868,0.7743,0.8181,0.8618,0.9056,0.9493,0.9931,1],"to":[0.2535,0.2122,0.0878,0.0387,0.0093,0,0,0.0093,0.0387,0.0878,0.2122,0.2613,0.2907,0.3,0.2907,0.2613,0.2535]}}] },
+    { layer: 'main', kind: 'part', seconds: 7, x: 171.33, y: 101.33, w: 69.33, h: 33.33, image: s16, tracks: [{"seconds":2.8,"opacity":{"at":[0,0.0625,0.125,0.1875,0.3125,0.375,0.4375,0.5,0.5625,0.625,0.6875,0.8125,0.875,0.9375,1],"to":[0,0.028,0.1162,0.2635,0.6365,0.7838,0.872,0.9,0.872,0.7838,0.6365,0.2635,0.1162,0.028,0]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 227.33, y: 101.33, w: 9.33, h: 5.33, image: s17, tracks: [{"seconds":5,"opacity":{"at":[0,0.0475,0.1725,0.235,0.2975,0.36,0.4225,0.485,0.5475,0.6725,0.735,0.7975,0.86,0.9225,0.985,1],"to":[0.1516,0.2635,0.6365,0.7838,0.872,0.9,0.872,0.7838,0.6365,0.2635,0.1162,0.028,0,0.028,0.1162,0.1516]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 195.33, y: 111.33, w: 37.33, h: 11.33, image: s18, tracks: [{"seconds":2.8,"opacity":{"at":[0,0.0625,0.125,0.1875,0.3125,0.375,0.4375,0.5,0.5625,0.625,0.6875,0.8125,0.875,0.9375,1],"to":[0.9,0.872,0.7838,0.6365,0.2635,0.1162,0.028,0,0.028,0.1162,0.2635,0.6365,0.7838,0.872,0.9]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 191.33, y: 119.33, w: 9.33, h: 5.33, image: s19, tracks: [{"seconds":5,"opacity":{"at":[0,0.0175,0.08,0.1425,0.205,0.2675,0.3925,0.455,0.5175,0.58,0.6425,0.705,0.7675,0.8925,0.955,1],"to":[0.8473,0.872,0.9,0.872,0.7838,0.6365,0.2635,0.1162,0.028,0,0.028,0.1162,0.2635,0.6365,0.7838,0.8473]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 215.33, y: 111.33, w: 9.33, h: 5.33, image: s20, tracks: [{"seconds":5,"opacity":{"at":[0,0.1125,0.175,0.2375,0.3,0.3625,0.425,0.4875,0.6125,0.675,0.7375,0.8,0.8625,0.925,0.9875,1],"to":[0.5992,0.2635,0.1162,0.028,0,0.028,0.1162,0.2635,0.6365,0.7838,0.872,0.9,0.872,0.7838,0.6365,0.5992]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 203.33, y: 117.33, w: 9.33, h: 5.33, image: s21, tracks: [{"seconds":5,"opacity":{"at":[0,0.02,0.0825,0.145,0.2075,0.3325,0.395,0.4575,0.52,0.5825,0.645,0.7075,0.8325,0.895,0.9575,1],"to":[0.009,0,0.028,0.1162,0.2635,0.6365,0.7838,0.872,0.9,0.872,0.7838,0.6365,0.2635,0.1162,0.028,0.009]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 235.33, y: 105.33, w: 9.33, h: 5.33, image: s22, tracks: [{"seconds":5,"opacity":{"at":[0,0.0525,0.115,0.1775,0.24,0.3025,0.365,0.4275,0.5525,0.615,0.6775,0.74,0.8025,0.865,0.9275,1],"to":[0.4798,0.6365,0.7838,0.872,0.9,0.872,0.7838,0.6365,0.2635,0.1162,0.028,0,0.028,0.1162,0.2635,0.4798]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 239.33, y: 107.33, w: 9.33, h: 5.33, image: s23, tracks: [{"seconds":5,"opacity":{"at":[0,0.0225,0.085,0.1475,0.2725,0.335,0.3975,0.46,0.5225,0.585,0.6475,0.7725,0.835,0.8975,0.96,1],"to":[0.8821,0.872,0.7838,0.6365,0.2635,0.1162,0.028,0,0.028,0.1162,0.2635,0.6365,0.7838,0.872,0.9,0.8821]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 235.33, y: 113.33, w: 9.33, h: 5.33, image: s24, tracks: [{"seconds":5,"opacity":{"at":[0,0.055,0.1175,0.18,0.2425,0.305,0.3675,0.4925,0.555,0.6175,0.68,0.7425,0.805,0.8675,0.9925,1],"to":[0.2458,0.1162,0.028,0,0.028,0.1162,0.2635,0.6365,0.7838,0.872,0.9,0.872,0.7838,0.6365,0.2635,0.2458]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 207.33, y: 115.33, w: 9.33, h: 5.33, image: s25, tracks: [{"seconds":2.2,"x":{"at":[0,1],"to":[0,-8]},"y":{"at":[0,1],"to":[0,4]},"opacity":{"at":[0,0.25,0.7,1],"to":[0,0.85,0.85,0]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 195.33, y: 117.33, w: 9.33, h: 5.33, image: s26, tracks: [{"seconds":2.2,"x":{"at":[0,0.8182,0.8187,1],"to":[-1.4545,-8,0,-1.4545]},"y":{"at":[0,0.8182,0.8187,1],"to":[0.7273,4,0,0.7273]},"opacity":{"at":[0,0.0682,0.5182,0.8182,1],"to":[0.6182,0.85,0.85,0,0.6182]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 199.33, y: 119.33, w: 9.33, h: 5.33, image: s27, tracks: [{"seconds":2.2,"x":{"at":[0,0.6364,0.6369,1],"to":[-2.9091,-8,0,-2.9091]},"y":{"at":[0,0.6364,0.6369,1],"to":[1.4545,4,0,1.4545]},"opacity":{"at":[0,0.3364,0.6364,0.8864,1],"to":[0.85,0.85,0,0.85,0.85]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 187.33, y: 121.33, w: 9.33, h: 5.33, image: s28, tracks: [{"seconds":2.2,"x":{"at":[0,0.4545,0.455,1],"to":[-4.3636,-8,0,-4.3636]},"y":{"at":[0,0.4545,0.455,1],"to":[2.1818,4,0,2.1818]},"opacity":{"at":[0,0.1545,0.4545,0.7045,1],"to":[0.85,0.85,0,0.85,0.85]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 191.33, y: 123.33, w: 9.33, h: 5.33, image: s29, tracks: [{"seconds":2.2,"x":{"at":[0,0.2727,0.2732,1],"to":[-5.8182,-8,0,-5.8182]},"y":{"at":[0,0.2727,0.2732,1],"to":[2.9091,4,0,2.9091]},"opacity":{"at":[0,0.2727,0.5227,0.9727,1],"to":[0.7727,0,0.85,0.85,0.7727]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 179.33, y: 125.33, w: 9.33, h: 5.33, image: s30, tracks: [{"seconds":2.2,"x":{"at":[0,0.0909,0.0914,1],"to":[-7.2727,-8,0,-7.2727]},"y":{"at":[0,0.0909,0.0914,1],"to":[3.6364,4,0,3.6364]},"opacity":{"at":[0,0.0909,0.3409,0.7909,1],"to":[0.2576,0,0.85,0.85,0.2576]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 183.33, y: 127.33, w: 9.33, h: 5.33, image: s31, tracks: [{"seconds":2.2,"x":{"at":[0,0.9091,0.9096,1],"to":[-0.7273,-8,0,-0.7273]},"y":{"at":[0,0.9091,0.9096,1],"to":[0.3636,4,0,0.3636]},"opacity":{"at":[0,0.1591,0.6091,0.9091,1],"to":[0.3091,0.85,0.85,0,0.3091]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 167.33, y: 141.33, w: 5.33, h: 7.33, image: s32, tracks: [{"seconds":1.2,"y":{"at":[0,1],"to":[-2,8]},"opacity":{"at":[0,0.3,1],"to":[0,0.85,0]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 167.33, y: 150.67, w: 5.33, h: 7.67, image: s33, tracks: [{"seconds":1.2,"y":{"at":[0,0.775,0.7755,1],"to":[0.25,8,-2,0.25]},"opacity":{"at":[0,0.075,0.775,1],"to":[0.6375,0.85,0,0.6375]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 167.33, y: 160.33, w: 5.33, h: 7.67, image: s34, tracks: [{"seconds":1.2,"y":{"at":[0,0.55,0.5505,1],"to":[2.5,8,-2,2.5]},"opacity":{"at":[0,0.55,0.85,1],"to":[0.6679,0,0.85,0.6679]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 167.33, y: 170, w: 5.33, h: 7.67, image: s35, tracks: [{"seconds":1.2,"y":{"at":[0,0.325,0.3255,1],"to":[4.75,8,-2,4.75]},"opacity":{"at":[0,0.325,0.625,1],"to":[0.3946,0,0.85,0.3946]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 167.33, y: 179.67, w: 5.33, h: 7.67, image: s36, tracks: [{"seconds":1.2,"y":{"at":[0,0.1,0.1005,1],"to":[7,8,-2,7]},"opacity":{"at":[0,0.1,0.4,1],"to":[0.1214,0,0.85,0.1214]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 167.33, y: 137.33, w: 5.33, h: 7.33, image: s37, tracks: [{"seconds":1.2,"y":{"at":[0,0.8583,0.8588,1],"to":[-0.5833,8,-2,-0.5833]},"opacity":{"at":[0,0.1583,0.8583,1],"to":[0.4014,0.85,0,0.4014]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 167.33, y: 146.67, w: 5.33, h: 7.67, image: s38, tracks: [{"seconds":1.2,"y":{"at":[0,0.6333,0.6338,1],"to":[1.6667,8,-2,1.6667]},"opacity":{"at":[0,0.6333,0.9333,1],"to":[0.769,0,0.85,0.769]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 167.33, y: 156.33, w: 5.33, h: 7.67, image: s39, tracks: [{"seconds":1.2,"y":{"at":[0,0.4083,0.4088,1],"to":[3.9167,8,-2,3.9167]},"opacity":{"at":[0,0.4083,0.7083,1],"to":[0.4958,0,0.85,0.4958]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 167.33, y: 166, w: 5.33, h: 7.67, image: s40, tracks: [{"seconds":1.2,"y":{"at":[0,0.1833,0.1838,1],"to":[6.1667,8,-2,6.1667]},"opacity":{"at":[0,0.1833,0.4833,1],"to":[0.2226,0,0.85,0.2226]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 167.33, y: 175.67, w: 5.33, h: 7.67, image: s41, tracks: [{"seconds":1.2,"y":{"at":[0,0.9583,0.9588,1],"to":[-1.5833,8,-2,-1.5833]},"opacity":{"at":[0,0.2583,0.9583,1],"to":[0.1181,0.85,0,0.1181]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 161.67, y: 192, w: 6.67, h: 6.33, image: s42, tracks: [{"seconds":2.8,"y":{"at":[0,0.125,0.25,0.375,0.5,0.625,0.75,0.875,1],"to":[0,-1.3901,-2.647,-3.7837,-4.7925,-5.6558,-6.3457,-6.8181,-7]},"opacity":{"at":[0,0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.475,0.55,0.625,0.7,0.775,0.85,0.925,1],"to":[0,0.1589,0.3025,0.4324,0.5477,0.6464,0.7252,0.7792,0.8,0.6411,0.4975,0.3676,0.2523,0.1536,0.0748,0.0208,0]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 165.67, y: 194, w: 6.67, h: 6.33, image: s43, tracks: [{"seconds":2.8,"y":{"at":[0,0.0536,0.1786,0.3036,0.4286,0.5536,0.6786,0.6791,0.8036,0.9286,1],"to":[-3.2966,-3.7837,-4.7925,-5.6558,-6.3457,-6.8181,-7,0,-1.3901,-2.647,-3.2966]},"opacity":{"at":[0,0.0286,0.0786,0.1536,0.2286,0.3036,0.3786,0.4536,0.5286,0.6036,0.6786,0.7286,0.7786,0.8286,0.8786,0.9286,0.9786,1],"to":[0.7484,0.7792,0.8,0.6411,0.4975,0.3676,0.2523,0.1536,0.0748,0.0208,0,0.1589,0.3025,0.4324,0.5477,0.6464,0.7252,0.7484]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 169.67, y: 192, w: 6.67, h: 6.33, image: s44, tracks: [{"seconds":2.8,"y":{"at":[0,0.1071,0.2321,0.3571,0.3576,0.4821,0.6071,0.7321,0.8571,0.9821,1],"to":[-5.7544,-6.3457,-6.8181,-7,0,-1.3901,-2.647,-3.7837,-4.7925,-5.6558,-5.7544]},"opacity":{"at":[0,0.0571,0.1321,0.2071,0.2821,0.3571,0.4071,0.4571,0.5071,0.5571,0.6071,0.6571,0.7071,0.7571,0.8321,0.9071,0.9821,1],"to":[0.3401,0.2523,0.1536,0.0748,0.0208,0,0.1589,0.3025,0.4324,0.5477,0.6464,0.7252,0.7792,0.8,0.6411,0.4975,0.3676,0.3401]}}], rest: 0 },
+    { layer: 'main', kind: 'part', seconds: 7, x: 217.33, y: 102.33, w: 7, h: 5.33, image: s45, tracks: [{"seconds":16,"x":{"at":[0,0.0209,0.0417,0.0626,0.1044,0.1252,0.1461,0.167,0.1877,0.2085,0.2293,0.2707,0.2915,0.3122,0.333,0.3539,0.3747,0.3956,0.4374,0.4583,0.4791,0.5,0.5209,0.5417,0.5626,0.6044,0.6253,0.6461,0.667,0.6878,0.7085,0.7292,0.7708,0.7915,0.8122,0.833,0.8539,0.8748,0.8956,0.9374,0.9583,0.9791,1],"to":[0,0.4978,2.0666,4.6843,11.3157,13.9334,15.5022,16,16.3734,17.5499,19.5132,24.4868,26.4501,27.6266,28,27.8755,27.4834,26.8289,25.1711,24.5166,24.1245,24,23.5022,21.9334,19.3157,12.6843,10.0666,8.4978,8,7.6266,6.4501,4.4868,-0.4868,-2.4501,-3.6266,-4,-3.8755,-3.4834,-2.8289,-1.1711,-0.5166,-0.1245,0]},"y":{"at":[0,0.167,0.1877,0.2085,0.2293,0.2707,0.2915,0.3122,0.333,0.3539,0.3747,0.3956,0.4374,0.4583,0.4791,0.5,0.667,0.6878,0.7085,0.7292,0.7708,0.7915,0.8122,0.833,0.8539,0.8748,0.8956,0.9374,0.9583,0.9791,1],"to":[0,0,0.1867,0.775,1.7566,4.2434,5.225,5.8133,6,6.1867,6.775,7.7566,10.2434,11.225,11.8133,12,12,11.8133,11.225,10.2434,7.7566,6.775,6.1867,6,5.8133,5.225,4.2434,1.7566,0.775,0.1867,0]}}] },
+    { layer: 'main', kind: 'part', seconds: 7, x: 227.33, y: 108.33, w: 7, h: 5.33, image: s46, tracks: [{"seconds":22,"x":{"at":[0,0.0074,0.0283,0.0492,0.07,0.0909,0.1118,0.1327,0.1535,0.1953,0.2162,0.237,0.2579,0.2787,0.2994,0.3202,0.3409,0.3617,0.3824,0.4032,0.4239,0.4448,0.4657,0.4865,0.5283,0.5492,0.57,0.5909,0.6118,0.6327,0.6535,0.6953,0.7162,0.737,0.7579,0.7787,0.7994,0.8202,0.8409,0.8617,0.8824,0.9032,0.9239,0.9448,0.9657,0.9865,1],"to":[14.8232,16,19.3157,21.9334,23.5022,24,24.1245,24.5166,25.1711,26.8289,27.4834,27.8755,28,27.6266,26.4501,24.4868,22,19.5132,17.5499,16.3734,16,15.5022,13.9334,11.3157,4.6843,2.0666,0.4978,0,-0.1245,-0.5166,-1.1711,-2.8289,-3.4834,-3.8755,-4,-3.6266,-2.4501,-0.4868,2,4.4868,6.4501,7.6266,8,8.4978,10.0666,12.6843,14.8232]},"y":{"at":[0,0.0909,0.1118,0.1327,0.1535,0.1953,0.2162,0.237,0.2579,0.2787,0.2994,0.3202,0.3409,0.3617,0.3824,0.4032,0.4239,0.5909,0.6118,0.6327,0.6535,0.6953,0.7162,0.737,0.7579,0.7787,0.7994,0.8202,0.8409,0.8617,0.8824,0.9032,0.9239,1],"to":[12,12,11.8133,11.225,10.2434,7.7566,6.775,6.1867,6,5.8133,5.225,4.2434,3,1.7566,0.775,0.1867,0,0,0.1867,0.775,1.7566,4.2434,5.225,5.8133,6,6.1867,6.775,7.7566,9,10.2434,11.225,11.8133,12,12]}}] },
+    { layer: 'main', kind: 'part', seconds: 7, x: 284.67, y: 118.33, w: 6.67, h: 11.33, image: s47, tracks: [{"seconds":30,"x":{"at":[0,0.04,0.46,0.54,0.96,1],"to":[0,0,-52,-52,0,0]},"y":{"at":[0,0.04,0.46,0.54,0.96,1],"to":[0,0,26,26,0,0]}},{"seconds":0.56,"y":{"at":[0,0.2495,0.25,0.7495,0.75,1],"to":[0,0,-1,-1,0,0]}}] },
+    { layer: 'main', kind: 'part', seconds: 7, x: 220.67, y: 146.33, w: 6.67, h: 11.33, image: s48, tracks: [{"seconds":24,"x":{"at":[0,0.065,0.185,0.565,0.685,1],"to":[23.2105,28,28,0,0,23.2105]},"y":{"at":[0,0.065,0.185,0.565,0.685,1],"to":[-11.6053,-14,-14,0,0,-11.6053]}},{"seconds":0.56,"y":{"at":[0,0.2495,0.25,0.7495,0.75,1],"to":[0,0,-1,-1,0,0]}}] },
+    { layer: 'main', kind: 'part', seconds: 7, x: 223.33, y: 155.33, w: 9.33, h: 13.33, image: s49, tracks: [{"seconds":13,"x":{"at":[0,0.96,1],"to":[0,56,56]},"y":{"at":[0,0.96,1],"to":[0,-28,-28]},"opacity":{"at":[0,0.06,0.88,0.96,1],"to":[0,1,1,0,0]}}] },
+    { layer: 'main', kind: 'part', seconds: 7, x: 343.67, y: 94.33, w: 44.33, h: 50.33, image: s50, tracks: [{"seconds":9,"rotate":{"at":[0,1],"to":[0,360]}}], slant: {"turn":52.018,"scaleX":1.2808,"scaleY":0.7808,"start":-37.982} },
+    { layer: 'main', kind: 'part', seconds: 7, x: 240, y: 133.33, w: 35.67, h: 40.33, image: s51, tracks: [{"seconds":12,"rotate":{"at":[0,0.6667,0.6672,1],"to":[120,360,0,120]}}], slant: {"turn":52.018,"scaleX":1.2808,"scaleY":0.7808,"start":-37.982} },
+    { layer: 'front', kind: 'body', seconds: 11, x: 3.33, y: 190.33, w: 85.33, h: 64.33, image: s52 },
+    { layer: 'front', kind: 'part', seconds: 11, x: 21.33, y: 169.33, w: 43.33, h: 37.33, image: s53, tracks: [{"seconds":5.5,"x":{"at":[0,0.0438,0.0875,0.1312,0.2188,0.2625,0.3062,0.35,0.3938,0.4375,0.4813,0.525,0.5688,0.6125,0.6563,0.7,0.7375,0.775,0.8125,0.8875,0.925,0.9625,1],"to":[0,0.0436,0.1808,0.4099,0.9901,1.2192,1.3564,1.4,1.3378,1.1417,0.8145,0.4,-0.0145,-0.3417,-0.5378,-0.6,-0.5813,-0.5225,-0.4243,-0.1757,-0.0775,-0.0187,0]},"y":{"at":[0,0.0438,0.0875,0.1312,0.2188,0.2625,0.3062,0.35,0.3938,0.4375,0.4813,0.5688,0.6125,0.6563,0.7,1],"to":[0,0.0093,0.0387,0.0878,0.2122,0.2613,0.2907,0.3,0.2907,0.2613,0.2122,0.0878,0.0387,0.0093,0,0]}}] },
+    { layer: 'front', kind: 'cloud', seconds: 210, x: 213.33, y: 193.67, w: 76.33, h: 42, image: s54 },
+    { layer: 'front', kind: 'cloud', seconds: 210, x: 489.33, y: 205.33, w: 61.33, h: 36, image: s55 },
+    { layer: 'glow', kind: 'body', seconds: 7, x: 179.33, y: 109.33, w: 161.33, h: 62.33, image: s56 },
+    { layer: 'glow', kind: 'part', seconds: 7, x: 251.33, y: 39.33, w: 169.33, h: 123.33, image: s57, tracks: [{"seconds":7,"time":"night","opacity":{"at":[0,0.46,0.465,0.47,0.475,0.485,0.49,0.495,0.5,0.5075,0.515,0.5225,0.5375,0.545,0.5525,0.56,0.59,0.62,0.65,0.71,0.74,0.77,0.8,0.825,0.85,0.875,0.925,0.95,0.975,1],"to":[1,1,0.9913,0.9638,0.918,0.802,0.7562,0.7287,0.72,0.7287,0.7562,0.802,0.918,0.9638,0.9913,1,0.9956,0.9819,0.959,0.901,0.8781,0.8644,0.86,0.8644,0.8781,0.901,0.959,0.9819,0.9956,1]}}] },
+    { layer: 'glow', kind: 'part', seconds: 7, x: 257.33, y: 95.33, w: 45.33, h: 45.33, image: s58, tracks: [{"seconds":3.6,"centred":true,"scale":{"at":[0,0.0625,0.125,0.1875,0.3125,0.375,0.4375,0.5,0.5625,0.625,0.6875,0.8125,0.875,0.9375,1],"to":[0.92,0.9244,0.9381,0.961,1.019,1.0419,1.0556,1.06,1.0556,1.0419,1.019,0.961,0.9381,0.9244,0.92]}}] },
+    { layer: 'glow', kind: 'part', seconds: 7, x: 241.33, y: 123.33, w: 45.33, h: 45.33, image: s59, tracks: [{"seconds":3.6,"centred":true,"scale":{"at":[0,0.0486,0.1111,0.1736,0.2361,0.2986,0.4236,0.4861,0.5486,0.6111,0.6736,0.7361,0.7986,0.9236,0.9861,1],"to":[1.045,1.0556,1.06,1.0556,1.0419,1.019,0.961,0.9381,0.9244,0.92,0.9244,0.9381,0.961,1.019,1.0419,1.045]}}] },
+    { layer: 'glow', kind: 'part', seconds: 7, x: 223.33, y: 121.33, w: 33.33, h: 33.33, image: s60, tracks: [{"seconds":3.6,"centred":true,"scale":{"at":[0,0.0625,0.125,0.1875,0.3125,0.375,0.4375,0.5,0.5625,0.625,0.6875,0.8125,0.875,0.9375,1],"to":[0.92,0.9244,0.9381,0.961,1.019,1.0419,1.0556,1.06,1.0556,1.0419,1.019,0.961,0.9381,0.9244,0.92]}}] },
+    { layer: 'glow', kind: 'part', seconds: 7, x: 319.33, y: 129.33, w: 33.33, h: 33.33, image: s61, tracks: [{"seconds":3.6,"centred":true,"scale":{"at":[0,0.0486,0.1111,0.1736,0.2361,0.2986,0.4236,0.4861,0.5486,0.6111,0.6736,0.7361,0.7986,0.9236,0.9861,1],"to":[1.045,1.0556,1.06,1.0556,1.0419,1.019,0.961,0.9381,0.9244,0.92,0.9244,0.9381,0.961,1.019,1.0419,1.045]}}] },
   ],
 };
 export default scene;
