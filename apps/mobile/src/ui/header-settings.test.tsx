@@ -150,8 +150,10 @@ it.each([false, true])('renders the phone card only when motion is available=%s'
   expect(switches).toHaveLength(available ? 2 : 0);
   const text = JSON.stringify(view.toJSON());
   expect(text.includes('On this phone')).toBe(available);
-  expect(text.includes('Scenes stay still')).toBe(available);
-  expect(text.includes('The scene shifts a little as you move the phone.')).toBe(available);
+  expect(text.includes('Islands float and clouds drift')).toBe(available);
+  expect(text.includes('The scene shifts a little as you move the phone')).toBe(available);
+  // Motion is real whenever the card is shown, so the card never says scenes stay still.
+  expect(text).not.toContain('stay still');
   expect(text).not.toContain('The scene shifts a little as you move it.');
   if (available) {
     expect(switches[0].props.accessibilityLabel).toBe('Motion');

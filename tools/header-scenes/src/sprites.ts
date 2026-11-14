@@ -160,3 +160,15 @@ export const listSource = (text: string) =>
 /** The picture files a committed list names. */
 export const listFiles = (text: string) =>
   [...text.matchAll(/assets\/header-scenes\/([\w-]+\.png)'/g)].map((match) => match[1]!);
+
+/** The settings choices show each scene's main island; the list only names pictures that exist. */
+export function thumbnailList(scenes: readonly HeaderSceneArt[]): string {
+  const imports = scenes
+    .map(
+      (scene, index) =>
+        `import t${index} from '../../../assets/header-scenes/${scene.id}-main-body.png';`,
+    )
+    .join('\n');
+  const rows = scenes.map((scene, index) => `  '${scene.id}': t${index},`).join('\n');
+  return `${NOTICE}import type { ImageSourcePropType } from 'react-native';\nimport type { GroupHeader } from '@splitbook/shared/group-header';\n${imports}\n\nexport const sceneThumbnails: Record<GroupHeader['scene'], ImageSourcePropType> = {\n${rows}\n};\n`;
+}

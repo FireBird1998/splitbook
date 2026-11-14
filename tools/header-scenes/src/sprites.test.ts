@@ -8,6 +8,7 @@ import {
   spriteList,
   spritePlans,
   spriteSource,
+  thumbnailList,
 } from './sprites';
 
 const scenes = buildScenes();
@@ -59,4 +60,12 @@ it('a list records the hash of its drawing input and the pictures it needs', asy
   const changed = structuredClone(scene);
   changed.layers.main.children![0]!.props.transform = 'translate(1 1)';
   expect(spriteSource(changed)).not.toBe(spriteSource(scene));
+});
+
+it('lists the main island of every scene as its settings thumbnail', () => {
+  const text = thumbnailList(scenes);
+  for (const scene of scenes) {
+    expect(text).toContain(`assets/header-scenes/${scene.id}-main-body.png`);
+    expect(spritePlans(scene).some((plan) => plan.file === `${scene.id}-main-body.png`)).toBe(true);
+  }
 });

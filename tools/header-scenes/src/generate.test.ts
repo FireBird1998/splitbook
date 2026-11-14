@@ -1,17 +1,7 @@
-import { expect, it, vi } from 'vitest';
-import { sceneThumbnails } from '../../../packages/shared/src/header-scenes/thumbnails';
-import {
-  buildScenes,
-  generatedFiles,
-  staleOutputs,
-  thumbnailSource,
-  sceneThumbnail,
-} from './generate';
+import { expect, it } from 'vitest';
+import { buildScenes, generatedFiles, staleOutputs } from './generate';
 import { vectorTree, vectorSvg } from './vectors';
 import type { SceneVector } from '@splitbook/shared/header-scene-art';
-
-// Drawing and re-encoding the thumbnails takes several seconds on a shared CI runner.
-vi.setConfig({ testTimeout: 30_000 });
 
 it('ships all four scenes with portable layers and independent motion and night-light groups', () => {
   const scenes = buildScenes();
@@ -110,52 +100,6 @@ it('covers the four scene modules and common styles in a repeatable fresh build'
     'mountain-village.ts',
     'sakura.ts',
     'styles.ts',
-    'thumbnails.ts',
   ]);
   expect(staleOutputs(first, await generatedFiles())).toEqual([]);
-});
-
-it('builds a decodable, bounded raster thumbnail for every generated scene', async () => {
-  const { default: sharp } = await import('sharp');
-  for (const scene of buildScenes()) {
-    const uri = sceneThumbnails[scene.id];
-    expect(uri).toMatch(/^data:image\/png;base64,/);
-    const data = Buffer.from(uri.split(',')[1], 'base64');
-    expect(data.byteLength).toBeLessThan(80_000);
-    const metadata = await sharp(data).metadata();
-    expect([metadata.width, metadata.height]).toEqual([368, 192]);
-  }
-});
-
-it('checks the raster source stamp while accepting different PNG encoding of the same pixels', async () => {
-  const { default: sharp } = await import('sharp');
-  const expected = await generatedFiles(false);
-  const actual = await generatedFiles();
-  const original = await sceneThumbnail(buildScenes()[0]);
-  const originalBytes = Buffer.from(original.split(',')[1], 'base64');
-  const encoded = await sharp(originalBytes).png({ compressionLevel: 0 }).toBuffer();
-  expect(encoded.equals(originalBytes)).toBe(false);
-  expect(await sharp(encoded).raw().toBuffer()).toEqual(
-    await sharp(originalBytes).raw().toBuffer(),
-  );
-  const file = actual.get('thumbnails.ts')!;
-  expect(file).toContain(original);
-  actual.set(
-    'thumbnails.ts',
-    file.replace(original, `data:image/png;base64,${encoded.toString('base64')}`),
-  );
-  expect(staleOutputs(expected, actual)).toEqual([]);
-  actual.set(
-    'thumbnails.ts',
-    actual.get('thumbnails.ts')!.replace(thumbnailSource(), '0'.repeat(64)),
-  );
-  expect(staleOutputs(expected, actual)).toEqual(['thumbnails.ts']);
-  actual.delete('thumbnails.ts');
-  expect(staleOutputs(expected, actual)).toEqual(['thumbnails.ts']);
-});
-it('changes the raster source stamp when a portable vector changes', () => {
-  const scenes = buildScenes();
-  const before = thumbnailSource(scenes);
-  scenes[0].layers.main.children![0].props.transform = 'translate(1 0)';
-  expect(thumbnailSource(scenes)).not.toBe(before);
 });

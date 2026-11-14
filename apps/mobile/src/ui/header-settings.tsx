@@ -153,8 +153,7 @@ export function HeaderSettings({
                   <View style={{ flex: 1 }}>
                     <CompactText>Motion</CompactText>
                     <CompactText variant="small" tone="secondary">
-                      Scenes stay still on Android for now. Your Motion preference is kept on this
-                      phone.
+                      Islands float and clouds drift
                     </CompactText>
                   </View>
                   <Switch
@@ -177,8 +176,7 @@ export function HeaderSettings({
                   <View style={{ flex: 1 }}>
                     <CompactText>Tilt with the phone</CompactText>
                     <CompactText variant="small" tone="secondary">
-                      The scene shifts a little as you move the phone. Scenes stay still on Android
-                      for now.
+                      The scene shifts a little as you move the phone
                     </CompactText>
                   </View>
                   <Switch

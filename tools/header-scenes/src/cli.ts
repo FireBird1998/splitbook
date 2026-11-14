@@ -8,6 +8,7 @@ import {
   SPRITE_IMAGES,
   SPRITE_LISTS,
   spriteList,
+  thumbnailList,
   spritePlans,
   spriteSource,
 } from './sprites.ts';
@@ -17,7 +18,7 @@ const directory = resolve(root, OUTPUT);
 const command = process.argv[2];
 if (!['build', 'check'].includes(command))
   throw new Error('Usage: pnpm --filter @splitbook/header-scenes <build|check>');
-const expected = await generatedFiles(command === 'build');
+const expected = await generatedFiles();
 const actual = new Map(
   (existsSync(directory) ? readdirSync(directory, { withFileTypes: true }) : [])
     .filter((file) => file.isFile())
@@ -26,7 +27,7 @@ const actual = new Map(
 const stale = staleOutputs(expected, actual);
 if (command === 'build') {
   mkdirSync(directory, { recursive: true });
-  for (const path of new Set([...stale, 'thumbnails.ts'])) {
+  for (const path of stale) {
     const text = expected.get(path);
     if (text === undefined) rmSync(resolve(directory, path));
     else writeFileSync(resolve(directory, path), text);
@@ -67,6 +68,16 @@ for (const scene of buildScenes()) {
     wanted.add(sprite.file);
   }
   writeFileSync(list, spriteList(scene, sprites));
+}
+// The settings thumbnails reuse the main island pictures, so this list is plain text.
+const thumbnails = resolve(lists, 'thumbnails.ts');
+const thumbnailText = thumbnailList(buildScenes());
+if (!existsSync(thumbnails) || readFileSync(thumbnails, 'utf8') !== thumbnailText) {
+  staleSprites.push('thumbnails.ts');
+  if (command === 'build') {
+    mkdirSync(lists, { recursive: true });
+    writeFileSync(thumbnails, thumbnailText);
+  }
 }
 const extra = (existsSync(images) ? readdirSync(images) : []).filter(
   (file) => file.endsWith('.png') && !wanted.has(file),

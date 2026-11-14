@@ -1,7 +1,6 @@
 import { act, create } from 'react-test-renderer';
 import { expect, it, vi } from 'vitest';
 import { useHeaderTilt } from './use-header-tilt';
-import { headerSceneMotionAvailable } from '../config';
 import { emitAppState, setReduceMotion, timing } from '../test-utils/native';
 const native = vi.hoisted(() => ({
   count: 0,
@@ -33,12 +32,11 @@ function Probe({ motion = true, tilt = true, visible = true, available = true })
   useHeaderTilt(motion && tilt && visible && available);
   return null;
 }
-it('shipping availability prevents even loading the sensor module', async () => {
-  expect(headerSceneMotionAvailable).toBe(false);
+it('an unavailable build never loads the sensor module', async () => {
   const before = native.loaded;
   let view!: ReturnType<typeof create>;
   await act(async () => {
-    view = create(<Probe available={headerSceneMotionAvailable} />);
+    view = create(<Probe available={false} />);
   });
   expect(native.loaded).toBe(before);
   expect(native.count).toBe(0);
