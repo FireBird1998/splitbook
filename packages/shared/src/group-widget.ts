@@ -44,12 +44,10 @@ export interface WidgetRecentPart {
   }[];
 }
 
-type WidgetPerson = { firstName: string; initials: string; id: string | null };
+type WidgetPerson = { firstName: string; initials: string };
 function spokenWidgetName(firstName: string, initials: string, people: WidgetPerson[]) {
   const identities = new Set(
-    people
-      .filter((person) => person.firstName === firstName)
-      .map((person) => person.id ?? person.initials),
+    people.filter((person) => person.firstName === firstName).map((person) => person.initials),
   );
   return identities.size > 1 && initials.length > 1
     ? `${firstName} ${initials.slice(1, 2)}`
@@ -72,12 +70,9 @@ function recentWidgetView(
     ...rows.flatMap((row) => [
       {
         firstName: row.payer === 'Former member' ? row.payer : row.payer.trim().split(/\s+/)[0],
-        id: row.payerId,
         initials: row.payerInitials ?? '',
       },
-      ...(row.payee
-        ? [{ firstName: row.payee.firstName, id: row.payee.id, initials: row.payee.initials }]
-        : []),
+      ...(row.payee ? [{ firstName: row.payee.firstName, initials: row.payee.initials }] : []),
     ]),
   ];
   const spokenName = (name: string, initials = '') => spokenWidgetName(name, initials, people);
@@ -329,7 +324,6 @@ function groupWidgetView(
     return {
       firstName: (outgoing ? payment.toName : payment.fromName).trim().split(/\s+/)[0],
       initials: (outgoing ? payment.toInitials : payment.fromInitials) ?? '',
-      id: outgoing ? payment.to : payment.from,
     };
   });
   const recentView = recentWidgetView(recent, setup, now, paymentPeople);
@@ -456,7 +450,6 @@ function spokenPayments(
     ...payments.map((payment) => ({
       firstName: payment.firstName,
       initials: payment.initials,
-      id: payment.payment ? (payment.incoming ? payment.payment.from : payment.payment.to) : null,
     })),
   ];
   return payments.map((payment) => {
