@@ -42,8 +42,13 @@ at night the window flicker, lantern bob and halo pulse. The rules:
 - **One source of timing.** The generator reads the web's own CSS (`scene.css`
   and each scene's rules) and bakes every `@keyframes` rule into straight stops,
   with its easing, steps, delay and direction drawn in. The list carries those
-  stops; the app never restates a period or a path. An animation the generator
-  cannot play stops the build.
+  stops; the app never restates a period or a path. What the generator cannot
+  play stops the build with a message: a direction other than `reverse`, a
+  finite repeat, `step-start`, `step-end` and steps that jump at the start,
+  timing or repeat written as longhands or inside keyframes, a transform other
+  than a px slide, a single scale or a turn in degrees, a positive delay, a
+  selector that does not end on one class under `.vq` or `.vq.t-night`, and a
+  night rule that replaces a day animation.
 - **Parts.** Each animated element is cut out of its layer body into a picture of
   its own; equal neighbours share one. A part is a child of its layer, so it
   rises and tilts with its island.
@@ -59,10 +64,14 @@ at night the window flicker, lantern bob and halo pulse. The rules:
   skew, so the picture holds the rotor unslanted and a holder applies the slant
   as a fixed turn, stretch and turn (its singular values), which Android can
   draw exactly.
-- **Stopping.** Motion off, Remove animations, off screen and background stop
-  every clock. A stopped part rests where the web's still scene has it; one that
-  is only seen while it moves (a drop, a snowflake, a ripple) is not drawn.
-- **Night.** Night-only movement is mounted only when the scene shows night.
+- **Stopping.** Motion off, Remove animations, off screen, a covered Group and
+  background stop every clock. With Motion off or Remove animations a part rests
+  where the web's still scene has it; one that is only seen while it moves (a
+  drop, a snowflake, a ripple) is not drawn. A scene that is only paused (off
+  screen, covered, in the background) keeps its parts in the pose its clocks
+  restart from, so nothing jumps when it comes back into view.
+- **Night.** The glow layer and night-only movement are mounted, and their
+  clocks started, only when the scene shows them.
 
 The existing reduce-motion watcher wins over the phone's Motion choice. React
 Native reports reduce motion on Android only when the transition animation scale

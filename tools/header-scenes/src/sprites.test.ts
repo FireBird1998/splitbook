@@ -128,28 +128,85 @@ function tagged(scene: HeaderSceneArt) {
 // Tagged, but the web only changes their brightness with the time of day; nothing moves.
 const STILL_ON_THE_WEB = ['door-glow', 'lit'];
 
+const SHAPE = /<(path|polygon|circle|ellipse|rect)\b/g;
+/** The shapes drawn inside elements the art marks as moving, per class list of the marked element. */
+function movingShapes(scene: HeaderSceneArt) {
+  let shapes = 0;
+  const classes = new Set<string>();
+  const walk = (node: SceneVector, inside: boolean) => {
+    const marked =
+      node.motion !== undefined &&
+      node.motion !== 'float' &&
+      node.motion !== 'clouds' &&
+      !node.classes!.some((name) => STILL_ON_THE_WEB.includes(name));
+    if (marked) classes.add(node.classes!.join(' '));
+    if ((inside || marked) && ['path', 'polygon', 'circle', 'ellipse', 'rect'].includes(node.tag))
+      shapes++;
+    node.children?.forEach((child) => walk(child, inside || marked));
+  };
+  Object.values(scene.layers).forEach((layer) => walk(layer, false));
+  return { shapes, classes };
+}
+
 it.each(scenes.map((scene) => [scene.id, scene] as const))(
-  '%s: every part the art marks as moving is a part picture, and none is left in a still body',
+  '%s: every shape the art marks as moving is in exactly one part picture, and none is in a still body',
   (_, scene) => {
     const plans = spritePlans(scene);
-    const count = (svgs: string[], classes: string) =>
-      svgs.join('').split(`class="${classes}"`).length - 1;
-    const parts = plans.filter((plan) => plan.kind === 'part').map((plan) => plan.svg);
-    const bodies = plans.filter((plan) => plan.kind === 'body').map((plan) => plan.svg);
-    const moving = tagged(scene).filter(
-      (classes) => !classes.split(' ').some((name) => STILL_ON_THE_WEB.includes(name)),
-    );
-    expect(moving.length).toBeGreaterThan(20);
-    for (const classes of new Set(moving)) {
-      // A moving group is also the wrapper of each picture cut from inside it, hence "at least".
-      expect(count(parts, classes), classes).toBeGreaterThanOrEqual(
-        moving.filter((each) => each === classes).length,
-      );
-      expect(count(bodies, classes), classes).toBe(0);
-    }
-    for (const plan of plans.filter((each) => each.kind === 'part')) {
+    const parts = plans.filter((plan) => plan.kind === 'part');
+    const bodies = plans
+      .filter((plan) => plan.kind === 'body')
+      .map((plan) => plan.svg)
+      .join('');
+    const { shapes, classes } = movingShapes(scene);
+    expect(tagged(scene).length).toBeGreaterThan(20);
+    // Shapes are never repeated as wrappers are, so the count is exact: one missing drop fails.
+    expect(parts.reduce((sum, plan) => sum + (plan.svg.match(SHAPE)?.length ?? 0), 0)).toBe(shapes);
+    for (const names of classes) expect(bodies, names).not.toContain(`class="${names}"`);
+    for (const plan of parts) {
       expect(plan.tracks!.length, plan.file).toBeGreaterThan(0);
-      for (const track of plan.tracks!) expect(track.seconds).toBeGreaterThan(0);
+      for (const track of plan.tracks!) {
+        expect(track.seconds).toBeGreaterThan(0);
+        // The phone rejects a range that does not rise strictly.
+        for (const curve of [track.x, track.y, track.scale, track.rotate, track.opacity])
+          if (curve) {
+            expect(curve.at[0]).toBe(0);
+            expect(curve.at.at(-1)).toBe(1);
+            expect(curve.to).toHaveLength(curve.at.length);
+            for (let i = 1; i < curve.at.length; i++)
+              expect(curve.at[i]!, `${plan.file}: ${curve.at}`).toBeGreaterThan(curve.at[i - 1]!);
+          }
+      }
+    }
+  },
+);
+
+it.each(scenes.map((scene) => [scene.id, scene] as const))(
+  '%s: every committed part picture decodes and is trimmed to what it shows',
+  async (_, scene) => {
+    const { readFileSync } = await import('node:fs');
+    const directory = new URL('../../../apps/mobile/assets/header-scenes/', import.meta.url);
+    const parts = (await renderScene(scene)).filter((sprite) => sprite.kind === 'part');
+    expect(parts.length).toBeGreaterThan(20);
+    for (const part of parts) {
+      const { data, info } = await sharp(readFileSync(new URL(part.file, directory)))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      expect(info.width / part.w, part.file).toBeCloseTo(3, 0);
+      let [left, top, right, bottom] = [info.width, info.height, -1, -1];
+      for (let y = 0; y < info.height; y++)
+        for (let x = 0; x < info.width; x++)
+          if (data[(y * info.width + x) * 4 + 3]! > 0) {
+            left = Math.min(left, x);
+            right = Math.max(right, x);
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y);
+          }
+      expect(right, part.file).toBeGreaterThanOrEqual(0);
+      // A rotor keeps its hub in the middle, so it may have empty margins; nothing else does.
+      if (part.slant) continue;
+      for (const margin of [left, top, info.width - 1 - right, info.height - 1 - bottom])
+        expect(margin, part.file).toBeLessThanOrEqual(3);
     }
   },
 );
@@ -263,4 +320,42 @@ it('draws the art in front of a moving part again, on top of it', async () => {
   // The body still holds everything that does not move.
   expect(body!.x).toBeLessThan(241);
   expect(body!.x + body!.w).toBeGreaterThan(439);
+});
+
+it('equal specks share a picture only when no still art is drawn between them', () => {
+  const speck = (x: number, between?: SceneVector): SceneVector[] => [
+    {
+      tag: 'rect',
+      props: { x: String(x), y: '100', width: '2', height: '2', fill: '#ffffff' },
+      classes: ['drop'],
+      motion: 'water',
+    },
+    ...(between ? [between] : []),
+  ];
+  const rock: SceneVector = {
+    tag: 'rect',
+    props: { x: '6', y: '98', width: '6', height: '8', fill: '#555555' },
+  };
+  const scene = (children: SceneVector[]): HeaderSceneArt => ({
+    ...structuredClone(scenes[0]!),
+    css: '.vq .drop { animation: fall 1s linear infinite; } @keyframes fall { from { transform: translateY(0) } to { transform: translateY(8px) } }',
+    layers: {
+      ...structuredClone(scenes[0]!.layers),
+      main: {
+        tag: 'svg',
+        props: {},
+        children: [{ tag: 'g', props: { transform: 'translate(300 0)' }, children }],
+      },
+    },
+  });
+  const parts = (art: HeaderSceneArt) =>
+    spritePlans(art).filter((plan) => plan.layer === 'main' && plan.kind === 'part');
+  // Side by side they are one picture.
+  expect(parts(scene([...speck(0), ...speck(4), ...speck(20)]))).toHaveLength(1);
+  // A rock drawn between two of them keeps its place: the later speck is its own picture,
+  // above the rock, and only the earlier one is covered by it.
+  const split = parts(scene([...speck(0), ...speck(4, rock), ...speck(8)]));
+  expect(split).toHaveLength(2);
+  expect(split[0]!.after).toContain('#555555');
+  expect(split[1]!.after).toBeUndefined();
 });

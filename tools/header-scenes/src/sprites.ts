@@ -113,6 +113,8 @@ interface Unit {
   rest: number;
   still: boolean;
   origin: [number, number];
+  /** Inside another moving element: the still art around it there moves with that element. */
+  nested: boolean;
   /** The slanted group above a turning part, with its `matrix(a b c d 0 0)`. */
   slanted?: { group: SceneVector; matrix: [number, number, number, number] };
 }
@@ -166,6 +168,7 @@ function units(top: SceneVector, rules: MotionRules): { units: Unit[]; moving: S
         rest: opacity,
         still: !floats,
         origin,
+        nested: chain.length > 0,
         ...(slanted ? { slanted } : {}),
       });
     }
@@ -206,7 +209,18 @@ function units(top: SceneVector, rules: MotionRules): { units: Unit[]; moving: S
     // Frames of one animal (no motion tag of their own) and scattered specks may share a picture
     // from anywhere under their parent; anything else only with its direct neighbour.
     const free = root.motion === undefined || SCATTERED.has(root.motion);
-    if (match && !turns(unit.tracks) && (free || match === merged.at(-1))) match.roots.push(root);
+    // Still art drawn between two elements must stay between them, so they keep their own
+    // pictures: merged, the art would be drawn over the later one by the cover.
+    const siblings = unit.parent.children ?? [];
+    // (Inside a moving element the art between is that element's own picture, never a cover.)
+    const between =
+      match && !unit.nested
+        ? siblings
+            .slice(siblings.indexOf(match.roots.at(-1)!) + 1, siblings.indexOf(root))
+            .some((sibling) => prune(sibling, (node) => (moving.has(node) ? false : 'inside')))
+        : false;
+    if (match && !between && !turns(unit.tracks) && (free || match === merged.at(-1)))
+      match.roots.push(root);
     else merged.push({ ...unit, roots: [root] });
   }
   return { units: merged, moving };

@@ -61,7 +61,9 @@ type Clocks = Map<number, Animated.Value>;
 function partMotion(sprite: SceneSprite, clocks: Clocks, night: boolean) {
   const slide: object[] = [];
   const turn: object[] = [];
-  let opacity: Animated.AnimatedNode | number = 1;
+  // Without a fade of its own a part keeps its resting opacity: one that is hidden at rest and
+  // only moves at night stays hidden by day.
+  let opacity: Animated.AnimatedNode | number | null = null;
   for (const track of sprite.tracks ?? []) {
     const clock = clocks.get(track.seconds);
     if (!clock || (track.time === 'night' && !night)) continue;
@@ -79,35 +81,42 @@ function partMotion(sprite: SceneSprite, clocks: Clocks, night: boolean) {
       });
     if (track.opacity)
       opacity =
-        typeof opacity === 'number'
+        opacity === null
           ? read(track.opacity)
           : Animated.multiply(opacity as Animated.Value, read(track.opacity));
   }
-  return { slide, turn, opacity };
+  return { slide, turn, opacity: opacity ?? sprite.rest ?? 1 };
 }
 
 const Piece = memo(function Piece({
   sprite,
   rises,
   clocks,
-  moving,
+  lively,
+  drifting,
   night,
   frameWidth,
 }: {
   sprite: SceneSprite;
   rises: Rises;
   clocks: Clocks;
-  moving: boolean;
+  /** Motion is on for this phone: parts wear their movement, whether or not the clocks run. */
+  lively: boolean;
+  /** The scene is running and this is a cloud. Parts do not take this, so a pause redraws none. */
+  drifting: boolean;
   night: boolean;
   frameWidth: number;
 }) {
-  const drift = useCloudDrift(moving && sprite.kind === 'cloud', sprite, frameWidth);
+  const drift = useCloudDrift(drifting, sprite, frameWidth);
   const rise = rises[sprite.seconds as 7 | 9 | 11] ?? rises[7];
   const motion = useMemo(
-    () => (sprite.kind === 'part' && moving ? partMotion(sprite, clocks, night) : null),
-    [sprite, clocks, moving, night],
+    () => (sprite.kind === 'part' && lively ? partMotion(sprite, clocks, night) : null),
+    [sprite, clocks, lively, night],
   );
-  const floats = sprite.still ? [] : [{ translateY: lift(rise) }];
+  const floats = useMemo(
+    () => (sprite.still ? [] : [{ translateY: lift(rise) }]),
+    [sprite.still, rise],
+  );
   if (sprite.kind === 'part') {
     // At rest a part stands where the web's still scene has it; one that only shows while it
     // moves (a falling drop, a snowflake) is not drawn at all.
@@ -208,33 +217,41 @@ export default function HeaderScene({
   const visibility = useContext(SceneVisibility);
   const foreground = useForeground();
   const reduced = useReducedMotion();
-  // Nothing moves, and no sensor is read, until this scene's pictures are the ones on screen.
+  // Motion is on for this phone. Parts then wear their movement even while the clocks are
+  // paused, so a scene that scrolls back into view carries on from the pose it was paused in
+  // (the start of each cycle) instead of jumping there from its resting pose. With Motion off or
+  // Remove animations on, parts rest where the web's still scene has them.
+  const lively = motion && headerSceneMotionAvailable && !reduced && art?.id === header.scene;
+  // Nothing runs, and no sensor is read, unless this scene's pictures are the ones on screen.
   const moving =
-    motion &&
-    headerSceneMotionAvailable &&
+    lively &&
     visible &&
     // The settings preview is pinned on its own page, outside any Group scroll.
     (preview || visibility.visible) &&
-    foreground &&
-    // Parts rest where the web's still scene has them, not frozen mid-cycle.
-    !reduced &&
-    art?.id === header.scene;
+    foreground;
+  const time = headerTimeOfDay(header.time, new Date().getHours());
   const position = useHeaderTilt(moving && tilt);
   const frameWidth = useWindowDimensions().width;
   const rise7 = useSceneRise(moving, 7);
   const rise9 = useSceneRise(moving, 9);
   const rise11 = useSceneRise(moving, 11);
   const [rises] = useState<Rises>(() => ({ 7: rise7, 9: rise9, 11: rise11 }));
+  // One clock per period that something on screen uses: the glow layer and night-only movement
+  // start no clock while the scene does not show them.
   const periods = useMemo(
     () =>
       [
         ...new Set(
-          (art?.sprites ?? []).flatMap((sprite) =>
-            (sprite.tracks ?? []).map((track) => track.seconds),
-          ),
+          (art?.sprites ?? [])
+            .filter((sprite) => sprite.layer !== 'glow' || glow[time] > 0)
+            .flatMap((sprite) =>
+              (sprite.tracks ?? [])
+                .filter((track) => track.time !== 'night' || time === 'night')
+                .map((track) => track.seconds),
+            ),
         ),
       ].sort((a, b) => a - b),
-    [art],
+    [art, time],
   );
   const clocks = useSceneClocks(moving, periods);
   // One set of animated nodes for the life of the scene, not one per render.
@@ -271,7 +288,6 @@ export default function HeaderScene({
     });
     return () => sub.remove();
   }, []);
-  const time = headerTimeOfDay(header.time, new Date().getHours());
   if (failed === header.scene) return <ClassicGroupHeader group={group} />;
   if (art?.id !== header.scene)
     return (
@@ -332,7 +348,8 @@ export default function HeaderScene({
                     sprite={sprite}
                     rises={rises}
                     clocks={clocks}
-                    moving={moving}
+                    lively={lively}
+                    drifting={moving && sprite.kind === 'cloud'}
                     night={time === 'night'}
                     frameWidth={frameWidth}
                   />
@@ -352,7 +369,8 @@ export default function HeaderScene({
                     sprite={sprite}
                     rises={rises}
                     clocks={clocks}
-                    moving={moving}
+                    lively={lively}
+                    drifting={moving && sprite.kind === 'cloud'}
                     night={time === 'night'}
                     frameWidth={frameWidth}
                   />

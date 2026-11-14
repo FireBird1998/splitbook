@@ -111,3 +111,79 @@ it("marks a turn about the element's own middle and refuses what it cannot play"
   expect(() => elementMotion(node('late'), rules)).toThrow(/positive animation delay/);
   expect(() => elementMotion(node('odd'), rules)).toThrow(/Unsupported Header scene transform/);
 });
+
+it.each([
+  ['a back-and-forth direction', '.vq .a { animation: go 4s linear infinite alternate; }'],
+  ['a finite repeat', '.vq .a { animation: go 4s linear 3; }'],
+  ['no repeat at all', '.vq .a { animation: go 4s linear; }'],
+  ['steps that jump at the start', '.vq .a { animation: go 4s steps(2, jump-start) infinite; }'],
+  ['step-start', '.vq .a { animation: go 4s step-start infinite; }'],
+  ['a timing longhand', '.vq .a { animation: go 4s infinite; animation-timing-function: linear; }'],
+  ['a repeat longhand', '.vq .a { animation: go 4s infinite; animation-iteration-count: 2; }'],
+  ['a compound selector', '.vq .a.b { animation: go 4s linear infinite; }'],
+  ['a selector ending on a tag', '.vq .a polygon { animation: go 4s linear infinite; }'],
+  ['another time of day', '.vq.t-sunset .a { animation: go 4s linear infinite; }'],
+  [
+    'a night rule replacing a day animation',
+    '.vq .a { animation: go 4s linear infinite; } .vq.t-night .a { animation: go 2s linear infinite; }',
+  ],
+])('refuses %s instead of playing it wrongly', (_, css) => {
+  const sheet = `${css} @keyframes go { from { transform: translate(0, 0) } to { transform: translate(4px, 0) } }`;
+  expect(() => elementMotion(node('a b'), motionRules(sheet))).toThrow(/Header scene|night rule/);
+});
+
+it.each([
+  ['a percentage', 'translate(50%, 0)'],
+  ['turns', 'rotate(1turn)'],
+  ['radians', 'rotate(3rad)'],
+  ['a scale per axis', 'scale(1, 2)'],
+  ['a unitless turn', 'rotate(90)'],
+])('refuses %s in a keyframe', (_, transform) => {
+  const rules = motionRules(
+    `.vq .a { animation: go 4s linear infinite; } @keyframes go { from { transform: translate(0, 0) } to { transform: ${transform} } }`,
+  );
+  expect(() => elementMotion(node('a'), rules)).toThrow(/Unsupported Header scene transform/);
+});
+
+it('refuses a timing function or a named stop inside keyframes', () => {
+  expect(() =>
+    motionRules(
+      '@keyframes go { 0% { opacity: 0; animation-timing-function: ease-in } 100% { opacity: 1 } }',
+    ),
+  ).toThrow(/timing function inside @keyframes go/);
+  expect(() => motionRules('@keyframes go { start { opacity: 0 } to { opacity: 1 } }')).toThrow(
+    /Unsupported Header scene keyframe/,
+  );
+});
+
+it('reads an easing only as a whole word, so a name that contains one keeps its own', () => {
+  const rules = motionRules(
+    '.vq .a { animation: release-wave 4s linear infinite; } @keyframes release-wave { from { transform: translate(0, 0) } to { transform: translate(8px, 0) } }',
+  );
+  // Straight, as written: "release" is not `ease`.
+  expect(elementMotion(node('a'), rules).tracks[0]!.x).toEqual({ at: [0, 1], to: [0, 8] });
+});
+
+it("leaves the phone's calm switch and plain colour rules alone", () => {
+  const rules = motionRules(
+    '.vq.calm *, .vq.calm { animation: none !important; } .vq .wins polygon { fill: #ffd98a; opacity: 0; } .vq .a { animation: go 4s linear infinite; } @keyframes go { from { opacity: 0 } to { opacity: 1 } }',
+  );
+  expect(elementMotion(node('a'), rules).tracks).toHaveLength(1);
+});
+
+it('keeps every range strictly rising from 0 to 1, however close two stops fall', () => {
+  // Delays that put the restart within a rounding step of another stop.
+  for (const delay of [-0.00001, -1.99999, -0.99996, -1, -3.99995, -0.3333]) {
+    const rules = motionRules(
+      '.vq .a { animation: go 4s steps(2, jump-none) infinite; } @keyframes go { 0%, 100% { transform: translateY(0); opacity: 0 } 50% { transform: translateY(-1px); opacity: 1 } }',
+    );
+    for (const track of elementMotion(node('a', { delaySeconds: delay }), rules).tracks)
+      for (const curve of [track.y, track.opacity]) {
+        expect(curve!.at[0], String(delay)).toBe(0);
+        expect(curve!.at.at(-1), String(delay)).toBe(1);
+        for (let i = 1; i < curve!.at.length; i++)
+          expect(curve!.at[i]!, `${delay}: ${curve!.at}`).toBeGreaterThan(curve!.at[i - 1]!);
+        expect(curve!.to).toHaveLength(curve!.at.length);
+      }
+  }
+});

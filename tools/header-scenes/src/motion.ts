@@ -67,7 +67,11 @@ export function motionRules(...sheets: string[]): MotionRules {
       (_, name: string, body: string) => {
         const frames: Keyframe[] = [];
         for (const frame of body.matchAll(/([^{}]+)\{([^{}]*)\}/g))
-          for (const selector of frame[1]!.split(','))
+          for (const selector of frame[1]!.split(',')) {
+            if (!/^(from|to|[\d.]+%)$/.test(selector.trim()))
+              throw new Error(`Unsupported Header scene keyframe: ${selector.trim()}`);
+            if ('animation-timing-function' in declarations(frame[2]!))
+              throw new Error(`A timing function inside @keyframes ${name} is not supported`);
             frames.push({
               at:
                 selector.trim() === 'from'
@@ -77,6 +81,7 @@ export function motionRules(...sheets: string[]): MotionRules {
                     : Number.parseFloat(selector) / 100,
               declarations: declarations(frame[2]!),
             });
+          }
         keyframes.set(
           name,
           frames.sort((a, b) => a.at - b.at),
@@ -86,6 +91,7 @@ export function motionRules(...sheets: string[]): MotionRules {
     );
     for (const rule of plain.matchAll(/([^{}@]+)\{([^{}]*)\}/g))
       for (const selector of rule[1]!.split(',')) {
+        const styles = declarations(rule[2]!);
         // Only a rule that ends on a class styles a moving element; `.wins polygon` and the like
         // colour shapes and are handled where the pictures are drawn.
         const match = /^\.vq(\.t-night)?(?:\s+\.[\w-]+)*\s+\.([\w-]+)$/.exec(selector.trim());
@@ -93,8 +99,15 @@ export function motionRules(...sheets: string[]): MotionRules {
           rules.push({
             ...(match[1] ? { time: 'night' as const } : {}),
             target: match[2]!,
-            declarations: declarations(rule[2]!),
+            declarations: styles,
           });
+        // The calm switch is the phone's Motion choice. Any other rule that animates through a
+        // selector this reader cannot place (`.a.b`, a tag, another time of day) would be lost.
+        else if (
+          !selector.trim().startsWith('.vq.calm') &&
+          Object.keys(styles).some((property) => property.startsWith('animation'))
+        )
+          throw new Error(`Unsupported Header scene animation selector: ${selector.trim()}`);
       }
   }
   return { rules, keyframes };
@@ -120,6 +133,8 @@ const EASINGS: Record<string, (progress: number) => number> = {
 };
 /** How many straight pieces stand in for one eased stretch between two keyframes. */
 const EASED_PIECES = 8;
+/** The smallest distance between two stops: the fourth decimal that stops are rounded to. */
+const STEP = 0.0001;
 /** The width of a jump: two stops this far apart read as an instant change. */
 const JUMP = 0.0005;
 
@@ -130,45 +145,62 @@ interface Animation {
   delay: number;
   reverse: boolean;
 }
+const KEYWORD_EASINGS = ['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out'];
+/** CSS animation words this reader does not play; none may be taken for an animation's name. */
+const RESERVED = new Set([
+  'alternate',
+  'alternate-reverse',
+  'forwards',
+  'backwards',
+  'both',
+  'paused',
+  'running',
+  'step-start',
+  'step-end',
+]);
+/** Reads `animation: name 9s linear infinite`, word by word; anything it cannot play is refused. */
 function shorthand(value: string): Partial<Animation> {
-  const easing =
-    /steps\([^)]*\)|cubic-bezier\([^)]*\)|ease-in-out|ease-out|ease-in|ease|linear/.exec(
-      value,
-    )?.[0];
-  const rest = value.replace(/steps\([^)]*\)|cubic-bezier\([^)]*\)/, '').split(/\s+/);
-  const times = rest
-    .filter((word) => /^-?[\d.]+s$/.test(word))
-    .map((word) => Number.parseFloat(word));
-  const name = rest.find(
-    (word) =>
-      !/^-?[\d.]+s$/.test(word) &&
-      !['infinite', 'linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'reverse'].includes(
-        word,
-      ) &&
-      word !== '',
-  );
-  return {
-    ...(name ? { name } : {}),
-    ...(times[0] !== undefined ? { seconds: times[0] } : {}),
-    ...(times[1] !== undefined ? { delay: times[1] } : {}),
-    easing: easing ?? 'ease',
-    ...(rest.includes('reverse') ? { reverse: true } : {}),
-  };
+  const out: Partial<Animation> = {};
+  const times: number[] = [];
+  let forever = false;
+  for (const word of value.match(/[\w-]+\([^)]*\)|\S+/g) ?? []) {
+    if (/^-?[\d.]+s$/.test(word)) times.push(Number.parseFloat(word));
+    else if (KEYWORD_EASINGS.includes(word) || /^steps\(/.test(word)) out.easing = word;
+    else if (word === 'infinite') forever = true;
+    else if (word === 'reverse') out.reverse = true;
+    else if (word === 'none') out.name = 'none';
+    else if (word === 'normal') continue;
+    else if (/^[a-zA-Z_][\w-]*$/.test(word) && out.name === undefined && !RESERVED.has(word))
+      out.name = word;
+    else throw new Error(`Unsupported Header scene animation value: ${word}`);
+  }
+  if (out.name !== 'none' && value.trim() && !forever)
+    throw new Error(`A Header scene animation must repeat forever: ${value}`);
+  if (times[0] !== undefined) out.seconds = times[0];
+  if (times[1] !== undefined) out.delay = times[1];
+  return { easing: 'ease', ...out };
 }
 
 function transformValues(value: string | undefined) {
   const out: { x?: number; y?: number; scale?: number; rotate?: number } = {};
   if (value === undefined) return out;
+  const unit = (text: string, allowed: RegExp) => {
+    if (!allowed.test(text.trim()))
+      throw new Error(`Unsupported Header scene transform value: ${text.trim()} in ${value}`);
+    return Number.parseFloat(text);
+  };
+  const length = /^-?[\d.]+(px)?$/;
   for (const part of value.matchAll(/(\w+)\(([^)]*)\)/g)) {
-    const numbers = part[2]!.split(',').map((text) => Number.parseFloat(text));
-    if (part[1] === 'translate') {
-      out.x = numbers[0]!;
-      out.y = numbers[1] ?? 0;
-    } else if (part[1] === 'translateX') out.x = numbers[0]!;
-    else if (part[1] === 'translateY') out.y = numbers[0]!;
-    else if (part[1] === 'scale') out.scale = numbers[0]!;
-    else if (part[1] === 'rotate') out.rotate = numbers[0]!;
-    else throw new Error(`Unsupported Header scene transform: ${part[1]}`);
+    const values = part[2]!.split(',');
+    if (part[1] === 'translate' && values.length <= 2) {
+      out.x = unit(values[0]!, length);
+      out.y = values[1] === undefined ? 0 : unit(values[1], length);
+    } else if (part[1] === 'translateX' && values.length === 1) out.x = unit(values[0]!, length);
+    else if (part[1] === 'translateY' && values.length === 1) out.y = unit(values[0]!, length);
+    else if (part[1] === 'scale' && values.length === 1) out.scale = unit(values[0]!, /^-?[\d.]+$/);
+    else if (part[1] === 'rotate' && values.length === 1)
+      out.rotate = unit(values[0]!, /^-?[\d.]+deg$/);
+    else throw new Error(`Unsupported Header scene transform: ${part[0]}`);
   }
   return out;
 }
@@ -179,6 +211,11 @@ const round = (value: number) => Math.round(value * 10000) / 10000;
 function bake(points: [number, number][], easing: string): [number, number][] {
   const out: [number, number][] = [points[0]!];
   const steps = /^steps\((\d+)(?:,\s*([\w-]+))?\)$/.exec(easing);
+  if (
+    /^steps\(/.test(easing) &&
+    (!steps || !['jump-none', 'jump-end', 'end', undefined].includes(steps[2]))
+  )
+    throw new Error(`Unsupported Header scene easing: ${easing}`);
   for (let i = 1; i < points.length; i++) {
     const [fromAt, from] = points[i - 1]!;
     const [toAt, to] = points[i]!;
@@ -251,14 +288,10 @@ function shift(points: [number, number][], phase: number, reverse: boolean): Cur
       [1, edge],
     ];
   }
-  const curve: Curve = { at: [], to: [] };
-  for (const [at, value] of all) {
-    const last = curve.at.length - 1;
-    // Two stops at one point would not be a valid range; keep them a hair apart.
-    const place = last >= 0 && at <= curve.at[last]! ? curve.at[last]! + JUMP / 10 : at;
-    curve.at.push(round(Math.min(place, 1)));
-    curve.to.push(round(value));
-  }
+  const curve: Curve = {
+    at: all.map(([at]) => round(at)),
+    to: all.map(([, value]) => round(value)),
+  };
   // Drop stops that lie on the straight line between their neighbours.
   for (let i = curve.at.length - 2; i > 0; i--) {
     const span = curve.at[i + 1]! - curve.at[i - 1]!;
@@ -270,6 +303,14 @@ function shift(points: [number, number][], phase: number, reverse: boolean): Cur
       curve.to.splice(i, 1);
     }
   }
+  // A range must rise strictly from 0 to 1: stops that rounding brought together are set a
+  // hair apart, pushed forwards and then held under the end.
+  curve.at[0] = 0;
+  for (let i = 1; i < curve.at.length; i++)
+    if (curve.at[i]! <= curve.at[i - 1]!) curve.at[i] = round(curve.at[i - 1]! + STEP);
+  curve.at[curve.at.length - 1] = 1;
+  for (let i = curve.at.length - 2; i > 0; i--)
+    if (curve.at[i]! >= curve.at[i + 1]!) curve.at[i] = round(curve.at[i + 1]! - STEP);
   return curve;
 }
 
@@ -293,9 +334,15 @@ export function elementMotion(
       Object.assign(merged, rule.declarations);
     }
     if (time === undefined && merged.opacity !== undefined) rest = Number(merged.opacity);
+    if (merged['animation-timing-function'] || merged['animation-iteration-count'])
+      throw new Error(
+        "Write a Header scene animation's timing and repeat in the `animation` shorthand",
+      );
     if (!merged.animation && !merged['animation-name']) continue;
     // The night pass only adds a track when a night rule itself animates.
     if (time === 'night' && !matched) continue;
+    if (time === 'night' && tracks.length)
+      throw new Error('A night rule that replaces a day animation is not supported');
     const animation: Animation = {
       name: '',
       seconds: 0,
