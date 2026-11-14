@@ -62,7 +62,7 @@ module.exports = function withAndroidWidgets(config, { enabled = false } = {}) {
     app.receiver.push({
       $: {
         'android:name': '.widget.Quick',
-        'android:label': 'Add expense',
+        'android:label': 'Quick actions',
         'android:enabled': String(enabled),
         'android:exported': 'false',
       },
@@ -298,7 +298,7 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
       fs.writeFileSync(
         path.join(main, 'res/xml/widget_quick.xml'),
         `<?xml version="1.0" encoding="utf-8"?>
-<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android" android:minWidth="40dp" android:minHeight="40dp" android:targetCellWidth="1" android:targetCellHeight="1" android:minResizeWidth="40dp" android:minResizeHeight="40dp" android:maxResizeWidth="250dp" android:maxResizeHeight="110dp" android:resizeMode="horizontal" android:description="@string/widget_quick_description" android:initialLayout="@layout/rn_widget" android:previewImage="@drawable/widget_quick_preview" android:configure="${config.android.package}.widget.GroupConfiguration" android:widgetFeatures="reconfigurable" android:updatePeriodMillis="0" android:widgetCategory="home_screen|not_keyguard" />`,
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android" android:minWidth="110dp" android:minHeight="40dp" android:targetCellWidth="2" android:targetCellHeight="1" android:minResizeWidth="40dp" android:minResizeHeight="40dp" android:maxResizeWidth="640dp" android:maxResizeHeight="640dp" android:resizeMode="horizontal|vertical" android:description="@string/widget_quick_description" android:initialLayout="@layout/rn_widget" android:previewImage="@drawable/widget_quick_preview" android:configure="${config.android.package}.widget.GroupConfiguration" android:widgetFeatures="reconfigurable" android:updatePeriodMillis="0" android:widgetCategory="home_screen|not_keyguard" />`,
       );
       fs.mkdirSync(path.join(main, 'res/drawable'), { recursive: true });
       fs.copyFileSync(
@@ -316,7 +316,7 @@ public class GroupConfiguration extends com.reactnativeandroidwidget.RNWidgetCon
       fs.mkdirSync(path.join(main, 'res/values'), { recursive: true });
       fs.writeFileSync(
         path.join(main, 'res/values/widget_balances.xml'),
-        '<resources><string name="widget_quick_description">Start an Expense in a Group</string><string name="widget_group_description">Your balance and Suggested payments in one Group</string><string name="widget_balances_description">What you owe and are owed, by currency</string></resources>\n',
+        '<resources><string name="widget_quick_description">Add an Expense or record a payment in one tap</string><string name="widget_group_description">Your balance and Suggested payments in one Group</string><string name="widget_balances_description">What you owe and are owed, by currency</string></resources>\n',
       );
       return mod;
     },

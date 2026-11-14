@@ -2738,7 +2738,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 ? snapshot.screen === 'create'
                 : typeof target !== 'string' && target.kind === 'expense'
                   ? snapshot.screen === 'expense' && snapshot.expense.groupId === target.groupId
-                  : typeof target !== 'string' && target.kind === 'settle'
+                  : typeof target !== 'string' &&
+                      (target.kind === 'settle' || target.kind === 'record-payment')
                     ? snapshot.screen === 'settlement' &&
                       snapshot.settlement.groupId === target.groupId
                     : false;
@@ -4890,7 +4891,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * `chosen` is the payment chosen on Balances, which the sheet shows as Balances did while it
    * checks (#334).
    */
-  const openSettlements = async (groupId: string, chosen: SettlementChoice | null = null) => {
+  const openSettlements = async (
+    groupId: string,
+    chosen: SettlementChoice | null = null,
+    widgetEntry = false,
+  ) => {
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation,
       request = ++settlementRequest,
@@ -4910,7 +4915,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       for (const { user } of snapshot.detail.data?.members ?? []) known[user.id] = user.name;
     navigate(
       { screen: 'settlement', groupId, reread: rereadOf(groupId) },
-      { settlement: { ...emptySettlement(), groupId, status: 'loading', chosen, known } },
+      {
+        settlement: {
+          ...emptySettlement(),
+          groupId,
+          status: 'loading',
+          chosen,
+          known,
+          widgetEntry,
+        },
+      },
     );
     const view = route;
     const stale = () => !current(owner) || view !== route || request !== settlementRequest;
@@ -8239,6 +8253,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       else {
         await openGroup(target.groupId, false, 'balances');
         if (!owns() || heldTaskProtected()) return;
+        if (
+          target.kind === 'record-payment' &&
+          snapshot.detail.status === 'ready' &&
+          snapshot.detail.data?.id === target.groupId &&
+          !snapshot.detail.data.isArchived
+        )
+          await openSettlements(target.groupId, null, true);
         if (
           target.kind === 'settle' &&
           target.payment &&

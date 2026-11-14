@@ -84,13 +84,19 @@ it.each([1, 1.3, 2])('keeps the entire spoken summary when visual lines drop at 
     groupWidget(part, setup, widgetDimensions('4x3'), auth, now).summary,
   );
 });
-it.each([1, 1.3, 2])('drops Add expense state text in 1x1 and caps 2x1 names at %s', (scale) => {
+it.each([1, 1.3, 2])('fits Quick actions at real launcher bounds at %s', (scale) => {
   const quick = { ...setup, kind: 'quick' as const };
-  const blocked = quickWidget(copy, quick, '1x1', { status: 'expired' }, scale);
-  expect(blocked.layout.showTitle).toBe(scale === 1);
+  const blocked = quickWidget(
+    copy,
+    quick,
+    { width: 78, height: 104 },
+    { status: 'expired' },
+    scale,
+  );
+  expect(blocked.layout.showTitle).toBe(scale < 2);
   expect(blocked.layout.showSubtitle).toBe(false);
-  const wide = quickWidget(copy, quick, '2x1', auth, scale);
-  expect(wide.layout.subtitleMaxLines).toBe(2);
+  const wide = quickWidget(copy, quick, { width: 172, height: 104 }, auth, scale);
+  expect(wide.layout.subtitleMaxLines).toBe(1);
   expect(wide.layout.showTitle).toBe(scale < 2);
   expect(wide.summary).toBe('Add expense in Maple House');
 });
@@ -111,9 +117,14 @@ it('treats Android’s float representation of 130% as large text', () => {
     groupWidget(part, setup, widgetDimensions('4x2'), auth, now, androidScale).payments,
   ).toHaveLength(1);
   expect(
-    quickWidget(copy, { ...setup, kind: 'quick' }, '1x1', { status: 'expired' }, androidScale)
-      .layout.showTitle,
-  ).toBe(false);
+    quickWidget(
+      copy,
+      { ...setup, kind: 'quick' },
+      { width: 78, height: 104 },
+      { status: 'expired' },
+      androidScale,
+    ).layout.showTitle,
+  ).toBe(true);
 });
 
 it('keeps the compact Group action on one readable line at 200% without losing saved time', () => {

@@ -2,13 +2,14 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { WidgetTaskHandler } from 'react-native-android-widget/src/api/register-widget-task-handler';
 const native = vi.hoisted(() => ({
   handler: null as WidgetTaskHandler | null,
+  drawQuick: vi.fn<(...args: unknown[]) => null>(),
   drawGroup: vi.fn<(...args: unknown[]) => null>(),
   getWidgetInfo: vi.fn(),
 }));
 vi.mock('./config', () => ({ mobileBuildSettings: {}, widgetKey: () => 'development' }));
 vi.mock('./group-widget-draw', () => ({ drawGroup: native.drawGroup }));
 vi.mock('./balances-widget-draw', () => ({ drawBalances: vi.fn() }));
-vi.mock('./quick-widget-draw', () => ({ drawQuick: vi.fn() }));
+vi.mock('./quick-widget-draw', () => ({ drawQuick: native.drawQuick }));
 vi.mock('./widgets-native', () => ({
   createWidgetsStore: () => ({
     read: async () => ({ copy: null, session: { status: 'signed-out' } }),
@@ -92,4 +93,35 @@ it('uses the event size when a just-added Group widget is not listed by native y
     { width: 360, height: 224, pixelRatio: 2.625 },
     { width: 360, height: 224, pixelRatio: 2.625 },
   ]);
+});
+
+it('projects Quick actions from the latest native width, height and density', async () => {
+  vi.stubGlobal('__DEV__', false);
+  const { registerAndroidWidgets } = await import('./widgets');
+  const info = {
+    widgetName: 'Quick',
+    widgetId: 8,
+    width: 172,
+    height: 224,
+    screenInfo: {
+      fontScale: 1.3,
+      density: 2.625,
+      densityDpi: 420,
+      screenWidthDp: 411,
+      screenHeightDp: 914,
+    },
+  };
+  native.getWidgetInfo.mockResolvedValue([info]);
+  registerAndroidWidgets();
+  const renderWidget = vi.fn();
+  await native.handler!({
+    widgetInfo: { ...info, height: 104 },
+    widgetAction: 'WIDGET_RESIZED',
+    renderWidget,
+  });
+  expect(native.drawQuick.mock.calls.map((args) => args[2])).toEqual([
+    { width: 172, height: 224, pixelRatio: 2.625 },
+    { width: 172, height: 224, pixelRatio: 2.625 },
+  ]);
+  expect(renderWidget).toHaveBeenCalledOnce();
 });

@@ -58,6 +58,7 @@ const button = () =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-09T04:11:00Z'));
   appearance.mode = 'light';
   store.read.mockResolvedValue({ copy, session });
   store.setup.mockResolvedValue(null);
@@ -67,6 +68,7 @@ beforeEach(() => {
 afterEach(() => {
   if (screen) act(() => screen!.unmount());
   screen = undefined;
+  vi.restoreAllMocks();
 });
 async function render(
   kind: 'Quick' | 'Group' | 'Balances',
@@ -103,15 +105,15 @@ it.each([null, 'maple'])(
   async (groupId) => {
     const saved: WidgetSetupRecord = { kind: 'quick', widgetId: 989, accountId: 'alex', groupId };
     const result = await render('Quick', saved);
-    expect(text()).toContain('Add expense widget');
-    expect(text()).toContain('Choose where this widget starts an Expense.');
+    expect(text()).toContain('Quick actions widget');
+    expect(text()).toContain('Choose what this widget does, and where.');
     expect(textOf(button())).toBe('Save');
     const radios = host('Pressable').filter((n) => n.props.accessibilityRole === 'radio');
     expect(
       radios.find((n) => n.props.accessibilityLabel === (groupId ? 'Maple House' : 'Ask each time'))
         ?.props.accessibilityState.checked,
     ).toBe(true);
-    expect(radios.filter((n) => n.props.accessibilityState.checked)).toHaveLength(1);
+    expect(radios.filter((n) => n.props.accessibilityState.checked)).toHaveLength(2);
     expect(host('Switch')).toHaveLength(0);
     expect(text()).not.toContain('Hide amounts');
     expect(text()).not.toContain('ON THE WIDGET');
@@ -316,3 +318,49 @@ it.each(setupChanges)(
     expect(result).toHaveBeenCalledExactlyOnceWith('ok');
   },
 );
+
+it('Record payment needs a saved Group, survives Reconfigure and cannot use Ask each time', async () => {
+  await render('Quick');
+  const payment = host('Pressable').find((n) => n.props.accessibilityLabel === 'Record payment');
+  expect(payment).toBeDefined();
+  await act(async () => payment!.props.onPress());
+  expect(text()).not.toContain('Ask each time');
+  expect(text()).toContain('Opens Settle up, on Record payment');
+  expect(button().props.disabled).toBe(true);
+  await act(async () =>
+    host('Pressable')
+      .find((n) => n.props.accessibilityLabel === 'Maple House')!
+      .props.onPress(),
+  );
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup).toHaveBeenCalledWith({
+    kind: 'quick',
+    widgetId: 989,
+    accountId: 'alex',
+    groupId: 'maple',
+    mode: 'payment',
+  });
+  await act(async () => screen!.unmount());
+  screen = undefined;
+  await render('Quick', store.saveSetup.mock.calls[0][0]);
+  expect(
+    host('Pressable').find((n) => n.props.accessibilityLabel === 'Record payment')!.props
+      .accessibilityState.checked,
+  ).toBe(true);
+});
+
+it('Record payment with no saved Groups offers Create a Group and cannot save an Ask each time setup', async () => {
+  store.read.mockResolvedValue({
+    copy: { ...copy, savedGroups: { ...copy.savedGroups!, rows: [] } },
+    session,
+  });
+  await render('Quick');
+  await act(async () =>
+    host('Pressable')
+      .find((n) => n.props.accessibilityLabel === 'Record payment')!
+      .props.onPress(),
+  );
+  expect(text()).toContain('No Groups yet');
+  expect(textOf(button())).toBe('Create a Group');
+  expect(store.saveSetup).not.toHaveBeenCalled();
+});

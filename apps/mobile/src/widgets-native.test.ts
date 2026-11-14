@@ -186,7 +186,7 @@ async function drawn(store: ReturnType<typeof createWidgetsStore>) {
       drawTime,
     ),
     group: groupWidget(part, placedGroup, widgetDimensions('4x2'), session, drawTime),
-    quick: quickWidget(copy, placedQuick, '2x1', session),
+    quick: quickWidget(copy, placedQuick, { width: 172, height: 104 }, session),
   };
 }
 

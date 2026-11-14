@@ -56,6 +56,22 @@ it('generates provider bounds that allow four columns and two rows on the device
     expect(groupXml).toContain('android:resizeMode="horizontal|vertical"');
     expect(groupXml).toContain('android:updatePeriodMillis="0"');
     expect(groupXml).toContain('android:widgetCategory="home_screen|not_keyguard"');
+    const quickXml = readFileSync(
+      join(root, 'android/app/src/main/res/xml/widget_quick.xml'),
+      'utf8',
+    );
+    expect(manifest).toContain('android:label="Quick actions"');
+    for (const attribute of [
+      'android:targetCellWidth="2" android:targetCellHeight="1"',
+      'android:minResizeWidth="40dp" android:minResizeHeight="40dp"',
+      'android:maxResizeWidth="640dp" android:maxResizeHeight="640dp"',
+      'android:resizeMode="horizontal|vertical"',
+      'android:updatePeriodMillis="0"',
+    ])
+      expect(quickXml).toContain(attribute);
+    expect(
+      readFileSync(join(root, 'android/app/src/main/res/values/widget_balances.xml'), 'utf8'),
+    ).toContain('Add an Expense or record a payment in one tap');
     const activity = readFileSync(
       join(root, 'android/app/src/main/java/com/splitbook/app/dev/widget/GroupConfiguration.java'),
       'utf8',

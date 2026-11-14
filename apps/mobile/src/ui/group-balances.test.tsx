@@ -1968,3 +1968,110 @@ describe('a Suggested payment to a name wider than its row (#921)', () => {
     },
   );
 });
+
+it('an empty Record payment entry offers payments without selecting one, or says there is nothing to pay', () => {
+  const select = vi.fn();
+  const props = {
+    visible: true,
+    currentUserId: you,
+    today: 'Today',
+    now: at,
+    onChange: vi.fn(),
+    onLeaveField: vi.fn(),
+    onAcknowledge: vi.fn(),
+    onRecord: vi.fn(),
+    onRetry: vi.fn(),
+    onClose: vi.fn(),
+    onSelect: select,
+  };
+  const root = render(
+    <RecordPaymentSheet
+      {...props}
+      state={{
+        ...emptySettlement(),
+        widgetEntry: true,
+        status: 'ready',
+        group: group(),
+        balances: [inr],
+      }}
+    />,
+  );
+  const choice = labelled(root, 'You pay Sam Chen ₹1,060.00')[0];
+  expect(choice).toBeDefined();
+  expect(select).not.toHaveBeenCalled();
+  act(() => choice.props.onPress());
+  expect(select).toHaveBeenCalledExactlyOnceWith(you, sam, 'INR');
+  const square = render(
+    <RecordPaymentSheet
+      {...props}
+      state={{
+        ...emptySettlement(),
+        widgetEntry: true,
+        status: 'ready',
+        group: group(),
+        balances: [],
+      }}
+    />,
+  );
+  expect(text(square)).toContain('Nothing to pay');
+});
+
+it('does not replace a withdrawn chosen payment with the blank Quick actions selector', () => {
+  const root = render(
+    <RecordPaymentSheet
+      visible
+      currentUserId={you}
+      today="Today"
+      now={at}
+      state={{
+        ...emptySettlement(),
+        status: 'ready',
+        group: group(),
+        balances: [inr],
+        chosen: { paidBy: you, paidTo: sam, currency: 'INR', shown: 1060 },
+      }}
+      onChange={vi.fn()}
+      onLeaveField={vi.fn()}
+      onAcknowledge={vi.fn()}
+      onRecord={vi.fn()}
+      onRetry={vi.fn()}
+      onClose={vi.fn()}
+      onSelect={vi.fn()}
+    />,
+  );
+  expect(text(root)).not.toContain('Choose a payment');
+});
+
+it.each(['loading', 'ready'] as const)(
+  'Check payment %s never offers the widget payment list',
+  (status) => {
+    const root = render(
+      <RecordPaymentSheet
+        visible
+        currentUserId={you}
+        today="Today"
+        now={at}
+        state={{
+          ...emptySettlement(),
+          status,
+          group: group(),
+          balances: [inr],
+          message:
+            status === 'ready'
+              ? 'Nothing is waiting to be retried. Close this to see the latest balances.'
+              : null,
+        }}
+        onChange={vi.fn()}
+        onLeaveField={vi.fn()}
+        onAcknowledge={vi.fn()}
+        onRecord={vi.fn()}
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(text(root)).not.toContain('Choose a payment');
+    expect(labelled(root, 'You pay Sam Chen ₹1,060.00')).toHaveLength(0);
+    if (status === 'ready') expect(text(root)).toContain('Nothing is waiting to be retried.');
+  },
+);

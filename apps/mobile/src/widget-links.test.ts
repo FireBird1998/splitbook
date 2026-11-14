@@ -45,3 +45,12 @@ it('round trips a payment identity without amounts or names', () => {
   };
   expect(widgetLinkTarget(widgetLink(target))).toEqual(target);
 });
+
+it('round trips the blank Record payment destination without changing existing Settle up links', () => {
+  const target = { kind: 'record-payment' as const, groupId: 'b00000000000000000000001' };
+  expect(widgetLinkTarget(widgetLink(target))).toEqual(target);
+  expect(widgetLinkTarget(widgetLink({ kind: 'settle', groupId: target.groupId }))).toEqual({
+    kind: 'settle',
+    groupId: target.groupId,
+  });
+});

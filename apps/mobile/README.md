@@ -418,3 +418,12 @@ initials differ ("You pay Priya S"), so speech agrees with the avatars.
 Older copies without initials keep rendering the first letter until the next Group and
 Balances reads rewrite them. An unreadable copy falls back to the no-copy state without
 wiping setup or blocking future reads.
+
+## Quick actions widget (#1183)
+
+Quick actions keeps the `.widget.Quick` receiver and existing setups. An absent setup mode means
+Add expense; Record payment stores `mode: 'payment'` and requires a Group. Setup reads the Widget
+copy only. The pure `quickWidget(copy, setup, dimensions, session, fontScale)` view measures real
+launcher dp through the shared widget fitter; its native drawing only paints that projection.
+The `record-payment` widget destination opens an unselected Record payment entry. Choosing a
+payment then uses the app's existing checked flow; opening a widget never records a payment.
