@@ -184,7 +184,7 @@ export function overviewWidget(
         : [];
       const showStateTile =
         !normal &&
-        !['loading', 'no-groups'].includes(state) &&
+        !['loading', 'no-groups', 'no-copy'].includes(state) &&
         !(state === 'all-square' && groupRows.length) &&
         optional &&
         !level &&

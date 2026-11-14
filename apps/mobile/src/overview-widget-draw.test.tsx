@@ -420,3 +420,22 @@ it('draws one Home update prompt for an older copy without per-Group figures', (
   expect(labels(groupSection)).not.toContain('Open the Group to update');
   expect(labels(tree).filter((label) => label === 'Open to update')).toHaveLength(1);
 });
+
+it('draws Nothing saved yet as a left-aligned text block without an icon', () => {
+  vi.stubGlobal('__DEV__', false);
+  const v = overviewWidget(
+    null,
+    { kind: 'balances', widgetId: 7 },
+    { width: 360, height: 584 },
+    auth,
+    now,
+  );
+  expect(v.layout.showStateTile).toBe(false);
+  const tree = buildWidgetTree(drawOverview(v, lightTokens));
+  const message = tree.children![v.layout.sections.findIndex((s) => s.id === 'message')];
+  expect(labels(message)).toContain('Nothing saved yet');
+  expect(labels(message)).not.toContain('!');
+  expect(labels(message).join(' ')).toContain(
+    'Open Splitbook to load your balances, payments and Groups.',
+  );
+});
