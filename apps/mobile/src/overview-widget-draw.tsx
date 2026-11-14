@@ -163,6 +163,33 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
       {text(view.review, t.brand.main, f.review, true)}
     </FlexWidget>
   ) : null;
+  const draftChip = view.finishLater ? (
+    <FlexWidget
+      clickAction="OPEN_URI"
+      clickActionData={link(view.finishLater.target)}
+      accessibilityLabel={`Finish later in ${view.finishLater.groupName}`}
+      style={{
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        backgroundColor: color(t.surfaceMuted),
+        borderRadius: 16,
+      }}
+    >
+      {text(view.finishLater.label, t.textSecondary, f.review, true)}
+    </FlexWidget>
+  ) : null;
+  const waiting =
+    view.review || view.finishLater ? (
+      <FlexWidget
+        style={{
+          flexDirection: l.waitingAcross ? 'row' : 'column',
+          flexGap: l.waitingAcross ? 6 : 4,
+          alignItems: 'flex-start',
+        }}
+      >
+        {[reviewChip, draftChip].filter(Boolean)}
+      </FlexWidget>
+    ) : null;
   const note = l.footerNote ? text(l.footerNote, t.textMuted, f.small) : null;
   const leading =
     reviewChip || note ? (
@@ -175,7 +202,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
           flexGap: 4,
         }}
       >
-        {[reviewChip, note].filter(Boolean)}
+        {[waiting, note].filter(Boolean)}
       </FlexWidget>
     ) : null;
   const action = view.action ? (

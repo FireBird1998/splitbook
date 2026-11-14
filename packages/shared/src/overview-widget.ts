@@ -46,6 +46,14 @@ export function overviewWidget(
   const target: WidgetTarget = otherAccount
     ? { kind: 'setup', widgetId: setup.widgetId }
     : read.target;
+  const unfinished =
+    session.status === 'authenticated' &&
+    copy?.accountId === session.accountId &&
+    setup.reviewEnabled !== false &&
+    !read.muted &&
+    !copy.lostGroupIds?.includes(copy.finishLater?.groupId ?? '')
+      ? copy.finishLater
+      : undefined;
   const normal = state === 'normal';
   const small = size.height < 130;
   const wide = size.width >= 280;
@@ -131,6 +139,14 @@ export function overviewWidget(
       const labelFont = small ? 10 : 11;
       const bodyFont = small ? 10 : 12;
       const review = !small && optional && (!level || tall) ? read.review : null;
+      const finishLater =
+        !small && optional && (!level || (tall && level === 1)) && unfinished
+          ? {
+              label: wide ? 'Finish later' : '✎',
+              groupName: unfinished.groupName,
+              target: { kind: 'expense', groupId: unfinished.groupId } satisfies WidgetTarget,
+            }
+          : null;
       const action =
         (normal || state === 'all-square') && wide && tall && optional
           ? '＋ Add expense'
@@ -211,16 +227,23 @@ export function overviewWidget(
       const footerNote =
         !small && read.muted
           ? 'Open to update'
-          : !action && !small && showSaved && (!review || wide)
+          : !action && !small && showSaved && !finishLater && (!review || wide)
             ? acrossGroups
             : null;
       const reviewWidth = review ? text.width(review, 11) + 20 : 0;
+      const draftWidth = finishLater ? text.width(finishLater.label, 11) + 20 : 0;
+      const waitingAcross = reviewWidth + draftWidth + (reviewWidth && draftWidth ? 6 : 0) <= width;
+      const waitingWidth = waitingAcross
+        ? reviewWidth + draftWidth + (reviewWidth && draftWidth ? 6 : 0)
+        : Math.max(reviewWidth, draftWidth);
+      const waitingHeight =
+        review || finishLater
+          ? (text.line(11) + 10) * (waitingAcross || !review || !finishLater ? 1 : 2) +
+            (waitingAcross ? 0 : 4)
+          : 0;
       const noteWidth = footerNote ? text.width(footerNote, 10) : 0;
-      const leadingWidth = reviewWidth + noteWidth + (reviewWidth && noteWidth ? 8 : 0);
-      const leadingHeight = Math.max(
-        review ? text.line(11) + 10 : 0,
-        footerNote ? text.line(10) : 0,
-      );
+      const leadingWidth = waitingWidth + noteWidth + (waitingWidth && noteWidth ? 8 : 0);
+      const leadingHeight = Math.max(waitingHeight, footerNote ? text.line(10) : 0);
       const actionWidth = action
         ? Math.min(
             width,
@@ -431,6 +454,8 @@ export function overviewWidget(
         actionPaddingVertical,
         actionPaddingHorizontal,
         footerAcross,
+        waitingAcross,
+        finishLater,
         footerNote,
         privacyLines,
         titleLines,
@@ -465,6 +490,7 @@ export function overviewWidget(
     review,
     action,
     actionTarget,
+    finishLater,
     measuredPayments,
     ...geometry
   } = layout;
@@ -496,6 +522,7 @@ export function overviewWidget(
     normal && allOwe.length ? 'You owe ' + allOwe.join(' and ') : null,
     ...spokenPayments,
     read.review?.replace(SEPARATOR, ' '),
+    unfinished ? `Finish later in ${unfinished.groupName}` : null,
     read.saved,
     hidden,
     read.muted ? 'Open to update' : null,
@@ -516,6 +543,7 @@ export function overviewWidget(
     owedOverflow,
     oweOverflow,
     review: footerVisible ? review : null,
+    finishLater: footerVisible ? finishLater : null,
     action: footerVisible ? action : null,
     actionTarget,
     payments: visiblePayments,

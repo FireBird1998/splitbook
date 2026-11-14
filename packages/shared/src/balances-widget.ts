@@ -27,6 +27,8 @@ export interface WidgetCopy {
     }[];
   };
   review?: { count: number; verifiedAt: number };
+  /** Only the Group identifies this phone’s unfinished entry; never its typed facts. */
+  finishLater?: { groupId: string; groupName: string };
 }
 export type WidgetTarget =
   | 'home'

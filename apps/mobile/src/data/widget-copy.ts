@@ -1,5 +1,5 @@
 import { parseGroupListResponse, type GroupReadTag } from '@splitbook/shared/group-read';
-import { parseExpenseContext } from './expense-draft';
+import { expenseDraftChanged, parseExpenseContext } from './expense-draft';
 import { cachedRead } from './offline-cache';
 import { parseGroup, parseGroups } from './dto';
 import { widgetMonthCopy } from './widget-month-copy';
@@ -235,6 +235,45 @@ export function createWidgetCopy(
               }
             : null,
       };
+      if (process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true') {
+        // A Group's kept entry is read when its list opens, before Home next lists drafts.
+        // Prefer that current result (including absence) over Home's earlier summary.
+        const kept = snapshot.keptDraft;
+        const openGroup = snapshot.detail.data;
+        const editor = snapshot.expense;
+        const entered = editor.draft;
+        const editorGroup = editor.groupId;
+        const editorName =
+          editor.context?.group.name ??
+          snapshot.groups.data.find((g) => g.id === editorGroup)?.name;
+        const draft =
+          editorGroup &&
+          editorName &&
+          entered &&
+          !entered.original &&
+          !editor.attempt &&
+          !editor.mutation &&
+          editor.persistence === 'saved' &&
+          !editor.accessLost &&
+          ['editing', 'resume', 'blocked'].includes(editor.status) &&
+          expenseDraftChanged(entered, editor.blank)
+            ? { groupId: editorGroup, groupName: editorName }
+            : kept?.draft &&
+                !kept.draft.edit &&
+                !kept.unconfirmed &&
+                kept.groupId !== editorGroup &&
+                openGroup?.id === kept.groupId
+              ? { groupId: kept.groupId, groupName: openGroup.name }
+              : snapshot.drafts.find(
+                  (d) =>
+                    !d.expenseId &&
+                    !d.unconfirmed &&
+                    d.groupId !== openGroup?.id &&
+                    d.groupId !== editorGroup,
+                );
+        if (draft && !lost.has(draft.groupId))
+          copy.finishLater = { groupId: draft.groupId, groupName: draft.groupName };
+      }
       const count = review(snapshot);
       if (count) copy.review = count;
       const state: WidgetSession = {

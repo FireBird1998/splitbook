@@ -600,38 +600,86 @@ it('keeps short incoming labels beside their amounts when the amount fits', () =
     ['From Meera', '₹2,000.00', false],
     ['From Ravi', '€40.00', false],
   ]);
+});
 
-it.each([true, false])('shows the unfinished Group beside the optional review count (%s), including Hide amounts', (withReview) => {
-  const c = {...copy, review: withReview ? copy.review : undefined, finishLater: {groupId: 'maple', groupName: 'Maple House'}};
-  for (const hideAmounts of [false,true]) {
-    const view = overviewWidget(c, {...setup, hideAmounts}, {width:360,height:344}, auth, now);
-    expect(view.finishLater).toMatchObject({label:'Finish later',groupName:'Maple House',target:{kind:'expense',groupId:'maple'}});
-    expect(view.review).toBe(withReview ? 'To review\u00a0· 3' : null);
-    expect(view.summary).toContain('Finish later in Maple House');
-    expect(view.layout.sections.find(s => s.id === 'footer')!.height).toBeGreaterThanOrEqual(25);
-  }
-});
-it.each(sizes.flatMap(size => [1,1.3,2].map(scale => ({...size,scale}))))('fits both waiting chips at $width×$height and $scale text', ({width,height,scale}) => {
- const c = {...copy,finishLater:{groupId:'maple',groupName:'A very long Group name is never replaced'}};
- const v = overviewWidget(c,setup,{width,height,pixelRatio:2.625},auth,now,scale);
- expect(v.layout.fits).toBe(true);
- if(v.finishLater) {
-  const t = widgetText(v.layout.width,scale,v.layout.textFactor,2.625);
-  const chipHeight = t.line(11)+10;
-  const footer = v.layout.sections.find(s=>s.id==='footer')!;
-  expect(footer.height).toBeGreaterThanOrEqual(chipHeight);
-  expect(v.finishLater.groupName).toBe(c.finishLater.groupName);
- }
-});
+it.each([true, false])(
+  'shows the unfinished Group beside the optional review count (%s), including Hide amounts',
+  (withReview) => {
+    const c = {
+      ...copy,
+      review: withReview ? copy.review : undefined,
+      finishLater: { groupId: 'maple', groupName: 'Maple House' },
+    };
+    for (const hideAmounts of [false, true]) {
+      const view = overviewWidget(
+        c,
+        { ...setup, hideAmounts },
+        { width: 360, height: 344 },
+        auth,
+        now,
+      );
+      expect(view.finishLater).toMatchObject({
+        label: 'Finish later',
+        groupName: 'Maple House',
+        target: { kind: 'expense', groupId: 'maple' },
+      });
+      expect(view.review).toBe(withReview ? 'To review\u00a0· 3' : null);
+      expect(view.summary).toContain('Finish later in Maple House');
+      expect(view.layout.sections.find((s) => s.id === 'footer')!.height).toBeGreaterThanOrEqual(
+        25,
+      );
+    }
+  },
+);
+it.each(sizes.flatMap((size) => [1, 1.3, 2].map((scale) => ({ ...size, scale }))))(
+  'fits both waiting chips at $width×$height and $scale text',
+  ({ width, height, scale }) => {
+    const c = {
+      ...copy,
+      finishLater: { groupId: 'maple', groupName: 'A very long Group name is never replaced' },
+    };
+    const v = overviewWidget(c, setup, { width, height, pixelRatio: 2.625 }, auth, now, scale);
+    expect(v.layout.fits).toBe(true);
+    if (v.finishLater) {
+      const t = widgetText(v.layout.width, scale, v.layout.textFactor, 2.625);
+      const chipHeight = t.line(11) + 10;
+      const footer = v.layout.sections.find((s) => s.id === 'footer')!;
+      expect(footer.height).toBeGreaterThanOrEqual(chipHeight);
+      expect(v.finishLater.groupName).toBe(c.finishLater.groupName);
+    }
+  },
+);
 it('keeps a pencil on narrow tall sizes, and hides the draft with Drafts off, old Home, another account or lost access', () => {
- const c = {...copy,finishLater:{groupId:'maple',groupName:'Maple House'}};
- const view = overviewWidget(c,setup,{width:172,height:464},auth,now);
- expect(view.finishLater?.label).toBe('✎');
- expect(overviewWidget(c,{...setup,reviewEnabled:false},{width:360,height:464},auth,now).finishLater).toBeNull();
- expect(overviewWidget(c,setup,{width:360,height:464},auth,now+86400001).finishLater).toBeNull();
- expect(overviewWidget({...c,accountId:'other'},setup,{width:360,height:464},auth,now).finishLater).toBeNull();
- expect(overviewWidget({...c,lostGroupIds:['maple']},setup,{width:360,height:464},auth,now).finishLater).toBeNull();
- expect(overviewWidget(copy,setup,{width:360,height:464},auth,now).finishLater).toBeNull();
+  const c = { ...copy, finishLater: { groupId: 'maple', groupName: 'Maple House' } };
+  const view = overviewWidget(c, setup, { width: 172, height: 464 }, auth, now);
+  expect(view.finishLater?.label).toBe('✎');
+  expect(
+    overviewWidget(c, { ...setup, reviewEnabled: false }, { width: 360, height: 464 }, auth, now)
+      .finishLater,
+  ).toBeNull();
+  expect(
+    overviewWidget(c, setup, { width: 360, height: 464 }, auth, now + 86400001).finishLater,
+  ).toBeNull();
+  expect(
+    overviewWidget({ ...c, accountId: 'other' }, setup, { width: 360, height: 464 }, auth, now)
+      .finishLater,
+  ).toBeNull();
+  expect(
+    overviewWidget({ ...c, lostGroupIds: ['maple'] }, setup, { width: 360, height: 464 }, auth, now)
+      .finishLater,
+  ).toBeNull();
+  expect(
+    overviewWidget(copy, setup, { width: 360, height: 464 }, auth, now).finishLater,
+  ).toBeNull();
+});
+
+it('keeps two payments with both waiting chips on the default board size', () => {
+  const c = { ...paymentCopy, finishLater: { groupId: 'maple', groupName: 'Maple House' } };
+  const v = overviewWidget(c, setup, { width: 360, height: 344, pixelRatio: 2.625 }, auth, now);
+  expect(v.payments).toHaveLength(2);
+  expect(v.review).toBe('To review\u00a0· 3');
+  expect(v.finishLater?.label).toBe('Finish later');
+  expect(v.action).toBe('＋ Add expense');
 });
 
 it.each([
