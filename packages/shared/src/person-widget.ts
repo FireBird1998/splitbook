@@ -11,7 +11,7 @@ import {
   type WidgetSection,
 } from './widget-sizing';
 import { widgetTextLevel } from './widget-layout';
-import { widgetPayments, type WidgetPayment } from './widget-payments';
+import { widgetPayments, widgetPaymentVerifiedAt, type WidgetPayment } from './widget-payments';
 import { widgetPeople, type WidgetPerson } from './widget-people';
 import { counted } from './separator';
 import { widgetSummary } from './widget-accessibility';
@@ -113,7 +113,7 @@ function readPerson(
   const times = [
     ...(selected?.groups.map((group) => group.verifiedAt) ?? []),
     ...(selected?.groups.flatMap((group) =>
-      parts[group.id] ? [parts[group.id].balancesVerifiedAt] : [],
+      parts[group.id] ? [widgetPaymentVerifiedAt(parts[group.id])] : [],
     ) ?? []),
   ];
   const age = times.length ? Math.min(...times) : null;

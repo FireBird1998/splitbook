@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { widgetPeople } from './widget-people';
 import { personWidget, type PersonWidgetSetup } from './person-widget';
 import type { WidgetCopy, WidgetSession } from './balances-widget';
-import type { WidgetGroupPart } from './group-widget';
+import { groupWidget, type WidgetGroupPart } from './group-widget';
 const now = Date.parse('2026-11-13T04:11:00Z');
 const person = { id: 'sam', firstName: 'Sam', initials: 'SC' };
 const setup: PersonWidgetSetup = { kind: 'person', widgetId: 88, accountId: 'alex', person };
@@ -488,4 +488,15 @@ it('shows the no-shared choice without a name after its setup labels were purged
     action: 'Choose another',
   });
   expect(result.summary).not.toMatch(/null|undefined|Sam/);
+});
+
+it('ages Person figures by the older Group read even when membership and Balances are fresh', () => {
+  const olderGroup: WidgetCopy = {
+    ...copy,
+    groups: {
+      ...copy.groups,
+      maple: { ...maple, verifiedAt: now - 25 * 3600000 },
+    },
+  };
+  expect(view(olderGroup)).toMatchObject({ muted: true, update: 'Open to update' });
 });
