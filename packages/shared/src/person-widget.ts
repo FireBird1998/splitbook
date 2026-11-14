@@ -200,7 +200,7 @@ function projectPerson(
       payment,
       groupName: payment.groupName,
     })),
-    ...(size.height >= 300 && !level
+    ...(size.height >= 300 && level < 2
       ? read.squareGroups.map((group) => ({ kind: 'square' as const, groupName: group.name }))
       : []),
   ];
@@ -317,7 +317,7 @@ function projectPerson(
                 rowHeight,
                 inset: compact ? 0 : 8,
                 moreHeight: text.line(10) + 4,
-                grow: true,
+                grow: 'when-complete' as const,
               },
             ]
           : []),
