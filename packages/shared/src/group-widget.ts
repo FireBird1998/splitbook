@@ -1,4 +1,8 @@
-import { groupWidgetPayments, spokenWidgetPayments } from './widget-payments';
+import {
+  widgetPaymentVerifiedAt,
+  groupWidgetPayments,
+  spokenWidgetPayments,
+} from './widget-payments';
 import {
   fitWidgetLayout,
   fitWidgetSections,
@@ -228,7 +232,7 @@ function groupWidgetView(
     : groupWidgetPayments({ ...part, currencies }, setup.accountId);
   const bucket = currencies[0];
   const allSquare = currencies.every((bucket) => bucket.balanceMinor === 0);
-  const age = Math.min(part.verifiedAt, part.balancesVerifiedAt),
+  const age = widgetPaymentVerifiedAt(part),
     muted = now - age > 86400000;
   const balanceText = allSquare
     ? 'You’re all square'

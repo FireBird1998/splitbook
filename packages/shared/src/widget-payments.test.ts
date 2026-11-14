@@ -69,7 +69,7 @@ it('orders pay before paid, then Home currencies, and amounts only within their 
     groupName: 'Maple House',
     firstName: 'Sam',
     initials: 'SC',
-    verifiedAt: now,
+    verifiedAt: now - 1000,
     target: {
       kind: 'settle',
       groupId: 'maple',
@@ -96,6 +96,20 @@ it('keeps a Group read time independently of Home and never nets opposite direct
   const rows = widgetPayments(c, 'alex');
   expect(rows).toHaveLength(2);
   expect(rows.map((r) => r.amountMinor)).toEqual([10000, 10000]);
-  expect(rows.map((r) => r.verifiedAt)).toEqual([now, now]);
+  expect(rows.map((r) => r.verifiedAt)).toEqual([now - 1000, now - 1000]);
   expect(c.home!.verifiedAt).toBe(now - 5000);
 });
+
+it.each(['Group', 'Balances'] as const)(
+  'dates the payment by the older read when %s is old',
+  (old) => {
+    const part = {
+      ...maple,
+      verifiedAt: old === 'Group' ? now - 86400001 : now,
+      balancesVerifiedAt: old === 'Balances' ? now - 86400001 : now,
+    };
+    expect(widgetPayments({ ...copy, groups: { maple: part } }, 'alex')[0].verifiedAt).toBe(
+      now - 86400001,
+    );
+  },
+);

@@ -3,6 +3,11 @@ import { toMajorAmount } from './exact-money';
 import type { WidgetGroupPart } from './group-widget';
 import type { WidgetCopy, WidgetTarget } from './balances-widget';
 
+/** A payment is only as current as the older of its Group and Balances reads. */
+export function widgetPaymentVerifiedAt(part: WidgetGroupPart) {
+  return Math.min(part.verifiedAt, part.balancesVerifiedAt);
+}
+
 /** One reading of the saved Suggested payments, shared by Group and Overview. */
 export function groupWidgetPayments(part: WidgetGroupPart, accountId: string) {
   return part.currencies.flatMap((bucket) =>
@@ -41,7 +46,7 @@ export function widgetPayments(copy: WidgetCopy | null, accountId: string) {
         ...row,
         groupId: group.id,
         groupName: group.name,
-        verifiedAt: group.balancesVerifiedAt,
+        verifiedAt: widgetPaymentVerifiedAt(group),
         target: {
           kind: 'settle',
           groupId: group.id,
