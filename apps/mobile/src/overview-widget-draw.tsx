@@ -136,7 +136,7 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
         <FlexWidget style={{ flex: 1, flexGap: 8 }}>
           {[
             <FlexWidget key="title">{lines(l.titleLines, t.text, f.title, true)}</FlexWidget>,
-            l.descriptionLines.length ? (
+            l.messageBesideTile && l.descriptionLines.length ? (
               <FlexWidget key="description">
                 {lines(l.descriptionLines, t.textSecondary, f.body)}
               </FlexWidget>
@@ -144,6 +144,9 @@ export function drawOverview(view: OverviewWidgetView, t: SemanticTokens) {
           ].filter(Boolean)}
         </FlexWidget>
       </FlexWidget>
+      {!l.messageBesideTile && l.descriptionLines.length ? (
+        <FlexWidget>{lines(l.descriptionLines, t.textSecondary, f.body)}</FlexWidget>
+      ) : null}
     </FlexWidget>
   );
   const reviewChip = view.review ? (

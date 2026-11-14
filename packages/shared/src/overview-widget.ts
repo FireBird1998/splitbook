@@ -140,10 +140,21 @@ export function overviewWidget(
         : [];
       const showStateTile =
         !normal && !['loading', 'no-groups'].includes(state) && optional && !level && !small;
+      const messageBesideTile = state === 'signed-out' || state === 'expired';
       const messageWidth = width - (showStateTile ? 60 : 0);
       const titleLines = title ? text.words(title, small ? 10 : 15, messageWidth) : [];
       const descriptionLines =
-        description && optional && level < 2 ? text.words(description, bodyFont, messageWidth) : [];
+        description && optional && level < 2
+          ? text.words(description, bodyFont, messageBesideTile ? messageWidth : width)
+          : [];
+      const titleHeight = titleLines.length * text.line(small ? 10 : 15);
+      const descriptionHeight = descriptionLines.length
+        ? 8 + descriptionLines.length * text.line(bodyFont)
+        : 0;
+      const tileHeight = showStateTile ? 48 : 0;
+      const messageHeight = messageBesideTile
+        ? Math.max(titleHeight + descriptionHeight, tileHeight)
+        : Math.max(titleHeight, tileHeight) + descriptionHeight;
       const secondary =
         small && normal && !hidden && owed.length && owe.length ? `You owe ${owe[0]}` : null;
       const secondaryFont = text.fit(secondary ?? '', level ? 9 : 12, width);
@@ -231,13 +242,7 @@ export function overviewWidget(
               {
                 id: 'message',
                 rows: 1,
-                rowHeight: Math.max(
-                  titleLines.length * text.line(small ? 10 : 15) +
-                    (descriptionLines.length
-                      ? 8 + descriptionLines.length * text.line(bodyFont)
-                      : 0),
-                  showStateTile ? 48 : 0,
-                ),
+                rowHeight: messageHeight,
                 required: true,
               },
             ]
@@ -296,6 +301,7 @@ export function overviewWidget(
         showHeader,
         showSaved,
         showStateTile,
+        messageBesideTile,
         review,
         action,
         actionTarget,

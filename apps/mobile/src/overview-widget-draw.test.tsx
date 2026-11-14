@@ -189,3 +189,38 @@ it('fits the whole ordinary native footer with To review and Add expense at 130 
     v.layout.sections.find((s) => s.id === 'footer')!.height,
   );
 });
+
+it.each(['all-square', 'no-copy', 'other-account'] as const)(
+  'keeps the existing sentence position for %s',
+  (state) => {
+    vi.stubGlobal('__DEV__', false);
+    const saved =
+      state === 'no-copy'
+        ? null
+        : state === 'other-account'
+          ? { ...copy, accountId: 'sam' }
+          : { ...copy, home: { ...copy.home!, currencies: [] } };
+    const v = overviewWidget(
+      saved,
+      { kind: 'balances', widgetId: 7 },
+      { width: 360, height: 584 },
+      auth,
+      now,
+    );
+    const tree = buildWidgetTree(drawOverview(v, lightTokens));
+    const message = tree.children![v.layout.sections.findIndex((s) => s.id === 'message')];
+    const descendants = (node: WidgetTree): WidgetTree[] => [
+      node,
+      ...(node.children ?? []).flatMap(descendants),
+    ];
+    const horizontal = descendants(message).find(
+      (node) =>
+        (node.props as { orientation?: string }).orientation === 'HORIZONTAL' &&
+        labels(node).includes(v.title!),
+    )!;
+    for (const line of v.layout.descriptionLines) {
+      expect(labels(message)).toContain(line);
+      expect(labels(horizontal.children!.at(-1)!)).not.toContain(line);
+    }
+  },
+);
