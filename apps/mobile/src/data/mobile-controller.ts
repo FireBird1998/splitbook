@@ -195,6 +195,7 @@ import {
   RequestError,
   storageMessage,
   groupRefused,
+  groupArchived,
   singleFlight,
   Superseded,
   type RequestOptions,
@@ -2201,9 +2202,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       : withdrawn;
   };
 
-  const evictGroupContent = (id: string, status: number) => {
+  const evictGroupContent = (id: string, status: number, archived = false) => {
     if (persistentDrafts) toReviewQueries.lose(id);
-    const message = groupRefused(status);
+    const message = archived ? groupArchived : groupRefused(status);
     const expense =
       snapshot.expense.groupId === id
         ? {
@@ -2432,7 +2433,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // The Group leaves the screen in the publish that shows Home's queries reading again.
     homeQueries.quietly(() => {
       invalidateReads(...scopes.filter((scope) => listed || scope !== 'groups'));
-      evictGroupContent(groupId, status);
+      evictGroupContent(groupId, status, archivedWidget);
     });
     const lease = accountStorage(),
       time = now();

@@ -959,8 +959,10 @@ it('keeps the last Group balance as final when an authoritative read says it is 
     title: 'Group archived',
     subtitle: 'Choose another',
   });
-  // The app's existing archived-Group refusal is unchanged.
   expect(c.getSnapshot().detail.data).toBeNull();
+  expect(c.getSnapshot().detail.message).toBe(
+    'This Group was archived, so nothing more can be saved in it.',
+  );
 });
 
 it('stores first names and two initials so members with the same first name remain distinct', async () => {
@@ -2943,3 +2945,21 @@ it('retires a departed person’s lines from a fresh Group read even when the ol
     [],
   );
 });
+
+it.each(['open', 'refresh', 'members'] as const)(
+  'explains the archived reason on the %s Group screen, rather than a membership loss',
+  async (source) => {
+    const f = fixture(),
+      c = f.make();
+    await c.signIn('alex');
+    await c.openGroup(groupId);
+    if (source === 'members') c.openMembers();
+    f.archive();
+    if (source === 'open') await c.openGroup(groupId, false);
+    else await c.refresh('pull');
+    expect(c.getSnapshot().detail.data).toBeNull();
+    expect(c.getSnapshot().detail.message).toBe(
+      'This Group was archived, so nothing more can be saved in it.',
+    );
+  },
+);
