@@ -8,7 +8,7 @@ export default function HeaderSceneThumbnail({ scene }: { scene: GroupHeader['sc
       accessible={false}
       importantForAccessibility="no-hide-descendants"
       source={{ uri: sceneThumbnails[scene] }}
-      resizeMode="cover"
+      resizeMode="contain"
       style={{ width: '100%', height: 64, borderRadius: 8 }}
     />
   );
