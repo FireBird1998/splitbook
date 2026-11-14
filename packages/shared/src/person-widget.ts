@@ -278,6 +278,7 @@ function projectPerson(
       const stateTileSize = read.state === 'all-square' ? 22 : 48;
       const messageGap = read.state === 'all-square' ? 8 : 12;
       const separateDescription = read.state === 'all-square' && size.height < 300;
+      const centerMessage = separateDescription || (read.state === 'no-copy' && size.height < 300);
       const messageWidth = width - (showStateTile ? stateTileSize + messageGap : 0);
       const titleLines = read.title ? text.words(read.title, titleFont, messageWidth) : [];
       const descriptionLines =
@@ -289,7 +290,7 @@ function projectPerson(
       const privacyLines = showPrivacy ? text.words(read.hidden!, 10, width - 18) : [];
       const sections: WidgetSection[] = [
         ...(read.name ? [{ id: 'header', rows: 1, rowHeight: headerHeight, required: true }] : []),
-        ...(separateDescription
+        ...(centerMessage
           ? [{ id: 'message-before', rows: 1, rowHeight: 0, required: true, grow: true }]
           : []),
         ...(read.title || descriptionLines.length
@@ -334,8 +335,8 @@ function projectPerson(
           rows: 1,
           rowHeight: 0,
           required: true,
-          grow: separateDescription,
-          fallbackGrow: !separateDescription,
+          grow: centerMessage,
+          fallbackGrow: !centerMessage,
         },
         ...(separateDescription && descriptionLines.length
           ? [

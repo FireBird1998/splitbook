@@ -556,3 +556,14 @@ it('projects a warning tile for no shared Group while keeping the established st
   expect(result.layout).toMatchObject({ stateIcon: 'warning' });
   expect(result.action).toBe('Choose another');
 });
+
+it('centres the no-copy sentence below the Person header in 4x2', () => {
+  const result = view(null),
+    sections = result.layout.sections;
+  const before = sections.find((s) => s.id === 'message-before')!,
+    after = sections.find((s) => s.id === 'space')!;
+  expect(before?.height).toBeGreaterThan(0);
+  expect(Math.abs(before.height - after.height)).toBeLessThanOrEqual(1);
+  expect(result.layout.descriptionLines.join(' ')).toContain('This phone has no saved copy');
+  expect(result.layout.fits).toBe(true);
+});
