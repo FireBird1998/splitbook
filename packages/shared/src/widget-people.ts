@@ -1,4 +1,3 @@
-import { widgetGroupWasDropped } from './widget-membership';
 import type { WidgetCopy } from './balances-widget';
 
 export interface WidgetPerson {
@@ -24,7 +23,6 @@ export function widgetPeople(copy: WidgetCopy | null, accountId: string) {
     if (
       !group ||
       group.archived ||
-      widgetGroupWasDropped(copy, id) ||
       copy.groups?.[id]?.archived ||
       copy.lostGroupIds?.includes(id) ||
       !Array.isArray(group.people) ||

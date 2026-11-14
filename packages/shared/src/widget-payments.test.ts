@@ -114,7 +114,7 @@ it.each(['Group', 'Balances'] as const)(
   },
 );
 
-it('retires omitted Groups from every payment and Quick action without waiting for a refusal', async () => {
+it('keeps payments and Quick actions for omitted Groups until a confirmed refusal', async () => {
   const { quickWidget } = await import('./quick-widget');
   const { widgetGroups } = await import('./widget-groups');
   const c: WidgetCopy = {
@@ -122,7 +122,13 @@ it('retires omitted Groups from every payment and Quick action without waiting f
     savedGroups: { verifiedAt: now, rows: [] },
     tags: { maple: { verifiedAt: now, rows: [{ id: 'food', name: 'Food' }] } },
   };
-  expect(widgetPayments(c, 'alex')).toEqual([]);
+  expect(widgetPayments(c, 'alex').map((p) => p.groupId)).toEqual([
+    'goa',
+    'maple',
+    'goa',
+    'goa',
+    'kerala',
+  ]);
   expect(widgetGroups(c, 'alex')).toEqual([]);
   const quick = quickWidget(
     c,
@@ -130,9 +136,9 @@ it('retires omitted Groups from every payment and Quick action without waiting f
     { width: 360, height: 224 },
     { status: 'authenticated', accountId: 'alex', loading: false },
   );
-  expect(quick.state).toBe('lost-access');
-  expect(quick.shortcuts).toBeNull();
-  expect(quick.summary).not.toMatch(/Maple|Food/);
+  expect(quick.state).toBe('normal');
+  expect(quick.shortcuts).not.toBeNull();
+  expect(quick.summary).toContain('Maple House');
 });
 
 it('keeps newer own parts against an older omitted list and preserves archived final Group reads', async () => {

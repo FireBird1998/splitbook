@@ -1,4 +1,3 @@
-import { widgetGroupWasDropped } from './widget-membership';
 import { formatCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
 import type { WidgetGroupPart } from './group-widget';
@@ -41,10 +40,7 @@ export function groupWidgetPayments(part: WidgetGroupPart, accountId: string) {
 export function widgetPayments(copy: WidgetCopy | null, accountId: string) {
   if (!copy || copy.accountId !== accountId) return [];
   const rows = Object.values(copy.groups ?? {})
-    .filter(
-      (g) =>
-        !g.archived && !copy.lostGroupIds?.includes(g.id) && !widgetGroupWasDropped(copy, g.id),
-    )
+    .filter((g) => !g.archived && !copy.lostGroupIds?.includes(g.id))
     .flatMap((group) =>
       groupWidgetPayments(group, accountId).map((row) => ({
         ...row,
