@@ -100,10 +100,12 @@ smaller (32.19 MB against 32.24 MB) with one native library fewer. Removing
 
 ## In-scene movement, measured (2026-11-15)
 
-Same emulator and build type. The host was busy during this run (a second
-emulator held a core), so the unchanged scene measured far below the table
-above. The two builds were therefore alternated on Mountain village by day, the
-scene with the most parts (61 on its main island), two runs each:
+Same emulator and build type, but on an unattended Mac (no user input for 45
+minutes, a second emulator open). There the unchanged scene itself drew about
+33 frames a second, far below the table above, at a host load of 2 to 3 as well
+as at 7; the cause was not established. The two builds were therefore alternated
+on Mountain village by day, the scene with the most parts (61 on its main
+island), two runs each, and again in a second session with the same result:
 
 | Build                  | Run       | Frames   | Janky  | p50       | p90         |
 | ---------------------- | --------- | -------- | ------ | --------- | ----------- |
@@ -113,8 +115,9 @@ scene with the most parts (61 on its main island), two runs each:
 | With in-scene movement | 16 swipes | 289, 241 | 22%    | 34, 36 ms | 69, 121 ms  |
 
 In-scene movement is no slower than the scene without it under the same load.
-The absolute numbers are the busy host's, not the app's: repeat the first
-table's runs on a quiet host before quoting a frame rate for this version.
+The absolute numbers belong to that session, not the app: repeat the first
+table's runs with someone at the Mac before quoting a frame rate for this
+version.
 Remove animations leaves no changed pixel between two captures, and the app in
 the background draws no frame. The release APK grew from 30.46 MB to 30.81 MB.
 
