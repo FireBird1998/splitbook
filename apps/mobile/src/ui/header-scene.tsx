@@ -157,7 +157,7 @@ export function HeaderSceneCard({ group, today }: { group: MobileGroup; today: s
                         : 'transparent',
                 }}
               />
-              <CompactText variant="small">{index + 1}</CompactText>
+              <CompactText variant="small">{Number(day.slice(-2))}</CompactText>
             </View>
           ))}
           <CompactText variant="small" tone="secondary">
