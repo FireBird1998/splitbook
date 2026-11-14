@@ -299,7 +299,6 @@ export function overviewWidget(
         actionWidth,
         actionPaddingVertical,
         actionPaddingHorizontal,
-        actionAlign: 'right' as const,
         footerAcross,
         footerNote,
         privacyLines,

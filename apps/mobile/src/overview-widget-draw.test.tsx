@@ -66,7 +66,7 @@ it.each([
       expect(labels(tree)).not.toContain('₹2,400.00');
   },
 );
-function minimumHeight(tree: WidgetTree): number {
+function minimumHeight(tree: WidgetTree, scale = 1): number {
   const p = tree.props as {
     text?: string;
     fontSize?: number;
@@ -74,10 +74,10 @@ function minimumHeight(tree: WidgetTree): number {
     separator?: { size: number };
     padding?: { top: number; bottom: number };
   };
-  const heights = (tree.children ?? []).map(minimumHeight);
+  const heights = (tree.children ?? []).map((child) => minimumHeight(child, scale));
   return (
     (p.text
-      ? Math.ceil((p.fontSize ?? 12) * 1.3)
+      ? Math.ceil((p.fontSize ?? 12) * scale * 1.3)
       : p.orientation === 'HORIZONTAL'
         ? Math.max(0, ...heights)
         : heights.reduce((sum, h) => sum + h, 0) +
@@ -99,9 +99,13 @@ it('keeps wrapped message lines in the measured small message block', () => {
   expect(minimumHeight(tree.children![0])).toBeLessThanOrEqual(view.layout.sections[0].height);
 });
 
-it.each(['signed-out', 'expired'] as const)(
-  'fits the entire native %s button within its reserved footer',
-  (status) => {
+it.each(
+  (['signed-out', 'expired'] as const).flatMap((status) =>
+    [1, 1.3, 2].map((scale) => ({ status, scale })),
+  ),
+)(
+  'fits the entire native $status button at $scale text within its reserved footer',
+  ({ status, scale }) => {
     vi.stubGlobal('__DEV__', false);
     const view = overviewWidget(
       copy,
@@ -109,9 +113,12 @@ it.each(['signed-out', 'expired'] as const)(
       { width: 360, height: 584 },
       { status },
       now,
+      scale,
     );
     const tree = buildWidgetTree(drawOverview(view, lightTokens));
     const i = view.layout.sections.findIndex((s) => s.id === 'footer');
-    expect(minimumHeight(tree.children![i])).toBeLessThanOrEqual(view.layout.sections[i].height);
+    expect(minimumHeight(tree.children![i], scale)).toBeLessThanOrEqual(
+      view.layout.sections[i].height,
+    );
   },
 );

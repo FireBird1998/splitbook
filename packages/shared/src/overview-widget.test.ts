@@ -313,6 +313,5 @@ it.each(['signed-out', 'expired', 'no-groups'] as const)(
       0,
     );
     expect(v.layout.sections.at(-1)?.id).toBe('footer');
-    expect(v.layout.actionAlign).toBe('right');
   },
 );
