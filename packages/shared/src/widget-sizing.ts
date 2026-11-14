@@ -221,7 +221,12 @@ function createWidgetText(width: number, scale = 1, factor = 1, pixelRatio = 1) 
     words: (value: string, base: number, room = width) => {
       const result: string[] = [];
       // A separator belongs to the following word, never stranded at a line end.
-      const words = value.trim().split(/\s+/).filter(Boolean);
+      // Counts and no-break separators stay joined; only breakable whitespace splits words.
+      const words = value
+        .trim()
+        .replace(/\u00a0(?=·)/g, ' ')
+        .split(/[ \t\r\n]+/)
+        .filter(Boolean);
       for (let i = 0; i < words.length; i++) {
         const word = words[i] === '·' && words[i + 1] ? words[i] + ' ' + words[++i] : words[i];
         const previous = result.at(-1);
@@ -229,7 +234,8 @@ function createWidgetText(width: number, scale = 1, factor = 1, pixelRatio = 1) 
           result[result.length - 1] = previous + ' ' + word;
         else result.push(word);
       }
-      return result;
+      // Keep the existing output-space convention after choosing the line boundaries.
+      return result.map((line) => line.replaceAll('\u00a0', ' '));
     },
   };
   return { text, narrowing: () => narrowing };

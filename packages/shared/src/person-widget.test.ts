@@ -276,6 +276,7 @@ it('takes the chosen name and initials from the copy when setup keeps only the i
 it('ignores people, lines and all-square rows omitted by a same-age or newer verified list', () => {
   const dropped: WidgetCopy = { ...copy, savedGroups: { verifiedAt: now, rows: [] } };
   expect(widgetPeople(dropped, 'alex')).toEqual([]);
+  expect(view(dropped).state).toBe('no-shared-group');
   expect(view(dropped).payments).toEqual([]);
   expect(view(dropped, { width: 360, height: 344 }).squareGroups).toEqual([]);
 });
@@ -325,4 +326,166 @@ it('keeps a Group read newer than an omitted list, including a newer Balances pa
     savedGroups: { verifiedAt: now, rows: [] },
   };
   expect(view(newer).payments.map((p) => p.groupId)).toEqual(['maple']);
+});
+
+it('is all square only when every shared Group has a saved Balances part with nothing suggested with this person', () => {
+  const clear = {
+    ...copy,
+    groups: Object.fromEntries(
+      Object.entries(copy.groups!).map(([id, g]) => [
+        id,
+        { ...g, currencies: g.currencies.map((bucket) => ({ ...bucket, payments: [] })) },
+      ]),
+    ),
+  };
+  const square = view(clear);
+  expect(square.state).toBe('all-square');
+  expect(square.title).toBe('All square with Sam');
+  expect(square.payments).toEqual([]);
+  expect(square.summary).toContain('Nothing is suggested either way');
+  expect(view({ ...clear, groups: { maple: clear.groups.maple } }).state).toBe('no-copy');
+});
+it('removes stale lines when no Group is shared and offers this widget’s setup', () => {
+  const gone = view({ ...copy, groupPeople: {}, savedGroups: { verifiedAt: now, rows: [] } });
+  expect(gone.state).toBe('no-shared-group');
+  expect(gone.title).toBe('No shared Group with Sam');
+  expect(gone.payments).toEqual([]);
+  expect(gone.rows).toEqual([]);
+  expect(gone.action).toBe('Choose another');
+  expect(gone.target).toEqual({ kind: 'setup', widgetId: 88 });
+});
+it('hides the person, initials, currencies and amounts, counting distinct Groups each way even with two currencies', () => {
+  const data = {
+    ...copy,
+    groups: {
+      ...copy.groups,
+      maple: {
+        ...maple,
+        currencies: [
+          ...maple.currencies,
+          ...group('maple', 'Maple House', 'JPY', false, 42000).currencies,
+        ],
+      },
+    },
+  };
+  const hidden = personWidget(
+    data,
+    { ...setup, hideAmounts: true },
+    { width: 360, height: 224 },
+    auth,
+    now,
+  );
+  expect(hidden.name).toBe('One person');
+  expect(hidden.initials).toBeNull();
+  expect(hidden.payments).toEqual([]);
+  expect(hidden.hiddenCounts).toEqual(['You pay in 1\u00a0Group', 'Pays you in 1\u00a0Group']);
+  expect(hidden.summary).toContain('Amounts and names hidden');
+  expect(JSON.stringify(hidden)).not.toMatch(/Sam|SC|₹|€|¥|INR|EUR|JPY|Maple|Lisbon/);
+});
+it('omits refused and archived Groups, including when their old people and payment rows remain on disk', () => {
+  const refused = view({ ...copy, lostGroupIds: ['maple'] });
+  expect(refused.payments.map((row) => row.groupName)).toEqual(['Lisbon & Tokyo']);
+  const archived = view({
+    ...copy,
+    groups: { ...copy.groups, maple: { ...maple, archived: true } },
+  });
+  expect(archived.payments.map((row) => row.groupName)).toEqual(['Lisbon & Tokyo']);
+  expect(archived.groupsLabel).toBe('1\u00a0Group together');
+});
+
+it('keeps the age of a zero-payment Balances part instead of presenting its absence of suggestions as fresh', () => {
+  const clear = {
+    ...copy,
+    groups: Object.fromEntries(
+      Object.entries(copy.groups!).map(([id, g]) => [
+        id,
+        {
+          ...g,
+          balancesVerifiedAt: now - 2 * 86400000,
+          currencies: g.currencies.map((bucket) => ({ ...bucket, payments: [] })),
+        },
+      ]),
+    ),
+  };
+  expect(view(clear)).toMatchObject({ state: 'all-square', muted: true, update: 'Open to update' });
+});
+
+it('fits every standing state and hidden counts across real sizes and text scales, with messages kept in one fixed block', () => {
+  const square = {
+    ...copy,
+    groups: Object.fromEntries(
+      Object.entries(copy.groups!).map(([id, g]) => [id, { ...g, currencies: [] }]),
+    ),
+  };
+  const none = { ...copy, groupPeople: {}, savedGroups: { verifiedAt: now, rows: [] } };
+  for (const width of [172, 220, 266, 360, 440, 640])
+    for (const height of [224, 284, 344, 464, 584, 640])
+      for (const scale of [1, 1.3, 2])
+        for (const [data, hidden] of [
+          [copy, true],
+          [square, false],
+          [square, true],
+          [none, false],
+          [none, true],
+          [null, false],
+          [null, true],
+        ] as const) {
+          const result = personWidget(
+              data,
+              { ...setup, hideAmounts: hidden },
+              { width, height, pixelRatio: 2.625 },
+              auth,
+              now,
+              scale,
+            ),
+            l = result.layout;
+          expect(l.fits, `${result.state} ${width}×${height} at ${scale}, hidden ${hidden}`).toBe(
+            true,
+          );
+          expect(
+            l.sections.reduce((n, s) => n + s.height, 0) +
+              Math.max(0, l.sections.length - 1) * l.gap +
+              2 * l.padding,
+          ).toBeLessThanOrEqual(height + 0.001);
+          if (hidden) {
+            expect(result.summary).not.toMatch(/Sam|SC|₹|€|Maple|Lisbon/);
+            expect(result.payments).toEqual([]);
+          }
+          if (result.more?.startsWith('+')) expect(result.rows.length).toBeGreaterThan(0);
+          if (result.layout.sections.some((s) => s.id === 'message'))
+            expect(l.sections.find((s) => s.id === 'space')?.height).toBeGreaterThanOrEqual(0);
+        }
+});
+
+it('agrees with the Group widget on the exact Suggested payment', () => {
+  const source = groupWidget(
+    maple,
+    { kind: 'group', widgetId: 7, accountId: 'alex', groupId: 'maple' },
+    { width: 360, height: 224 },
+    auth,
+    now,
+  );
+  const filtered = view().payments.filter((row) => row.groupId === 'maple');
+  expect(filtered.map((row) => [row.label, row.amount, row.amountMinor, row.currency])).toEqual(
+    source.payments.map((row) => [row.label, row.amount, 42000, row.currency]),
+  );
+});
+
+it('shows the no-shared choice without a name after its setup labels were purged', () => {
+  const result = personWidget(
+    { ...copy, groupPeople: {}, savedGroups: { verifiedAt: now, rows: [] } },
+    { ...setup, person: { id: person.id } },
+    { width: 360, height: 224 },
+    auth,
+    now,
+  );
+  expect(result).toMatchObject({
+    state: 'no-shared-group',
+    title: 'No shared Group',
+    name: null,
+    initials: null,
+    payments: [],
+    action: 'Choose another',
+  });
+  expect(result.summary).not.toMatch(/null|undefined|Sam/);
 });

@@ -701,3 +701,35 @@ it('rechecks saved membership when confirming Person setup and refuses a person 
   expect(text()).toContain('Choose a saved person for this account.');
   expect(text()).not.toContain('Sam');
 });
+
+it('keeps the Person Hide amounts choice through reconfigure and saves it with the selected person', async () => {
+  const person = { id: 'sam', firstName: 'Sam', initials: 'SC' };
+  store.read.mockResolvedValue({
+    copy: {
+      ...copy,
+      groupPeople: {
+        maple: { name: 'Maple House', archived: false, verifiedAt: 1, people: [person] },
+      },
+    },
+    session,
+  });
+  await render('Person', {
+    kind: 'person',
+    widgetId: 989,
+    accountId: 'alex',
+    person,
+    hideAmounts: true,
+  });
+  const control = host('Switch').find((n) => n.props.accessibilityLabel === 'Hide amounts')!;
+  expect(control.props.value).toBe(true);
+  expect(text()).toContain('Counts only: no name or amounts');
+  await act(async () => control.props.onValueChange(false));
+  await act(async () => button().props.onPress());
+  expect(store.saveSetup).toHaveBeenCalledExactlyOnceWith({
+    kind: 'person',
+    widgetId: 989,
+    accountId: 'alex',
+    person,
+    hideAmounts: false,
+  });
+});
