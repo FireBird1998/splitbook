@@ -93,8 +93,13 @@ export function spritePlans(scene: HeaderSceneArt): SpritePlan[] {
         seconds,
         svg: frame(defs, parts.map((part) => vectorSvg(lit(part))).join('')),
       });
+    // The main island is the last thing drawn in its layer. Anything else there (Beach's small
+    // neighbour) is its own picture behind the shadow, so the island alone can be the thumbnail.
+    const island = layer === 'main' ? body.slice(-1) : body;
+    const side = layer === 'main' ? body.slice(0, -1) : [];
+    if (side.length) add('body', 'side', FLOAT_SECONDS.far, side);
     if (shadows.length) add('shadow', 'shadow', FLOAT_SECONDS[layer], shadows);
-    if (body.length) add('body', 'body', FLOAT_SECONDS[layer], body);
+    if (island.length) add('body', 'body', FLOAT_SECONDS[layer], island);
     clouds.forEach((cloud, index) => {
       const seconds = (cloud.classes ?? []).reduce(
         (found, name) => CLOUD_SECONDS[name] ?? found,

@@ -7,15 +7,16 @@ import s2 from '../../../assets/header-scenes/beach-far-cloud-2.png';
 import s3 from '../../../assets/header-scenes/beach-clouds-cloud-1.png';
 import s4 from '../../../assets/header-scenes/beach-clouds-cloud-2.png';
 import s5 from '../../../assets/header-scenes/beach-clouds-cloud-3.png';
-import s6 from '../../../assets/header-scenes/beach-main-shadow.png';
-import s7 from '../../../assets/header-scenes/beach-main-body.png';
-import s8 from '../../../assets/header-scenes/beach-front-body.png';
-import s9 from '../../../assets/header-scenes/beach-glow-body.png';
+import s6 from '../../../assets/header-scenes/beach-main-side.png';
+import s7 from '../../../assets/header-scenes/beach-main-shadow.png';
+import s8 from '../../../assets/header-scenes/beach-main-body.png';
+import s9 from '../../../assets/header-scenes/beach-front-body.png';
+import s10 from '../../../assets/header-scenes/beach-glow-body.png';
 
 const scene: HeaderSceneSprites = {
   id: 'beach',
   description: "A floating beach island with a waterfall hill, palms, a thatched hut, a jetty, a sailboat, a lantern, a villager, a crab and a gull.",
-  source: '782cba4903fe4f61ee0344926297f5c5f3449202c0e1e9f5b5fdbf9162bc0c73',
+  source: 'b4241714f69a9cb499219ac301c225647a4a0720356fbd56bea8ce24cce87072',
   sprites: [
     { layer: 'far', kind: 'body', seconds: 9, x: 86, y: 33.67, w: 580, h: 165, image: s0 },
     { layer: 'far', kind: 'cloud', seconds: 260, x: 380, y: 23.67, w: 78, h: 26, image: s1 },
@@ -23,10 +24,11 @@ const scene: HeaderSceneSprites = {
     { layer: 'clouds', kind: 'cloud', seconds: 140, x: 28, y: 7, w: 130, h: 39, image: s3 },
     { layer: 'clouds', kind: 'cloud', seconds: 180, x: 516, y: 38, w: 94, h: 36, image: s4 },
     { layer: 'clouds', kind: 'cloud', seconds: 160, x: 789, y: 4, w: 142, h: 37.67, image: s5 },
-    { layer: 'main', kind: 'shadow', seconds: 7, x: 171, y: 213, w: 258, h: 28, image: s6 },
-    { layer: 'main', kind: 'body', seconds: 7, x: 146, y: 38.67, w: 395, h: 175, image: s7 },
-    { layer: 'front', kind: 'body', seconds: 11, x: -16, y: 159.67, w: 112, h: 99, image: s8 },
-    { layer: 'glow', kind: 'body', seconds: 7, x: 229.33, y: 79.67, w: 139.33, h: 73, image: s9 },
+    { layer: 'main', kind: 'body', seconds: 9, x: 471, y: 39, w: 70, h: 96, image: s6 },
+    { layer: 'main', kind: 'shadow', seconds: 7, x: 171, y: 213, w: 258, h: 28, image: s7 },
+    { layer: 'main', kind: 'body', seconds: 7, x: 146, y: 38.67, w: 308, h: 175, image: s8 },
+    { layer: 'front', kind: 'body', seconds: 11, x: -16, y: 159.67, w: 112, h: 99, image: s9 },
+    { layer: 'glow', kind: 'body', seconds: 7, x: 229.33, y: 79.67, w: 139.33, h: 73, image: s10 },
   ],
 };
 export default scene;

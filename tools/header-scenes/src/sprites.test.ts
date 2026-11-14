@@ -18,7 +18,15 @@ it.each(scenes.map((scene) => [scene.id, scene] as const))(
   (_, scene) => {
     const plans = spritePlans(scene);
     for (const layer of ['far', 'main', 'front', 'glow'] as const)
-      expect(plans.filter((plan) => plan.layer === layer && plan.kind === 'body')).toHaveLength(1);
+      expect(
+        plans.filter(
+          (plan) => plan.layer === layer && plan.kind === 'body' && plan.file.endsWith('-body.png'),
+        ),
+      ).toHaveLength(1);
+    // Only Beach has a second island in its main layer; it is a picture of its own.
+    expect(plans.filter((plan) => plan.file.endsWith('-main-side.png'))).toHaveLength(
+      scene.id === 'beach' ? 1 : 0,
+    );
     expect(plans.filter((plan) => plan.kind === 'shadow')).toHaveLength(1);
     const clouds = plans.filter((plan) => plan.kind === 'cloud');
     expect(clouds.length).toBeGreaterThanOrEqual(5);
@@ -26,7 +34,7 @@ it.each(scenes.map((scene) => [scene.id, scene] as const))(
     expect(new Set(plans.map((plan) => plan.file)).size).toBe(plans.length);
     // The shadow lies under the island, and a layer's clouds pass in front of its body.
     const main = plans.filter((plan) => plan.layer === 'main').map((plan) => plan.kind);
-    expect(main.indexOf('shadow')).toBeLessThan(main.indexOf('body'));
+    expect(main.indexOf('shadow')).toBeLessThan(main.lastIndexOf('body'));
   },
 );
 

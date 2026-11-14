@@ -31,7 +31,7 @@ it.each(scenes.map((scene) => [scene.id, scene] as const))(
     expect(scene.sprites.filter((sprite) => sprite.kind === 'shadow')).toHaveLength(1);
     for (const sprite of scene.sprites)
       if (sprite.kind !== 'cloud') expect([7, 9, 11]).toContain(sprite.seconds);
-    const main = scene.sprites.find((s) => s.layer === 'main' && s.kind === 'body')!;
+    const main = scene.sprites.filter((s) => s.layer === 'main' && s.kind === 'body').at(-1)!;
     expect(main.x).toBeLessThan(SCENE_CENTRE);
     expect(main.x + main.w).toBeGreaterThan(SCENE_CENTRE);
   },
@@ -43,7 +43,7 @@ it.each(scenes.map((scene) => [scene.id, scene] as const))(
     // No moving piece is cut by its own picture, and the sky behind never moves, so an island that
     // stays inside the 208 dp picture cannot uncover a blank strip.
     const travel = FLOAT_RISE * SCENE_UNIT + Math.abs(TILT_DEPTH.main) * 0.6;
-    const main = scene.sprites.find((s) => s.layer === 'main' && s.kind === 'body')!;
+    const main = scene.sprites.filter((s) => s.layer === 'main' && s.kind === 'body').at(-1)!;
     expect(main.y * SCENE_UNIT - travel).toBeGreaterThanOrEqual(0);
     expect((main.y + main.h) * SCENE_UNIT + travel).toBeLessThanOrEqual(PICTURE_HEIGHT);
   },
