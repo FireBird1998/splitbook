@@ -3853,3 +3853,31 @@ describe('source-specific held copy', () => {
     });
   });
 });
+
+it('mounts one selected preview and releases the Group SVG while Header settings are open', async () => {
+  vi.stubEnv('EXPO_PUBLIC_HEADER_SCENES_ENABLED', 'true');
+  try {
+    const app = await renderApp((path) =>
+      path === `/api/groups/${groupId}`
+        ? json({
+            status: 200,
+            data: { ...group, header: { style: 'scene', scene: 'beach', time: 'day' } },
+          })
+        : undefined,
+    );
+    await app.press('Open Maple House');
+    await settle(import('@splitbook/shared/header-scenes/beach'));
+    const scenes = () => app.root().findAll((node) => (node.type as unknown) === 'default');
+    expect(scenes()).toHaveLength(1);
+    await app.press('Group options');
+    await app.press('Header scene');
+    await settle(import('./ui/header-scene-thumbnail'));
+    expect(scenes()).toHaveLength(1);
+    expect(app.root().findAll((node) => (node.type as unknown) === 'Image')).toHaveLength(4);
+    await app.press('Back to Group');
+    expect(scenes()).toHaveLength(1);
+    expect(app.root().findAll((node) => (node.type as unknown) === 'Image')).toHaveLength(0);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

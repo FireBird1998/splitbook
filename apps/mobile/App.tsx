@@ -1,3 +1,4 @@
+import { HeaderScenePlaceholder } from './src/ui/header-scene-card';
 import { HeaderSettings } from './src/ui/header-settings';
 import { sceneMotion } from './src/data/scene-motion';
 import {
@@ -1530,7 +1531,11 @@ function GroupScreen() {
           ) : (
             <>
               {readGroupHeader(shown.header, headerScenesEnabled()).style === 'scene' ? (
-                <GroupHeader group={shown} motion={motion.enabled} />
+                state.headerSettings ? (
+                  <HeaderScenePlaceholder group={shown} />
+                ) : (
+                  <GroupHeader group={shown} motion={motion.enabled} />
+                )
               ) : getGroupTheme(shown.category).header === 'strip' ? (
                 <TripStrip group={shown} />
               ) : null}

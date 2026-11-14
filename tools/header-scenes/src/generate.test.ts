@@ -92,14 +92,28 @@ it.each([
     expect(main.some((node) => node.motion === 'windows')).toBe(false);
   },
 );
-it('covers the four scene modules and common styles in a repeatable fresh build', () => {
-  const first = generatedFiles();
+it('covers the four scene modules and common styles in a repeatable fresh build', async () => {
+  const first = await generatedFiles();
   expect([...first.keys()].sort()).toEqual([
     'beach.ts',
     'eco-city.ts',
     'mountain-village.ts',
     'sakura.ts',
     'styles.ts',
+    'thumbnails.ts',
   ]);
-  expect(staleOutputs(first, generatedFiles())).toEqual([]);
+  expect(staleOutputs(first, await generatedFiles())).toEqual([]);
+});
+
+it('builds a decodable, bounded raster thumbnail for every generated scene', async () => {
+  const { sceneThumbnail } = await import('./generate');
+  const { default: sharp } = await import('sharp');
+  for (const scene of buildScenes()) {
+    const uri = await sceneThumbnail(scene);
+    expect(uri).toMatch(/^data:image\/png;base64,/);
+    const data = Buffer.from(uri.split(',')[1], 'base64');
+    expect(data.byteLength).toBeLessThan(80_000);
+    const metadata = await sharp(data).metadata();
+    expect([metadata.width, metadata.height]).toEqual([368, 192]);
+  }
 });

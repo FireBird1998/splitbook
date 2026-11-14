@@ -1,3 +1,4 @@
+import { HeaderScenePlaceholder } from './header-scene-card';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { Modal, ScrollView, Switch, View, Pressable, useWindowDimensions } from 'react-native';
@@ -14,9 +15,7 @@ import { GroupHeader } from './group-header';
 import { NotAvailableOffline } from './offline-notice';
 import { useTheme } from './theme';
 const Scene = lazy(() => import('./header-scene'));
-const Thumbnail = lazy(() =>
-  import('./header-scene').then((module) => ({ default: module.HeaderSceneThumbnail })),
-);
+const Thumbnail = lazy(() => import('./header-scene-thumbnail'));
 export function HeaderSettings({
   state,
   group,
@@ -87,7 +86,7 @@ export function HeaderSettings({
         />
         <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
           {state.draft.style === 'scene' ? (
-            <Suspense fallback={<CompactText>Loading preview</CompactText>}>
+            <Suspense fallback={<HeaderScenePlaceholder group={group} preview={state.draft} />}>
               <Scene group={group} header={state.draft} motion={motion} preview />
             </Suspense>
           ) : (
@@ -179,7 +178,7 @@ export function HeaderSettings({
           <CompactButton
             block
             label={state.status === 'saving' ? 'Saving…' : 'Save'}
-            disabled={!headerChanged(state) || state.status === 'saving'}
+            disabled={offline || !headerChanged(state) || state.status === 'saving'}
             onPress={onSave}
           />
         </View>

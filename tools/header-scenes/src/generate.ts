@@ -1,10 +1,11 @@
+import sharp from 'sharp';
 import { readFileSync } from 'node:fs';
 import type { HeaderSceneArt, SceneLayer } from '@splitbook/shared/header-scene-art';
 import { ecoScene, ecoCss } from './eco-city.ts';
 import { alpScene, alpCss } from './mountain-village.ts';
 import { beachScene, beachCss } from './beach.ts';
 import { sakuraScene, sakuraCss } from './sakura.ts';
-import { vectorTree } from './vectors.ts';
+import { vectorSvg, vectorTree } from './vectors.ts';
 
 export const OUTPUT = 'packages/shared/src/header-scenes';
 const NOTICE =
@@ -52,14 +53,29 @@ export function buildScenes(): HeaderSceneArt[] {
     ) as Record<SceneLayer, ReturnType<typeof vectorTree>>,
   }));
 }
-export function generatedFiles(): Map<string, string> {
+/** Decode once per settings choice instead of mounting four complete native SVG trees. */
+export async function sceneThumbnail(scene: HeaderSceneArt): Promise<string> {
+  const layers = (['far', 'clouds', 'main', 'front'] as const)
+    .map((layer) => vectorSvg({ ...scene.layers[layer], tag: 'g', props: {} }))
+    .join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="368" height="192" viewBox="70 0 460 240"><rect x="70" width="460" height="240" fill="#d6e7ef"/>${layers}</svg>`;
+  const png = await sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toBuffer();
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+export async function generatedFiles(): Promise<Map<string, string>> {
   const files = new Map<string, string>();
+  const thumbnails: Record<string, string> = {};
   for (const scene of buildScenes()) {
+    thumbnails[scene.id] = await sceneThumbnail(scene);
     files.set(
       `${scene.id}.ts`,
       `${NOTICE}import type { HeaderSceneArt } from '../header-scene-art';\nconst scene: HeaderSceneArt = ${JSON.stringify(scene)};\nexport default scene;\n`,
     );
   }
+  files.set(
+    'thumbnails.ts',
+    `${NOTICE}export const sceneThumbnails = ${JSON.stringify(thumbnails)};\n`,
+  );
   files.set(
     'styles.ts',
     `${NOTICE}export const headerSceneCss = ${JSON.stringify(sharedCss())};\n`,

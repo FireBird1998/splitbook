@@ -1,6 +1,3 @@
-import { SEPARATOR } from '@splitbook/shared/separator';
-import { CompactText } from './compact';
-import { useTheme } from './theme';
 import { createElement, memo, useEffect, useState, type ComponentType } from 'react';
 import { Animated, AppState, StyleSheet, View } from 'react-native';
 import Svg, {
@@ -21,7 +18,12 @@ import type { MobileGroup } from '../data/types';
 import { useSceneFloat } from './compact/motion';
 import { headerSceneMotionAvailable } from '../config';
 import { currentDayKey } from './list-day-header';
-import { HeaderSceneCard, HeaderScenePlaceholder, ClassicGroupHeader } from './header-scene-card';
+import {
+  HeaderSceneCard,
+  HeaderScenePreviewCaption,
+  HeaderScenePlaceholder,
+  ClassicGroupHeader,
+} from './header-scene-card';
 export { HeaderSceneCard } from './header-scene-card';
 
 const loaders = {
@@ -97,7 +99,6 @@ export default function HeaderScene({
   preview?: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
-  const theme = useTheme();
   const [art, setArt] = useState<HeaderSceneArt | null>(null);
   const [, setHour] = useState(() => new Date().getHours());
   const translateY = useSceneFloat(motion && headerSceneMotionAvailable);
@@ -122,7 +123,14 @@ export default function HeaderScene({
   }, []);
   const time = headerTimeOfDay(header.time, new Date().getHours());
   if (failed === header.scene) return <ClassicGroupHeader group={group} />;
-  if (art?.id !== header.scene) return <HeaderScenePlaceholder group={group} header={header} />;
+  if (art?.id !== header.scene)
+    return (
+      <HeaderScenePlaceholder
+        group={group}
+        header={header}
+        preview={preview ? header : undefined}
+      />
+    );
   return (
     <View style={{ borderRadius: 16, overflow: 'hidden' }}>
       <View
@@ -168,45 +176,10 @@ export default function HeaderScene({
         </Animated.View>
       </View>
       {preview ? (
-        <View style={{ padding: 12, backgroundColor: theme.surface }}>
-          <CompactText variant="small">
-            Preview{SEPARATOR}
-            {art?.name ?? header.scene}
-            {SEPARATOR}
-            {time}
-          </CompactText>
-        </View>
+        <HeaderScenePreviewCaption scene={header.scene} time={time} />
       ) : (
         <HeaderSceneCard group={group} today={today} time={time} />
       )}
-    </View>
-  );
-}
-
-/** Small generated-art previews are evaluated only while the member chooses a scene. */
-export function HeaderSceneThumbnail({ scene }: { scene: GroupHeader['scene'] }) {
-  const [art, setArt] = useState<HeaderSceneArt | null>(null);
-  useEffect(() => {
-    let active = true;
-    loaders[scene]().then((value) => {
-      if (active) setArt(value.default);
-    });
-    return () => {
-      active = false;
-    };
-  }, [scene]);
-  return (
-    <View
-      importantForAccessibility="no-hide-descendants"
-      style={{
-        height: 64,
-        width: '100%',
-        overflow: 'hidden',
-        backgroundColor: '#d6e7ef',
-        borderRadius: 8,
-      }}
-    >
-      {art ? <Art art={art} time="day" /> : null}
     </View>
   );
 }

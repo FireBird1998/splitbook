@@ -158,6 +158,7 @@ vi.mock('./ui/tag-sheet', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/header-settings', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-header', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/header-scene-card', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/header-scene-thumbnail', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/header-scene', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/trip-strip', async (load) => counting.wrap(await load<Module>()));
 

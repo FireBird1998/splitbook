@@ -18,6 +18,11 @@ pnpm --filter @splitbook/header-scenes test
 pnpm --filter @splitbook/header-scenes render /absolute/path/to/review-images
 ```
 
+`build` also rasterizes each scene's day layers into a 368 × 192 PNG with the
+pinned Sharp build dependency. `thumbnails.ts` contains their data URIs so native
+settings choices need one Image each. The same fresh rasterization is compared
+by `check`, including missing/changed thumbnails. Full scene layers are unchanged.
+
 `build` owns `packages/shared/src/header-scenes/` and removes obsolete output.
 Never edit that output by hand. `check` builds again in memory and fails on any
 missing, changed or obsolete file. `test:unit` runs the unit tests and that same

@@ -7,7 +7,7 @@ const directory = resolve(root, OUTPUT);
 const command = process.argv[2];
 if (!['build', 'check'].includes(command))
   throw new Error('Usage: pnpm --filter @splitbook/header-scenes <build|check>');
-const expected = generatedFiles();
+const expected = await generatedFiles();
 const actual = new Map(
   (existsSync(directory) ? readdirSync(directory, { withFileTypes: true }) : [])
     .filter((file) => file.isFile())

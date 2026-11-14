@@ -7710,8 +7710,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         method: 'PATCH',
         body: state.draft,
       });
-      if (!current(owner) || snapshot.headerSettings?.groupId !== state.groupId) return false;
+      if (!current(owner)) return false;
       invalidateReads(`group:${state.groupId}`);
+      if (snapshot.headerSettings?.groupId !== state.groupId) return true;
       publish({
         ...snapshot,
         headerSettings: {
@@ -7724,12 +7725,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await refresh();
       return true;
     } catch (error) {
-      if (
-        !current(owner) ||
-        error instanceof Superseded ||
-        snapshot.headerSettings?.groupId !== state.groupId
-      )
-        return false;
+      if (!current(owner) || error instanceof Superseded) return false;
+      if (error instanceof RequestError && error.code === 'FORBIDDEN') {
+        invalidateReads(`group:${state.groupId}`);
+        await refresh();
+      }
+      if (!current(owner) || snapshot.headerSettings?.groupId !== state.groupId) return false;
       publish({
         ...snapshot,
         headerSettings: {

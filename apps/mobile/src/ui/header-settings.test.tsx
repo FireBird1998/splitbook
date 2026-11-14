@@ -61,3 +61,35 @@ it.each([false, true])('shows selected states, unchanged Save and offline=%s', (
   expect(markup).not.toContain('Tilt');
   act(() => renderer.unmount());
 });
+
+it.each([false, true])('a changed header has Save disabled only when offline=%s', (offline) => {
+  let view!: ReturnType<typeof create>;
+  const state: Settings = {
+    groupId: 'g',
+    saved: header,
+    draft: { ...header, time: 'night' },
+    status: 'editing',
+    message: null,
+  };
+  act(() => {
+    view = create(
+      <HeaderSettings
+        group={{ name: 'Maple House', category: 'home' } as unknown as MobileGroup}
+        state={state}
+        offline={offline}
+        motion={false}
+        motionMessage={null}
+        onMotion={() => {}}
+        onChoose={() => {}}
+        onSave={() => {}}
+        onRetry={() => {}}
+        onClose={() => {}}
+      />,
+    );
+  });
+  const save = view.root
+    .findAll((node) => (node.type as unknown) === 'Pressable')
+    .find((node) => node.props.accessibilityLabel === 'Save');
+  expect(save?.props.accessibilityState.disabled).toBe(offline);
+  act(() => view.unmount());
+});

@@ -1,7 +1,9 @@
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import {
+  HEADER_SCENES,
   headerCard,
+  headerCardTone,
   headerTimeOfDay,
   readGroupHeader,
   type GroupHeader,
@@ -100,11 +102,14 @@ export function HeaderSceneCard({
 export function HeaderScenePlaceholder({
   group,
   header = readGroupHeader(group.header),
+  preview,
 }: {
   group: MobileGroup;
   header?: GroupHeader;
+  preview?: GroupHeader;
 }) {
   const theme = useTheme();
+  const time = headerTimeOfDay((preview ?? header).time, new Date().getHours());
   return (
     <View style={{ borderRadius: 16, overflow: 'hidden' }}>
       <View
@@ -112,14 +117,37 @@ export function HeaderScenePlaceholder({
         accessibilityLabel="Loading Header scene"
         style={{ height: 208, backgroundColor: theme.surfaceMuted }}
       />
-      <HeaderSceneCard
-        group={group}
-        today={currentDayKey()}
-        time={headerTimeOfDay(header.time, new Date().getHours())}
-      />
+      {preview ? (
+        <HeaderScenePreviewCaption scene={preview.scene} time={time} />
+      ) : (
+        <HeaderSceneCard group={group} today={currentDayKey()} time={time} />
+      )}
     </View>
   );
 }
 export function ClassicGroupHeader({ group }: { group: MobileGroup }) {
   return getGroupTheme(group.category).header === 'strip' ? <TripStrip group={group} /> : null;
+}
+
+export function HeaderScenePreviewCaption({
+  scene,
+  time,
+}: {
+  scene: GroupHeader['scene'];
+  time: ReturnType<typeof headerTimeOfDay>;
+}) {
+  const appTheme = useTheme();
+  const theme = headerCardTone(time) === 'dark' ? getSemanticTokens('dark') : appTheme;
+  return (
+    <ThemeContext.Provider value={theme}>
+      <View style={{ padding: 12, backgroundColor: theme.surface }}>
+        <CompactText variant="small">
+          Preview{SEPARATOR}
+          {HEADER_SCENES.find((choice) => choice.id === scene)?.name}
+          {SEPARATOR}
+          {time}
+        </CompactText>
+      </View>
+    </ThemeContext.Provider>
+  );
 }
