@@ -57,6 +57,17 @@ it('the rendered still fallback never evaluates sensors, with both phone choices
   await act(async () => {
     view = create(<Scene />);
   });
+  await vi.waitFor(
+    async () => {
+      await act(async () => {});
+      expect(
+        view.root.findAll(
+          (node) => (node.type as unknown) === 'View' && node.props.accessibilityRole === 'image',
+        ),
+      ).toHaveLength(1);
+    },
+    { timeout: 5000 },
+  );
   expect(native.loaded).toBe(0);
   expect(native.listeners).toBe(0);
   act(() => view.unmount());
@@ -68,7 +79,13 @@ it('the rendered available scene applies every phone/visibility gate; previews n
     await act(async () => {
       view = create(<Scene />);
     });
-    expect(native.listeners).toBe(1);
+    await vi.waitFor(
+      async () => {
+        await act(async () => {});
+        expect(native.listeners).toBe(1);
+      },
+      { timeout: 5000 },
+    );
     for (const props of [
       { motion: false },
       { tilt: false },
@@ -77,9 +94,21 @@ it('the rendered available scene applies every phone/visibility gate; previews n
       { preview: true },
     ]) {
       await act(async () => view.update(<Scene {...props} />));
-      expect(native.listeners).toBe(0);
+      await vi.waitFor(
+        async () => {
+          await act(async () => {});
+          expect(native.listeners).toBe(0);
+        },
+        { timeout: 5000 },
+      );
       await act(async () => view.update(<Scene />));
-      expect(native.listeners).toBe(1);
+      await vi.waitFor(
+        async () => {
+          await act(async () => {});
+          expect(native.listeners).toBe(1);
+        },
+        { timeout: 5000 },
+      );
     }
   } finally {
     act(() => view.unmount());
