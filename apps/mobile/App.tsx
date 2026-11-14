@@ -1443,6 +1443,7 @@ function GroupScreen() {
           onMotion={(value) => void sceneMotion.select(value)}
           onChoose={controller.chooseHeader}
           onSave={() => void controller.saveHeader()}
+          onRetry={() => void controller.refresh()}
           onClose={controller.closeHeaderSettings}
         />
       )}

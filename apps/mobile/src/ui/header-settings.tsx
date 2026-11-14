@@ -26,6 +26,7 @@ export function HeaderSettings({
   onMotion,
   onChoose,
   onSave,
+  onRetry,
   onClose,
 }: {
   state: Settings;
@@ -36,6 +37,7 @@ export function HeaderSettings({
   onMotion: (value: boolean) => void;
   onChoose: (change: Partial<Header>) => void;
   onSave: () => void;
+  onRetry: () => void;
   onClose: () => void;
 }) {
   const theme = useTheme();
@@ -166,7 +168,7 @@ export function HeaderSettings({
           {offline ? (
             <NotAvailableOffline
               message="Changing the header needs a connection. Your choices have not been saved."
-              onRetry={onSave}
+              onRetry={onRetry}
             />
           ) : null}
           {state.message ? (
