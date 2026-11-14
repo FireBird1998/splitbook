@@ -494,8 +494,10 @@ it.each([lightTokens, darkTokens])(
   'draws two-line Recent rows and Group Expenses tap targets in $mode',
   (tokens) => {
     vi.stubGlobal('__DEV__', false);
+    // The Expense's calendar day and the phone's current local day are both November 13.
+    const recentNow = new Date(2026, 10, 13, 9, 41).getTime();
     const recent = {
-      verifiedAt: now - 180000,
+      verifiedAt: recentNow - 180000,
       rows: [
         {
           id: 'private-expense-identity',
@@ -515,7 +517,7 @@ it.each([lightTokens, darkTokens])(
           payerId: 'rohan',
           amountMinor: 50000,
           currency: 'INR',
-          date: '2026-11-13',
+          date: new Date(2026, 10, 13, 9, 40).toISOString(),
         },
       ],
     };
@@ -531,7 +533,7 @@ it.each([lightTokens, darkTokens])(
         },
         { width: 360, height: 584 },
         { status: 'authenticated', accountId: 'alex', loading: false },
-        now,
+        recentNow,
         tokens,
       ),
     );
