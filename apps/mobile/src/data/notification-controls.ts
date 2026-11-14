@@ -157,16 +157,22 @@ export function notificationControls(d: {
         : 'Couldn’t confirm notification settings. Retry.',
     );
   };
-  /** True only when this call obtained fresh controls for its still-current session. */
-  const read = async (): Promise<boolean> => {
-    if (!d.native || !d.authenticated() || d.state().status === 'pending') return false;
-    const owner = d.owner(),
-      task = ++operation;
+  let reading: {
+    owner: number;
+    settle: (confirmed: boolean | PromiseLike<boolean>) => void;
+  } | null = null;
+  const retireRead = () => {
+    reading?.settle(false);
+    reading = null;
+  };
+  const confirmRead = async (owner: number, task: number): Promise<boolean> => {
+    const native = d.native;
+    if (!native) return false;
     set('loading');
     try {
       await cleanup;
       if (!active(owner, task)) return false;
-      const installation = await d.native.installation();
+      const installation = await native.installation();
       if (!active(owner, task)) return false;
       const value = await d.request(
         '/api/notifications/device?installationId=' + installation.id,
@@ -175,7 +181,7 @@ export function notificationControls(d: {
       );
       if (!active(owner, task)) return false;
       const confirmed = result(value);
-      const permission = await d.native.permission();
+      const permission = await native.permission();
       if (!active(owner, task)) return false;
       d.publish({
         confirmed,
@@ -192,6 +198,28 @@ export function notificationControls(d: {
       }
     }
     return false;
+  };
+  /** Fresh controls may come from this read or a newer read in the same session.
+   * Changes and resets retire the chain; forwarding never sends another request. */
+  const read = async (): Promise<boolean> => {
+    if (!d.native || !d.authenticated() || d.state().status === 'pending') return false;
+    const owner = d.owner(),
+      task = ++operation;
+    let settle!: NonNullable<typeof reading>['settle'];
+    const confirmation = new Promise<boolean>((resolve) => {
+      settle = resolve;
+    });
+    const previous = reading;
+    const pending = { owner, settle };
+    reading = pending;
+    // Resolving with the newer promise locks out the older request's eventual outcome.
+    previous?.settle(previous.owner === owner ? confirmation : false);
+    void confirmRead(owner, task).then(settle, () => settle(false));
+    try {
+      return await confirmation;
+    } finally {
+      if (reading === pending) reading = null;
+    }
   };
   /** Resume Settings without reading or changing the server's confirmed registration. */
   const recheckPermission = async () => {
@@ -221,6 +249,7 @@ export function notificationControls(d: {
     explicit = false,
   ) => {
     if (!d.native || !d.authenticated() || d.state().status === 'pending') return;
+    retireRead();
     const requestedBy = d.owner();
     const repeat = async () => {
       await read();
@@ -416,6 +445,7 @@ export function notificationControls(d: {
     },
     maintain,
     reset: () => {
+      retireRead();
       operation++;
       stopMaintenance();
       maintenanceWanted = false;

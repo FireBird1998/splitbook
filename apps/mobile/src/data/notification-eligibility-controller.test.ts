@@ -400,7 +400,7 @@ it.each(['receipt', 'tap'] as const)(
     await write.arrived;
     try {
       await app.refreshNotifications();
-      const answer = await within(pending);
+      const answer = await within<boolean | void>(pending);
       if (kind === 'receipt') expect(answer).toBe(false);
       expect(app.getSnapshot()).toMatchObject({
         screen: 'create',
