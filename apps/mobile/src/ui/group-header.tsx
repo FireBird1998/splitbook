@@ -13,7 +13,7 @@ const Scene = lazy(() =>
 export function GroupHeader({ group, motion = true }: { group: MobileGroup; motion?: boolean }) {
   const header = readGroupHeader(group.header, headerScenesEnabled());
   return header.style === 'scene' ? (
-    <Suspense fallback={<HeaderScenePlaceholder group={group} />}>
+    <Suspense fallback={<HeaderScenePlaceholder group={group} header={header} />}>
       <Scene group={group} header={header} motion={motion} />
     </Suspense>
   ) : (

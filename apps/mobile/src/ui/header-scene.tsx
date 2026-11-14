@@ -116,7 +116,7 @@ export default function HeaderScene({
   }, []);
   const time = headerTimeOfDay(header.time, new Date().getHours());
   if (failed === header.scene) return <ClassicGroupHeader group={group} />;
-  if (art?.id !== header.scene) return <HeaderScenePlaceholder group={group} />;
+  if (art?.id !== header.scene) return <HeaderScenePlaceholder group={group} header={header} />;
   return (
     <View style={{ borderRadius: 16, overflow: 'hidden' }}>
       <View
@@ -161,7 +161,7 @@ export default function HeaderScene({
           {art?.id === header.scene ? <Art art={art} time={time} /> : null}
         </Animated.View>
       </View>
-      <HeaderSceneCard group={group} today={today} />
+      <HeaderSceneCard group={group} today={today} time={time} />
     </View>
   );
 }
