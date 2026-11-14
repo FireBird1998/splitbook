@@ -1,8 +1,8 @@
+import { overviewAt } from './test-utils/overview-widget';
 import { widgetDimensions } from './test-utils/widget-size';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
 import type { WidgetCopy } from '@splitbook/shared/balances-widget';
-import { balancesWidget } from '@splitbook/shared/balances-widget';
 import { groupWidget } from '@splitbook/shared/group-widget';
 import { quickWidget } from '@splitbook/shared/quick-widget';
 import { fakeSplitbook } from './test-utils/fake-splitbook';
@@ -175,7 +175,7 @@ async function drawn(store: ReturnType<typeof createWidgetsStore>) {
   const { copy, session } = await store.read();
   const part = copy?.lostGroupIds?.includes('maple') ? null : copy?.groups?.maple;
   return {
-    balances: balancesWidget(
+    balances: overviewAt(
       copy,
       {
         kind: 'balances',

@@ -1,6 +1,7 @@
+import { overviewAt } from '../test-utils/overview-widget';
 import { widgetDimensions } from '../test-utils/widget-size';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { balancesWidget, type WidgetCopy } from '@splitbook/shared/balances-widget';
+import { type WidgetCopy } from '@splitbook/shared/balances-widget';
 import { groupWidget, type WidgetGroupPart } from '@splitbook/shared/group-widget';
 import { quickWidget } from '@splitbook/shared/quick-widget';
 const now = Date.parse('2026-11-08T04:11:00Z');
@@ -52,8 +53,8 @@ const copy: WidgetCopy = {
   review: { count: 3, verifiedAt: now },
 };
 it('summarizes Balances with complete amounts and their verification time', () => {
-  expect(balancesWidget(copy, { kind: 'balances' }, '2x2', auth, now).summary).toBe(
-    'Balances. You’re owed ₹2,400.00 and €40.00. You owe ₹1,480.00. Saved 9:41. To review 3.',
+  expect(overviewAt(copy, { kind: 'balances' }, '2x2', auth, now).summary).toBe(
+    'Balances. You’re owed ₹2,400.00 and €40.00. You owe ₹1,480.00. To review 3. Saved 9:41.',
   );
 });
 it('summarizes a Group with first names only', () => {
@@ -62,7 +63,7 @@ it('summarizes a Group with first names only', () => {
   );
 });
 it('speaks the visible Group name but not amounts or member names when hidden', () => {
-  const b = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, '2x2', auth, now).summary;
+  const b = overviewAt(copy, { kind: 'balances', hideAmounts: true }, '2x2', auth, now).summary;
   const g = groupWidget(
     part,
     { ...setup, hideAmounts: true },
@@ -79,7 +80,7 @@ it('speaks the visible Group name but not amounts or member names when hidden', 
 it.each(['signed-out', 'expired'] as const)(
   'speaks the %s explanation without saved private data',
   (status) => {
-    const b = balancesWidget(copy, { kind: 'balances' }, '2x2', { status }, now).summary;
+    const b = overviewAt(copy, { kind: 'balances' }, '2x2', { status }, now).summary;
     const g = groupWidget(part, setup, widgetDimensions('4x2'), { status }, now).summary;
     expect(b + g).toContain(status === 'expired' ? 'Sign in again' : 'Sign in');
     expect(b + g).not.toMatch(/₹|€|Maple|Priya|Saved/);
@@ -95,13 +96,13 @@ it.each(['2x1', '2x2', '4x2'] as const)(
   'announces loading, no saved copy, all square, no Groups and stale Balances at %s',
   (size) => {
     expect(
-      balancesWidget(null, { kind: 'balances' }, size, { ...auth, loading: true }, now).summary,
+      overviewAt(null, { kind: 'balances' }, size, { ...auth, loading: true }, now).summary,
     ).toContain('Loading');
-    expect(balancesWidget(null, { kind: 'balances' }, size, auth, now).summary).toContain(
+    expect(overviewAt(null, { kind: 'balances' }, size, auth, now).summary).toContain(
       'Nothing saved yet',
     );
     expect(
-      balancesWidget(
+      overviewAt(
         { ...copy, home: { ...copy.home!, currencies: [] } },
         { kind: 'balances' },
         size,
@@ -110,7 +111,7 @@ it.each(['2x1', '2x2', '4x2'] as const)(
       ).summary,
     ).toContain('all square');
     expect(
-      balancesWidget(
+      overviewAt(
         { ...copy, home: { ...copy.home!, groupCount: 0, currencies: [] } },
         { kind: 'balances' },
         size,
@@ -118,9 +119,9 @@ it.each(['2x1', '2x2', '4x2'] as const)(
         now,
       ).summary,
     ).toContain('No Groups yet');
-    expect(
-      balancesWidget(copy, { kind: 'balances' }, size, auth, now + 86400001).summary,
-    ).toContain('Open to update');
+    expect(overviewAt(copy, { kind: 'balances' }, size, auth, now + 86400001).summary).toContain(
+      'Open to update',
+    );
   },
 );
 it.each(['2x2', '4x2', '4x3'] as const)(
@@ -250,8 +251,8 @@ it('speaks the compact Group’s Main currency amount and wide payment overflow'
 });
 
 it('names the extra currency when compact Balances omits it', () => {
-  expect(balancesWidget(copy, { kind: 'balances' }, '2x1', auth, now).summary).toContain(
-    '1 more currency owed',
+  expect(overviewAt(copy, { kind: 'balances' }, '2x1', auth, now).summary).toContain(
+    'You’re owed ₹2,400.00 and €40.00',
   );
 });
 const priyas = (

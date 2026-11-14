@@ -1,6 +1,7 @@
+import { overviewAt } from '../test-utils/overview-widget';
 import { widgetDimensions } from '../test-utils/widget-size';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { balancesWidget, type WidgetCopy } from '@splitbook/shared/balances-widget';
+import { type WidgetCopy } from '@splitbook/shared/balances-widget';
 import { groupWidget, type WidgetGroupPart } from '@splitbook/shared/group-widget';
 import {
   legacyBalancesSetup,
@@ -80,7 +81,7 @@ const privateOutput = (view: unknown) =>
 it.each(['2x1', '2x2', '4x2'] as const)(
   'hides every Balances amount at %s and keeps currency counts and saved time',
   (size) => {
-    const v = balancesWidget(copy, { kind: 'balances', hideAmounts: true }, size, session, now);
+    const v = overviewAt(copy, { kind: 'balances', hideAmounts: true }, size, session, now);
     expect(v).toMatchObject({
       owed: ['in 2\u00a0currencies'],
       owe: ['in 1\u00a0currency'],
@@ -96,16 +97,14 @@ it.each(['2x1', '2x2', '4x2'] as const)(
       { ...session, accountId: 'other' },
       { ...session, loading: true },
     ])
-      privateOutput(
-        balancesWidget(copy, { kind: 'balances', hideAmounts: true }, size, state, now),
-      );
+      privateOutput(overviewAt(copy, { kind: 'balances', hideAmounts: true }, size, state, now));
     for (const home of [
       null,
       { ...copy.home!, groupCount: 0, currencies: [] },
       { ...copy.home!, currencies: [] },
     ])
       privateOutput(
-        balancesWidget(
+        overviewAt(
           { ...copy, home },
           { kind: 'balances', hideAmounts: true },
           size,
@@ -114,7 +113,7 @@ it.each(['2x1', '2x2', '4x2'] as const)(
         ),
       );
     privateOutput(
-      balancesWidget(
+      overviewAt(
         null,
         { kind: 'balances', hideAmounts: true },
         size,
@@ -123,8 +122,13 @@ it.each(['2x1', '2x2', '4x2'] as const)(
       ),
     );
     expect(
-      balancesWidget(copy, { kind: 'balances', hideAmounts: true }, size, session, now + 86400001),
-    ).toMatchObject({ muted: true, footer: 'Open to update', hidden: 'Amounts hidden' });
+      overviewAt(copy, { kind: 'balances', hideAmounts: true }, size, session, now + 86400001),
+    ).toMatchObject({
+      muted: true,
+      layout: { footerNote: size === '2x1' ? null : 'Open to update' },
+      summary: expect.stringContaining('Open to update'),
+      hidden: 'Amounts hidden',
+    });
   },
 );
 it.each(['2x2', '4x2', '4x3'] as const)(

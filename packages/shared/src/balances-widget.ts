@@ -1,6 +1,4 @@
-import { balancesLayout, widgetTextLevel } from './widget-layout';
 import { dayKeyInZone } from './zoned-calendar';
-import { widgetSummary } from './widget-accessibility';
 import type { WidgetGroupPart, WidgetMonthPart } from './group-widget';
 import type { GroupCategory } from './types';
 /** Saved read available to the Android widget renderer, never a live balance. */
@@ -51,27 +49,14 @@ export type WidgetSession =
 import { SEPARATOR, counted } from './separator';
 import { formatCurrency } from './currency';
 import { toMajorAmount } from './exact-money';
-export type BalancesWidgetSize = '2x1' | '2x2' | '4x2';
-export interface BalancesWidgetView {
-  layout: ReturnType<typeof balancesLayout>;
-  summary: string;
-  compactLines: string[];
-  compactFallback: string | null;
-  state: 'normal' | 'loading' | 'no-copy' | 'signed-out' | 'expired' | 'all-square' | 'no-groups';
-  size: BalancesWidgetSize;
-  hidden: string | null;
-  saved: string | null;
-  muted: boolean;
-  owed: string[];
-  owe: string[];
-  owedOverflow: string | null;
-  oweOverflow: string | null;
-  review: string | null;
-  footer: string | null;
-  title: string | null;
-  description: string | null;
-  target: WidgetTarget;
-}
+type WidgetBalancesState =
+  | 'normal'
+  | 'loading'
+  | 'no-copy'
+  | 'signed-out'
+  | 'expired'
+  | 'all-square'
+  | 'no-groups';
 
 /** Calendar boundaries use the phone's local zone; age uses elapsed time. */
 export function widgetSavedTime(verifiedAt: number, now: number) {
@@ -96,7 +81,7 @@ export function widgetSavedTime(verifiedAt: number, now: number) {
   return `Saved ${saved.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][saved.getUTCMonth()]}`;
 }
 
-/** Size-independent reading shared by Overview and the original small-view contract. */
+/** Account, saved-time and balance reading for Overview. */
 export function readWidgetBalances(
   copy: WidgetCopy | null,
   setup: { reviewEnabled?: boolean; hideAmounts?: boolean },
@@ -104,7 +89,7 @@ export function readWidgetBalances(
   now: number,
 ) {
   const empty = {
-    state: 'no-copy' as BalancesWidgetView['state'],
+    state: 'no-copy' as WidgetBalancesState,
     title: 'Nothing saved yet' as string | null,
     description: 'Open Splitbook to load your balances.' as string | null,
     target: 'home' as WidgetTarget,
@@ -171,94 +156,5 @@ export function readWidgetBalances(
     hidden: setup.hideAmounts ? 'Amounts hidden' : null,
     owed: lines('owedMinor'),
     owe: lines('oweMinor'),
-  };
-}
-
-function balancesWidgetView(
-  copy: WidgetCopy | null,
-  setup: { kind: 'balances'; reviewEnabled?: boolean; hideAmounts?: boolean },
-  size: BalancesWidgetSize,
-  session: WidgetSession,
-  now: number,
-  fontScale = 1,
-): BalancesWidgetView {
-  const { groupCount, ...read } = readWidgetBalances(copy, setup, session, now);
-  const layout = balancesLayout(size, fontScale, read.state === 'normal');
-  const limit = layout.currencyLines;
-  const overflow = (rows: string[]) =>
-    !read.hidden && rows.length > limit
-      ? size === '2x1'
-        ? `+${rows.length - limit}`
-        : `+${counted(rows.length - limit, 'currency', 'currencies')}`
-      : null;
-  return {
-    ...read,
-    layout,
-    summary: '',
-    compactLines: [],
-    compactFallback: null,
-    size,
-    owed: read.owed.slice(0, limit),
-    owe: read.owe.slice(0, limit),
-    owedOverflow: overflow(read.owed),
-    oweOverflow: overflow(read.owe),
-    review: size === '2x1' ? null : read.review,
-    footer: read.muted
-      ? 'Open to update'
-      : read.saved && size === '4x2'
-        ? `Across ${counted(groupCount, 'Group')}`
-        : null,
-  };
-}
-
-/** One spoken description, kept independent of which lines fit visually. */
-export function balancesWidget(...args: Parameters<typeof balancesWidgetView>): BalancesWidgetView {
-  const view = balancesWidgetView(...args);
-  const full = args[5] ? balancesWidgetView(args[0], args[1], args[2], args[3], args[4]) : view;
-  const overflowSpeech = (overflow: string | null, direction: 'owed' | 'owing') => {
-    if (!overflow) return null;
-    const count = Number(overflow.match(/\d+/)?.[0] ?? 0);
-    return `${count} more ${count === 1 ? 'currency' : 'currencies'} ${direction}`;
-  };
-  const summary = widgetSummary([
-    'Balances',
-    full.state === 'loading' ? 'Loading' : null,
-    full.title,
-    full.description,
-    full.owed.length
-      ? 'You’re owed ' +
-        full.owed.join(' and ') +
-        (args[2] === '2x1' && full.owedOverflow
-          ? ' and ' + overflowSpeech(full.owedOverflow, 'owed')
-          : '')
-      : null,
-    full.owe.length
-      ? 'You owe ' +
-        full.owe.join(' and ') +
-        (args[2] === '2x1' && full.oweOverflow
-          ? ' and ' + overflowSpeech(full.oweOverflow, 'owing')
-          : '')
-      : null,
-    args[2] !== '2x1' ? overflowSpeech(full.owedOverflow, 'owed') : null,
-    args[2] !== '2x1' ? overflowSpeech(full.oweOverflow, 'owing') : null,
-    full.saved,
-    full.review?.replace(SEPARATOR, ' '),
-    full.hidden,
-    full.muted ? 'Open to update' : null,
-  ]);
-  const level = widgetTextLevel(args[5] ?? 1);
-  const compact = args[2] === '2x1' && level > 0 && view.state === 'normal';
-  const lines = compact
-    ? view.hidden
-      ? ['You’re owed', 'You owe']
-      : [`Owed ${view.owed[0] ?? '—'}`, `Owe ${view.owe[0] ?? '—'}`]
-    : [];
-  const tooWide = !view.hidden && lines.some((line) => line.length > (level === 2 ? 15 : 20));
-  return {
-    ...view,
-    summary,
-    compactLines: tooWide ? [] : lines,
-    compactFallback: tooWide ? 'Open to see balances' : null,
-    layout: balancesLayout(args[2], args[5] ?? 1, view.state === 'normal', Boolean(view.hidden)),
   };
 }
