@@ -12,6 +12,7 @@ import { expenseReceipt } from './test-utils/expense-receipt';
 const native = vi.hoisted(() => ({
   databases: new Map<string, DatabaseSync>(),
   exists: true,
+  failMigration: false,
   copyWrite: null as null | {
     when(value: string): boolean;
     arrive(): void;
@@ -30,7 +31,15 @@ vi.mock('expo-sqlite', async () => {
         native.databases.set(file, db);
       }
       return {
-        execAsync: async (sql: string) => db.exec(sql),
+        execAsync: async (sql: string) => {
+          if (native.failMigration && sql.startsWith('BEGIN IMMEDIATE')) {
+            native.failMigration = false;
+            db.exec(
+              'BEGIN IMMEDIATE; DROP TRIGGER IF EXISTS widget_recent_copy; SELECT * FROM missing_migration_table;',
+            );
+          }
+          return db.exec(sql);
+        },
         runAsync: async (sql: string, ...values: (string | number | null)[]) => {
           const held =
             sql.startsWith('UPDATE widget_state SET copy =') &&
@@ -58,6 +67,7 @@ vi.mock('expo-sqlite', async () => {
 afterEach(() => {
   for (const db of native.databases.values()) db.close();
   native.databases.clear();
+  native.failMigration = false;
   native.copyWrite = null;
   vi.unstubAllEnvs();
 });
@@ -1100,4 +1110,40 @@ it('an unreadable setup cannot authorize descriptions or block another widget’
   expect(await store.recentGroups('alex', [7, 8])).toEqual(['maple']);
   await store.saveSetup(recentSetup(7, false));
   expect(descriptionOnDisk()).toBe(false);
+});
+
+it('replaces the unversioned Recent triggers on upgrade, then keeps versioned triggers on reopen', async () => {
+  const store = createWidgetsStore('development');
+  await store.saveSetup(recentSetup(7));
+  await store.write(recentCopy);
+  const db = native.databases.get('splitbook-widgets.db')!;
+  db.exec(
+    'DROP TRIGGER widget_recent_setup_removed; CREATE TRIGGER widget_recent_setup_removed AFTER DELETE ON widget_setup BEGIN SELECT 1; END; PRAGMA user_version = 0;',
+  );
+  const upgraded = createWidgetsStore('development');
+  await upgraded.read();
+  expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 1 });
+  expect(
+    db.prepare("SELECT sql FROM sqlite_master WHERE name = 'widget_recent_setup_removed'").get(),
+  ).toMatchObject({ sql: expect.stringContaining('UPDATE widget_state') });
+  await upgraded.removeSetup(7);
+  expect((await upgraded.read()).copy?.recents).toEqual({});
+  await createWidgetsStore('development').read();
+  expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 1 });
+});
+
+it('rolls back a failed trigger migration and retries it on the next store open', async () => {
+  const store = createWidgetsStore('development');
+  await store.read();
+  const db = native.databases.get('splitbook-widgets.db')!;
+  db.exec('PRAGMA user_version = 0');
+  native.failMigration = true;
+  const upgrading = createWidgetsStore('development');
+  await expect(upgrading.read()).rejects.toThrow('missing_migration_table');
+  expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 0 });
+  expect(
+    db.prepare("SELECT name FROM sqlite_master WHERE name = 'widget_recent_copy'").get(),
+  ).toBeDefined();
+  await upgrading.read();
+  expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 1 });
 });

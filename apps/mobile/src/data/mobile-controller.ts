@@ -1356,6 +1356,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       return session.read(path, owner, signal);
     },
+    ...(dependencies.widgets?.recentSelections
+      ? {
+          recentRequested: async (id: string) => {
+            const selected = await dependencies.widgets!.recentSelections!(account().accountId);
+            return Object.hasOwn(selected, id);
+          },
+        }
+      : {}),
     answered: (path, saved) => answered(path, saved, true),
     route: () => route,
     savable: (key) => savable(key),

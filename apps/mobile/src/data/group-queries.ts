@@ -206,6 +206,8 @@ export interface GroupSession {
   now(): number;
   /** Read projections such as the Widget copy observe the completed queries without a UI publish. */
   readSettled?(): void;
+  /** A placed Group widget requests the complete Recent ledger on its next open. */
+  recentRequested?(groupId: string): Promise<boolean>;
 }
 
 /** This open of a Group view, until the member opens another. */
@@ -872,6 +874,25 @@ export function createGroupQueries(session: GroupSession) {
     if (ended && session.current(owner) && view === opened && !onScreen()?.sheet)
       await settle(owner, { group: from === 'group' });
   };
+  const recentRead = (groupId: string) => {
+    const candidates: Envelope[] = client
+      .getQueriesData<Pages | Envelope>({
+        queryKey: listKey(groupId, false, null).slice(0, 4),
+        predicate: ({ queryKey }) =>
+          typeof queryKey[4] === 'string' &&
+          queryKey[4].startsWith(`${groupPrefix(groupId)}/expenses?`),
+      })
+      .flatMap(([, data]) => {
+        if (!data) return [];
+        return 'pages' in data ? data.pages.filter((page) => page.source !== 'failed') : [data];
+      });
+    const order = (read: Envelope & { widgetRecentOrder?: number }) => read.widgetRecentOrder ?? 0;
+    return (
+      candidates
+        .filter((read) => parseExpensePageResponse(read.value).recent !== undefined)
+        .sort((a, b) => order(b) - order(a) || b.refreshedAt - a.refreshedAt)[0] ?? null
+    );
+  };
   const steps = async (
     opened: View,
     owner: number,
@@ -879,6 +900,16 @@ export function createGroupQueries(session: GroupSession) {
     from: Step,
     still: () => boolean,
   ): Promise<boolean> => {
+    let recentMissing = false;
+    if (from === 'group' && session.recentRequested) {
+      try {
+        recentMissing =
+          (await session.recentRequested(opened.groupId)) && !recentRead(opened.groupId);
+      } catch {
+        // Widget metadata cannot prevent ordinary Group reads.
+      }
+      if (!still() || !session.current(owner)) return false;
+    }
     /** A Month changed meanwhile reads its own list: this one isn't read again. */
     const sameMonth = (list: QueryKey) => () =>
       still() && hashKey(shownList() ?? []) === hashKey(list);
@@ -889,7 +920,8 @@ export function createGroupQueries(session: GroupSession) {
      */
     let early: { hash: string; reading: Promise<Pages> } | null = null;
     const readList = (list: QueryKey) => {
-      const read = () => readNow<Pages>(listOptions(list, fresh), owner, sameMonth(list));
+      const read = () =>
+        readNow<Pages>(listOptions(list, fresh || recentMissing), owner, sameMonth(list));
       if (early?.hash !== hashKey(list)) return read();
       return early.reading.catch((error: unknown) => {
         if (error instanceof Superseded && opened.checked && sameMonth(list)()) return read();
@@ -943,7 +975,7 @@ export function createGroupQueries(session: GroupSession) {
           shown = onScreen();
         if (!list || !shown || shown.destination === 'activity') return null;
         const listing = readNow<Pages>(
-          listOptions(list, fresh),
+          listOptions(list, fresh || recentMissing),
           owner,
           () => opened.checked && sameMonth(list)(),
         );
@@ -1599,36 +1631,7 @@ export function createGroupQueries(session: GroupSession) {
      * what another destination reads beside the Group shows from now on (#222).
      */
     checked: (groupId: string) => !!view && view.groupId === groupId && view.checked && !view.lost,
-    /** Recent enrichment comes from any existing page. Older responses use only the first page. */
-    recentRead(groupId: string) {
-      const month = monthKeyInZone(session.now(), session.timeZone());
-      const candidates: Envelope[] = client
-        .getQueriesData<Pages | Envelope>({
-          queryKey: listKey(groupId, false, null).slice(0, 4),
-          predicate: ({ queryKey }) =>
-            typeof queryKey[4] === 'string' &&
-            queryKey[4].startsWith(`${groupPrefix(groupId)}/expenses?`),
-        })
-        .flatMap(([, data]) => {
-          if (!data) return [];
-          return 'pages' in data ? data.pages.filter((page) => page.source !== 'failed') : [data];
-        });
-      const order = (read: Envelope & { widgetRecentOrder?: number }) =>
-        read.widgetRecentOrder ?? 0;
-      const enriched = candidates
-        .filter((read) => parseExpensePageResponse(read.value).recent !== undefined)
-        .sort((a, b) => order(b) - order(a) || b.refreshedAt - a.refreshedAt)[0];
-      if (enriched) return enriched;
-      const allTime = stateOf<Pages>(listKey(groupId, false, null))?.data?.pages.find(
-        (page) => page.page === 1 && page.source !== 'failed',
-      );
-      const currentMonth = stateOf<Pages>(listKey(groupId, true, month))?.data?.pages.find(
-        (page) => page.page === 1 && page.source !== 'failed',
-      );
-      return (
-        allTime ?? currentMonth ?? stateOf<Envelope>(monthPageKey(groupId, month))?.data ?? null
-      );
-    },
+    recentRead,
     /** A Month summary already read by the app, carrying the time of that page's own read. */
     monthRead(groupId: string, month: string) {
       const key = listKey(groupId, true, month);

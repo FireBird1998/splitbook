@@ -40,6 +40,7 @@ export interface WidgetRecentPart {
     amountMinor: number;
     currency: string;
     date: string;
+    createdAt?: string;
     isDeleted?: boolean;
   }[];
 }
@@ -61,10 +62,17 @@ function recentWidgetView(
   paymentPeople: WidgetPerson[] = [],
 ) {
   if (setup.showRecentExpenses !== true) return null;
-  const today = dayKeyInZone(now, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const today = dayKeyInZone(now, zone);
+  // New copies compare the saved creation instants. Legacy copies keep their phone-calendar order.
+  const recentTime = (row: WidgetRecentPart['rows'][number]) =>
+    Date.parse(
+      row.createdAt ??
+        (row.kind === 'settlement' ? dayKeyInZone(row.date, zone) : row.date.slice(0, 10)),
+    );
   const rows = (part?.rows ?? [])
     .filter((row) => !row.isDeleted)
-    .sort((a, b) => b.date.localeCompare(a.date));
+    .sort((a, b) => recentTime(b) - recentTime(a));
   const people: WidgetPerson[] = [
     ...paymentPeople,
     ...rows.flatMap((row) => [
@@ -165,7 +173,14 @@ export interface WidgetGroupPart {
 function tripDay(part: WidgetGroupPart, now: number): string | null {
   const start = part.tripDates?.start;
   const end = part.tripDates?.end;
-  const today = dayKeyInZone(now, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const today = dayKeyInZone(now, zone);
+  // New copies compare the saved creation instants. Legacy copies keep their phone-calendar order.
+  const recentTime = (row: WidgetRecentPart['rows'][number]) =>
+    Date.parse(
+      row.createdAt ??
+        (row.kind === 'settlement' ? dayKeyInZone(row.date, zone) : row.date.slice(0, 10)),
+    );
   if (part.theme !== 'trip' || !start || !end || today < start || today > end) return null;
   try {
     return `Day ${dayCount(start, today)} of ${dayCount(start, end)}`;
@@ -327,14 +342,14 @@ function groupWidgetView(
     };
   });
   const recentView = recentWidgetView(recent, setup, now, paymentPeople);
-  const hiddenSummary = () => {
+  const hiddenSummary = (outgoing = 'You owe') => {
     const owe = new Set(ownPayments.filter((p) => p.from === setup.accountId).map((p) => p.to))
       .size;
     const owed = new Set(ownPayments.filter((p) => p.to === setup.accountId).map((p) => p.from))
       .size;
     return (
       [
-        owe ? `You owe ${counted(owe, 'person', 'people')}` : null,
+        owe ? `${outgoing} ${counted(owe, 'person', 'people')}` : null,
         owed ? `You’re owed by ${counted(owed, 'person', 'people')}` : null,
       ]
         .filter(Boolean)
@@ -364,7 +379,7 @@ function groupWidgetView(
     hiddenCounts:
       setup.hideAmounts && setup.showRecentExpenses
         ? [
-            hiddenSummary().replace('You owe ', 'You pay '),
+            hiddenSummary('You pay'),
             recentView?.count ?? recentView?.prompt,
             monthView?.count ?? monthView?.prompt,
           ].filter((value): value is string => !!value)
@@ -646,12 +661,23 @@ function groupLayout(
       );
       const recentSection: WidgetSection = {
         id: 'recent',
+        ...(view.payments.length
+          ? { afterRows: { id: 'payments', rows: view.payments.length } }
+          : {}),
         rows: recentCount || 1,
         rowHeight: recentCount ? recentRowHeight : recentMessageLines.length * text.line(11) + 12,
         inset:
           (view.hidden ? 0 : sectionLabelHeight) + (recentCount && !compact ? pixels(4) * 2 : 0),
-        minHeight: recentCount ? sectionLabelHeight + text.line(10) + 4 : 0,
-        ...(recentCount ? { moreHeight: text.line(10) + 4, grow: true } : {}),
+        minHeight: recentCount
+          ? sectionLabelHeight +
+            text.words(
+              counted(recentCount, 'recent Expense or payment', 'recent Expenses and payments'),
+              10,
+            ).length *
+              text.line(10) +
+            4
+          : 0,
+        ...(recentCount ? { moreHeight: 0, grow: true } : {}),
       };
       const monthPanelPadding = compact ? 0 : 8;
       const monthColumnWidth = (compact ? width : (width - 8) / 2) - monthPanelPadding * 2;
@@ -700,11 +726,13 @@ function groupLayout(
         4;
       const monthSection: WidgetSection = {
         id: 'month',
-        ...(view.payments.length
-          ? compact
-            ? { whenComplete: 'payments' }
-            : { afterRows: { id: 'payments', rows: view.payments.length } }
-          : {}),
+        ...(recentEligible
+          ? { afterRows: { id: 'recent', rows: recentCount || 1 } }
+          : view.payments.length
+            ? compact
+              ? { whenComplete: 'payments' }
+              : { afterRows: { id: 'payments', rows: view.payments.length } }
+            : {}),
         rows: monthRows,
         rowHeight: view.month?.totals.length ? text.line(monthAmountFont) : monthTextHeight,
         inset: monthInset,
@@ -716,7 +744,6 @@ function groupLayout(
             ? 0
             : monthHeading + text.line(11) + 4 + text.line(monthAmountFont),
         ...(view.month?.totals.length ? { moreHeight: monthMoreHeight } : {}),
-        ...(recentEligible ? { afterRows: { id: 'recent', rows: 3 } } : {}),
       };
       let showSectionLabels = (recentEligible || monthEligible) && !view.hidden;
       let sections: WidgetSection[] = [
@@ -841,6 +868,24 @@ function groupLayout(
               : section,
           );
       }
+      const fitted = fitWidgetSections(height, sections, gap, ratio);
+      const anotherSection = fitted.sections.some((section) => section.id === 'recent');
+      if (anotherSection && fitted.sections.some((section) => section.id === 'payments')) {
+        sections = sections.map((section) =>
+          section.id === 'payments' ? { ...section, grow: false } : section,
+        );
+        if (
+          !fitted.sections.some((section) => section.id === 'recent' && section.rows && recentCount)
+        )
+          sections.splice(
+            Math.max(
+              0,
+              sections.findIndex((section) => section.id === 'action'),
+            ),
+            0,
+            { id: 'space', rows: 1, rowHeight: 0, required: true, grow: true },
+          );
+      }
       return {
         sections,
         showSectionLabels,
@@ -894,7 +939,7 @@ function groupLayout(
   const countsSection = settings.sections.find((s) => s.id === 'counts');
   const recentMore = recentSection?.more
     ? recentSection.rows
-      ? `+${counted(recentSection.more, 'more', 'more')}`
+      ? null
       : counted(
           view.recent?.rows.length ?? 0,
           'recent Expense or payment',
@@ -938,7 +983,10 @@ function groupLayout(
     recentMoreIsCount: !!recentMore && !recentSection?.rows,
     recentSaved: view.hidden ? null : view.recent?.saved,
     recentLabel: view.hidden ? null : 'RECENT',
-    recentMoreHeight: recentSection?.moreHeight ?? 0,
+    recentMoreHeight:
+      recentSection && !recentSection.rows
+        ? recentSection.height - (view.hidden ? 0 : settings.sectionLabelHeight)
+        : 0,
     recentPanelHeight: recentSection
       ? recentSection.height - (view.hidden ? 0 : settings.sectionLabelHeight)
       : 0,

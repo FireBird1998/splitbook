@@ -291,19 +291,25 @@ export function createWidgetCopy(
         copy.tags = { ...tags };
         copy.lostGroupIds = [...lost];
         if (savedGroups) copy.savedGroups = savedGroups;
+        copy.recents = {};
         if (native.recentSelections) {
-          await held.writeSavedCopy(async () => {
-            const selected = await native.recentSelections!(held.accountId);
-            const recents: NonNullable<WidgetCopy['recents']> = {};
-            for (const id of Object.keys(selected)) {
-              if (lost.has(id)) continue;
-              const current = recentRead(id);
-              if (current) retiredRecent.delete(id);
-              const saved = current ?? (!retiredRecent.has(id) ? selected[id] : null);
-              if (saved) recents[id] = saved;
-            }
-            copy.recents = recents;
-          });
+          try {
+            await held.writeSavedCopy(async () => {
+              const selected = await native.recentSelections!(held.accountId);
+              const recents: NonNullable<WidgetCopy['recents']> = {};
+              for (const id of Object.keys(selected)) {
+                if (lost.has(id)) continue;
+                const current = recentRead(id);
+                if (current) retiredRecent.delete(id);
+                const saved = current ?? (!retiredRecent.has(id) ? selected[id] : null);
+                if (saved) recents[id] = saved;
+              }
+              copy.recents = recents;
+            });
+          } catch {
+            // Optional private rows cannot prevent the other saved parts or session redrawing.
+            copy.recents = {};
+          }
         }
         const next = JSON.stringify([copy, state]);
         if (next === signature) return;

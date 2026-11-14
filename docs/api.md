@@ -1372,7 +1372,9 @@ page. `byMember` appears only when `includeMemberBreakdown=1`; `net` is
 
 `includeRecent=1` adds `recent.expenses` and `recent.settlements`, each capped at
 20 saved rows across the Group, ordered newest first. Expense rows exclude deleted
-items, notes and edit history. Settlement rows contain payer, recipient, saved
+items, notes, creator and edit history. Each Expense contains only its identity, Group,
+description, stored money/currency, calendar date, creation time and payer allocations.
+Populated people contain only identity, name and image. Settlement rows contain payer, recipient, saved
 amounts and currencies, and creation time. The ordinary filtered list, pagination
 and summary retain their selected window. Android asks for this addition on an
 existing Expense read only while a placed Group widget has Recent enabled. The

@@ -425,7 +425,9 @@ export class ExpenseService {
           firstUnfilteredPage
             ? Promise.resolve(expenses.slice(0, 20))
             : Expense.find({ group: groupId, isDeleted: false })
-                .select('-editHistory -notes')
+                .select(
+                  'group description amount amountMinor moneyVersion currency date createdAt paidBy',
+                )
                 .sort({ date: -1, createdAt: -1 })
                 .limit(20)
                 .populate('paidBy.user', PERSON_FIELDS)
@@ -440,7 +442,38 @@ export class ExpenseService {
             .populate('paidBy', PERSON_FIELDS)
             .populate('paidTo', PERSON_FIELDS)
             .lean(),
-        ]).then(([expenses, settlements]) => ({ expenses, settlements }))
+        ]).then(([expenses, settlements]) => ({
+          expenses: expenses.map(
+            ({
+              _id,
+              group,
+              description,
+              amount,
+              amountMinor,
+              moneyVersion,
+              currency,
+              date,
+              createdAt,
+              paidBy,
+            }) => ({
+              _id,
+              group,
+              description,
+              amount,
+              amountMinor,
+              moneyVersion,
+              currency,
+              date,
+              createdAt,
+              paidBy: paidBy.map(({ user, amount, amountMinor }) => ({
+                user,
+                amount,
+                amountMinor,
+              })),
+            }),
+          ),
+          settlements,
+        }))
       : undefined;
     return {
       ...(recent ? { recent } : {}),

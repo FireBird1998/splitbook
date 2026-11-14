@@ -10,6 +10,7 @@ import {
 import { DEMO_PERSONA_IDS } from './demo-personas';
 import { groupService } from './services/group.service';
 import { expenseService } from './services/expense.service';
+import { parseRecentLedgerRead } from '@splitbook/shared/recent-ledger-read';
 import { settlementService } from './services/settlement.service';
 
 vi.mock('next/headers', async () => (await import('./test-utils/signed-in-route')).nextHeaders);
@@ -112,4 +113,61 @@ it('the optional part follows the same real-session and Group access checks', as
   await addExpense('Member-only lunch');
   expect((await page('&includeRecent=1', '')).status).toBe(401);
   expect((await page('&includeRecent=1', await signIn('priya'))).status).toBe(403);
+});
+
+it('projects the reused unfiltered first page to the exact Recent fields', async () => {
+  const expense = await addExpense('Recent lunch');
+  await expenseService.update(
+    { actorId: alex, groupId, expenseId: String(expense._id) },
+    { notes: 'Only the Expense screen may show this note' },
+    0,
+  );
+  const answer = await page('&includeRecent=1');
+  expect(answer.status).toBe(200);
+  expect(answer.body.data.expenses[0].notes).toBe('Only the Expense screen may show this note');
+  expect(answer.body.data.expenses[0].createdBy).toMatchObject({ _id: alex });
+  const recent = answer.body.data.recent;
+  expect(Object.keys(recent.expenses[0]).sort()).toEqual(
+    [
+      '_id',
+      'group',
+      'description',
+      'amount',
+      'amountMinor',
+      'moneyVersion',
+      'currency',
+      'date',
+      'createdAt',
+      'paidBy',
+    ].sort(),
+  );
+  expect(parseRecentLedgerRead(recent).expenses).toHaveLength(1);
+  expect(() =>
+    parseRecentLedgerRead({
+      ...recent,
+      expenses: [{ ...recent.expenses[0], notes: 'Injected extra field' }],
+    }),
+  ).toThrow();
+  expect(() =>
+    parseRecentLedgerRead({
+      ...recent,
+      expenses: [{ ...recent.expenses[0], createdBy: { _id: alex, name: 'Alex' } }],
+    }),
+  ).toThrow();
+  expect(() =>
+    parseRecentLedgerRead({
+      ...recent,
+      expenses: [
+        {
+          ...recent.expenses[0],
+          paidBy: [
+            {
+              ...recent.expenses[0].paidBy[0],
+              user: { _id: alex, name: 'Alex', email: 'private@example.test' },
+            },
+          ],
+        },
+      ],
+    }),
+  ).toThrow();
 });

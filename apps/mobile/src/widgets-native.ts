@@ -30,22 +30,40 @@ export function createWidgetsStore(environment: string) {
     (opening ??= (async () => {
       const db = await openDatabaseAsync('splitbook-widgets.db');
       await db.execAsync(`PRAGMA secure_delete = ON;
+      PRAGMA journal_mode = DELETE;
       CREATE TABLE IF NOT EXISTS widget_state (environment TEXT PRIMARY KEY, copy TEXT, session TEXT);
-      CREATE TABLE IF NOT EXISTS widget_setup (environment TEXT, widget_id INTEGER, setup TEXT, PRIMARY KEY(environment, widget_id));
-      CREATE TRIGGER IF NOT EXISTS widget_recent_copy AFTER UPDATE OF copy ON widget_state
-      BEGIN ${pruneRecents} END;
-      CREATE TRIGGER IF NOT EXISTS widget_recent_setup_saved AFTER INSERT ON widget_setup
-      BEGIN
-        DELETE FROM widget_setup WHERE widget_id = NEW.widget_id AND environment != NEW.environment
-          AND json_valid(setup)
-          AND json_type(setup, '$.showRecentExpenses') = 'true';
-        ${pruneRecents}
-      END;
-      CREATE TRIGGER IF NOT EXISTS widget_recent_setup_removed AFTER DELETE ON widget_setup
-      BEGIN ${pruneRecents} END;
-      ${pruneRecents}`);
+      CREATE TABLE IF NOT EXISTS widget_setup (environment TEXT, widget_id INTEGER, setup TEXT, PRIMARY KEY(environment, widget_id));`);
+      const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+      if ((version?.user_version ?? 0) < 1) {
+        try {
+          await db.execAsync(`BEGIN IMMEDIATE;
+        DROP TRIGGER IF EXISTS widget_recent_copy;
+        DROP TRIGGER IF EXISTS widget_recent_setup_saved;
+        DROP TRIGGER IF EXISTS widget_recent_setup_removed;
+        CREATE TRIGGER widget_recent_copy AFTER UPDATE OF copy ON widget_state
+        BEGIN ${pruneRecents} END;
+        CREATE TRIGGER widget_recent_setup_saved AFTER INSERT ON widget_setup
+        BEGIN
+          DELETE FROM widget_setup WHERE widget_id = NEW.widget_id AND environment != NEW.environment
+            AND json_valid(setup)
+            AND json_type(setup, '$.showRecentExpenses') = 'true';
+          ${pruneRecents}
+        END;
+        CREATE TRIGGER widget_recent_setup_removed AFTER DELETE ON widget_setup
+        BEGIN ${pruneRecents} END;
+        PRAGMA user_version = 1;
+        COMMIT;`);
+        } catch (error) {
+          await db.execAsync('ROLLBACK').catch(() => undefined);
+          throw error;
+        }
+      }
+      await db.execAsync(pruneRecents);
       return db;
-    })());
+    })().catch((error: unknown) => {
+      opening = undefined;
+      throw error;
+    }));
   const ensure = async () => {
     const db = await database();
     await db.runAsync('INSERT OR IGNORE INTO widget_state(environment) VALUES (?)', environment);

@@ -19,19 +19,17 @@ export function widgetRecentCopy(
   groupId: string,
   verifiedAt: number,
   accountId: string,
-): WidgetRecentPart {
+): WidgetRecentPart | null {
   const page = parseExpensePageResponse(value);
-  const ledger =
-    page.recent === undefined
-      ? { expenses: page.expenses, settlements: [] }
-      : parseRecentLedgerRead(page.recent);
+  if (page.recent === undefined) return null;
+  const ledger = parseRecentLedgerRead(page.recent);
   const expenses = ledger.expenses
-    .filter((row) => row.group === groupId && row.isDeleted !== true && getCurrency(row.currency))
+    .filter((row) => row.group === groupId && getCurrency(row.currency))
     .map((row) => {
       const payers = row.paidBy.filter((payer) => payer.amount > 0);
       const payer = payers.length === 1 ? payers[0].user : null;
       return {
-        sortDate: Date.parse(row.date),
+        sortDate: Date.parse(row.createdAt),
         createdAt: Date.parse(row.createdAt),
         row: {
           id: row._id,
@@ -44,6 +42,7 @@ export function widgetRecentCopy(
           amountMinor: readStoredAmountMinor(row),
           currency: row.currency,
           date: row.date.slice(0, 10),
+          createdAt: row.createdAt,
         },
       };
     });
@@ -76,6 +75,7 @@ export function widgetRecentCopy(
         amountMinor: row.paidCurrency ? row.amountPaidMinor! : readStoredAmountMinor(row),
         currency: row.paidCurrency ?? row.currency,
         date: row.createdAt,
+        createdAt: row.createdAt,
       },
     }));
   return {

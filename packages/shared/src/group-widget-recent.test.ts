@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { groupWidget, type WidgetGroupPart, type WidgetRecentPart } from './group-widget';
 
 const now = new Date(2026, 10, 14, 9, 41).getTime();
@@ -278,3 +278,78 @@ it.each([{ currencies: [] }, { currencies: [{ currency: 'INR', balanceMinor: 0, 
     expect(result.summary).toContain('Maple House');
   },
 );
+
+it('keeps normal payment heights and gives Recent two rows without an overflow line at 4×3', () => {
+  const result = view({ width: 360, height: 344 });
+  expect(result.payments).toHaveLength(2);
+  expect(result.layout.sections.find((s) => s.id === 'payments')?.rowHeight).toBeLessThanOrEqual(
+    39,
+  );
+  expect(result.recent?.rows.length).toBeGreaterThanOrEqual(2);
+  expect(result.recent?.more).toBeNull();
+});
+it('Recent never displaces the payments that fit without it', () => {
+  for (const height of [224, 270, 344, 464]) {
+    const baseline = groupWidget(
+      group,
+      { ...setup, showRecentExpenses: false },
+      { width: 360, height },
+      auth,
+      now,
+    );
+    const result = view({ width: 360, height });
+    expect(result.payments).toHaveLength(baseline.payments.length);
+  }
+});
+it('orders Expense and payment creation instants across midnight in the phone zone', () => {
+  const resolve = Intl.DateTimeFormat.prototype.resolvedOptions;
+  vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
+    this: Intl.DateTimeFormat,
+  ) {
+    return { ...resolve.call(this), timeZone: 'Pacific/Honolulu' };
+  });
+  try {
+    const values = {
+      ...recent,
+      rows: [
+        {
+          ...recent.rows[0],
+          id: 'expense-newer',
+          date: '2026-11-13',
+          createdAt: '2026-11-14T03:00:00Z',
+        },
+        {
+          ...recent.rows[0],
+          id: 'payment',
+          kind: 'settlement' as const,
+          date: '2026-11-14T02:00:00Z',
+          createdAt: '2026-11-14T02:00:00Z',
+        },
+        {
+          ...recent.rows[0],
+          id: 'expense-older',
+          date: '2026-11-13',
+          createdAt: '2026-11-13T23:00:00Z',
+        },
+      ],
+    };
+    const result = groupWidget(
+      group,
+      setup,
+      { width: 360, height: 584 },
+      auth,
+      Date.parse('2026-11-14T04:11:00Z'),
+      1,
+      month,
+      values,
+    );
+    expect(result.recent?.rows.map((r) => r.id)).toEqual([
+      'expense-newer',
+      'payment',
+      'expense-older',
+    ]);
+    expect(result.recent?.rows.every((r) => r.detail.endsWith('Today'))).toBe(true);
+  } finally {
+    vi.restoreAllMocks();
+  }
+});

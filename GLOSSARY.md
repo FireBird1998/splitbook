@@ -51,7 +51,7 @@ Server data stored on a member's device so a Group can be shown offline. It alwa
 _Avoid_: cache (in product copy), offline data, local data
 
 **Widget copy**:
-The Saved copy a home-screen widget draws from. It holds what the widgets show, including balances, Group names, own Suggested payments, first names and initials, To review counts, Trip dates and current-Month totals per currency with the member's available share. Each part keeps its read's verification time. Recent Expense and Settlement descriptions are held only for Groups where a placed widget has Show recent Expenses on, and are deleted when the last such widget is turned off or removed. The Saved copy purge rules cover every part, including descriptions.
+The Saved copy a home-screen widget draws from. It holds what the widgets show, including balances, Group names, own Suggested payments, first names and initials, To review counts, Trip dates and current-Month totals per currency with the member's available share. Each part keeps its read's verification time. Recent Expense descriptions, payer and payee first names, amounts and day are held only for Groups where a placed widget has Show recent Expenses on, and are deleted when the last such widget is turned off or removed. The Saved copy purge rules cover every part, including descriptions.
 _Avoid_: widget cache, widget data
 
 **Widget setup**:

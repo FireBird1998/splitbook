@@ -1,16 +1,37 @@
 import { z } from 'zod';
-import { expenseReadSchema } from './expense-page-read';
-import { amount, currencyCode, financialPerson, identity, timestamp } from './wire-fields';
+import { amount, currencyCode, identity, timestamp } from './wire-fields';
 
-const recentLedger = z.object({
-  expenses: z.array(expenseReadSchema).max(20),
+const recentPerson = z.union([
+  identity,
+  z.strictObject({ _id: identity, name: z.string().optional(), image: z.string().nullish() }),
+  z.null(),
+]);
+const allocation = z.strictObject({
+  user: recentPerson,
+  amount,
+  amountMinor: z.number().int().optional(),
+});
+const recentExpense = z.strictObject({
+  _id: identity,
+  group: identity,
+  description: z.string(),
+  amount,
+  amountMinor: z.number().int().optional(),
+  moneyVersion: z.number().int().optional(),
+  currency: currencyCode,
+  date: timestamp,
+  createdAt: timestamp,
+  paidBy: z.array(allocation),
+});
+const recentLedger = z.strictObject({
+  expenses: z.array(recentExpense).max(20),
   settlements: z
     .array(
-      z.object({
+      z.strictObject({
         _id: identity,
         group: identity,
-        paidBy: financialPerson,
-        paidTo: financialPerson,
+        paidBy: recentPerson,
+        paidTo: recentPerson,
         amount,
         amountMinor: z.number().int().optional(),
         moneyVersion: z.number().int().optional(),
@@ -22,7 +43,7 @@ const recentLedger = z.object({
     )
     .max(20),
 });
-/** The optional Recent part of an Expense page; notes and activity/history never project. */
+/** The bounded Recent wire fields, excluding notes, creator, allocations to recipients and history. */
 export function parseRecentLedgerRead(value: unknown) {
   return recentLedger.parse(value);
 }
