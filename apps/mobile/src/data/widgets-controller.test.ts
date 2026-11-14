@@ -3321,3 +3321,38 @@ it('does not confirm a listed Group when its delayed first native restore comple
   );
   expect(f.record().copy?.groups?.[groupId]).toBeDefined();
 });
+
+it('confirms a warm Home-only Group even when trimming the next partial list clears Home first', async () => {
+  const f = fixture(),
+    c = f.make(),
+    omitted = 'b00000000000000000000009';
+  await c.signIn('alex');
+  f.addOverviewGroup(omitted, 'Cabin Weekend');
+  f.listGroups([groupId]);
+  f.home({
+    buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0, net: -30 }],
+    groups: [
+      { groupId: omitted, name: 'Cabin Weekend', balances: [{ currency: 'INR', balance: -30 }] },
+    ],
+  });
+  await c.refresh('pull');
+  await vi.waitFor(() =>
+    expect(f.record().copy?.home?.byGroup?.[omitted]).toEqual([
+      { currency: 'INR', balanceMinor: -3000 },
+    ]),
+  );
+  expect(f.record().copy?.groupPeople?.[omitted]).toBeUndefined();
+  const home = f.backend.hold('GET', '/api/user/balances'),
+    start = f.backend.requests.length;
+  const refreshing = c.refresh('pull');
+  try {
+    await vi.waitFor(() =>
+      expect(
+        f.backend.requests.slice(start).filter((r) => r.path === `/api/groups/${omitted}`),
+      ).toHaveLength(1),
+    );
+  } finally {
+    home.release();
+    await refreshing;
+  }
+});
