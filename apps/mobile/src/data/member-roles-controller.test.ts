@@ -284,7 +284,8 @@ describe('Changing a member’s role', () => {
   it('shows a refusal answered on a later visit to the same Group’s Members', async () => {
     const f = await onMembers();
     const words = 'This Group changed. Reload and try again.';
-    const held = f.backend.hold('PATCH', rolePath(samId));
+    // Held before the server answers, so its answer is the refusal set below.
+    const held = f.backend.hold('PATCH', rolePath(samId), { at: 'request' });
     const changing = f.controller.changeMemberRole(samId, 'admin');
     await held.arrived;
     await f.controller.back();

@@ -6728,10 +6728,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     const owner = generation,
       attempt = ++roleRequest,
-      view = route,
       groupId = acting.group.id,
       name = acting.target.user.name;
-    const onPage = () => current(owner) && view === route && attempt === roleRequest;
+    // Any visit to this Group's Members: one answered on a later visit shows there, a refusal
+    // included (#1262), since that visit shows the change still being made.
+    const onPage = () =>
+      current(owner) &&
+      attempt === roleRequest &&
+      route.screen === 'members' &&
+      route.groupId === groupId;
     publish({
       ...snapshot,
       memberRole: { groupId, userId, name, role, status: 'changing', message: null, done: null },
