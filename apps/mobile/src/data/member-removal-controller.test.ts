@@ -344,6 +344,30 @@ describe('Removing a member', () => {
     });
   });
 
+  // #1262 (4), for removals: a read answered offline from this phone's saved copy isn't the
+  // server's word, so the confirmed removal is still said.
+  it('says a confirmed removal was made when the read after it is lost on the way', async () => {
+    const f = await onMembers();
+    f.answerRemoval((userId) => {
+      f.removeMember(userId);
+      f.backend.reply(
+        'GET',
+        `/api/groups/${groupId}`,
+        () => {
+          throw new TypeError('Network request failed');
+        },
+        { once: true },
+      );
+      return undefined;
+    });
+    f.controller.reviewRemoveMember(priyaId);
+    await f.controller.removeMember();
+    expect(f.controller.getSnapshot()).toMatchObject({
+      memberRemoval: closed,
+      memberRole: { done: 'Priya Shah was removed from Maple House' },
+    });
+  });
+
   it('a sign-out while removing publishes nothing of it into the next session', async () => {
     const f = await onMembers();
     f.controller.reviewRemoveMember(priyaId);

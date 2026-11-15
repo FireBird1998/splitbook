@@ -6641,10 +6641,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!current(owner) || error instanceof Superseded) return null;
       failure = error;
     }
-    /** The Group read again after the write, whatever its answer. */
+    /** The Group read again from the server after the write, whatever its answer. */
     let reread: MobileGroup | null = null;
     try {
-      reread = await readMembersGroup(write.groupId, owner, { fresh: true, wanted: onPage });
+      const read = await readMembersGroup(write.groupId, owner, { fresh: true, wanted: onPage });
+      // Offline, the read answers from this phone's saved copy: that isn't the server's word on
+      // the write (#1262), so it counts as not read.
+      const fromServer =
+        queryClient.getQueryData<Envelope>(groupKey(account(), write.groupId))?.source ===
+        'network';
+      reread = fromServer ? read : null;
     } catch (error) {
       if (!onPage() || error instanceof Superseded) return null;
       if (error instanceof RequestError && [403, 404].includes(error.status)) {
@@ -6780,8 +6786,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       } catch {
         // The change was made; the read that followed shows it, or the next one will.
       }
-    if (!sent.reread && changeAnswer)
-      publish({ ...snapshot, detail: { ...snapshot.detail, data: changeAnswer } });
+    if (!sent.reread && changeAnswer && onPage()) {
+      // The server confirmed it: its answer stands as the Group's read, so Members shows it even
+      // though the read after it couldn't land (#1262), as the next open will.
+      const verified = groupQueries.groupAnswered(change.groupId, sent.answer);
+      publish({
+        ...snapshot,
+        detail: { ...snapshot.detail, data: changeAnswer, refreshedAt: verified.refreshedAt },
+      });
+    }
     return { ...sent, shown: sent.reread ?? changeAnswer };
   };
   /**
