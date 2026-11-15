@@ -469,7 +469,7 @@ export class GroupService {
     if (newRole === 'member' && target.role === 'admin') {
       const adminCount = group.members.filter((m) => m.role === 'admin').length;
       if (adminCount <= 1) {
-        throw new Refusal('LAST_ADMIN', { variant: 'demotion' });
+        throw new Refusal('LAST_ADMIN', { variant: 'demotion', groupName: group.name });
       }
     }
 
@@ -525,7 +525,7 @@ export class GroupService {
   async removeMember(groupId: string, targetUserId: string, actorId: string) {
     await connectDB();
 
-    const group = await Group.findById(groupId).select('members').lean();
+    const group = await Group.findById(groupId).select('members name').lean();
     if (!group) return null;
 
     // Check admin permission
@@ -546,7 +546,7 @@ export class GroupService {
     if (target.role === 'admin') {
       const adminCount = group.members.filter((m) => m.role === 'admin').length;
       if (adminCount <= 1) {
-        throw new Refusal('LAST_ADMIN', { variant: 'removal' });
+        throw new Refusal('LAST_ADMIN', { variant: 'removal', groupName: group.name });
       }
     }
 

@@ -11,14 +11,14 @@ it.each([
   [() => notFound('Expense'), 404, '{"error":"Expense not found","status":404,"code":"NOT_FOUND"}'],
   [() => notFound(), 404, '{"error":"Resource not found","status":404,"code":"NOT_FOUND"}'],
   [
-    () => serverError(new Refusal('LAST_ADMIN', { variant: 'demotion' })),
+    () => serverError(new Refusal('LAST_ADMIN', { variant: 'demotion', groupName: 'Maple House' })),
     409,
-    '{"error":"Cannot demote the last admin. Promote another member first.","status":409,"code":"LAST_ADMIN"}',
+    '{"error":"Maple House needs an admin. Make someone else an admin first.","status":409,"code":"LAST_ADMIN"}',
   ],
   [
-    () => serverError(new Refusal('LAST_ADMIN', { variant: 'removal' })),
+    () => serverError(new Refusal('LAST_ADMIN', { variant: 'removal', groupName: 'Maple House' })),
     409,
-    '{"error":"Cannot remove the last admin.","status":409,"code":"LAST_ADMIN"}',
+    '{"error":"Maple House needs an admin. Make someone else an admin first.","status":409,"code":"LAST_ADMIN"}',
   ],
   [
     () => serverError(new Refusal('SELF_REMOVE')),

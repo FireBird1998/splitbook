@@ -248,8 +248,9 @@ export function currentCause(
         return new Refusal(code);
     }
 
+    // #1250: the demotion and removal words name the Group.
     if (code === 'LAST_ADMIN' && (caller === 'demotion' || caller === 'removal'))
-      return new Refusal(code, { variant: caller });
+      return new Refusal(code, { variant: caller, groupName: 'Maple House' });
     if (caller === 'removal' && (code === 'SELF_REMOVE' || code === 'REMOVAL_CONFLICT'))
       return new Refusal(code);
     if (

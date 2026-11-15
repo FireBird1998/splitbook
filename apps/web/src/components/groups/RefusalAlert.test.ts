@@ -75,8 +75,9 @@ describe('the refusal on Group settings', () => {
   });
 
   it('shows any other refusal in its words alone', () => {
-    const html = shown({ message: 'Cannot remove the last admin.' });
-    expect(text(html)).toContain('Cannot remove the last admin.');
+    const message = 'Maple House needs an admin. Make someone else an admin first.';
+    const html = shown({ message, code: 'LAST_ADMIN' });
+    expect(text(html)).toContain(message);
     expect(anchors(html)).toEqual([]);
   });
 });

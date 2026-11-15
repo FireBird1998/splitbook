@@ -35,7 +35,8 @@ words. The signed-out example is
 
 Demoting or removing the last admin carries `LAST_ADMIN`, removing yourself
 carries `SELF_REMOVE`, and invitation refusals carry `INVITATION_NOT_PENDING`,
-`INVITATION_EXPIRED` or `ALREADY_INVITED`. Their statuses and words are kept.
+`INVITATION_EXPIRED` or `ALREADY_INVITED`. Their statuses and words are kept,
+except the last admin's words, which name the Group since #1250 (see Members).
 Both payment routes answer `422` `FORBIDDEN_SETTLEMENT` with
 "Only the payer or recipient can record this payment".
 
@@ -829,8 +830,12 @@ Day [10,17), Sunset [17,20), Night otherwise. It runs on no timer.
 | POST   | `/api/groups/[id]/leave`            | The signed-in member leaves |
 
 PATCH and DELETE are admin-only. **Body** for PATCH is `{ "role": "admin" | "member" }`.
-Demoting or removing the last admin returns **409**; removing yourself returns
-**400** `You cannot remove yourself. Use leave group instead.`
+Demoting or removing the last admin returns **409** `code: "LAST_ADMIN"` with
+`<Group> needs an admin. Make someone else an admin first.`, naming the Group, such
+as `Maple House needs an admin. Make someone else an admin first.` (#1250; before
+it, `Cannot demote the last admin. Promote another member first.` and
+`Cannot remove the last admin.`). Removing yourself returns **400**
+`You cannot remove yourself. Use leave group instead.`
 
 ### DELETE /api/groups/[id]/members/[userId]
 

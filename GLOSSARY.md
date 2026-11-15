@@ -93,6 +93,10 @@ _Avoid_: hidden group, blocked group, private group
 A Group admin's choice of whether members' Connected assistants may reach that Group at all. It limits every member's assistant, whatever each member granted.
 _Avoid_: assistant policy, AI setting
 
+**Admin**:
+A Group member with the admin role, which lets them change the Group's settings, Tags and members: making another member an admin or a member, and removing a member. Every other member has the member role and can still add Expenses and record payments. A Group always keeps an admin, so the last one makes someone else an admin before stepping down or leaving.
+_Avoid_: owner, moderator; promote and demote (the buttons say Make admin and Make member)
+
 **Debt**:
 What one member owes another, from just the Expenses and Settlements between the two of them, before Suggested payments simplify it.
 _Avoid_: pairwise balance, IOU

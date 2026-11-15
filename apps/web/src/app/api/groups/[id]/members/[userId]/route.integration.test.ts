@@ -268,7 +268,7 @@ describe('PATCH /api/groups/[id]/members/[userId]', () => {
     ]);
   });
 
-  it('keeps the last admin an admin', async () => {
+  it('keeps the last admin an admin, in the words of the buttons (#1250)', async () => {
     const groupId = await coorgWeekend(sam);
 
     const refused = await changeRole(groupId, alex, await signIn('alex'), 'member');
@@ -276,7 +276,7 @@ describe('PATCH /api/groups/[id]/members/[userId]', () => {
     expect(refused).toEqual({
       status: 409,
       body: {
-        error: 'Cannot demote the last admin. Promote another member first.',
+        error: 'Coorg Weekend needs an admin. Make someone else an admin first.',
         status: 409,
         code: 'LAST_ADMIN',
       },
