@@ -203,6 +203,10 @@ class AnimatedValue {
   setValue(value: number) {
     this.value = value;
   }
+  /** Reports where the value stands, as the native driver does when asked. */
+  stopAnimation(callback?: (value: number) => void) {
+    callback?.(this.value);
+  }
   interpolate(config: { inputRange: number[]; outputRange: (number | string)[] }) {
     return { interpolation: config, of: this };
   }

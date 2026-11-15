@@ -2,6 +2,8 @@ import sharp from 'sharp';
 import { createHash } from 'node:crypto';
 import type { HeaderSceneArt, SceneLayer, SceneVector } from '@splitbook/shared/header-scene-art';
 import { vectorSvg } from './vectors.ts';
+import { elementMotion, motionRules, type Curve, type MotionRules, type Track } from './motion.ts';
+import { sharedCss } from './generate.ts';
 
 /** Where the Android app keeps the pictures and the per-scene lists that place them. */
 export const SPRITE_IMAGES = 'apps/mobile/assets/header-scenes';
@@ -24,6 +26,8 @@ const RENDER = {
   paletteColours: 256,
   /** No picture is longer than this on either side: the texture limit of the oldest GPUs. */
   maxSide: 2048,
+  /** The settings thumbnail is drawn about a hundred dp wide. */
+  thumbSide: 360,
 };
 /** Seconds of one web cloud crossing, by class; later classes override `cl` and `cf`. */
 const CLOUD_SECONDS: Record<string, number> = {
@@ -43,16 +47,31 @@ const FLOAT_SECONDS: Record<SceneLayer, number> = {
 };
 const LAYERS: SceneLayer[] = ['far', 'clouds', 'main', 'front', 'glow'];
 
-export type SpriteKind = 'body' | 'cloud' | 'shadow';
+export type SpriteKind = 'body' | 'cloud' | 'shadow' | 'part' | 'cover' | 'thumb';
 export interface SpritePlan {
   file: string;
   layer: SceneLayer;
   kind: SpriteKind;
-  /** Float period for a body or shadow; one web crossing for a cloud. */
+  /** Float period for a body, part or shadow; one web crossing for a cloud. */
   seconds: number;
   svg: string;
+  /** A part's own movement, outermost first, as the web's CSS gives it. */
+  tracks?: Track[];
+  /** A part's opacity when nothing runs; 0 hides it at rest, as on the web. */
+  rest?: number;
+  /** A part outside every floating group keeps still while the islands rise. */
+  still?: boolean;
+  /** The origin a rotation or an uncentred scale turns about, in scene units. */
+  origin?: [number, number];
+  /**
+   * A turning part inside a slanted group (Eco city's turbines): the picture holds the part
+   * unslanted, and the phone slants it with a fixed turn, stretch and turn of its own.
+   */
+  slant?: { turn: number; scaleX: number; scaleY: number; start: number };
+  /** What a cover is cut from: the static art drawn after the part, in drawing order. */
+  after?: string;
 }
-export interface Sprite extends Omit<SpritePlan, 'svg'> {
+export interface Sprite extends Omit<SpritePlan, 'svg' | 'after' | 'origin'> {
   x: number;
   y: number;
   w: number;
@@ -80,8 +99,136 @@ function lit(node: SceneVector, inWindows = false): SceneVector {
 const frame = (defs: string, body: string) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${AREA.width * SCALE}" height="${AREA.height * SCALE}" viewBox="${AREA.x} ${AREA.y} ${AREA.width} ${AREA.height}">${defs}${body}</svg>`;
 
-/** Splits a scene into the pieces that move on their own: bodies, clouds and the ground shadow. */
+const SHAPES = new Set(['path', 'polygon', 'circle', 'ellipse', 'rect']);
+/** Small parts that never overlap one another: equal ones may share a picture wherever they sit. */
+const SCATTERED = new Set(['water', 'snow', 'petals', 'smoke']);
+const turns = (tracks: readonly Track[]) => tracks.some((track) => track.scale || track.rotate);
+
+interface Unit {
+  top: SceneVector;
+  /** The moving elements this picture shows; equal neighbours are merged into one unit. */
+  roots: SceneVector[];
+  parent: SceneVector;
+  tracks: Track[];
+  rest: number;
+  still: boolean;
+  origin: [number, number];
+  /** Inside another moving element: the still art around it there moves with that element. */
+  nested: boolean;
+  /** The slanted group above a turning part, with its `matrix(a b c d 0 0)`. */
+  slanted?: { group: SceneVector; matrix: [number, number, number, number] };
+}
+
+/** A copy of `node` keeping only what `keep` allows; a group left empty is dropped. */
+function prune(
+  node: SceneVector,
+  keep: (node: SceneVector) => boolean | 'inside',
+): SceneVector | null {
+  const verdict = keep(node);
+  if (verdict === false) return null;
+  if (verdict === true || !node.children)
+    return verdict === true || SHAPES.has(node.tag) ? node : null;
+  const children = node.children
+    .map((child) => prune(child, keep))
+    .filter((child): child is SceneVector => child !== null);
+  return children.length ? { ...node, children } : null;
+}
+
+/** The moving elements under one top-level node, in drawing order. */
+function units(top: SceneVector, rules: MotionRules): { units: Unit[]; moving: Set<SceneVector> } {
+  const found: Unit[] = [];
+  const moving = new Set<SceneVector>();
+  const visit = (
+    node: SceneVector,
+    parent: SceneVector,
+    chain: Track[],
+    rest: number,
+    floats: boolean,
+    origin: [number, number],
+    slanted?: Unit['slanted'],
+  ) => {
+    const own =
+      /^(float|clouds)$/.test(node.motion ?? '') || (node.classes ?? []).includes('shadow')
+        ? { tracks: [], rest: 1 }
+        : elementMotion(node, rules);
+    const animated = own.tracks.length > 0;
+    const tracks = animated ? [...chain, ...own.tracks] : chain;
+    const opacity = animated ? rest * own.rest : rest;
+    if (animated) {
+      moving.add(node);
+      if (chain.some((track) => track.scale || track.rotate))
+        throw new Error('A Header scene part inside a turning group is not supported');
+      if (slanted && !own.tracks.some((track) => track.rotate))
+        throw new Error('Only a turning Header scene part may sit in a slanted group');
+      found.push({
+        top,
+        roots: [node],
+        parent,
+        tracks,
+        rest: opacity,
+        still: !floats,
+        origin,
+        nested: chain.length > 0,
+        ...(slanted ? { slanted } : {}),
+      });
+    }
+    const shift = /^translate\((-?[\d.]+)[ ,]+(-?[\d.]+)\)$/.exec(node.props.transform ?? '');
+    const matrix = /^matrix\(([-\d. ]+) 0 0\)$/.exec(node.props.transform ?? '');
+    if (node.props.transform && !shift && !matrix && node !== top)
+      throw new Error(`Unsupported Header scene transform: ${node.props.transform}`);
+    if (matrix && (slanted || animated))
+      throw new Error('Unsupported Header scene transform: a slant on or inside a moving part');
+    const inner: [number, number] = shift
+      ? [origin[0] + Number(shift[1]), origin[1] + Number(shift[2])]
+      : origin;
+    const within = matrix
+      ? {
+          group: node,
+          matrix: matrix[1]!.split(' ').map(Number) as [number, number, number, number],
+        }
+      : slanted;
+    for (const child of node.children ?? [])
+      visit(child, node, tracks, opacity, floats || node.motion === 'float', inner, within);
+  };
+  visit(top, top, [], 1, false, [0, 0]);
+  // A unit with nothing of its own to draw only carries its movement down to its children.
+  const own = found.filter((unit) =>
+    prune(unit.roots[0]!, (node) =>
+      node === unit.roots[0] || !moving.has(node) ? 'inside' : false,
+    ),
+  );
+  const merged: Unit[] = [];
+  for (const unit of own) {
+    const signature = JSON.stringify([unit.tracks, unit.rest, unit.still]);
+    const root = unit.roots[0]!;
+    const match = merged.findLast(
+      (other) =>
+        other.parent === unit.parent &&
+        JSON.stringify([other.tracks, other.rest, other.still]) === signature,
+    );
+    // Frames of one animal (no motion tag of their own) and scattered specks may share a picture
+    // from anywhere under their parent; anything else only with its direct neighbour.
+    const free = root.motion === undefined || SCATTERED.has(root.motion);
+    // Still art drawn between two elements must stay between them, so they keep their own
+    // pictures: merged, the art would be drawn over the later one by the cover.
+    const siblings = unit.parent.children ?? [];
+    // (Inside a moving element the art between is that element's own picture, never a cover.)
+    const between =
+      match && !unit.nested
+        ? siblings
+            .slice(siblings.indexOf(match.roots.at(-1)!) + 1, siblings.indexOf(root))
+            .some((sibling) => prune(sibling, (node) => (moving.has(node) ? false : 'inside')))
+        : false;
+    if (match && !between && !turns(unit.tracks) && (free || match === merged.at(-1)))
+      match.roots.push(root);
+    else merged.push({ ...unit, roots: [root] });
+  }
+  return { units: merged, moving };
+}
+
+/** Splits a scene into the pieces that move on their own. */
 export function spritePlans(scene: HeaderSceneArt): SpritePlan[] {
+  const rules = motionRules(sharedCss(), scene.css);
   const defs = LAYERS.flatMap((layer) =>
     (scene.layers[layer].children ?? []).filter((node) => node.tag === 'defs'),
   )
@@ -93,21 +240,61 @@ export function spritePlans(scene: HeaderSceneArt): SpritePlan[] {
     const clouds = nodes.filter((node) => node.motion === 'clouds');
     const shadows = nodes.filter((node) => node.tag === 'ellipse');
     const body = nodes.filter((node) => !clouds.includes(node) && !shadows.includes(node));
+    const draw = (parts: (SceneVector | null)[]) =>
+      frame(defs, parts.map((part) => (part ? vectorSvg(lit(part)) : '')).join(''));
     const add = (kind: SpriteKind, name: string, seconds: number, parts: SceneVector[]) =>
       plans.push({
         file: `${scene.id}-${layer}-${name}.png`,
         layer,
         kind,
         seconds,
-        svg: frame(defs, parts.map((part) => vectorSvg(lit(part))).join('')),
+        svg: draw(parts),
       });
+    /** One body without its moving elements, then each of those as a part of its own. */
+    const split = (name: string, seconds: number, tops: SceneVector[]) => {
+      const each = tops.map((top) => units(top, rules));
+      const still = tops
+        .map((top, index) =>
+          prune(top, (node) => (each[index]!.moving.has(node) ? false : 'inside')),
+        )
+        .filter((node): node is SceneVector => node !== null);
+      if (still.length) add('body', name, seconds, still);
+      let count = 0;
+      for (const { units: parts, moving } of each)
+        for (const unit of parts) {
+          const roots = new Set(unit.roots);
+          let passed = false;
+          // The static art the web draws after this part: it must stay in front of it.
+          const after = prune(unit.top, (node) => {
+            if (roots.has(node)) passed = true;
+            if (moving.has(node)) return false;
+            return SHAPES.has(node.tag) ? passed : 'inside';
+          });
+          plans.push({
+            file: `${scene.id}-${layer}-${name === 'body' ? '' : `${name}-`}part-${++count}.png`,
+            layer,
+            kind: 'part',
+            seconds,
+            svg: draw([upright(only(unit.top, roots, moving), unit.slanted?.group)]),
+            tracks: unit.tracks,
+            // The glow layer's own opacity follows the time of day; its parts are drawn in full.
+            rest: layer === 'glow' ? 1 : unit.rest,
+            ...(unit.still ? { still: true } : {}),
+            ...(turns(unit.tracks) && !unit.tracks.at(-1)!.centred ? { origin: unit.origin } : {}),
+            ...(unit.slanted ? { slant: slant(unit.slanted.matrix) } : {}),
+            // Lights are see-through: drawing one twice would brighten it, and their order
+            // does not show, so the glow layer has no covers.
+            ...(after && layer !== 'glow' ? { after: draw([after]) } : {}),
+          });
+        }
+    };
     // The main island is the last thing drawn in its layer. Anything else there (Beach's small
     // neighbour) is its own picture behind the shadow, so the island alone can be the thumbnail.
     const island = layer === 'main' ? body.slice(-1) : body;
     const side = layer === 'main' ? body.slice(0, -1) : [];
-    if (side.length) add('body', 'side', FLOAT_SECONDS.far, side);
+    if (side.length) split('side', FLOAT_SECONDS.far, side);
     if (shadows.length) add('shadow', 'shadow', FLOAT_SECONDS[layer], shadows);
-    if (island.length) add('body', 'body', FLOAT_SECONDS[layer], island);
+    if (island.length) split('body', FLOAT_SECONDS[layer], island);
     clouds.forEach((cloud, index) => {
       const seconds = (cloud.classes ?? []).reduce(
         (found, name) => CLOUD_SECONDS[name] ?? found,
@@ -115,9 +302,78 @@ export function spritePlans(scene: HeaderSceneArt): SpritePlan[] {
       );
       add('cloud', `cloud-${index + 1}`, cloud.durationSeconds ?? seconds, [cloud]);
     });
+    // The settings thumbnail shows the whole island, moving parts included.
+    if (layer === 'main')
+      plans.push({
+        file: `${scene.id}-thumb.png`,
+        layer,
+        kind: 'thumb',
+        seconds: 0,
+        svg: draw(island),
+      });
   }
   return plans;
 }
+/** The same tree with one group's slant taken off, matched by its place in the drawing. */
+function upright(node: SceneVector | null, group: SceneVector | undefined): SceneVector | null {
+  if (!node || !group) return node;
+  if (node.props.transform === group.props.transform && node.tag === group.tag) {
+    return {
+      ...node,
+      props: Object.fromEntries(Object.entries(node.props).filter(([key]) => key !== 'transform')),
+    };
+  }
+  return { ...node, children: node.children?.map((child) => upright(child, group)!) };
+}
+/** `matrix(a b c d)` as a turn, a stretch along each axis, and a first turn: M = R(turn)·S·R(start). */
+function slant([a, b, c, d]: [number, number, number, number]) {
+  const degrees = (radians: number) => Math.round(((radians * 180) / Math.PI) * 1000) / 1000;
+  const e = (a + d) / 2;
+  const f = (a - d) / 2;
+  const g = (b + c) / 2;
+  const h = (b - c) / 2;
+  const q = Math.hypot(e, h);
+  const r = Math.hypot(f, g);
+  const a1 = Math.atan2(g, f);
+  const a2 = Math.atan2(h, e);
+  return {
+    turn: degrees((a2 + a1) / 2),
+    scaleX: Math.round((q + r) * 1e4) / 1e4,
+    scaleY: Math.round((q - r) * 1e4) / 1e4,
+    start: degrees((a2 - a1) / 2),
+  };
+}
+/** `node` cut down to the `roots` and the groups that hold them; other moving parts are left out. */
+function only(
+  node: SceneVector,
+  roots: ReadonlySet<SceneVector>,
+  moving: ReadonlySet<SceneVector>,
+): SceneVector | null {
+  if (roots.has(node))
+    return prune(node, (each) => (each === node || !moving.has(each) ? 'inside' : false));
+  const children = (node.children ?? [])
+    .map((child) => only(child, roots, moving))
+    .filter((child): child is SceneVector => child !== null);
+  return children.length ? { ...node, children } : null;
+}
+
+/** One whole layer as the web draws it, for checking that the pieces add up to it. */
+export function layerSvg(scene: HeaderSceneArt, layer: SceneLayer): string {
+  const defs = LAYERS.flatMap((each) =>
+    (scene.layers[each].children ?? []).filter((node) => node.tag === 'defs'),
+  )
+    .map(vectorSvg)
+    .join('');
+  return frame(
+    defs,
+    (scene.layers[layer].children ?? [])
+      .filter((node) => node.tag !== 'defs' && node.tag !== 'ellipse')
+      .map((node) => vectorSvg(lit(node)))
+      .join(''),
+  );
+}
+/** Pixels per scene unit and the drawn area, for placing a picture back on the layer. */
+export const DRAWN = { scale: SCALE, area: AREA };
 
 /** A hash of everything the pictures are drawn from. The check compares this, never PNG bytes. */
 export function spriteSource(scene: HeaderSceneArt): string {
@@ -126,7 +382,10 @@ export function spriteSource(scene: HeaderSceneArt): string {
     .digest('hex');
 }
 
-export async function renderSprite(plan: SpritePlan): Promise<Sprite> {
+/** Draws one plan. `null` for a cover that turns out to have nothing in it. */
+export async function renderSprite(plan: SpritePlan): Promise<Sprite>;
+export async function renderSprite(plan: SpritePlan, allowEmpty: true): Promise<Sprite | null>;
+export async function renderSprite(plan: SpritePlan, allowEmpty = false): Promise<Sprite | null> {
   let image = sharp(Buffer.from(plan.svg)).ensureAlpha();
   // The web blurs the ground shadow with CSS; the picture carries the same softness.
   if (plan.kind === 'shadow') image = image.blur(RENDER.shadowBlur * SCALE);
@@ -143,27 +402,44 @@ export async function renderSprite(plan: SpritePlan): Promise<Sprite> {
         if (y < top) top = y;
         if (y > bottom) bottom = y;
       }
-  if (right < 0) throw new Error(`Empty Header scene picture: ${plan.file}`);
+  if (right < 0) {
+    if (allowEmpty) return null;
+    throw new Error(`Empty Header scene picture: ${plan.file}`);
+  }
   if (left === 0 || top === 0 || right === info.width - 1 || bottom === info.height - 1)
     throw new Error(`Header scene picture is cut by the drawn area: ${plan.file}`);
   left -= PAD;
   top -= PAD;
-  const width = right - left + 1 + PAD;
-  const height = bottom - top + 1 + PAD;
+  right += PAD;
+  bottom += PAD;
+  if (plan.tracks?.some((track) => track.rotate) && plan.origin) {
+    // A turning part is drawn with its hub in the middle, so the phone can turn the picture
+    // about its own centre.
+    const hubX = Math.round((plan.origin[0] - AREA.x) * SCALE);
+    const hubY = Math.round((plan.origin[1] - AREA.y) * SCALE);
+    const reachX = Math.max(hubX - left, right - hubX);
+    const reachY = Math.max(hubY - top, bottom - hubY);
+    left = hubX - reachX;
+    right = hubX + reachX;
+    top = hubY - reachY;
+    bottom = hubY + reachY;
+  }
+  const width = right - left + 1;
+  const height = bottom - top + 1;
   const full = sharp(data, {
     raw: { width: info.width, height: info.height, channels: 4 },
   }).extract({ left, top, width, height });
+  const limit = plan.kind === 'thumb' ? RENDER.thumbSide : RENDER.maxSide;
   // A wide layer is scaled down to the limit; it still covers the same scene units.
   const cut =
-    Math.max(width, height) > RENDER.maxSide
-      ? sharp(await full.png().toBuffer()).resize({
-          width: RENDER.maxSide,
-          height: RENDER.maxSide,
-          fit: 'inside',
-        })
+    Math.max(width, height) > limit
+      ? sharp(await full.png().toBuffer()).resize({ width: limit, height: limit, fit: 'inside' })
       : full;
   const png =
-    plan.layer === 'glow' || plan.kind === 'shadow'
+    plan.layer === 'glow' ||
+    plan.kind === 'shadow' ||
+    (plan.rest ?? 1) < 1 ||
+    plan.tracks?.some((track) => track.opacity)
       ? await cut.png({ compressionLevel: 9 }).toBuffer()
       : await cut
           .png({ compressionLevel: 9, palette: true, colours: RENDER.paletteColours })
@@ -174,6 +450,10 @@ export async function renderSprite(plan: SpritePlan): Promise<Sprite> {
     layer: plan.layer,
     kind: plan.kind,
     seconds: plan.seconds,
+    ...(plan.tracks ? { tracks: plan.tracks } : {}),
+    ...(plan.rest !== undefined ? { rest: plan.rest } : {}),
+    ...(plan.still ? { still: true } : {}),
+    ...(plan.slant ? { slant: plan.slant } : {}),
     x: unit(left, AREA.x),
     y: unit(top, AREA.y),
     w: unit(width),
@@ -182,15 +462,100 @@ export async function renderSprite(plan: SpritePlan): Promise<Sprite> {
   };
 }
 
+const sample = (curve: Curve | undefined, at: number, rest: number) => {
+  if (!curve) return rest;
+  for (let i = 1; i < curve.at.length; i++)
+    if (at <= curve.at[i]!) {
+      const span = curve.at[i]! - curve.at[i - 1]!;
+      return span === 0
+        ? curve.to[i]!
+        : curve.to[i - 1]! + ((curve.to[i]! - curve.to[i - 1]!) * (at - curve.at[i - 1]!)) / span;
+    }
+  return curve.to.at(-1)!;
+};
+const extent = (curve: Curve | undefined, rest: number) =>
+  curve ? [Math.min(...curve.to), Math.max(...curve.to)] : [rest, rest];
+
+/**
+ * The web scales a group about its own origin, the phone about the picture's middle. The
+ * difference is a slide in step with the scale, added to the track here.
+ */
+function scaleAboutOrigin(sprite: Sprite, origin: [number, number]): Track[] {
+  return sprite.tracks!.map((track) => {
+    if (!track.scale || track.centred) return track;
+    const offset = [sprite.x + sprite.w / 2 - origin[0], sprite.y + sprite.h / 2 - origin[1]];
+    const at = [
+      ...new Set([...track.scale.at, ...(track.x?.at ?? []), ...(track.y?.at ?? [])]),
+    ].sort((a, b) => a - b);
+    const slide = (curve: Curve | undefined, distance: number): Curve => ({
+      at,
+      to: at.map(
+        (point) =>
+          Math.round(
+            (sample(curve, point, 0) + (sample(track.scale, point, 1) - 1) * distance) * 1e4,
+          ) / 1e4,
+      ),
+    });
+    return { ...track, x: slide(track.x, offset[0]!), y: slide(track.y, offset[1]!) };
+  });
+}
+
+/** Every picture of a scene, in the order the phone draws them: each part, then its cover. */
+export async function renderScene(scene: HeaderSceneArt): Promise<Sprite[]> {
+  const sprites: Sprite[] = [];
+  for (const plan of spritePlans(scene)) {
+    const sprite = await renderSprite(plan);
+    if (plan.origin && sprite.tracks && !plan.tracks!.some((track) => track.rotate))
+      sprite.tracks = scaleAboutOrigin(sprite, plan.origin);
+    sprites.push(sprite);
+    if (plan.kind !== 'part' || !plan.after) continue;
+    // Everywhere the part can reach, the art in front of it is drawn again on top.
+    let [left, top, right, bottom] = [sprite.x, sprite.y, sprite.x + sprite.w, sprite.y + sprite.h];
+    for (const track of sprite.tracks ?? []) {
+      const grow = (Math.max(...extent(track.scale, 1)) - 1) / 2;
+      const spin = track.rotate ? Math.hypot(sprite.w, sprite.h) / 2 : 0;
+      const [x0, x1] = extent(track.x, 0);
+      const [y0, y1] = extent(track.y, 0);
+      left += Math.min(x0!, 0) - grow * sprite.w - spin;
+      right += Math.max(x1!, 0) + grow * sprite.w + spin;
+      top += Math.min(y0!, 0) - grow * sprite.h - spin;
+      bottom += Math.max(y1!, 0) + grow * sprite.h + spin;
+    }
+    const clip = `<clipPath id="reach"><rect x="${left}" y="${top}" width="${right - left}" height="${bottom - top}"/></clipPath>`;
+    const cover = await renderSprite(
+      {
+        file: plan.file.replace('.png', '-cover.png'),
+        layer: plan.layer,
+        kind: 'cover',
+        seconds: plan.seconds,
+        ...(plan.still ? { still: true } : {}),
+        svg: plan.after.replace(
+          /(<svg[^>]*>)([\s\S]*)<\/svg>$/,
+          `$1${clip}<g clip-path="url(#reach)">$2</g></svg>`,
+        ),
+      },
+      true,
+    );
+    if (cover) sprites.push(cover);
+  }
+  return sprites;
+}
+
 export function spriteList(scene: HeaderSceneArt, sprites: readonly Sprite[]): string {
-  const imports = sprites
+  // The thumbnail is listed with the other scenes' thumbnails, not here.
+  const listed = sprites.filter((sprite) => sprite.kind !== 'thumb');
+  const imports = listed
     .map((sprite, index) => `import s${index} from '../../../assets/header-scenes/${sprite.file}';`)
     .join('\n');
-  const rows = sprites
-    .map(
-      ({ layer, kind, seconds, x, y, w, h }, index) =>
-        `    { layer: '${layer}', kind: '${kind}', seconds: ${seconds}, x: ${x}, y: ${y}, w: ${w}, h: ${h}, image: s${index} },`,
-    )
+  const rows = listed
+    .map(({ layer, kind, seconds, x, y, w, h, tracks, rest, still, slant }, index) => {
+      const extra =
+        (tracks ? `, tracks: ${JSON.stringify(tracks)}` : '') +
+        (rest !== undefined && rest !== 1 ? `, rest: ${rest}` : '') +
+        (still ? ', still: true' : '') +
+        (slant ? `, slant: ${JSON.stringify(slant)}` : '');
+      return `    { layer: '${layer}', kind: '${kind}', seconds: ${seconds}, x: ${x}, y: ${y}, w: ${w}, h: ${h}, image: s${index}${extra} },`;
+    })
     .join('\n');
   return `${NOTICE}import type { HeaderSceneSprites } from '../header-scene-sprite';\n${imports}\n\nconst scene: HeaderSceneSprites = {\n  id: '${scene.id}',\n  description: ${JSON.stringify(scene.description)},\n  source: '${spriteSource(scene)}',\n  sprites: [\n${rows}\n  ],\n};\nexport default scene;\n`;
 }
@@ -207,7 +572,7 @@ export function thumbnailList(scenes: readonly HeaderSceneArt[]): string {
   const imports = scenes
     .map(
       (scene, index) =>
-        `import t${index} from '../../../assets/header-scenes/${scene.id}-main-body.png';`,
+        `import t${index} from '../../../assets/header-scenes/${scene.id}-thumb.png';`,
     )
     .join('\n');
   const rows = scenes.map((scene, index) => `  '${scene.id}': t${index},`).join('\n');

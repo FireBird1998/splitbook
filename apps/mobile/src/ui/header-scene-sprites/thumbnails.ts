@@ -2,10 +2,10 @@
 // Do not edit by hand.
 import type { ImageSourcePropType } from 'react-native';
 import type { GroupHeader } from '@splitbook/shared/group-header';
-import t0 from '../../../assets/header-scenes/eco-city-main-body.png';
-import t1 from '../../../assets/header-scenes/mountain-village-main-body.png';
-import t2 from '../../../assets/header-scenes/beach-main-body.png';
-import t3 from '../../../assets/header-scenes/sakura-main-body.png';
+import t0 from '../../../assets/header-scenes/eco-city-thumb.png';
+import t1 from '../../../assets/header-scenes/mountain-village-thumb.png';
+import t2 from '../../../assets/header-scenes/beach-thumb.png';
+import t3 from '../../../assets/header-scenes/sakura-thumb.png';
 
 export const sceneThumbnails: Record<GroupHeader['scene'], ImageSourcePropType> = {
   'eco-city': t0,

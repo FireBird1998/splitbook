@@ -1,6 +1,6 @@
 import { SceneVisibility } from './scene-visibility';
 import { useHeaderTilt } from './use-header-tilt';
-import { memo, useContext, useEffect, useState } from 'react';
+import { memo, useContext, useEffect, useMemo, useState } from 'react';
 import { Animated, AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { headerTimeOfDay, type GroupHeader } from '@splitbook/shared/group-header';
@@ -12,11 +12,13 @@ import {
   TILT_DEPTH,
   useCloudDrift,
   useForeground,
+  useSceneClocks,
   useSceneRise,
 } from './header-scene-motion';
 import type { HeaderSceneSprites, SceneSprite } from './header-scene-sprite';
 import { headerSceneMotionAvailable } from '../config';
 import { currentDayKey } from './list-day-header';
+import { useReducedMotion } from './compact/motion';
 import {
   HeaderSceneCard,
   HeaderScenePreviewCaption,
@@ -42,22 +44,119 @@ const place = (sprite: SceneSprite) =>
     width: sprite.w * SCENE_UNIT,
     height: sprite.h * SCENE_UNIT,
   }) as const;
+/** The same box, for a picture inside a holder already placed there. */
+const fill = (sprite: SceneSprite) =>
+  ({
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: sprite.w * SCENE_UNIT,
+    height: sprite.h * SCENE_UNIT,
+  }) as const;
 const lift = (rise: Animated.Value) =>
   rise.interpolate({ inputRange: [0, 1], outputRange: [0, -FLOAT_RISE * SCENE_UNIT] });
+
+type Clocks = Map<number, Animated.Value>;
+/** A part's own movement as native-driver styles: slides and fades from its tracks' clocks. */
+function partMotion(sprite: SceneSprite, clocks: Clocks, night: boolean) {
+  const slide: object[] = [];
+  const turn: object[] = [];
+  // Without a fade of its own a part keeps its resting opacity: one that is hidden at rest and
+  // only moves at night stays hidden by day.
+  let opacity: Animated.AnimatedNode | number | null = null;
+  for (const track of sprite.tracks ?? []) {
+    const clock = clocks.get(track.seconds);
+    if (!clock || (track.time === 'night' && !night)) continue;
+    const read = (curve: { at: number[]; to: number[] }, unit = 1) =>
+      clock.interpolate({ inputRange: curve.at, outputRange: curve.to.map((to) => to * unit) });
+    if (track.x) slide.push({ translateX: read(track.x, SCENE_UNIT) });
+    if (track.y) slide.push({ translateY: read(track.y, SCENE_UNIT) });
+    if (track.scale) turn.push({ scale: read(track.scale) });
+    if (track.rotate)
+      turn.push({
+        rotate: clock.interpolate({
+          inputRange: track.rotate.at,
+          outputRange: track.rotate.to.map((to) => `${to + (sprite.slant?.start ?? 0)}deg`),
+        }),
+      });
+    if (track.opacity)
+      opacity =
+        opacity === null
+          ? read(track.opacity)
+          : Animated.multiply(opacity as Animated.Value, read(track.opacity));
+  }
+  return { slide, turn, opacity: opacity ?? sprite.rest ?? 1 };
+}
 
 const Piece = memo(function Piece({
   sprite,
   rises,
-  moving,
+  clocks,
+  lively,
+  drifting,
+  night,
   frameWidth,
 }: {
   sprite: SceneSprite;
   rises: Rises;
-  moving: boolean;
+  clocks: Clocks;
+  /** Motion is on for this phone: parts wear their movement, whether or not the clocks run. */
+  lively: boolean;
+  /** The scene is running and this is a cloud. Parts do not take this, so a pause redraws none. */
+  drifting: boolean;
+  night: boolean;
   frameWidth: number;
 }) {
-  const drift = useCloudDrift(moving && sprite.kind === 'cloud', sprite, frameWidth);
+  const drift = useCloudDrift(drifting, sprite, frameWidth);
   const rise = rises[sprite.seconds as 7 | 9 | 11] ?? rises[7];
+  const motion = useMemo(
+    () => (sprite.kind === 'part' && lively ? partMotion(sprite, clocks, night) : null),
+    [sprite, clocks, lively, night],
+  );
+  const floats = useMemo(
+    () => (sprite.still ? [] : [{ translateY: lift(rise) }]),
+    [sprite.still, rise],
+  );
+  if (sprite.kind === 'part') {
+    // At rest a part stands where the web's still scene has it; one that only shows while it
+    // moves (a falling drop, a snowflake) is not drawn at all.
+    if (!motion && sprite.rest === 0) return null;
+    const { slant } = sprite;
+    const placed = [
+      ...floats,
+      ...(motion?.slide ?? []),
+      ...(slant
+        ? [{ rotate: `${slant.turn}deg` }, { scaleX: slant.scaleX }, { scaleY: slant.scaleY }]
+        : []),
+    ];
+    const turned = motion?.turn.length
+      ? motion.turn
+      : slant
+        ? [{ rotate: `${slant.start}deg` }]
+        : [];
+    const opacity = motion ? motion.opacity : (sprite.rest ?? 1);
+    const picture = (
+      <Animated.Image
+        accessible={false}
+        fadeDuration={0}
+        resizeMode="stretch"
+        source={sprite.image}
+        style={
+          slant
+            ? [fill(sprite), { transform: turned }]
+            : [place(sprite), { opacity, transform: [...placed, ...turned] }]
+        }
+      />
+    );
+    // A slanted part turns inside a holder that carries the slant, so the turn itself stays round.
+    return slant ? (
+      <Animated.View style={[place(sprite), { opacity, transform: placed }]}>
+        {picture}
+      </Animated.View>
+    ) : (
+      picture
+    );
+  }
   return (
     <Animated.Image
       accessible={false}
@@ -76,7 +175,7 @@ const Piece = memo(function Piece({
                   { scale: rise.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) },
                 ],
               }
-            : { transform: [{ translateY: lift(rise) }] },
+            : { transform: floats },
       ]}
     />
   );
@@ -117,21 +216,44 @@ export default function HeaderScene({
   const [, setHour] = useState(() => new Date().getHours());
   const visibility = useContext(SceneVisibility);
   const foreground = useForeground();
-  // Nothing moves, and no sensor is read, until this scene's pictures are the ones on screen.
+  const reduced = useReducedMotion();
+  // Motion is on for this phone. Parts then wear their movement even while the clocks are
+  // paused, so a scene that scrolls back into view carries on from the pose it was paused in
+  // (the start of each cycle) instead of jumping there from its resting pose. With Motion off or
+  // Remove animations on, parts rest where the web's still scene has them.
+  const lively = motion && headerSceneMotionAvailable && !reduced && art?.id === header.scene;
+  // Nothing runs, and no sensor is read, unless this scene's pictures are the ones on screen.
   const moving =
-    motion &&
-    headerSceneMotionAvailable &&
+    lively &&
     visible &&
     // The settings preview is pinned on its own page, outside any Group scroll.
     (preview || visibility.visible) &&
-    foreground &&
-    art?.id === header.scene;
+    foreground;
+  const time = headerTimeOfDay(header.time, new Date().getHours());
   const position = useHeaderTilt(moving && tilt);
   const frameWidth = useWindowDimensions().width;
   const rise7 = useSceneRise(moving, 7);
   const rise9 = useSceneRise(moving, 9);
   const rise11 = useSceneRise(moving, 11);
   const [rises] = useState<Rises>(() => ({ 7: rise7, 9: rise9, 11: rise11 }));
+  // One clock per period that something on screen uses: the glow layer and night-only movement
+  // start no clock while the scene does not show them.
+  const periods = useMemo(
+    () =>
+      [
+        ...new Set(
+          (art?.sprites ?? [])
+            .filter((sprite) => sprite.layer !== 'glow' || glow[time] > 0)
+            .flatMap((sprite) =>
+              (sprite.tracks ?? [])
+                .filter((track) => track.time !== 'night' || time === 'night')
+                .map((track) => track.seconds),
+            ),
+        ),
+      ].sort((a, b) => a - b),
+    [art, time],
+  );
+  const clocks = useSceneClocks(moving, periods);
   // One set of animated nodes for the life of the scene, not one per render.
   const [shifts] = useState(
     () =>
@@ -166,7 +288,6 @@ export default function HeaderScene({
     });
     return () => sub.remove();
   }, []);
-  const time = headerTimeOfDay(header.time, new Date().getHours());
   if (failed === header.scene) return <ClassicGroupHeader group={group} />;
   if (art?.id !== header.scene)
     return (
@@ -220,13 +341,16 @@ export default function HeaderScene({
         <View importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
           {(['far', 'clouds', 'main', 'front'] as const).map((layer) => (
             <Animated.View key={layer} style={[styles.world, shifts[layer]]}>
-              {art.sprites.map((sprite) =>
+              {art.sprites.map((sprite, index) =>
                 sprite.layer === layer ? (
                   <Piece
-                    key={`${sprite.kind}:${sprite.x}:${sprite.y}`}
+                    key={index}
                     sprite={sprite}
                     rises={rises}
-                    moving={moving}
+                    clocks={clocks}
+                    lively={lively}
+                    drifting={moving && sprite.kind === 'cloud'}
+                    night={time === 'night'}
                     frameWidth={frameWidth}
                   />
                 ) : null,
@@ -238,13 +362,16 @@ export default function HeaderScene({
           ) : null}
           {glow[time] ? (
             <Animated.View style={[styles.world, shifts.glow, { opacity: glow[time] }]}>
-              {art.sprites.map((sprite) =>
+              {art.sprites.map((sprite, index) =>
                 sprite.layer === 'glow' ? (
                   <Piece
-                    key={`glow:${sprite.x}:${sprite.y}`}
+                    key={index}
                     sprite={sprite}
                     rises={rises}
-                    moving={moving}
+                    clocks={clocks}
+                    lively={lively}
+                    drifting={moving && sprite.kind === 'cloud'}
+                    night={time === 'night'}
                     frameWidth={frameWidth}
                   />
                 ) : null,

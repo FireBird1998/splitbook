@@ -55,7 +55,7 @@ it('uses four thumbnail Images and only the selected full-size scene, with no sc
   await act(async () => {
     view = create(render(header));
   });
-  // A scene is a handful of pictures, never a vector tree.
+  // A scene is its layers plus one small picture per moving part, never a vector tree.
   const count = () =>
     view.root.findAll((node) => (node.type as unknown) === 'AnimatedImage').length;
   const scenes = () =>
@@ -74,7 +74,7 @@ it('uses four thumbnail Images and only the selected full-size scene, with no sc
   expect(view.root.findAll((node) => (node.type as unknown) === 'Image')).toHaveLength(4);
   expect(scenes()).toHaveLength(1);
   expect(beach).toBeGreaterThan(0);
-  expect(beach).toBeLessThanOrEqual(16);
+  expect(beach).toBeLessThanOrEqual(60);
   expect(loaded).toEqual([]);
   await act(async () => {
     view.update(render({ ...header, scene: 'sakura' }));
@@ -89,7 +89,7 @@ it('uses four thumbnail Images and only the selected full-size scene, with no sc
   const sakura = count();
   expect(loaded).toEqual(['sakura']);
   expect(sakura).toBeGreaterThan(0);
-  expect(sakura).toBeLessThanOrEqual(16);
+  expect(sakura).toBeLessThanOrEqual(90);
   expect(scenes()).toHaveLength(1);
   await act(async () => view.update(render({ ...header, style: 'classic' })));
   expect(count()).toBe(0);
