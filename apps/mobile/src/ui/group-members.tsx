@@ -248,11 +248,14 @@ function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGro
           />
         </View>
       ) : null}
-      <CompactText>
-        {deleting
-          ? 'Leaving will permanently delete this Group and its history. Expenses, Settlements and Activity will be removed. You cannot rejoin this Group.'
-          : leaveExplanation}
-      </CompactText>
+      {/* The last admin sees only what to do first, and Choose an admin (board 24). */}
+      {lastAdmin ? null : (
+        <CompactText>
+          {deleting
+            ? 'Leaving will permanently delete this Group and its history. Expenses, Settlements and Activity will be removed. You cannot rejoin this Group.'
+            : leaveExplanation}
+        </CompactText>
+      )}
       {!!leave.toReviewCount && (
         <CompactText>
           You have {counted(leave.toReviewCount, 'item')} in To review for {group.name}. They’re
@@ -263,7 +266,10 @@ function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGro
         <Banner tone="info" message={leaveDiscardsDraft} />
       ) : null}
       {state.message ? (
-        <Banner tone={state.status === 'blocked' ? 'warning' : 'error'} message={state.message} />
+        <Banner
+          tone={state.status === 'blocked' || lastAdmin ? 'warning' : 'error'}
+          message={state.message}
+        />
       ) : null}
     </BottomSheet>
   );
@@ -592,9 +598,12 @@ export function GroupMembers({
   useEffect(() => {
     const opened = openedFor.current;
     if (!selected || !opened) return;
-    if (!isAdmin || !selectedMember || selectedMember.role !== opened.role) setSelected(null);
+    // Your own options too, once no other admin is left to stay (#1254).
+    const ownWithoutAnother = opened.user.id === currentUserId && !anotherAdmin;
+    if (!isAdmin || !selectedMember || selectedMember.role !== opened.role || ownWithoutAnother)
+      setSelected(null);
     if (isAdmin && !selectedMember) roles.onMemberGone(opened.user.id, opened.user.name);
-  }, [selected, selectedMember, isAdmin]);
+  }, [selected, selectedMember, isAdmin, anotherAdmin]);
   const open = (member: Member) => {
     openedFor.current = member;
     setSelected(member.user.id);
