@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { onlineManager } from '@tanstack/query-core';
 import { testPhone, notificationNative } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import { notificationHint, notificationPreferences } from '../test-utils/notification';
@@ -439,6 +440,7 @@ const settle = async () => {
 const changes = {
   'turns notifications off': {
     change: (app: Awaited<ReturnType<typeof enabledPhone>>['app']) => app.disableNotifications(),
+    sent: { enabled: false },
     confirmed: {
       ...notificationPreferences,
       enabled: false,
@@ -450,6 +452,7 @@ const changes = {
   'turns Payments off': {
     change: (app: Awaited<ReturnType<typeof enabledPhone>>['app']) =>
       app.setNotificationCategory('payments', false),
+    sent: { enabled: true, expenseUpdates: true, payments: false },
     confirmed: { ...notificationPreferences, payments: false, revision: 2 },
   },
 };
@@ -520,6 +523,50 @@ it.each(
       write.release();
       await changing;
     }
+  },
+);
+it.each(Object.keys(changes) as (keyof typeof changes)[])(
+  'a member who %s offline during a Settings read keeps that change for Retry when the read still answers (#1245)',
+  async (kind) => {
+    const { app, server, envelope, holdRead } = await enabledPhone();
+    const posts = () =>
+      server.requests.filter((r) => r.method === 'POST' && r.url.pathname === path);
+    // The held read was answered before the change: the controls are still on, at revision 1.
+    const held = holdRead();
+    const receipt = app.receiveNotification(envelope, { visible: false });
+    await held.arrived;
+    const { change, sent, confirmed } = changes[kind];
+    const offline = {
+      status: 'offline',
+      confirmed: notificationPreferences,
+      hasConfirmed: true,
+      message: 'Connect to confirm notification settings.',
+    };
+    onlineManager.setOnline(false);
+    try {
+      await change(app);
+      expect(app.getSnapshot().notifications).toEqual(offline);
+      expect(await within(receipt)).toBe(false);
+      held.release();
+      await settle();
+      expect(app.getSnapshot().notifications).toEqual(offline);
+    } finally {
+      held.release();
+      onlineManager.setOnline(true);
+    }
+    expect(posts()).toEqual([]);
+    server.reply('POST', path, () => {
+      server.world.notifications = confirmed;
+      return Response.json({ data: confirmed });
+    });
+    await app.retryNotifications();
+    expect(app.getSnapshot().notifications).toEqual({
+      status: 'ready',
+      confirmed,
+      hasConfirmed: true,
+      message: '',
+    });
+    expect(posts().map((r) => r.body)).toEqual([expect.objectContaining({ ...sent, revision: 1 })]);
   },
 );
 it('does not join the next account’s notification check when the account changes between receipts', async () => {
