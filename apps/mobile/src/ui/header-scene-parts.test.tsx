@@ -160,6 +160,60 @@ it.each([
   act(() => shown.view.unmount());
 });
 
+it('covering the Group holds the float and the clouds where they are; Motion off puts them back at rest', async () => {
+  emitAppState('active');
+  setReduceMotion(false);
+  const shown = await scene('day');
+  const moved = (picked: (config: Record<string, unknown>) => boolean) => [
+    ...new Set(timing.mock.calls.filter(([, config]) => picked(config)).map(([value]) => value)),
+  ];
+  // The float eases; a cloud drifts straight, out to the far side.
+  const floats = moved((config) => config.easing !== Easing.linear) as Animated.Value[];
+  const clouds = moved(
+    (config) => config.easing === Easing.linear && config.toValue !== 1,
+  ) as Animated.Value[];
+  expect(floats).toHaveLength(3);
+  expect(clouds).toHaveLength(beach.sprites.filter((sprite) => sprite.kind === 'cloud').length);
+  const at = (value: Animated.Value) => (value as unknown as { value: number }).value;
+  act(() => {
+    for (const float of floats) float.setValue(0.6);
+    for (const cloud of clouds) cloud.setValue(42);
+  });
+  await act(async () => shown.update({ visible: false }));
+  expect(floats.map(at)).toEqual([0.6, 0.6, 0.6]);
+  expect(clouds.map(at)).toEqual(clouds.map(() => 42));
+  await act(async () => shown.update({ motion: false }));
+  expect([...floats, ...clouds].map(at).every((value) => value === 0)).toBe(true);
+  act(() => shown.view.unmount());
+});
+
+it('everything that follows the float (island lift, shadow) is back at rest when the float reaches 2', async () => {
+  emitAppState('active');
+  setReduceMotion(false);
+  const shown = await scene('day');
+  const floats = new Set(
+    timing.mock.calls.filter(([, config]) => config.easing !== Easing.linear).map(([v]) => v),
+  );
+  type Derived = { interpolation: { inputRange: number[]; outputRange: number[] }; of: unknown };
+  const followers: Derived[] = [];
+  const walk = (style: unknown) => {
+    if (Array.isArray(style)) return style.forEach(walk);
+    if (!style || typeof style !== 'object') return;
+    if ('interpolation' in style && floats.has((style as Derived).of))
+      return followers.push(style as Derived);
+    Object.values(style).forEach(walk);
+  };
+  for (const node of shown.view.root.findAll((node) => node.props.style != null))
+    walk(node.props.style);
+  // The lift of every island that floats, and its shadow's fade and tightening.
+  expect(followers.length).toBeGreaterThan(3);
+  for (const { interpolation } of followers) {
+    expect(interpolation.inputRange).toEqual([0, 1, 2]);
+    expect(interpolation.outputRange[2]).toBe(interpolation.outputRange[0]);
+  }
+  act(() => shown.view.unmount());
+});
+
 it('night movement (window flicker, lantern, halo) starts no clock and draws nothing by day', async () => {
   emitAppState('active');
   setReduceMotion(false);

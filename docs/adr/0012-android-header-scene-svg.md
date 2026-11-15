@@ -74,9 +74,12 @@ at night the window flicker, lantern bob and halo pulse. The rules:
   drop, a snowflake, a ripple) is not drawn. A scene that is only paused (off
   screen, covered, in the background) can still be seen, under the Group's
   options for one, so each clock stops where it is and the next run finishes
-  that cycle before looping: no part jumps at the pause or after it. The float
-  and the clouds still return to rest at a pause (up to 3 scene units for an
-  island; a cloud goes back to where it started), as they have since #1208.
+  that cycle before looping: no part jumps at the pause or after it. Since
+  #1243 the float and the clouds hold their place the same way: an island
+  finishes the half of its float it was paused in, a cloud the crossing it was
+  part-way through. With Motion off or Remove animations they return to rest
+  and start from there when motion comes back. The float's value runs 0 to 1
+  to 2 (2 is rest again), so its place alone tells which half it is in.
 - **Night.** The glow layer and night-only movement are mounted, and their
   clocks started, only when the scene shows them. When the time of day
   changes, only those clocks start or stop; the rest run on.
