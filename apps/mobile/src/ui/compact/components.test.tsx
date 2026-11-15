@@ -442,6 +442,26 @@ describe('Buttons and rows', () => {
     expect(open).not.toHaveBeenCalled();
   });
 
+  // #1252, seen on the device: Android keeps an accessibility state it was given when the prop
+  // later goes, and adds "busy" to the row's description again on its next label. A row that was
+  // busy must say it no longer is.
+  it('a row that was busy says it no longer is', () => {
+    const row = (busy?: string) => (
+      <ListRow
+        title="Priya Shah"
+        meta="Admin"
+        busy={busy}
+        accessibilityLabel="Priya Shah, Admin, options"
+        onPress={() => undefined}
+      />
+    );
+    const root = render(row('Making admin…'));
+    act(() => renderer!.update(row()));
+    expect(one(byRole(root, 'button', 'Priya Shah, Admin, options')).props.accessibilityState).toEqual(
+      { disabled: false, busy: false },
+    );
+  });
+
   // #1252: a sheet's option, shared by Member options and a Tag's options: a tile, a title and
   // a second line that explains it, and a red variant for one that removes something.
   it('an option row is a button with a tile, its title and the line that explains it', () => {
