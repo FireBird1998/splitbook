@@ -44,6 +44,20 @@ function publisher() {
 }
 
 describe('the public flow monitor', () => {
+  // #1254: stepping down is its own flow, sent only by the command that sends it.
+  it('checks the step-down flow: declared steps, and stepping only through its command', () => {
+    const { controller, publish } = publisher();
+    const check = monitorFlows(controller);
+    const stepDown = controller.getSnapshot().stepDown;
+    publish({ ...controller.getSnapshot(), stepDown: { ...stepDown, status: 'confirm' } });
+    publish({ ...controller.getSnapshot(), stepDown: { ...stepDown, status: 'stepping' } });
+    publish({ ...controller.getSnapshot(), stepDown: { ...stepDown, status: 'closed' } });
+    publish({ ...controller.getSnapshot(), stepDown: { ...stepDown, status: 'refused' } });
+    expect(() => check.assertValid()).toThrow(
+      ['stepDown: stepping without stepDown', 'stepDown: undeclared closed → refused'].join('\n'),
+    );
+    check.stop();
+  });
   // #1253: a removal is its own flow, sent only by the command that sends it.
   it('checks the member removal flow: declared steps, and removing only through its command', () => {
     const { controller, publish } = publisher();

@@ -318,14 +318,14 @@ describe('Leave Group', () => {
     });
   });
 
-  // #877: Android can't change roles, as Members already says, so the last admin is told where.
-  const lastAdmin =
-    'Make someone else an admin before you leave. Changing roles is done on the web for now.';
+  // #1254: Android makes admins now (#1252), so the last admin is told in the server's words, with
+  // nothing about the web (#877's sentence), and Choose an admin shows the list.
+  const lastAdmin = 'Make someone else an admin before you leave.';
 
   it.each([
-    ['with the server’s words', refusals.LAST_ADMIN],
+    ['in the server’s words', refusals.LAST_ADMIN],
     ['when the server doesn’t explain', { status: 409, code: 'LAST_ADMIN' }],
-  ])('tells the last admin that roles are changed on the web, %s (#877)', async (_, body) => {
+  ])('tells the last admin to make someone else an admin first, %s (#1254)', async (_, body) => {
     const f = await onMembers();
     f.answer(() => Response.json(body, { status: 409 }));
     await f.controller.reviewLeaveGroup();
