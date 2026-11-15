@@ -450,7 +450,8 @@ export const ListRow = memo(function ListRow({
     ? () => {
         if (!rowDisabled) trailingSwitch.onChange(!trailingSwitch.value);
       }
-    : onPress && busy !== undefined
+    : // A row that can't be used ignores a press that reaches it anyway.
+      onPress && rowDisabled
       ? () => undefined
       : onPress;
   const shownMeta = busy ?? meta;
@@ -614,13 +615,7 @@ export function OptionRow({
       meta={meta}
       metaLines={3}
       disabled={disabled}
-      onPress={
-        onPress
-          ? () => {
-              if (!disabled) onPress();
-            }
-          : undefined
-      }
+      onPress={onPress}
       accessibilityLabel={accessibilityLabel}
     />
   );

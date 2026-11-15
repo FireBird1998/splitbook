@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
-import type { GroupCategory } from '@splitbook/shared/types';
+import type { GroupCategory, MemberRole } from '@splitbook/shared/types';
+import { isGroupAdmin } from '../data/member-roles';
 import type { LeaveGroupState, MemberRoleState, MobileGroup } from '../data/types';
 import {
   Banner,
@@ -50,7 +51,9 @@ export interface MemberRoleActions {
   state: MemberRoleState;
   offline: boolean;
   /** Make admin or Make member, chosen in a member's options: sent at once. */
-  onChange: (userId: string, role: 'admin' | 'member') => void;
+  onChange: (userId: string, role: MemberRole) => void;
+  /** The member whose options were open is no longer listed. */
+  onMemberGone: (userId: string, name: string) => void;
   onDismissDone: () => void;
 }
 
@@ -231,7 +234,11 @@ function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGro
 }
 
 type Member = MobileGroup['members'][number];
-const roleName = (member: Member) => (member.role === 'admin' ? 'Admin' : 'Member');
+/** A role as the list shows it, and while it is being given (#1252). */
+const roleText: Record<MemberRole, { name: string; making: string }> = {
+  admin: { name: 'Admin', making: 'Making admin…' },
+  member: { name: 'Member', making: 'Making member…' },
+};
 
 /**
  * Member options: what an admin can do to another member, opened from their row (#1252). Make
@@ -248,7 +255,7 @@ function MemberOptionsSheet({
   onClose: () => void;
 }) {
   const unavailable = roles.offline || roles.state.status === 'changing';
-  const choose = (role: 'admin' | 'member') => {
+  const choose = (role: MemberRole) => {
     if (!member || unavailable) return;
     onClose();
     roles.onChange(member.user.id, role);
@@ -265,14 +272,14 @@ function MemberOptionsSheet({
         <>
           <View
             accessible
-            accessibilityLabel={`${member.user.name}, ${roleName(member)}`}
+            accessibilityLabel={`${member.user.name}, ${roleText[member.role].name}`}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
           >
             <CompactAvatar name={member.user.name} large />
             <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
               <CompactText weight="semibold">{member.user.name}</CompactText>
               <CompactText variant="caption" tone="secondary">
-                {roleName(member)}
+                {roleText[member.role].name}
               </CompactText>
             </View>
           </View>
@@ -340,31 +347,26 @@ export function GroupMembers({
   unavailable?: string | null;
 }) {
   const theme = useTheme();
-  const isAdmin = !!group?.members.some(
-    (member) => member.user.id === currentUserId && member.role === 'admin',
-  );
+  const isAdmin = isGroupAdmin(group, currentUserId);
   /** The member whose options are open. */
   const [selected, setSelected] = useState<string | null>(null);
   const selectedMember =
     (selected && group?.members.find((member) => member.user.id === selected)) || null;
-  /** Said when the member whose options were open is no longer listed. */
-  const [gone, setGone] = useState<string | null>(null);
-  const openedFor = useRef<string | null>(null);
-  // A member who leaves the list, or losing admin, closes their options: nothing there applies.
+  /** Who the open options were for, as they were when opened. */
+  const openedFor = useRef<Member | null>(null);
+  // Their options close once nothing there applies (MembersRolesNotes): you're no longer an
+  // admin, the member has left the list, which a Snackbar says, or their role changed meanwhile.
   useEffect(() => {
-    if (!selected) return;
-    if (!isAdmin) setSelected(null);
-    else if (!selectedMember) {
-      setSelected(null);
-      if (openedFor.current) setGone(`${openedFor.current} is no longer in this Group`);
-    }
+    const opened = openedFor.current;
+    if (!selected || !opened) return;
+    if (!isAdmin || !selectedMember || selectedMember.role !== opened.role) setSelected(null);
+    if (isAdmin && !selectedMember) roles.onMemberGone(opened.user.id, opened.user.name);
   }, [selected, selectedMember, isAdmin]);
   const open = (member: Member) => {
-    openedFor.current = member.user.name;
+    openedFor.current = member;
     setSelected(member.user.id);
   };
   const changing = roles.state.status === 'changing' ? roles.state : null;
-  const done = roles.state.done ?? gone;
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <TopBar
@@ -402,7 +404,7 @@ export function GroupMembers({
             <Card>
               {group.members.map((member, index) => {
                 const you = member.user.id === currentUserId;
-                const role = roleName(member);
+                const role = roleText[member.role].name;
                 // An admin opens another member's options from their row (#1252).
                 const actionable = isAdmin && !you;
                 const shield =
@@ -417,10 +419,8 @@ export function GroupMembers({
                       title={you ? `${member.user.name}${SEPARATOR}You` : member.user.name}
                       meta={role}
                       busy={
-                        changing?.userId === member.user.id
-                          ? changing.role === 'admin'
-                            ? 'Making admin…'
-                            : 'Making member…'
+                        changing?.userId === member.user.id && changing.role
+                          ? roleText[changing.role].making
                           : undefined
                       }
                       trailing={
@@ -483,14 +483,8 @@ export function GroupMembers({
           onClose={() => setSelected(null)}
         />
       ) : null}
-      {done ? (
-        <DoneNote
-          message={done}
-          onDismiss={() => {
-            if (roles.state.done) roles.onDismissDone();
-            else setGone(null);
-          }}
-        />
+      {roles.state.done ? (
+        <DoneNote message={roles.state.done} onDismiss={roles.onDismissDone} />
       ) : null}
     </View>
   );

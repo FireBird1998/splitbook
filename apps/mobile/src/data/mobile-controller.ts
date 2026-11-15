@@ -25,6 +25,8 @@ import {
 } from '@splitbook/shared/api-paths';
 import { groupCurrencySettingsSchema } from '@splitbook/shared/group-currency-settings';
 import { emptyTagManager, tagManager } from './tag-manager';
+import { isGroupAdmin, roleComplement } from './member-roles';
+import type { MemberRole } from '@splitbook/shared/types';
 import { createAssistants, emptyAssistants } from './assistants';
 import { tagManagement, tagRead, unresolvedTagRecord, type TagRead } from './tag-management';
 import { createReviewRun } from './review-run';
@@ -363,6 +365,8 @@ function closedLeave(): LeaveGroupState {
   return { groupId: null, status: 'closed', code: null, message: null, draft: false, check: null };
 }
 
+/** What's said when a member is no longer listed in the Group the page shows. */
+const noLongerInGroup = (name: string) => `${name} is no longer in this Group`;
 /** No role change under way, failed or confirmed (#1252). */
 function idleMemberRole(): MemberRoleState {
   return {
@@ -375,8 +379,6 @@ function idleMemberRole(): MemberRoleState {
     done: null,
   };
 }
-/** The role being given, as its sentences say it. */
-const roleWords = (role: 'admin' | 'member') => (role === 'admin' ? 'an admin' : 'a member');
 
 /** The server's refusals to let a member leave, with fallbacks for its own words. */
 const leaveRefusals: Record<string, string> = {
@@ -6450,7 +6452,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * read shows it. A refusal stays above the Group's details in the server's words where it has
    * them. Nothing is queued, kept or sent again.
    */
-  const changeMemberRole = async (userId: string, role: 'admin' | 'member') => {
+  const changeMemberRole = async (userId: string, role: MemberRole) => {
     const group = shownGroup(snapshot),
       self = snapshot.auth.user?.id,
       target = group?.members.find((member) => member.user.id === userId);
@@ -6463,7 +6465,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       userId === self ||
       (role !== 'admin' && role !== 'member') ||
       target.role === role ||
-      !group.members.some((member) => member.user.id === self && member.role === 'admin') ||
+      !isGroupAdmin(group, self) ||
       snapshot.memberRole.status === 'changing' ||
       snapshot.offline.active
     )
@@ -6478,8 +6480,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ...snapshot,
       memberRole: { groupId, userId, name, role, status: 'changing', message: null, done: null },
     });
+    /** The change's refusal or failure; null once the server answered that it made it. */
     let failure: unknown = null,
-      answered: MobileGroup | null = null;
+      /** The Group as the change's answer gave it. */
+      changeAnswer: MobileGroup | null = null;
     try {
       const value = await request(`/api/groups/${groupId}/members/${userId}`, owner, {
         method: 'PATCH',
@@ -6489,7 +6493,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         if (current(owner)) invalidateReads(`group:${groupId}`);
       });
       try {
-        answered = parseGroup(value);
+        changeAnswer = parseGroup(value);
       } catch {
         // The change was made; the read that follows shows it.
       }
@@ -6497,9 +6501,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!current(owner) || error instanceof Superseded) return;
       failure = error;
     }
-    let read: MobileGroup | null = null;
+    /** The Group read again after the change, whatever its answer. */
+    let reread: MobileGroup | null = null;
     try {
-      read = await readMembersGroup(groupId, owner, { fresh: true, wanted: onPage });
+      reread = await readMembersGroup(groupId, owner, { fresh: true, wanted: onPage });
     } catch (error) {
       if (!onPage() || error instanceof Superseded) return;
       if (error instanceof RequestError && [403, 404].includes(error.status)) {
@@ -6512,34 +6517,43 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // Not read: the page keeps showing what it had, or the change's own answer.
     }
     if (!onPage() || attempt !== roleRequest) return;
-    if (!read && answered && failure === null)
-      publish({ ...snapshot, detail: { ...snapshot.detail, data: answered } });
-    const now = read?.members.find((member) => member.user.id === userId);
+    if (!reread && changeAnswer && failure === null)
+      publish({ ...snapshot, detail: { ...snapshot.detail, data: changeAnswer } });
+    const changed = reread?.members.find((member) => member.user.id === userId);
     const settled = { groupId, userId, name, role, status: 'idle' as const, message: null };
-    if (read && !now) {
+    if (reread && !changed) {
+      publish({ ...snapshot, memberRole: { ...settled, done: noLongerInGroup(name) } });
+      return;
+    }
+    if (failure === null || changed?.role === role) {
       publish({
         ...snapshot,
-        memberRole: { ...settled, done: `${name} is no longer in this Group` },
+        memberRole: { ...settled, done: `${name} is now ${roleComplement[role]}` },
       });
       return;
     }
-    if (failure === null || now?.role === role) {
-      publish({
-        ...snapshot,
-        memberRole: { ...settled, done: `${name} is now ${roleWords(role)}` },
-      });
-      return;
-    }
-    const stillAdmin = read?.members.some(
-      (member) => member.user.id === self && member.role === 'admin',
-    );
     const message =
       failure instanceof RequestError && failure.status === 409 && failure.serverMessage?.trim()
         ? failure.serverMessage.trim()
-        : failure instanceof RequestError && failure.status === 403 && read && !stillAdmin
-          ? `You’re no longer an admin of ${read.name}.`
-          : `Couldn’t make ${name} ${roleWords(role)}. Try again.`;
+        : failure instanceof RequestError &&
+            failure.status === 403 &&
+            reread &&
+            !isGroupAdmin(reread, self)
+          ? `You’re no longer an admin of ${reread.name}.`
+          : `Couldn’t make ${name} ${roleComplement[role]}. Try again.`;
     publish({ ...snapshot, memberRole: { ...settled, status: 'failed', message, done: null } });
+  };
+  /**
+   * The member whose options were open is no longer listed, as a read found (MembersRolesNotes):
+   * their options closed, and a Snackbar says so. Not while a change is being made.
+   */
+  const noteMemberGone = (userId: string, name: string) => {
+    const groupId = snapshot.detail.id;
+    if (route.screen !== 'members' || !groupId || snapshot.memberRole.status === 'changing') return;
+    publish({
+      ...snapshot,
+      memberRole: { ...idleMemberRole(), groupId, userId, name, done: noLongerInGroup(name) },
+    });
   };
   /** The role change's Snackbar went, after its time or dismissed. */
   const dismissMemberRoleDone = () => {
@@ -7092,11 +7106,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }),
       );
       assertCurrent(owner);
-      if (
-        !group.members.some(
-          (member) => member.user.id === snapshot.auth.user?.id && member.role === 'admin',
-        )
-      )
+      if (!isGroupAdmin(group, snapshot.auth.user?.id))
         throw new RequestError('The server returned invalid creator membership.');
       gainedGroup(group.id);
       // Confirmed, so this device no longer keeps the submission (unless a newer one replaced it).
@@ -7446,7 +7456,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (shownRecovery === recovery) shownRecovery = null;
     }
   };
-  /** `reuse`: a foreground refresh may show reads verified within the display freshness window. */
   /**
    * Reads the Group for Members and Group details and shows it there. Null once that page is no
    * longer the one it was read for. A Group that no longer lists the member is forgotten, as a
@@ -7479,6 +7488,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     return group;
   };
+  /** `reuse`: a foreground refresh may show reads verified within the display freshness window. */
   const refreshView = async (reuse: boolean) => {
     if (['restoring', 'signing-in'].includes(snapshot.auth.status)) return;
     if (
@@ -8738,6 +8748,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     cancelLeaveGroup,
     leaveGroup,
     changeMemberRole,
+    noteMemberGone,
     dismissMemberRoleDone,
     showLeaveCheck,
     accountStorage,

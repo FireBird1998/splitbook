@@ -498,6 +498,7 @@ function Members({ controller }: { controller: MobileController }) {
         state: snapshot.memberRole,
         offline: snapshot.offline.active,
         onChange: noop,
+        onMemberGone: noop,
         onDismissDone: noop,
       }}
     />

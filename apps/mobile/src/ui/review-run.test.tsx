@@ -1174,6 +1174,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
             state: snapshot.memberRole,
             offline: false,
             onChange: noop,
+            onMemberGone: noop,
             onDismissDone: noop,
           }}
         />

@@ -112,6 +112,7 @@ import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
 import { spellDay } from './src/ui/day-format';
 import { GroupActivity } from './src/ui/group-activity';
 import { GroupMembers } from './src/ui/group-members';
+import { isGroupAdmin } from './src/data/member-roles';
 import type { MobileGroup, MobileSnapshot } from './src/data/types';
 import { shownGroup, type MobileController } from './src/data/mobile-controller';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -1344,9 +1345,7 @@ function GroupScreen() {
         offline: state.offline.active,
       }}
       onManageTags={
-        known?.members.some((member) => member.user.id === userId && member.role === 'admin')
-          ? () => controller.openTags(known.id)
-          : undefined
+        known && isGroupAdmin(known, userId) ? () => controller.openTags(known.id) : undefined
       }
       onViewTags={
         known?.members.some((member) => member.user.id === userId && member.role !== 'admin')
@@ -1426,9 +1425,7 @@ function GroupScreen() {
           groupId={group.id}
           groupName={group.name}
           accountId={userId}
-          recoveryOnly={
-            !group.members.some((member) => member.user.id === userId && member.role === 'admin')
-          }
+          recoveryOnly={!isGroupAdmin(group, userId)}
           offline={state.offline.active}
           onClose={() => {
             controller.closeTags();
@@ -1667,6 +1664,7 @@ function MembersScreen() {
         state: state.memberRole,
         offline: state.offline.active,
         onChange: (userId, role) => void controller.changeMemberRole(userId, role),
+        onMemberGone: controller.noteMemberGone,
         onDismissDone: controller.dismissMemberRoleDone,
       }}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}

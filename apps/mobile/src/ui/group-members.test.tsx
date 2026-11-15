@@ -137,6 +137,7 @@ const roleActions = (state: Partial<MemberRoleState> = {}, offline = false) => (
   state: { ...idle, ...(state.status ? { groupId: household.id } : {}), ...state },
   offline,
   onChange: vi.fn(),
+  onMemberGone: vi.fn(),
   onDismissDone: vi.fn(),
 });
 
@@ -433,7 +434,7 @@ describe('Changing a member’s role (#1252)', () => {
     expect(props.roles.onChange).not.toHaveBeenCalled();
   });
 
-  it('closes Member options when the member leaves the list or you stop being an admin', () => {
+  it('closes Member options when the member leaves the list, their role changes or you stop being an admin', () => {
     const { root, props } = page();
     press(root, 'Sam Chen, Member, options');
     act(() => {
@@ -445,6 +446,28 @@ describe('Changing a member’s role (#1252)', () => {
       );
     });
     expect(options(root).props.visible).toBe(false);
+    // A Snackbar says so (MembersRolesNotes).
+    expect(props.roles.onMemberGone).toHaveBeenCalledExactlyOnceWith(samId, 'Sam Chen');
+
+    act(() => renderer!.update(<GroupMembers {...props} />));
+    press(root, 'Sam Chen, Member, options');
+    act(() => {
+      renderer!.update(
+        <GroupMembers
+          {...props}
+          group={{
+            ...household,
+            members: household.members.map((m) =>
+              m.user.id === samId ? { ...m, role: 'admin' as const } : m,
+            ),
+          }}
+        />,
+      );
+    });
+    // Another admin changed Sam's role meanwhile: the option shown would be the other one.
+    expect(options(root).props.visible).toBe(false);
+    expect(props.roles.onMemberGone).toHaveBeenCalledOnce();
+    act(() => renderer!.update(<GroupMembers {...props} />));
 
     press(root, 'Priya Shah, Admin, options');
     act(() => {
@@ -687,4 +710,87 @@ describe.each(['light', 'dark'] as const)('Members’ details at large text in %
     expect(unreadText(bar!, size.fontScale, size.width)).toEqual([]);
     expect(unreadText(details!, size.fontScale, size.width - 32)).toEqual([]);
   });
+});
+
+type Json = ReactTestRendererJSON | ReactTestRendererJSON[] | null;
+/** The page without its sheets, which lie over it. */
+const screenOnly = (node: Json): Json =>
+  node && !Array.isArray(node)
+    ? {
+        ...node,
+        children:
+          node.children
+            ?.filter((child) => typeof child === 'string' || child.type !== 'Modal')
+            .map((child) => (typeof child === 'string' ? child : (screenOnly(child) as never))) ??
+          null,
+      }
+    : node;
+
+// #1252 (board MembersRoles130): the list with its dots and a busy row, a failed change's Banner,
+// and Member options read in full at large text: names wrap, the shield and dots keep their size.
+describe.each(['light', 'dark'] as const)('Member roles at large text in %s (#1252)', (mode) => {
+  it.each(largeTextWindows)(
+    'reads the list, the Banner and Member options in full, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      const props = {
+        group: household,
+        currentUserId: you,
+        back: { label: 'Back to Group', onPress: vi.fn() },
+        invite: { onPress: vi.fn(), disabled: false, offline: false },
+        leave: leaveActions(),
+        roles: roleActions({
+          status: 'changing',
+          userId: priyaId,
+          name: 'Priya Shah',
+          role: 'member',
+        }),
+      };
+      const failed = roleActions({
+        status: 'failed',
+        userId: samId,
+        name: 'Sam Chen',
+        role: 'admin',
+        message: 'Couldn’t make Sam Chen an admin. Try again.',
+      });
+      act(() => {
+        renderer = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <GroupMembers {...props} />
+          </ThemeContext.Provider>,
+        );
+      });
+      // The page's content lies 16dp in from each edge.
+      expect(
+        unreadText(screenOnly(renderer!.toJSON()) as never, size.fontScale, size.width - 32),
+      ).toEqual([]);
+      act(() => {
+        renderer!.update(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <GroupMembers {...props} roles={failed} />
+          </ThemeContext.Provider>,
+        );
+      });
+      expect(
+        unreadText(screenOnly(renderer!.toJSON()) as never, size.fontScale, size.width - 32),
+      ).toEqual([]);
+      press(renderer!.root, 'Sam Chen, Member, options');
+      const [modal] = findHosts(
+        renderer!.toJSON() as never,
+        (p, type) => type === 'Modal' && p.visible === true,
+      );
+      expect(modal).toBeDefined();
+      expect(unreadText(modal!, size.fontScale, size.width)).toEqual([]);
+      // The list's dots and shields keep their size.
+      const icons = renderer!.root.findAll(
+        (n) =>
+          isHost(n, 'Ionicons') &&
+          !inSheet(n) &&
+          ['ellipsis-vertical', 'shield-checkmark-outline'].includes(n.props.name),
+      );
+      expect(new Set(icons.map((n) => `${n.props.name}:${n.props.size}`))).toEqual(
+        new Set(['ellipsis-vertical:20', 'shield-checkmark-outline:22']),
+      );
+    },
+  );
 });

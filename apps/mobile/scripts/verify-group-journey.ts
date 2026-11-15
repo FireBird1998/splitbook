@@ -455,6 +455,14 @@ async function verify() {
     );
     await sam.controller.openGroup(household._id);
     sam.controller.openMembers();
+    // Sam read the Group moments ago, as a member: Retry reads it again, now as an admin.
+    await sam.controller.refresh();
+    observe(
+      sam.controller.getSnapshot().detail.data?.members.find((m) => m.user.id === samId)?.role ===
+        'admin',
+      'Sam’s Members page did not show him as an admin after a fresh read.',
+      {},
+    );
     await alex.controller.changeMemberRole(samId, 'member');
     observe(
       alex.controller.getSnapshot().memberRole.done === `${samName} is now a member` &&

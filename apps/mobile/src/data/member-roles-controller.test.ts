@@ -345,6 +345,23 @@ describe('Changing a member’s role', () => {
     });
   });
 
+  it('says a member whose options were open is no longer in the Group, while no change runs', async () => {
+    const f = await onMembers();
+    const held = f.backend.hold('PATCH', rolePath(samId));
+    const changing = f.controller.changeMemberRole(samId, 'admin');
+    await held.arrived;
+    f.controller.noteMemberGone(priyaId, 'Priya Shah');
+    expect(f.controller.getSnapshot().memberRole.status).toBe('changing');
+    held.release();
+    await changing;
+    f.controller.noteMemberGone(priyaId, 'Priya Shah');
+    expect(f.controller.getSnapshot().memberRole).toMatchObject({
+      status: 'idle',
+      done: 'Priya Shah is no longer in this Group',
+    });
+    expect(f.sent().filter((call) => call.startsWith('PATCH'))).toHaveLength(1);
+  });
+
   it('a change answered after Back shows nothing on the Group view', async () => {
     const f = await onMembers();
     const held = f.backend.hold('PATCH', rolePath(samId));

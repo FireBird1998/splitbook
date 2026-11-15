@@ -1,3 +1,4 @@
+import type { MemberRole } from '@splitbook/shared/types';
 import type { GroupHeader } from '@splitbook/shared/group-header';
 import type { TagManagerState } from './tag-manager';
 import type { AssistantsState } from './assistants';
@@ -394,7 +395,7 @@ export interface MemberRoleState {
   /** Their name when the change began, for the words that follow it. */
   name: string | null;
   /** The role being given. */
-  role: 'admin' | 'member' | null;
+  role: MemberRole | null;
   status: 'idle' | 'changing' | 'failed';
   message: string | null;
   /** The last change's confirmation, a Snackbar naming the person, until dismissed or left. */
