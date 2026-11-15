@@ -537,6 +537,13 @@ describe('Removing a member (#1253)', () => {
     const { root, props } = page();
     press(root, 'Sam Chen, Member, options');
     expect(text(options(root))).toContain('You’ll be asked to confirm');
+    // In the error colour, on its title as on its tile (board MembersRolesSheet 8).
+    const colour = options(root)
+      .findAll((n) => isHost(n, 'Text') && text(n) === 'Remove from Group')
+      .flatMap((n) => [n.props.style].flat(Infinity))
+      .filter((style) => style && 'color' in style)
+      .at(-1)?.color;
+    expect(colour).toBe(getSemanticTokens('light').status.negative);
     press(options(root), 'Remove from Group, You’ll be asked to confirm');
     expect(props.removal.onReview).toHaveBeenCalledExactlyOnceWith(samId);
     expect(options(root).props.visible).toBe(false);
