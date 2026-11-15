@@ -137,6 +137,19 @@ describe('Stepping down to member', () => {
     });
   });
 
+  it('says nothing when the read after it still shows you an admin: the list speaks', async () => {
+    const f = await onMembers();
+    // Answered as made, then made an admin again by another admin before the read.
+    f.answerRole(() => Response.json({ data: { message: 'ok' }, status: 200 }));
+    f.controller.reviewStepDown();
+    await f.controller.stepDown();
+    expect(roleOf(f, alexId)).toBe('admin');
+    expect(f.controller.getSnapshot()).toMatchObject({
+      stepDown: closed,
+      memberRole: { done: null },
+    });
+  });
+
   it('closes when a read shows you a member already, or the other admins gone', async () => {
     const f = await onMembers();
     f.controller.reviewStepDown();
