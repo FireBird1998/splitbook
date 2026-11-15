@@ -256,6 +256,14 @@ It runs as two projects, against one isolated app and database per run (#476):
   splits, membership changes and edited descriptions, so no figure a browser test compares
   moves, and no Home or Groups list is capped, so their extra Groups crowd nothing out.
 
+Every test uses the same three personas, so each test's Groups go when it ends (#1260). The
+ledger fixture notes the id of every Group the test makes, through the personas' request contexts
+or a page's own replies. It then deletes those Groups straight from the run's database, with
+everything the product's own Group deletion removes. Before this, each persona belonged to about
+500 Groups by the end of a run, and Home slowed down. After the last test the run checks that no
+Group is left, and fails naming a few if any are: a Group made some other way would start the
+pile-up again.
+
 Its MongoDB is `127.0.0.1:27017` unless `EXPENSE_ACCESS_MONGO_PORT` names another loopback port;
 To review saves and Tag actions need transactions, so give it a replica set (CI's expense-access
 job starts one of its own on 27038). With `CI` set it serves a production build of the snapshot, otherwise `next dev`. On `next dev`, global setup first requests the pages the suite
