@@ -2,11 +2,76 @@ import { widgetPeople } from '@splitbook/shared/widget-people';
 import { openDatabaseAsync, defaultDatabaseDirectory, type SQLiteDatabase } from 'expo-sqlite';
 import { readWidgetTagIds, type WidgetSetupRecord } from '@splitbook/shared/widget-setup';
 import type { WidgetCopy, WidgetSession } from '@splitbook/shared/balances-widget';
+import { z } from 'zod';
 import type {
   WidgetsNative,
   WidgetCopyWriteOptions,
   WidgetGroupEviction,
 } from './data/widget-copy';
+
+const sessionSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('authenticated'),
+      accountId: z.string().min(1),
+      loading: z.boolean(),
+    })
+    .passthrough(),
+  z.object({ status: z.literal('signed-out') }).passthrough(),
+  z.object({ status: z.literal('expired') }).passthrough(),
+]);
+const setupSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('balances'),
+      widgetId: z.number().int().positive(),
+      hideAmounts: z.boolean().optional(),
+    })
+    .passthrough(),
+  z
+    .object({
+      kind: z.literal('group'),
+      widgetId: z.number().int().positive(),
+      accountId: z.string().min(1),
+      groupId: z.string().min(1),
+      hideAmounts: z.boolean().optional(),
+      showRecentExpenses: z.boolean().optional(),
+    })
+    .passthrough(),
+  z
+    .object({
+      kind: z.literal('quick'),
+      widgetId: z.number().int().positive(),
+      accountId: z.string().min(1),
+      groupId: z.string().min(1).nullable(),
+      mode: z.enum(['expense', 'payment']).optional(),
+      tagIds: z.unknown().optional(),
+    })
+    .passthrough(),
+  z
+    .object({
+      kind: z.literal('person'),
+      widgetId: z.number().int().positive(),
+      accountId: z.string().min(1),
+      person: z
+        .object({
+          id: z.string().min(1),
+          firstName: z.string().optional(),
+          initials: z.string().optional(),
+        })
+        .passthrough(),
+      hideAmounts: z.boolean().optional(),
+    })
+    .passthrough(),
+]);
+function readSession(raw: string | null | undefined): WidgetSession {
+  try {
+    return sessionSchema.parse(JSON.parse(raw ?? ''));
+  } catch {
+    // A damaged session must replace the old frame, never preserve another account's picture.
+    return { status: 'signed-out' };
+  }
+}
 
 // SQLite checks the current setup in the same statement that stores a copy. A delayed app
 // write cannot put descriptions back after setup was switched off or its widget removed.
@@ -125,7 +190,37 @@ export function createWidgetsStore(environment: string) {
       JSON.stringify(setup),
     );
   };
+  /** Distinguish a broken placement from an absent (including legacy) preference.
+   * Reads keep the bytes; only an explicit setup Save replaces an unreadable row. */
+  const readSetup = async (
+    widgetId: number,
+  ): Promise<{ setup: WidgetSetupRecord | null; unreadable: boolean }> => {
+    const row = await (
+      await database()
+    ).getFirstAsync<{ setup: string }>(
+      'SELECT setup FROM widget_setup WHERE environment = ? AND widget_id = ?',
+      environment,
+      widgetId,
+    );
+    if (!row) return { setup: null, unreadable: false };
+    try {
+      const value = setupSchema.parse(JSON.parse(row.setup));
+      if (value.widgetId !== widgetId) return { setup: null, unreadable: true };
+      if (value.kind === 'quick') {
+        // Keep the existing tolerant Tag-id reading; its result is safe for the view.
+        const { tagIds, ...quick } = value;
+        return {
+          setup: tagIds === undefined ? quick : { ...quick, tagIds: readWidgetTagIds(tagIds) },
+          unreadable: false,
+        };
+      }
+      return { setup: value, unreadable: false };
+    } catch {
+      return { setup: null, unreadable: true };
+    }
+  };
   return {
+    readSetup,
     async recentGroups(accountId: string, activeIds: number[]) {
       const rows = await (
         await database()
@@ -163,18 +258,7 @@ export function createWidgetsStore(environment: string) {
       );
     },
     async setup(widgetId: number): Promise<WidgetSetupRecord | null> {
-      const row = await (
-        await database()
-      ).getFirstAsync<{ setup: string }>(
-        'SELECT setup FROM widget_setup WHERE environment = ? AND widget_id = ?',
-        environment,
-        widgetId,
-      );
-      if (!row) return null;
-      const setup: WidgetSetupRecord = JSON.parse(row.setup);
-      return setup.kind === 'quick' && setup.tagIds !== undefined
-        ? { ...setup, tagIds: readWidgetTagIds(setup.tagIds) }
-        : setup;
+      return (await readSetup(widgetId)).setup;
     },
     saveSetup: (setup: WidgetSetupRecord) => saveSetup(setup, true),
     saveSetupIfAbsent: (setup: WidgetSetupRecord) => saveSetup(setup, false),
@@ -272,7 +356,7 @@ export function createWidgetsStore(environment: string) {
       }
       return {
         copy,
-        session: row?.session ? JSON.parse(row.session) : { status: 'signed-out' },
+        session: readSession(row?.session),
       };
     },
     async evictGroup(accountId: string, id: string, eviction: WidgetGroupEviction) {

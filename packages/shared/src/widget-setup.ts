@@ -2,11 +2,40 @@ import type { QuickWidgetSetup } from './quick-widget';
 
 import type { PersonWidgetSetup } from './person-widget';
 import type { GroupWidgetSetup } from './group-widget';
+import { fitWidgetLayout, type WidgetDimensions } from './widget-sizing';
 export type WidgetSetupRecord =
   | PersonWidgetSetup
   | GroupWidgetSetup
   | { kind: 'balances'; widgetId: number; hideAmounts?: boolean }
   | QuickWidgetSetup;
+
+/** One account-neutral message for a damaged placement, for every widget kind. */
+export function widgetSetupRequired(widgetId: number, size: WidgetDimensions, fontScale = 1) {
+  const title = 'Set up this widget again';
+  const padding = 8;
+  const bounds = {
+    ...size,
+    width: Math.max(0, size.width - padding * 2),
+    height: Math.max(0, size.height - padding * 2),
+  };
+  const layout = fitWidgetLayout(
+    bounds,
+    fontScale,
+    (text) => {
+      const font = text.fit(title, 20, bounds.width * 2);
+      const lines = text.words(title, font);
+      return {
+        lines,
+        fontSize: text.font(font),
+        sections: [
+          { id: 'message', rows: lines.length, rowHeight: text.line(font), required: true },
+        ],
+      };
+    },
+    0,
+  );
+  return { title, padding, layout, target: { kind: 'setup' as const, widgetId } };
+}
 /** Stored choices keep first-chosen order; malformed entries supply no Tags. */
 export function readWidgetTagIds(value: unknown): string[] {
   return Array.isArray(value)
