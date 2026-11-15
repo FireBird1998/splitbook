@@ -36,6 +36,7 @@ import {
   IconTile,
   LinearProgress,
   ListRow,
+  OptionRow,
   SectionHeader,
   Snackbar,
   TopBar,
@@ -663,28 +664,24 @@ export function TagManager({
           {selectedTag ? (
             <Card>
               {selectedTag.isArchived ? (
-                <ListRow
-                  leading={<IconTile icon="arrow-undo-outline" />}
+                <OptionRow
+                  icon="arrow-undo-outline"
                   title="Restore"
                   meta="Offer it on new Expenses again"
-                  metaLines={3}
                   disabled={busy}
                   onPress={() => {
-                    if (busy) return;
                     setSelected(null);
                     void manager.restore(selectedTag);
                   }}
                 />
               ) : (
                 <>
-                  <ListRow
-                    leading={<IconTile icon="create-outline" />}
+                  <OptionRow
+                    icon="create-outline"
                     title="Rename"
                     meta="Saved Expenses show the new name"
-                    metaLines={3}
                     disabled={busy}
                     onPress={() => {
-                      if (busy) return;
                       setSelected(null);
                       typing.current = true;
                       manager.edit(selectedTag, 'rename');
@@ -692,24 +689,22 @@ export function TagManager({
                   />
                   <Divider inset={66} />
                   {active.length > 1 ? (
-                    <ListRow
-                      leading={<IconTile icon="archive-outline" />}
+                    <OptionRow
+                      icon="archive-outline"
                       title="Archive"
                       meta="Stop offering it. Saved Expenses keep it."
-                      metaLines={3}
                       disabled={busy}
                       onPress={() => {
-                        if (busy) return;
                         setSelected(null);
                         manager.edit(selectedTag, 'archive');
                       }}
                     />
                   ) : (
-                    <ListRow
-                      leading={<IconTile icon="archive-outline" tone="neutral" />}
+                    <OptionRow
+                      icon="archive-outline"
+                      tone="neutral"
                       title="Archive"
                       meta="A Group needs one active Tag. Create or restore another Tag first."
-                      metaLines={3}
                       accessibilityLabel="Archive, unavailable. A Group needs one active Tag. Create or restore another Tag first."
                     />
                   )}

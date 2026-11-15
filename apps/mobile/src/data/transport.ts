@@ -404,6 +404,9 @@ export function createTransport({
         // Expenses is access-denied too, but purges nothing.
         const deniedGroup = /^\/api\/groups\/([a-f\d]{24})(?:\/|\?|$)/i.exec(path)?.[1];
         const tagAction = /^\/api\/groups\/[a-f\d]{24}\/tag-actions(?:\/|$)/i.test(path);
+        // A member route refuses an admin who lost only the admin role with the same 403 it
+        // gives someone outside the Group, so the Group's own read decides (#1252).
+        const memberAction = /^\/api\/groups\/[a-f\d]{24}\/members\//i.test(path);
         const denied =
           (response.status === 403 ||
             (response.status === 404 && path === `/api/groups/${deniedGroup}`)) &&
@@ -439,7 +442,9 @@ export function createTransport({
         // An unreadable denial body cannot distinguish that from membership loss; keep the
         // Group until its own read confirms access. Other endpoints retain prompt eviction.
         const membershipDenied =
-          denied && (!tagAction || (code !== null && code !== 'TAG_ADMIN_REQUIRED'));
+          denied &&
+          !memberAction &&
+          (!tagAction || (code !== null && code !== 'TAG_ADMIN_REQUIRED'));
         if (membershipDenied && denied) await onGroupDenied(denied, response.status, owner, path);
         if (response.status === 409 && code === 'GROUP_ARCHIVED' && deniedGroup) {
           await onGroupDenied(deniedGroup, 403, owner, path, code);

@@ -588,6 +588,7 @@ describe('Replies that are lost, late or slow', () => {
     expect(sheetTitle()).toEqual([longName]);
     expect(labelled('Rename, Saved Expenses show the new name').props.accessibilityState).toEqual({
       disabled: true,
+      busy: false,
     });
     await press('Rename, Saved Expenses show the new name');
     expect(sheetTitle()).toEqual([longName]);

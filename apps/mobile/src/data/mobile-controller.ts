@@ -25,6 +25,8 @@ import {
 } from '@splitbook/shared/api-paths';
 import { groupCurrencySettingsSchema } from '@splitbook/shared/group-currency-settings';
 import { emptyTagManager, tagManager } from './tag-manager';
+import { isGroupAdmin, roleComplement } from './member-roles';
+import type { MemberRole } from '@splitbook/shared/types';
 import { createAssistants, emptyAssistants } from './assistants';
 import { tagManagement, tagRead, unresolvedTagRecord, type TagRead } from './tag-management';
 import { createReviewRun } from './review-run';
@@ -211,6 +213,8 @@ import type {
   GroupSnackbar,
   KeptDraft,
   LeaveGroupState,
+  MemberRoleState,
+  MobileGroup,
   MobileConfig,
   MobileDependencies,
   MobileSnapshot,
@@ -361,6 +365,21 @@ function closedLeave(): LeaveGroupState {
   return { groupId: null, status: 'closed', code: null, message: null, draft: false, check: null };
 }
 
+/** What's said when a member is no longer listed in the Group the page shows. */
+const noLongerInGroup = (name: string) => `${name} is no longer in this Group`;
+/** No role change under way, failed or confirmed (#1252). */
+function idleMemberRole(): MemberRoleState {
+  return {
+    groupId: null,
+    userId: null,
+    name: null,
+    role: null,
+    status: 'idle',
+    message: null,
+    done: null,
+  };
+}
+
 /** The server's refusals to let a member leave, with fallbacks for its own words. */
 const leaveRefusals: Record<string, string> = {
   OPEN_BALANCE: 'Settle up before you leave this Group.',
@@ -433,6 +452,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     snackbar: null,
     homeSnackbar: null,
     leave: closedLeave(),
+    memberRole: idleMemberRole(),
     settlement: emptySettlement(),
     pendingPayment: null,
     keptDraft: null,
@@ -719,6 +739,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (next.homeSnackbar && next.screen !== 'groups') next = { ...next, homeSnackbar: null };
     if (next.leave.status !== 'closed' && next.screen !== 'members')
       next = { ...next, leave: closedLeave() };
+    // A role change's progress, failure and Snackbar belong to the Members page they were made on.
+    if (
+      (next.memberRole.status !== 'idle' || next.memberRole.done !== null) &&
+      (next.screen !== 'members' || next.detail.id !== next.memberRole.groupId)
+    )
+      next = { ...next, memberRole: idleMemberRole() };
     if (
       next.toReview.groupId &&
       (next.screen !== 'group' || next.detail.id !== next.toReview.groupId)
@@ -6418,6 +6444,123 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await openGroup(groupId, true, check);
   };
 
+  let roleRequest = 0;
+  /**
+   * Make admin or Make member in a member's options (#1252): an admin changes another member's
+   * role, sent at once and only online. Whatever the answer, the Group is read again so the roles
+   * shown are the server's, never a guess; a change whose reply was lost counts as made once that
+   * read shows it. A refusal stays above the Group's details in the server's words where it has
+   * them. Nothing is queued, kept or sent again.
+   */
+  const changeMemberRole = async (userId: string, role: MemberRole) => {
+    const group = shownGroup(snapshot),
+      self = snapshot.auth.user?.id,
+      target = group?.members.find((member) => member.user.id === userId);
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      route.screen !== 'members' ||
+      !group ||
+      !target ||
+      !self ||
+      userId === self ||
+      (role !== 'admin' && role !== 'member') ||
+      target.role === role ||
+      !isGroupAdmin(group, self) ||
+      snapshot.memberRole.status === 'changing' ||
+      snapshot.offline.active
+    )
+      return;
+    const owner = generation,
+      attempt = ++roleRequest,
+      view = route,
+      groupId = group.id,
+      name = target.user.name;
+    const onPage = () => current(owner) && view === route;
+    publish({
+      ...snapshot,
+      memberRole: { groupId, userId, name, role, status: 'changing', message: null, done: null },
+    });
+    /** The change's refusal or failure; null once the server answered that it made it. */
+    let failure: unknown = null,
+      /** The Group as the change's answer gave it. */
+      changeAnswer: MobileGroup | null = null;
+    try {
+      const value = await request(`/api/groups/${groupId}/members/${userId}`, owner, {
+        method: 'PATCH',
+        body: { role },
+      }).finally(() => {
+        // Whatever the answer, the Group may have changed.
+        if (current(owner)) invalidateReads(`group:${groupId}`);
+      });
+      try {
+        changeAnswer = parseGroup(value);
+      } catch {
+        // The change was made; the read that follows shows it.
+      }
+    } catch (error) {
+      if (!current(owner) || error instanceof Superseded) return;
+      failure = error;
+    }
+    /** The Group read again after the change, whatever its answer. */
+    let reread: MobileGroup | null = null;
+    try {
+      reread = await readMembersGroup(groupId, owner, { fresh: true, wanted: onPage });
+    } catch (error) {
+      if (!onPage() || error instanceof Superseded) return;
+      if (error instanceof RequestError && [403, 404].includes(error.status)) {
+        // The Group itself refuses or is gone: the page says so, as on any denial.
+        dropDeniedGroup(groupId, error);
+        unshowGroup();
+        if (attempt === roleRequest) publish({ ...snapshot, memberRole: idleMemberRole() });
+        return;
+      }
+      // Not read: the page keeps showing what it had, or the change's own answer.
+    }
+    if (!onPage() || attempt !== roleRequest) return;
+    if (!reread && changeAnswer && failure === null)
+      publish({ ...snapshot, detail: { ...snapshot.detail, data: changeAnswer } });
+    const changed = reread?.members.find((member) => member.user.id === userId);
+    const settled = { groupId, userId, name, role, status: 'idle' as const, message: null };
+    if (reread && !changed) {
+      publish({ ...snapshot, memberRole: { ...settled, done: noLongerInGroup(name) } });
+      return;
+    }
+    if (failure === null || changed?.role === role) {
+      publish({
+        ...snapshot,
+        memberRole: { ...settled, done: `${name} is now ${roleComplement[role]}` },
+      });
+      return;
+    }
+    const message =
+      failure instanceof RequestError && failure.status === 409 && failure.serverMessage?.trim()
+        ? failure.serverMessage.trim()
+        : failure instanceof RequestError &&
+            failure.status === 403 &&
+            reread &&
+            !isGroupAdmin(reread, self)
+          ? `You’re no longer an admin of ${reread.name}.`
+          : `Couldn’t make ${name} ${roleComplement[role]}. Try again.`;
+    publish({ ...snapshot, memberRole: { ...settled, status: 'failed', message, done: null } });
+  };
+  /**
+   * The member whose options were open is no longer listed, as a read found (MembersRolesNotes):
+   * their options closed, and a Snackbar says so. Not while a change is being made.
+   */
+  const noteMemberGone = (userId: string, name: string) => {
+    const groupId = snapshot.detail.id;
+    if (route.screen !== 'members' || !groupId || snapshot.memberRole.status === 'changing') return;
+    publish({
+      ...snapshot,
+      memberRole: { ...idleMemberRole(), groupId, userId, name, done: noLongerInGroup(name) },
+    });
+  };
+  /** The role change's Snackbar went, after its time or dismissed. */
+  const dismissMemberRoleDone = () => {
+    if (snapshot.memberRole.done !== null)
+      publish({ ...snapshot, memberRole: { ...snapshot.memberRole, done: null } });
+  };
+
   /** Needs the Group to be known, not read just now; inviting needs a connection. */
   const loadInviteLink = async (): Promise<string | null> => {
     if (
@@ -6963,11 +7106,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }),
       );
       assertCurrent(owner);
-      if (
-        !group.members.some(
-          (member) => member.user.id === snapshot.auth.user?.id && member.role === 'admin',
-        )
-      )
+      if (!isGroupAdmin(group, snapshot.auth.user?.id))
         throw new RequestError('The server returned invalid creator membership.');
       gainedGroup(group.id);
       // Confirmed, so this device no longer keeps the submission (unless a newer one replaced it).
@@ -7317,6 +7456,38 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (shownRecovery === recovery) shownRecovery = null;
     }
   };
+  /**
+   * Reads the Group for Members and Group details and shows it there. Null once that page is no
+   * longer the one it was read for. A Group that no longer lists the member is forgotten, as a
+   * refusal is, and throws as one.
+   */
+  const readMembersGroup = async (
+    groupId: string,
+    owner: number,
+    { fresh, wanted }: { fresh: boolean; wanted: () => boolean },
+  ) => {
+    const group = parseGroup(await groupQueries.readGroup(groupId, owner, { fresh, wanted }));
+    if (!current(owner) || !wanted() || snapshot.screen !== 'members') return null;
+    if (group.id !== groupId)
+      throw new RequestError('The server returned a different Group. Please retry.', 500);
+    if (!group.members.some((member) => member.user.id === snapshot.auth.user?.id)) {
+      // As for a refusal: its saved copies and its place in the Group list go too.
+      await forgetGroup(groupId, 403, owner);
+      throw new RequestError('You no longer have access to this group.', 403);
+    }
+    publish({
+      ...snapshot,
+      detail: {
+        status: 'ready',
+        id: groupId,
+        data: group,
+        message: null,
+        refreshedAt:
+          queryClient.getQueryData<Envelope>(groupKey(account(), groupId))?.refreshedAt ?? null,
+      },
+    });
+    return group;
+  };
   /** `reuse`: a foreground refresh may show reads verified within the display freshness window. */
   const refreshView = async (reuse: boolean) => {
     if (['restoring', 'signing-in'].includes(snapshot.auth.status)) return;
@@ -7357,31 +7528,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         readingGroup = true;
         if (screen === 'members' && groupId) {
           // Read as on the Group view: a foreground refresh reuses a recently verified read.
-          const key = groupKey(account(), groupId);
-          const group = parseGroup(
-            await groupQueries.readGroup(groupId, owner, {
-              fresh: !reuse,
-              wanted: () => view === route,
-            }),
-          );
-          if (!current(owner) || view !== route || snapshot.screen !== 'members') return;
-          if (group.id !== groupId)
-            throw new RequestError('The server returned a different Group. Please retry.', 500);
-          if (!group.members.some((member) => member.user.id === snapshot.auth.user?.id)) {
-            // As for a refusal: its saved copies and its place in the Group list go too.
-            await forgetGroup(groupId, 403, owner);
-            throw new RequestError('You no longer have access to this group.', 403);
-          }
-          publish({
-            ...snapshot,
-            detail: {
-              status: 'ready',
-              id: groupId,
-              data: group,
-              message: null,
-              refreshedAt: queryClient.getQueryData<Envelope>(key)?.refreshedAt ?? null,
-            },
+          const shown = await readMembersGroup(groupId, owner, {
+            fresh: !reuse,
+            wanted: () => view === route,
           });
+          if (!shown) return;
         } else if (groupId) {
           const context = parseExpenseContext(
             await groupQueries.readGroup(groupId, owner, {
@@ -8596,6 +8747,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     reviewLeaveGroup,
     cancelLeaveGroup,
     leaveGroup,
+    changeMemberRole,
+    noteMemberGone,
+    dismissMemberRoleDone,
     showLeaveCheck,
     accountStorage,
     openSettlements,

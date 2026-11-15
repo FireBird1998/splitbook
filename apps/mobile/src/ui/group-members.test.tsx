@@ -7,7 +7,7 @@ import {
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { LeaveGroupState, MobileGroup } from '../data/types';
+import type { LeaveGroupState, MemberRoleState, MobileGroup } from '../data/types';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import {
   findHosts,
@@ -22,10 +22,17 @@ import { ThemeContext } from './theme';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { GroupMembers, leaveDiscardsDraft, leaveExplanation, leaveNeedsConnection } =
-  await import('./group-members');
+const {
+  GroupMembers,
+  leaveDiscardsDraft,
+  leaveExplanation,
+  leaveNeedsConnection,
+  rolesNeedConnection,
+} = await import('./group-members');
 
-const you = 'a00000000000000000000001';
+const you = 'a00000000000000000000001',
+  priyaId = 'a00000000000000000000002',
+  samId = 'a00000000000000000000003';
 const member = (id: string, name: string, role: 'admin' | 'member') => ({
   user: { id, name, email: `${id}@x.test`, image: null },
   role,
@@ -41,8 +48,8 @@ const household: MobileGroup = {
   latestExpenseCurrency: null,
   members: [
     member(you, 'Alex Rivera', 'admin'),
-    member('a00000000000000000000002', 'Priya Shah', 'admin'),
-    member('a00000000000000000000003', 'Sam Chen', 'member'),
+    member(priyaId, 'Priya Shah', 'admin'),
+    member(samId, 'Sam Chen', 'member'),
   ],
   startDate: null,
   endDate: null,
@@ -117,6 +124,23 @@ const leaveActions = (state: Partial<LeaveGroupState> = {}, offline = false) => 
   onCheck: vi.fn(),
 });
 
+const idle: MemberRoleState = {
+  groupId: null,
+  userId: null,
+  name: null,
+  role: null,
+  status: 'idle',
+  message: null,
+  done: null,
+};
+const roleActions = (state: Partial<MemberRoleState> = {}, offline = false) => ({
+  state: { ...idle, ...(state.status ? { groupId: household.id } : {}), ...state },
+  offline,
+  onChange: vi.fn(),
+  onMemberGone: vi.fn(),
+  onDismissDone: vi.fn(),
+});
+
 function page(overrides: Partial<Parameters<typeof GroupMembers>[0]> = {}) {
   const props = {
     group: household,
@@ -124,12 +148,30 @@ function page(overrides: Partial<Parameters<typeof GroupMembers>[0]> = {}) {
     back: { label: 'Back to Group', onPress: vi.fn() },
     invite: { onPress: vi.fn(), disabled: false, offline: false },
     leave: leaveActions(),
+    roles: roleActions(),
     ...overrides,
   };
   return { root: render(<GroupMembers {...props} />), props };
 }
-/** The Leave Group sheet, and whether it shows. */
-const sheet = (root: ReactTestInstance) => one(root.findAll((node) => isHost(node, 'Modal')));
+/** A sheet, by its title, and whether it shows. */
+const sheetTitled = (root: ReactTestInstance, title: string) =>
+  one(root.findAll((node) => isHost(node, 'Modal') && text(node).startsWith(title)));
+/** The Leave Group sheet. */
+const sheet = (root: ReactTestInstance) => sheetTitled(root, 'Leave ');
+/** Member options, the sheet a member's row opens. */
+const options = (root: ReactTestInstance) => sheetTitled(root, 'Member options');
+/** Presses the button labelled `label`, on the page or inside `within`. */
+const press = (root: ReactTestInstance, label: string) =>
+  act(() => {
+    one(
+      root.findAll(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityLabel === label &&
+          typeof node.props.onPress === 'function',
+      ),
+    ).props.onPress();
+  });
 
 describe('Members and Group details', () => {
   it('titles the page with the Group and returns from the back arrow', () => {
@@ -164,14 +206,14 @@ describe('Members and Group details', () => {
   });
 
   it('lists the members with their roles, marking you and each admin', () => {
-    const { root } = page();
+    const { root } = page({ currentUserId: samId });
     expect(spoken(root).slice(4)).toEqual([
-      'Alex Rivera, You, Admin',
+      'Alex Rivera, Admin',
       'Priya Shah, Admin',
-      'Sam Chen, Member',
+      'Sam Chen, You, Member',
     ]);
-    expect(text(root)).toContain('Alex Rivera\u00a0· YouAdmin');
-    expect(text(root)).toContain('Sam ChenMember');
+    expect(text(root)).toContain('Alex RiveraAdmin');
+    expect(text(root)).toContain('Sam Chen\u00a0· YouMember');
     const rows = hosts(root, (p) => p.accessible === true).slice(4);
     const shields = rows.map(
       (row) =>
@@ -209,15 +251,241 @@ describe('Members and Group details', () => {
     expect(text(root)).not.toContain('Inviting needs a connection.');
   });
 
-  it('says role changes and removals happen on the web', () => {
-    const { root } = page();
-    expect(text(root)).toContain('Changing roles or removing members is done on the web for now.');
+  it('tells an admin to tap a member, and anyone else who can change roles (#1252)', () => {
+    const admin = page().root;
+    expect(text(admin)).toContain('Tap a member to change their role or remove them.');
+    expect(text(admin)).not.toContain('Only admins can change roles or remove members.');
+    expect(text(admin)).not.toContain('done on the web');
+    act(() => renderer?.unmount());
+    const other = page({ currentUserId: samId }).root;
+    expect(text(other)).toContain('Only admins can change roles or remove members.');
+    expect(text(other)).not.toContain('Tap a member');
   });
 
   it('explains a Group that is no longer available', () => {
     const { root } = page({ group: null, unavailable: 'You no longer have access to this group.' });
     expect(text(one(byRole(root, 'alert')))).toBe('You no longer have access to this group.');
     expect(byRole(root, 'button', 'Invite people')).toHaveLength(0);
+  });
+});
+
+describe('Changing a member’s role (#1252)', () => {
+  /** Each member row's dots, in list order. */
+  const dots = (root: ReactTestInstance) =>
+    hosts(root, (p) => p.accessible === true || p.accessibilityRole === 'button')
+      .filter((row) => /^(Alex|Priya|Sam)/.test(String(row.props.accessibilityLabel)))
+      .map(
+        (row) =>
+          row.findAll((node) => isHost(node, 'Ionicons') && node.props.name === 'ellipsis-vertical')
+            .length,
+      );
+
+  it('gives an admin three dots on every other member’s row, each opening their options', () => {
+    const { root } = page();
+    expect(byRole(root, 'button', 'Priya Shah, Admin, options')).toHaveLength(1);
+    expect(byRole(root, 'button', 'Sam Chen, Member, options')).toHaveLength(1);
+    // Your own row offers nothing yet: Leave Group is how you leave.
+    expect(spoken(root)).toContain('Alex Rivera, You, Admin');
+    expect(dots(root)).toEqual([0, 1, 1]);
+    expect(options(root).props.visible).toBe(false);
+    press(root, 'Sam Chen, Member, options');
+    expect(options(root).props.visible).toBe(true);
+  });
+
+  it('gives a member who isn’t an admin plain rows that do nothing', () => {
+    const { root } = page({ currentUserId: samId });
+    expect(
+      byRole(root, 'button').filter((b) => /options$/.test(b.props.accessibilityLabel)),
+    ).toEqual([]);
+    expect(dots(root)).toEqual([0, 0, 0]);
+    expect(root.findAll((n) => isHost(n, 'Modal') && text(n).startsWith('Member options'))).toEqual(
+      [],
+    );
+  });
+
+  it('offers Make admin for a member: chosen, it is sent at once and the sheet closes', () => {
+    const { root, props } = page();
+    press(root, 'Sam Chen, Member, options');
+    const sheet = options(root);
+    expect(text(sheet)).toContain('Sam Chen');
+    expect(text(sheet)).toContain('Member');
+    expect(text(sheet)).toContain('Can change Group settings, Tags and members');
+    expect(text(sheet)).not.toContain('Make member');
+    press(sheet, 'Make admin, Can change Group settings, Tags and members');
+    expect(props.roles.onChange).toHaveBeenCalledExactlyOnceWith(samId, 'admin');
+    expect(options(root).props.visible).toBe(false);
+  });
+
+  it('offers Make member for an admin', () => {
+    const { root, props } = page();
+    press(root, 'Priya Shah, Admin, options');
+    const sheet = options(root);
+    expect(text(sheet)).not.toContain('Make admin');
+    press(sheet, 'Make member, Keeps adding Expenses; can’t change the Group');
+    expect(props.roles.onChange).toHaveBeenCalledExactlyOnceWith(priyaId, 'member');
+  });
+
+  it('closes Member options with Close, sending nothing', () => {
+    const { root, props } = page();
+    press(root, 'Sam Chen, Member, options');
+    press(options(root), 'Close');
+    expect(options(root).props.visible).toBe(false);
+    expect(props.roles.onChange).not.toHaveBeenCalled();
+  });
+
+  it('dims a row while its role changes and says what is happening', () => {
+    const { root } = page({
+      roles: roleActions({ status: 'changing', userId: samId, name: 'Sam Chen', role: 'admin' }),
+    });
+    const row = one(byRole(root, 'button', 'Sam Chen, Making admin…'));
+    expect(row.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(text(row)).toContain('Making admin…');
+    expect(text(row)).not.toContain('Member');
+    const other = page({
+      roles: roleActions({
+        status: 'changing',
+        userId: priyaId,
+        name: 'Priya Shah',
+        role: 'member',
+      }),
+    }).root;
+    expect(text(other)).toContain('Making member…');
+  });
+
+  it('keeps the options of others waiting while a role changes', () => {
+    const { root, props } = page({
+      roles: roleActions({ status: 'changing', userId: samId, name: 'Sam Chen', role: 'admin' }),
+    });
+    press(root, 'Priya Shah, Admin, options');
+    const action = one(
+      options(root).findAll(
+        (n) =>
+          typeof n.type === 'string' &&
+          n.props.accessibilityRole === 'button' &&
+          String(n.props.accessibilityLabel).startsWith('Make member'),
+      ),
+    );
+    expect(action.props.accessibilityState).toEqual({ disabled: true, busy: false });
+    act(() => action.props.onPress?.());
+    expect(props.roles.onChange).not.toHaveBeenCalled();
+  });
+
+  it('explains a failed change above the Group’s details', () => {
+    const { root } = page({
+      roles: roleActions({
+        status: 'failed',
+        userId: samId,
+        name: 'Sam Chen',
+        role: 'admin',
+        message: 'Couldn’t make Sam Chen an admin. Try again.',
+      }),
+    });
+    expect(text(one(byRole(root, 'alert')))).toBe('Couldn’t make Sam Chen an admin. Try again.');
+    // Above the details: the alert comes before the Theme row.
+    const order = hosts(
+      root,
+      (p) => p.accessibilityRole === 'alert' || p.accessibilityLabel === 'Theme: Household',
+    ).map((node) => node.props.accessibilityRole ?? 'details');
+    expect(order).toEqual(['alert', 'details']);
+    // The row is back to what it was.
+    expect(byRole(root, 'button', 'Sam Chen, Member, options')).toHaveLength(1);
+  });
+
+  it('names the person in a Snackbar with no action, which goes after a while', async () => {
+    vi.useFakeTimers();
+    try {
+      const { root, props } = page({ roles: roleActions({ done: 'Sam Chen is now an admin' }) });
+      const snack = one(hosts(root, (p) => p.accessibilityLiveRegion === 'polite'));
+      expect(text(snack)).toBe('Sam Chen is now an admin');
+      expect(
+        snack.findAll((n) => typeof n.type === 'string' && n.props.accessibilityRole === 'button'),
+      ).toEqual([]);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4000);
+      });
+      expect(props.roles.onDismissDone).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('offline: rows still open, the options are off with the note, nothing is sent', () => {
+    const { root, props } = page({
+      invite: { onPress: vi.fn(), disabled: false, offline: true },
+      leave: leaveActions({}, true),
+      roles: roleActions({}, true),
+    });
+    expect(text(root)).toContain(rolesNeedConnection);
+    expect(text(root)).not.toContain('Tap a member');
+    press(root, 'Sam Chen, Member, options');
+    const sheet = options(root);
+    expect(sheet.props.visible).toBe(true);
+    expect(text(sheet)).toContain(rolesNeedConnection);
+    const action = one(
+      sheet.findAll(
+        (n) =>
+          typeof n.type === 'string' &&
+          n.props.accessibilityRole === 'button' &&
+          String(n.props.accessibilityLabel).startsWith('Make admin'),
+      ),
+    );
+    expect(action.props.accessibilityState).toEqual({ disabled: true, busy: false });
+    act(() => action.props.onPress?.());
+    expect(props.roles.onChange).not.toHaveBeenCalled();
+  });
+
+  it('closes Member options when the member leaves the list, their role changes or you stop being an admin', () => {
+    const { root, props } = page();
+    press(root, 'Sam Chen, Member, options');
+    act(() => {
+      renderer!.update(
+        <GroupMembers
+          {...props}
+          group={{ ...household, members: household.members.slice(0, 2) }}
+        />,
+      );
+    });
+    expect(options(root).props.visible).toBe(false);
+    // A Snackbar says so (MembersRolesNotes).
+    expect(props.roles.onMemberGone).toHaveBeenCalledExactlyOnceWith(samId, 'Sam Chen');
+
+    act(() => renderer!.update(<GroupMembers {...props} />));
+    press(root, 'Sam Chen, Member, options');
+    act(() => {
+      renderer!.update(
+        <GroupMembers
+          {...props}
+          group={{
+            ...household,
+            members: household.members.map((m) =>
+              m.user.id === samId ? { ...m, role: 'admin' as const } : m,
+            ),
+          }}
+        />,
+      );
+    });
+    // Another admin changed Sam's role meanwhile: the option shown would be the other one.
+    expect(options(root).props.visible).toBe(false);
+    expect(props.roles.onMemberGone).toHaveBeenCalledOnce();
+    act(() => renderer!.update(<GroupMembers {...props} />));
+
+    press(root, 'Priya Shah, Admin, options');
+    act(() => {
+      renderer!.update(
+        <GroupMembers
+          {...props}
+          group={{
+            ...household,
+            members: household.members.map((m) =>
+              m.user.id === you ? { ...m, role: 'member' as const } : m,
+            ),
+          }}
+        />,
+      );
+    });
+    expect(root.findAll((n) => isHost(n, 'Modal') && text(n).startsWith('Member options'))).toEqual(
+      [],
+    );
   });
 });
 
@@ -393,6 +661,7 @@ describe.each(['light', 'dark'] as const)('Members at large text in %s (#639)', 
             back={{ label: 'Back to Group', onPress: vi.fn() }}
             invite={{ onPress: vi.fn(), disabled: false, offline: false }}
             leave={leaveActions()}
+            roles={roleActions()}
           />
         </ThemeContext.Provider>,
       );
@@ -419,6 +688,7 @@ describe.each(['light', 'dark'] as const)('Members’ details at large text in %
             back={{ label: 'Back to Group', onPress: vi.fn() }}
             invite={{ onPress: vi.fn(), disabled: false, offline: false }}
             leave={leaveActions()}
+            roles={roleActions()}
           />
         </ThemeContext.Provider>,
       );
@@ -440,4 +710,87 @@ describe.each(['light', 'dark'] as const)('Members’ details at large text in %
     expect(unreadText(bar!, size.fontScale, size.width)).toEqual([]);
     expect(unreadText(details!, size.fontScale, size.width - 32)).toEqual([]);
   });
+});
+
+type Json = ReactTestRendererJSON | ReactTestRendererJSON[] | null;
+/** The page without its sheets, which lie over it. */
+const screenOnly = (node: Json): Json =>
+  node && !Array.isArray(node)
+    ? {
+        ...node,
+        children:
+          node.children
+            ?.filter((child) => typeof child === 'string' || child.type !== 'Modal')
+            .map((child) => (typeof child === 'string' ? child : (screenOnly(child) as never))) ??
+          null,
+      }
+    : node;
+
+// #1252 (board MembersRoles130): the list with its dots and a busy row, a failed change's Banner,
+// and Member options read in full at large text: names wrap, the shield and dots keep their size.
+describe.each(['light', 'dark'] as const)('Member roles at large text in %s (#1252)', (mode) => {
+  it.each(largeTextWindows)(
+    'reads the list, the Banner and Member options in full, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      const props = {
+        group: household,
+        currentUserId: you,
+        back: { label: 'Back to Group', onPress: vi.fn() },
+        invite: { onPress: vi.fn(), disabled: false, offline: false },
+        leave: leaveActions(),
+        roles: roleActions({
+          status: 'changing',
+          userId: priyaId,
+          name: 'Priya Shah',
+          role: 'member',
+        }),
+      };
+      const failed = roleActions({
+        status: 'failed',
+        userId: samId,
+        name: 'Sam Chen',
+        role: 'admin',
+        message: 'Couldn’t make Sam Chen an admin. Try again.',
+      });
+      act(() => {
+        renderer = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <GroupMembers {...props} />
+          </ThemeContext.Provider>,
+        );
+      });
+      // The page's content lies 16dp in from each edge.
+      expect(
+        unreadText(screenOnly(renderer!.toJSON()) as never, size.fontScale, size.width - 32),
+      ).toEqual([]);
+      act(() => {
+        renderer!.update(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <GroupMembers {...props} roles={failed} />
+          </ThemeContext.Provider>,
+        );
+      });
+      expect(
+        unreadText(screenOnly(renderer!.toJSON()) as never, size.fontScale, size.width - 32),
+      ).toEqual([]);
+      press(renderer!.root, 'Sam Chen, Member, options');
+      const [modal] = findHosts(
+        renderer!.toJSON() as never,
+        (p, type) => type === 'Modal' && p.visible === true,
+      );
+      expect(modal).toBeDefined();
+      expect(unreadText(modal!, size.fontScale, size.width)).toEqual([]);
+      // The list's dots and shields keep their size.
+      const icons = renderer!.root.findAll(
+        (n) =>
+          isHost(n, 'Ionicons') &&
+          !inSheet(n) &&
+          ['ellipsis-vertical', 'shield-checkmark-outline'].includes(n.props.name),
+      );
+      expect(new Set(icons.map((n) => `${n.props.name}:${n.props.size}`))).toEqual(
+        new Set(['ellipsis-vertical:20', 'shield-checkmark-outline:22']),
+      );
+    },
+  );
 });

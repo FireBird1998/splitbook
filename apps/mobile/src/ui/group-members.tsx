@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
-import type { GroupCategory } from '@splitbook/shared/types';
-import type { LeaveGroupState, MobileGroup } from '../data/types';
+import type { GroupCategory, MemberRole } from '@splitbook/shared/types';
+import { isGroupAdmin } from '../data/member-roles';
+import type { LeaveGroupState, MemberRoleState, MobileGroup } from '../data/types';
 import {
   Banner,
   BottomSheet,
@@ -13,10 +14,13 @@ import {
   Divider,
   LinearProgress,
   ListRow,
+  OptionRow,
   SectionHeader,
+  Snackbar,
   TopBar,
   useTextColumn,
 } from './compact';
+import { useDismissAfter } from './group-snackbar';
 import { Icon, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
 import { SEPARATOR, counted } from '@splitbook/shared/separator';
@@ -35,6 +39,23 @@ export const leaveExplanation =
   'You won’t see this Group or its balances any more. Its Expenses and Activity stay for the others. You can rejoin with an invite.';
 export const leaveDiscardsDraft =
   'Your Expense draft for this Group is kept on this device. Leaving discards it.';
+
+export const rolesNeedConnection = 'Changing roles or removing members needs a connection.';
+const adminHint = 'Tap a member to change their role or remove them.';
+const memberHint = 'Only admins can change roles or remove members.';
+/** How long a change's Snackbar stays, unless Android's accessibility timeout extends it. */
+const doneShownFor = 4000;
+
+/** An admin's role changes (#1252): the change's state and what choosing one does. */
+export interface MemberRoleActions {
+  state: MemberRoleState;
+  offline: boolean;
+  /** Make admin or Make member, chosen in a member's options: sent at once. */
+  onChange: (userId: string, role: MemberRole) => void;
+  /** The member whose options were open is no longer listed. */
+  onMemberGone: (userId: string, name: string) => void;
+  onDismissDone: () => void;
+}
 
 /** Leave Group: the sheet's state and what each of its buttons does. */
 export interface LeaveGroupActions {
@@ -212,9 +233,97 @@ function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGro
   );
 }
 
+type Member = MobileGroup['members'][number];
+/** A role as the list shows it, and while it is being given (#1252). */
+const roleText: Record<MemberRole, { name: string; making: string }> = {
+  admin: { name: 'Admin', making: 'Making admin…' },
+  member: { name: 'Member', making: 'Making member…' },
+};
+
+/**
+ * Member options: what an admin can do to another member, opened from their row (#1252). Make
+ * admin or Make member is sent at once, and the sheet closes on it. Offline, or while another
+ * role change is made, the options show but can't be chosen.
+ */
+function MemberOptionsSheet({
+  member,
+  roles,
+  onClose,
+}: {
+  member: Member | null;
+  roles: MemberRoleActions;
+  onClose: () => void;
+}) {
+  const unavailable = roles.offline || roles.state.status === 'changing';
+  const choose = (role: MemberRole) => {
+    if (!member || unavailable) return;
+    onClose();
+    roles.onChange(member.user.id, role);
+  };
+  return (
+    <BottomSheet
+      visible={!!member}
+      title="Member options"
+      doneLabel="Close"
+      dismissLabel="Close member options"
+      onDone={onClose}
+    >
+      {member ? (
+        <>
+          <View
+            accessible
+            accessibilityLabel={`${member.user.name}, ${roleText[member.role].name}`}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+          >
+            <CompactAvatar name={member.user.name} large />
+            <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+              <CompactText weight="semibold">{member.user.name}</CompactText>
+              <CompactText variant="caption" tone="secondary">
+                {roleText[member.role].name}
+              </CompactText>
+            </View>
+          </View>
+          <Card>
+            {member.role === 'admin' ? (
+              <OptionRow
+                icon="person-outline"
+                title="Make member"
+                meta="Keeps adding Expenses; can’t change the Group"
+                disabled={unavailable}
+                onPress={() => choose('member')}
+              />
+            ) : (
+              <OptionRow
+                icon="shield-checkmark-outline"
+                title="Make admin"
+                meta="Can change Group settings, Tags and members"
+                disabled={unavailable}
+                onPress={() => choose('admin')}
+              />
+            )}
+          </Card>
+          {roles.offline ? (
+            <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+              {rolesNeedConnection}
+            </CompactText>
+          ) : null}
+        </>
+      ) : null}
+    </BottomSheet>
+  );
+}
+
+/** A change's short note, naming the person; it has no action and goes after a while. */
+function DoneNote({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  const notice = useMemo(() => ({ message }), [message]);
+  useDismissAfter(notice, doneShownFor, onDismiss);
+  return <Snackbar message={message} bottom={24} />;
+}
+
 /**
  * Members and Group details: the Group's details, then its members with their roles and Invite,
- * and Leave Group. Role changes and removals stay on the web.
+ * and Leave Group. An admin taps another member for their options and changes their role there
+ * (#1252); removals stay on the web.
  */
 export function GroupMembers({
   group,
@@ -222,6 +331,7 @@ export function GroupMembers({
   back,
   invite,
   leave,
+  roles,
   notice,
   unavailable,
 }: {
@@ -231,11 +341,32 @@ export function GroupMembers({
   back: { label: string; onPress: () => void };
   invite: { onPress: () => void; disabled: boolean; offline: boolean };
   leave: LeaveGroupActions;
+  roles: MemberRoleActions;
   /** Shown above the details, e.g. the offline notice. */
   notice?: ReactNode;
   unavailable?: string | null;
 }) {
   const theme = useTheme();
+  const isAdmin = isGroupAdmin(group, currentUserId);
+  /** The member whose options are open. */
+  const [selected, setSelected] = useState<string | null>(null);
+  const selectedMember =
+    (selected && group?.members.find((member) => member.user.id === selected)) || null;
+  /** Who the open options were for, as they were when opened. */
+  const openedFor = useRef<Member | null>(null);
+  // Their options close once nothing there applies (MembersRolesNotes): you're no longer an
+  // admin, the member has left the list, which a Snackbar says, or their role changed meanwhile.
+  useEffect(() => {
+    const opened = openedFor.current;
+    if (!selected || !opened) return;
+    if (!isAdmin || !selectedMember || selectedMember.role !== opened.role) setSelected(null);
+    if (isAdmin && !selectedMember) roles.onMemberGone(opened.user.id, opened.user.name);
+  }, [selected, selectedMember, isAdmin]);
+  const open = (member: Member) => {
+    openedFor.current = member;
+    setSelected(member.user.id);
+  };
+  const changing = roles.state.status === 'changing' ? roles.state : null;
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <TopBar
@@ -247,6 +378,9 @@ export function GroupMembers({
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
       >
         {notice}
+        {roles.state.status === 'failed' && roles.state.message ? (
+          <Banner tone="error" message={roles.state.message} />
+        ) : null}
         {!group ? (
           <Banner tone="error" message={unavailable ?? 'This Group isn’t available.'} />
         ) : (
@@ -270,29 +404,44 @@ export function GroupMembers({
             <Card>
               {group.members.map((member, index) => {
                 const you = member.user.id === currentUserId;
-                const role = member.role === 'admin' ? 'Admin' : 'Member';
+                const role = roleText[member.role].name;
+                // An admin opens another member's options from their row (#1252).
+                const actionable = isAdmin && !you;
+                const shield =
+                  member.role === 'admin' ? (
+                    <Icon name="shield-checkmark-outline" size={22} color={theme.brand.main} />
+                  ) : null;
                 return (
-                  <View
-                    key={member.user.id}
-                    accessible
-                    accessibilityLabel={[member.user.name, you ? 'You' : null, role]
-                      .filter(Boolean)
-                      .join(', ')}
-                  >
+                  <View key={member.user.id}>
                     {index > 0 ? <Divider inset={58} /> : null}
                     <ListRow
                       leading={<CompactAvatar name={member.user.name} />}
                       title={you ? `${member.user.name}${SEPARATOR}You` : member.user.name}
                       meta={role}
-                      trailing={
-                        member.role === 'admin' ? (
-                          <Icon
-                            name="shield-checkmark-outline"
-                            size={22}
-                            color={theme.brand.main}
-                          />
-                        ) : null
+                      busy={
+                        changing?.userId === member.user.id && changing.role
+                          ? roleText[changing.role].making
+                          : undefined
                       }
+                      trailing={
+                        actionable ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            {shield}
+                            <Icon name="ellipsis-vertical" size={20} color={theme.textMuted} />
+                          </View>
+                        ) : (
+                          shield
+                        )
+                      }
+                      onPress={actionable ? () => open(member) : undefined}
+                      accessibilityLabel={[
+                        member.user.name,
+                        you ? 'You' : null,
+                        role,
+                        actionable ? 'options' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(', ')}
                     />
                   </View>
                 );
@@ -304,7 +453,7 @@ export function GroupMembers({
               </CompactText>
             ) : null}
             <CompactText variant="small" tone="secondary">
-              Changing roles or removing members is done on the web for now.
+              {!isAdmin ? memberHint : roles.offline ? rolesNeedConnection : adminHint}
             </CompactText>
             <View style={{ gap: 6, paddingTop: 12 }}>
               <CompactButton
@@ -327,6 +476,16 @@ export function GroupMembers({
         )}
       </ScrollView>
       {group ? <LeaveGroupSheet group={group} leave={leave} /> : null}
+      {group && isAdmin ? (
+        <MemberOptionsSheet
+          member={selectedMember}
+          roles={roles}
+          onClose={() => setSelected(null)}
+        />
+      ) : null}
+      {roles.state.done ? (
+        <DoneNote message={roles.state.done} onDismiss={roles.onDismissDone} />
+      ) : null}
     </View>
   );
 }

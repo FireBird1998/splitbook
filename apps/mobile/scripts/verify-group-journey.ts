@@ -14,6 +14,12 @@ import { observe, reportVerifierFailure } from './verify-report';
 const alexId = 'a00000000000000000000001';
 const samId = 'a00000000000000000000002';
 const id = z.string().regex(/^[a-f\d]{24}$/i);
+const groupRead = z.object({
+  status: z.literal(200),
+  data: z.object({
+    members: z.array(z.object({ user: z.object({ _id: id }), role: z.string() })),
+  }),
+});
 const groupList = z.object({
   status: z.literal(200),
   data: z.array(
@@ -420,6 +426,73 @@ async function verify() {
       { members: alex.controller.getSnapshot().detail.data?.members.length ?? null },
     );
     checks.push('Existing-member reopening and both personas reading the same Group');
+
+    // #1252: on Members, Alex makes Sam an admin, then a member again, each read back from the
+    // server. Sam, made a member while his own Members page still showed him as an admin, is
+    // refused (403) as a refusal: his phone keeps the Group and shows the member's view.
+    const serverRole = async (userId: string) => {
+      const response = await alex.authorized(`/api/groups/${household._id}`);
+      observe(response.status === 200, 'Could not read the Household back.', {
+        status: response.status,
+      });
+      return groupRead
+        .parse(await response.json())
+        .data.members.find((member) => member.user._id === userId)?.role;
+    };
+    alex.controller.openMembers();
+    const samName = alex.controller
+      .getSnapshot()
+      .detail.data?.members.find((member) => member.user.id === samId)?.user.name;
+    observe(samName, 'Alex’s Members page did not list Sam.', {});
+    await alex.controller.changeMemberRole(samId, 'admin');
+    observe(
+      alex.controller.getSnapshot().memberRole.done === `${samName} is now an admin` &&
+        alex.controller.getSnapshot().detail.data?.members.find((m) => m.user.id === samId)
+          ?.role === 'admin' &&
+        (await serverRole(samId)) === 'admin',
+      'Make admin did not reach the server or was not read back.',
+      { snapshot: alex.controller.getSnapshot().memberRole.status },
+    );
+    await sam.controller.openGroup(household._id);
+    sam.controller.openMembers();
+    // Sam read the Group moments ago, as a member: Retry reads it again, now as an admin.
+    await sam.controller.refresh();
+    observe(
+      sam.controller.getSnapshot().detail.data?.members.find((m) => m.user.id === samId)?.role ===
+        'admin',
+      'Sam’s Members page did not show him as an admin after a fresh read.',
+      {},
+    );
+    await alex.controller.changeMemberRole(samId, 'member');
+    observe(
+      alex.controller.getSnapshot().memberRole.done === `${samName} is now a member` &&
+        (await serverRole(samId)) === 'member',
+      'Make member did not reach the server or was not read back.',
+      { snapshot: alex.controller.getSnapshot().memberRole.status },
+    );
+    const samPatches = () =>
+      sam.sent.filter((call) => call.startsWith('PATCH ') && call.includes('/members/')).length;
+    const samPatchesBefore = samPatches();
+    await sam.controller.changeMemberRole(alexId, 'member');
+    const samView = sam.controller.getSnapshot();
+    observe(
+      samPatches() === samPatchesBefore + 1 &&
+        samView.memberRole.status === 'failed' &&
+        samView.memberRole.message === `You’re no longer an admin of ${householdName}.` &&
+        samView.detail.status === 'ready' &&
+        samView.detail.data?.members.find((m) => m.user.id === samId)?.role === 'member' &&
+        samView.groups.data.some((group) => group.id === household._id) &&
+        (await serverRole(alexId)) === 'admin',
+      'A role change refused for a lost admin role was not handled as a refusal.',
+      {
+        patches: samPatches() - samPatchesBefore,
+        status: samView.memberRole.status,
+        detail: samView.detail.status,
+      },
+    );
+    await sam.controller.back();
+    await alex.controller.back();
+    checks.push('Make admin and Make member read back, and a lost admin role refused in place');
 
     const beforeRejectedLink = sam.requests;
     await sam.controller.openInvitation('https://unsupported.example.invalid/join/00000000');

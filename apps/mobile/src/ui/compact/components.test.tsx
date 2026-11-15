@@ -45,6 +45,7 @@ const {
   IconTile,
   LinearProgress,
   ListRow,
+  OptionRow,
   Money,
   RowAmount,
   SectionHeader,
@@ -418,6 +419,100 @@ describe('Buttons and rows', () => {
   it('list rows without an action are not buttons', () => {
     const root = render(<ListRow title="Sam Chen" meta="Member" />);
     expect(byRole(root, 'button')).toHaveLength(0);
+  });
+
+  // #1252: a row whose change is being made dims, says so in place of its second line, and
+  // can't be pressed again until the server answers.
+  it('a busy row dims, says what it is doing and can’t be pressed', () => {
+    const open = vi.fn();
+    const root = render(
+      <ListRow
+        title="Priya Shah"
+        meta="Member"
+        busy="Making admin…"
+        accessibilityLabel="Priya Shah, Member, options"
+        onPress={open}
+      />,
+    );
+    const row = one(byRole(root, 'button', 'Priya Shah, Making admin…'));
+    expect(row.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(text(row)).toBe('Priya Shah Making admin…');
+    expect(flatten(row.props.style({ pressed: false })).opacity).toBe(0.55);
+    press(row);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  // #1252, seen on the device: Android keeps an accessibility state it was given when the prop
+  // later goes, and adds "busy" to the row's description again on its next label. A row that was
+  // busy must say it no longer is.
+  it('a row that was busy says it no longer is', () => {
+    const row = (busy?: string) => (
+      <ListRow
+        title="Priya Shah"
+        meta="Admin"
+        busy={busy}
+        accessibilityLabel="Priya Shah, Admin, options"
+        onPress={() => undefined}
+      />
+    );
+    const root = render(row('Making admin…'));
+    act(() => renderer!.update(row()));
+    expect(
+      one(byRole(root, 'button', 'Priya Shah, Admin, options')).props.accessibilityState,
+    ).toEqual({ disabled: false, busy: false });
+  });
+
+  // #1252: a sheet's option, shared by Member options and a Tag's options: a tile, a title and
+  // a second line that explains it, and a red variant for one that removes something.
+  it('an option row is a button with a tile, its title and the line that explains it', () => {
+    const lightTokens = getSemanticTokens('light');
+    const choose = vi.fn();
+    const root = render(
+      <ThemeContext.Provider value={lightTokens}>
+        <OptionRow
+          icon="shield-checkmark-outline"
+          title="Make admin"
+          meta="Can change Group settings, Tags and members"
+          onPress={choose}
+        />
+        <OptionRow
+          icon="person-remove-outline"
+          title="Remove from Group"
+          meta="You’ll be asked to confirm"
+          tone="negative"
+          onPress={choose}
+        />
+        <OptionRow
+          icon="archive-outline"
+          title="Archive"
+          meta="A Group needs one active Tag."
+          disabled
+          onPress={choose}
+        />
+      </ThemeContext.Provider>,
+    );
+    const [admin, remove, archive] = byRole(root, 'button');
+    expect(admin!.props.accessibilityLabel).toBe(
+      'Make admin, Can change Group settings, Tags and members',
+    );
+    press(admin!);
+    expect(choose).toHaveBeenCalledOnce();
+    // The title's own colour comes last, over the text's default.
+    const titleColour = (node: ReactTestInstance, title: string) =>
+      node
+        .findAll((n) => isHost(n, 'Text') && text(n) === title)
+        .flatMap((n) => [n.props.style].flat(Infinity))
+        .filter((style) => style && 'color' in style)
+        .at(-1)?.color;
+    expect(titleColour(admin!, 'Make admin')).toBe(lightTokens.text);
+    expect(titleColour(remove!, 'Remove from Group')).toBe(lightTokens.status.negative);
+    const tileColour = (node: ReactTestInstance) =>
+      one(node.findAll((n) => isHost(n, 'Ionicons'))).props.color;
+    expect(tileColour(admin!)).toBe(lightTokens.brand.main);
+    expect(tileColour(remove!)).toBe(lightTokens.status.negative);
+    expect(archive!.props.accessibilityState).toEqual({ disabled: true, busy: false });
+    press(archive!);
+    expect(choose).toHaveBeenCalledOnce();
   });
 });
 
