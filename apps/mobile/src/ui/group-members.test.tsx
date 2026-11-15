@@ -791,6 +791,36 @@ describe('Stepping down to member (#1254)', () => {
     });
   });
 
+  it('closes your own options once no other admin is left', () => {
+    const { root, props } = page();
+    press(root, 'Alex Rivera, You, Admin, options');
+    expect(options(root).props.visible).toBe(true);
+    act(() => renderer!.update(<GroupMembers {...props} group={onlyAdmin} />));
+    expect(options(root).props.visible).toBe(false);
+    expect(props.stepDown.onReview).not.toHaveBeenCalled();
+  });
+
+  // Board MembersRolesDone 16: the screen becomes the member's view.
+  it('after stepping down: your own row plain, the member’s line, and the Snackbar', () => {
+    const { root } = page({
+      group: {
+        ...household,
+        members: household.members.map((m) =>
+          m.user.id === you ? { ...m, role: 'member' as const } : m,
+        ),
+      },
+      roles: roleActions({ done: 'You’re now a member of Maple House' }),
+    });
+    expect(spoken(root)).toContain('Alex Rivera, You, Member');
+    expect(
+      byRole(root, 'button').filter((b) => /options$/.test(b.props.accessibilityLabel)),
+    ).toEqual([]);
+    expect(text(root)).toContain('Only admins can change roles or remove members.');
+    expect(text(one(hosts(root, (p) => p.accessibilityLiveRegion === 'polite')))).toBe(
+      'You’re now a member of Maple House',
+    );
+  });
+
   it('offline: Step down is off, with the note', () => {
     const { root } = page({
       roles: roleActions({}, true),
@@ -902,6 +932,10 @@ describe('Leave Group', () => {
     ]);
     press(modal, 'Choose an admin');
     expect(props.leave.onCancel).toHaveBeenCalledOnce();
+    // What the admin must do first, in the warning tone, with nothing else (board 24).
+    expect(text(modal)).not.toContain(leaveExplanation);
+    const alert = one(byRole(modal, 'alert'));
+    expect(flatten(alert.props.style).backgroundColor).toBe(getSemanticTokens('light').warning.bg);
   });
 
   it('names a recurring Expense that still includes the member, and only closes (#257)', () => {
