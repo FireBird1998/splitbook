@@ -1,6 +1,6 @@
 import { SceneVisibility } from './scene-visibility';
 import { useHeaderTilt } from './use-header-tilt';
-import { memo, useContext, useEffect, useMemo, useState } from 'react';
+import { memo, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Animated, AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { headerTimeOfDay, type GroupHeader } from '@splitbook/shared/group-header';
@@ -23,9 +23,9 @@ import { currentDayKey } from './list-day-header';
 import { useReducedMotion } from './compact/motion';
 import {
   HeaderSceneCard,
-  HeaderScenePreviewCaption,
   HeaderScenePlaceholder,
   ClassicGroupHeader,
+  PREVIEW_HEIGHT,
 } from './header-scene-card';
 export { HeaderSceneCard } from './header-scene-card';
 
@@ -186,6 +186,27 @@ const tint = {
   night: { backgroundColor: '#28386e', opacity: 0.52 },
 } as const;
 const glow = { morning: 0, day: 0, sunset: 0.55, night: 0.92 } as const;
+const GROUP_LAYERS = ['far', 'clouds', 'main', 'front'] as const;
+// The settings preview draws the main island alone, as its board does (#1267): the neighbouring
+// islands, the clouds and the front rocks would be cut at the card's edges.
+const PREVIEW_LAYERS = ['main'] as const;
+/** Scene units across the settings preview: the board's viewBox, x 70 to 530. */
+const PREVIEW_SPAN = 460;
+/** The card around the pinned preview: the page's 16 dp sides and the card's 1 dp border. */
+const PREVIEW_INSET = 34;
+/**
+ * The scene's pictures as the settings preview shows them: scaled so the board's span fills the
+ * card's width (or its height, if that is larger), with the scene's middle line on the frame's.
+ */
+const previewWorld = (width: number) =>
+  ({
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: PREVIEW_HEIGHT / 2 - 120 * SCENE_UNIT,
+    height: 240 * SCENE_UNIT,
+    transform: [{ scale: Math.max(width / PREVIEW_SPAN, PREVIEW_HEIGHT / 240) / SCENE_UNIT }],
+  }) as const;
 const sky = {
   morning: ['#c8d9ed', '#f9dfc1'],
   day: ['#a9d3ec', '#e5edf4'],
@@ -213,6 +234,10 @@ export default function HeaderScene({
   const [failed, setFailed] = useState<string | null>(null);
   const [art, setArt] = useState<HeaderSceneSprites | null>(null);
   const [, setHour] = useState(() => new Date().getHours());
+  const window = useWindowDimensions();
+  // The preview card's width, measured once laid out; until then, the page's estimate.
+  const [previewWidth, setPreviewWidth] = useState<number | null>(null);
+  const layers = preview ? PREVIEW_LAYERS : GROUP_LAYERS;
   const visibility = useContext(SceneVisibility);
   const foreground = useForeground();
   const reduced = useReducedMotion();
@@ -230,7 +255,7 @@ export default function HeaderScene({
     foreground;
   const time = headerTimeOfDay(header.time, new Date().getHours());
   const position = useHeaderTilt(moving && tilt);
-  const frameWidth = useWindowDimensions().width;
+  const frameWidth = window.width;
   // A pause holds the float and the clouds where they are, since the scene can still be seen;
   // with Motion off or Remove animations they rest where the still scene has them.
   const sceneMotion: SceneMotion = moving ? 'running' : lively ? 'paused' : 'still';
@@ -245,7 +270,11 @@ export default function HeaderScene({
       [
         ...new Set(
           (art?.sprites ?? [])
-            .filter((sprite) => sprite.layer !== 'glow' || glow[time] > 0)
+            .filter((sprite) =>
+              sprite.layer === 'glow'
+                ? glow[time] > 0
+                : (layers as readonly string[]).includes(sprite.layer),
+            )
             .flatMap((sprite) =>
               (sprite.tracks ?? [])
                 .filter((track) => track.time !== 'night' || time === 'night')
@@ -253,7 +282,7 @@ export default function HeaderScene({
             ),
         ),
       ].sort((a, b) => a - b),
-    [art, time],
+    [art, time, layers],
   );
   const clocks = useSceneClocks(moving, periods);
   // One set of animated nodes for the life of the scene, not one per render.
@@ -299,16 +328,26 @@ export default function HeaderScene({
         preview={preview ? header : undefined}
       />
     );
+  const world = (children: ReactNode) =>
+    preview ? (
+      <View style={previewWorld(previewWidth ?? window.width - PREVIEW_INSET)}>{children}</View>
+    ) : (
+      children
+    );
   return (
     <View
       onLayout={preview ? undefined : visibility.onLayout}
-      style={{ borderRadius: 16, overflow: 'hidden' }}
+      // The preview's card rounds and clips it.
+      style={preview ? undefined : { borderRadius: 16, overflow: 'hidden' }}
     >
       <View
         accessible
         accessibilityRole="image"
         accessibilityLabel={art.description}
-        style={{ height: 208, overflow: 'hidden' }}
+        onLayout={
+          preview ? ({ nativeEvent }) => setPreviewWidth(nativeEvent.layout.width) : undefined
+        }
+        style={{ height: preview ? PREVIEW_HEIGHT : 208, overflow: 'hidden' }}
       >
         <LinearGradient colors={sky[time]} style={StyleSheet.absoluteFill} />
         <Animated.View style={[StyleSheet.absoluteFill, shifts.sky]}>
@@ -341,52 +380,52 @@ export default function HeaderScene({
           />
         </Animated.View>
         <View importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
-          {(['far', 'clouds', 'main', 'front'] as const).map((layer) => (
-            <Animated.View key={layer} style={[styles.world, shifts[layer]]}>
-              {art.sprites.map((sprite, index) =>
-                sprite.layer === layer ? (
-                  <Piece
-                    key={index}
-                    sprite={sprite}
-                    rises={rises}
-                    clocks={clocks}
-                    lively={lively}
-                    drifting={sprite.kind === 'cloud' ? sceneMotion : 'still'}
-                    night={time === 'night'}
-                    frameWidth={frameWidth}
-                  />
-                ) : null,
-              )}
-            </Animated.View>
-          ))}
+          {world(
+            layers.map((layer) => (
+              <Animated.View key={layer} style={[styles.world, shifts[layer]]}>
+                {art.sprites.map((sprite, index) =>
+                  sprite.layer === layer ? (
+                    <Piece
+                      key={index}
+                      sprite={sprite}
+                      rises={rises}
+                      clocks={clocks}
+                      lively={lively}
+                      drifting={sprite.kind === 'cloud' ? sceneMotion : 'still'}
+                      night={time === 'night'}
+                      frameWidth={frameWidth}
+                    />
+                  ) : null,
+                )}
+              </Animated.View>
+            )),
+          )}
           {tint[time] ? (
             <View pointerEvents="none" style={[StyleSheet.absoluteFill, tint[time]]} />
           ) : null}
-          {glow[time] ? (
-            <Animated.View style={[styles.world, shifts.glow, { opacity: glow[time] }]}>
-              {art.sprites.map((sprite, index) =>
-                sprite.layer === 'glow' ? (
-                  <Piece
-                    key={index}
-                    sprite={sprite}
-                    rises={rises}
-                    clocks={clocks}
-                    lively={lively}
-                    drifting={sprite.kind === 'cloud' ? sceneMotion : 'still'}
-                    night={time === 'night'}
-                    frameWidth={frameWidth}
-                  />
-                ) : null,
-              )}
-            </Animated.View>
-          ) : null}
+          {glow[time]
+            ? world(
+                <Animated.View style={[styles.world, shifts.glow, { opacity: glow[time] }]}>
+                  {art.sprites.map((sprite, index) =>
+                    sprite.layer === 'glow' ? (
+                      <Piece
+                        key={index}
+                        sprite={sprite}
+                        rises={rises}
+                        clocks={clocks}
+                        lively={lively}
+                        drifting={sprite.kind === 'cloud' ? sceneMotion : 'still'}
+                        night={time === 'night'}
+                        frameWidth={frameWidth}
+                      />
+                    ) : null,
+                  )}
+                </Animated.View>,
+              )
+            : null}
         </View>
       </View>
-      {preview ? (
-        <HeaderScenePreviewCaption scene={header.scene} time={time} />
-      ) : (
-        <HeaderSceneCard group={group} today={today} time={time} />
-      )}
+      {preview ? null : <HeaderSceneCard group={group} today={today} time={time} />}
     </View>
   );
 }

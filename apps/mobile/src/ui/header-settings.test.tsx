@@ -2,6 +2,7 @@ import { act, create, type ReactTestInstance } from 'react-test-renderer';
 import { Platform, StyleSheet } from 'react-native';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { SEPARATOR } from '@splitbook/shared/separator';
 import { HeaderSettings } from './header-settings';
 import { ThemeContext } from './theme';
 import { setWindow } from '../test-utils/native';
@@ -292,14 +293,14 @@ it('Time of day is a full-width Auto row, then four tiles with their skies in on
   const view = await open(page({ draft: { ...scene, time: 'sunset' }, onChoose }));
   const times = group(view, 'Time of day');
   const [auto, tiles] = rows(times);
-  expect(labels(auto)).toEqual(['Auto, Follows your clock · morning now']);
+  expect(labels(auto)).toEqual([`Auto, Follows your clock${SEPARATOR}morning now`]);
   expect(auto.props.accessibilityState).toEqual({ checked: false, disabled: false });
   expect(
     auto.findAll(
       (node) => (node.type as unknown) === 'Ionicons' && node.props.name === 'time-outline',
     ),
   ).toHaveLength(1);
-  expect(text(view)).toContain('Follows your clock · morning now');
+  expect(text(view)).toContain(`Follows your clock${SEPARATOR}morning now`);
   expect(labels(tiles)).toEqual(['Morning', 'Day', 'Sunset', 'Night']);
   expect(StyleSheet.flatten(tiles.props.style)).toMatchObject({ flexDirection: 'row' });
   for (const tile of tiles.findAll(isRadio)) {
@@ -340,7 +341,7 @@ it('Classic greys the Scene and Time of day choices and keeps them from being pr
   for (const label of [
     'Beach',
     'Mountain village',
-    'Auto, Follows your clock · morning now',
+    `Auto, Follows your clock${SEPARATOR}morning now`,
     'Night',
   ])
     expect(radio(view, label).props.accessibilityState, label).toMatchObject({ disabled: true });
@@ -359,11 +360,11 @@ it('Classic greys the Scene and Time of day choices and keeps them from being pr
 });
 
 it.each([
-  ['Auto', scene, 'Beach · now, morning'],
+  ['Auto', scene, `Beach${SEPARATOR}now, morning`],
   [
     'a fixed time',
     { ...scene, scene: 'mountain-village', time: 'night' } as const,
-    'Mountain village · Night',
+    `Mountain village${SEPARATOR}Night`,
   ],
   ['Classic', header, 'Classic'],
 ])('the preview caption reads PREVIEW and the choice for %s', async (_, draft, caption) => {

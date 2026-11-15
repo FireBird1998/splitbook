@@ -309,12 +309,18 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   stacked = false,
+  disabled,
 }: {
   label: string;
   options: SegmentOption<T>[];
   value: T;
   onChange: (value: T) => void;
   stacked?: boolean;
+  /**
+   * Whether the choice can be changed just now, as while the page saves (#1267). Given, it is
+   * always reported, both ways: Android keeps a state it was given once the prop goes.
+   */
+  disabled?: boolean;
 }) {
   const theme = useTheme();
   return (
@@ -335,7 +341,10 @@ export function SegmentedControl<T extends string>({
             key={option.value}
             accessibilityRole="radio"
             accessibilityLabel={option.label}
-            accessibilityState={{ checked: selected }}
+            accessibilityState={
+              disabled === undefined ? { checked: selected } : { checked: selected, disabled }
+            }
+            disabled={disabled}
             onPress={() => onChange(option.value)}
             style={{ flex: stacked ? undefined : 1, paddingVertical: 3, paddingHorizontal: 1.5 }}
           >

@@ -1,9 +1,7 @@
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import {
-  HEADER_SCENES,
   headerCard,
-  headerCardTone,
   headerTimeOfDay,
   readGroupHeader,
   type GroupHeader,
@@ -98,7 +96,14 @@ export function HeaderSceneCard({
     </ThemeContext.Provider>
   );
 }
-/** Art always reserves its final height, with the actual card below it at every text scale. */
+/** The settings preview's picture, as tall as the board draws it (#1267). */
+export const PREVIEW_HEIGHT = 150;
+/** A scene card's picture on the Header scene page, as tall as the board draws it. */
+export const THUMBNAIL_PICTURE_HEIGHT = 84;
+/**
+ * Art always reserves its final height, with the actual card below it at every text scale. In the
+ * settings preview it is the picture alone: the page draws the caption under it.
+ */
 export function HeaderScenePlaceholder({
   group,
   header = readGroupHeader(group.header),
@@ -110,44 +115,22 @@ export function HeaderScenePlaceholder({
 }) {
   const theme = useTheme();
   const time = headerTimeOfDay((preview ?? header).time, new Date().getHours());
-  return (
+  const art = (
+    <View
+      accessibilityRole="progressbar"
+      accessibilityLabel="Loading Header scene"
+      style={{ height: preview ? PREVIEW_HEIGHT : 208, backgroundColor: theme.surfaceMuted }}
+    />
+  );
+  return preview ? (
+    art
+  ) : (
     <View style={{ borderRadius: 16, overflow: 'hidden' }}>
-      <View
-        accessibilityRole="progressbar"
-        accessibilityLabel="Loading Header scene"
-        style={{ height: 208, backgroundColor: theme.surfaceMuted }}
-      />
-      {preview ? (
-        <HeaderScenePreviewCaption scene={preview.scene} time={time} />
-      ) : (
-        <HeaderSceneCard group={group} today={currentDayKey()} time={time} />
-      )}
+      {art}
+      <HeaderSceneCard group={group} today={currentDayKey()} time={time} />
     </View>
   );
 }
 export function ClassicGroupHeader({ group }: { group: MobileGroup }) {
   return getGroupTheme(group.category).header === 'strip' ? <TripStrip group={group} /> : null;
-}
-
-export function HeaderScenePreviewCaption({
-  scene,
-  time,
-}: {
-  scene: GroupHeader['scene'];
-  time: ReturnType<typeof headerTimeOfDay>;
-}) {
-  const appTheme = useTheme();
-  const theme = headerCardTone(time) === 'dark' ? getSemanticTokens('dark') : appTheme;
-  return (
-    <ThemeContext.Provider value={theme}>
-      <View style={{ padding: 12, backgroundColor: theme.surface }}>
-        <CompactText variant="small">
-          Preview{SEPARATOR}
-          {HEADER_SCENES.find((choice) => choice.id === scene)?.name}
-          {SEPARATOR}
-          {time}
-        </CompactText>
-      </View>
-    </ThemeContext.Provider>
-  );
 }
