@@ -550,7 +550,8 @@ function owing(balances: Balance[], member: boolean) {
     .filter(Boolean)
     .join(' and ');
 }
-function recurringNames(expenses: BrokenRecurringExpense[]) {
+/** Recurring Expenses as a refusal names them: "Rent (recurring) and Wi-Fi (recurring)". */
+export function recurringNames(expenses: Pick<BrokenRecurringExpense, 'description'>[]) {
   const names = expenses.map(
     ({ description }) => `${description.trim() || 'A recurring Expense'} (recurring)`,
   );

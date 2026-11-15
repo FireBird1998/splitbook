@@ -26,6 +26,8 @@ import {
 import { groupCurrencySettingsSchema } from '@splitbook/shared/group-currency-settings';
 import { emptyTagManager, tagManager } from './tag-manager';
 import { isGroupAdmin, roleComplement } from './member-roles';
+import { recurringNames } from '@splitbook/shared/refusals';
+import { z } from 'zod';
 import type { MemberRole } from '@splitbook/shared/types';
 import { createAssistants, emptyAssistants } from './assistants';
 import { tagManagement, tagRead, unresolvedTagRecord, type TagRead } from './tag-management';
@@ -370,6 +372,13 @@ function closedLeave(): LeaveGroupState {
 const noLongerInGroup = (name: string) => `${name} is no longer in this Group`;
 /** An admin's change refused (403) once the Group read after it shows they're a member now. */
 const noLongerAdmin = (groupName: string) => `You’re no longer an admin of ${groupName}.`;
+/** Members' Snackbar, which a role change and a removal share (#1253). */
+const confirmedOnMembers = (
+  groupId: string,
+  userId: string,
+  name: string,
+  done: string,
+): MemberRoleState => ({ ...idleMemberRole(), groupId, userId, name, done });
 /** The Remove sheet closed: nothing asked or under way (#1253). */
 function closedRemoval(): MemberRemovalState {
   return {
@@ -382,17 +391,21 @@ function closedRemoval(): MemberRemovalState {
     check: null,
   };
 }
+const brokenRecurringExpenses = z.object({
+  recurringExpenses: z.array(z.object({ description: z.string() })).min(1),
+});
 /**
- * A broken recurring Expense that still includes the member, in the server's words but saying
- * it is fixed on the web: Android can't repair a recurring Expense (#1253, as for leaving, #877).
+ * A broken recurring Expense that still includes the member, in Android's own sentence: it is
+ * fixed on the web, since Android can't repair a recurring Expense (#1253, as for leaving, #877).
+ * It names the Expenses the refusal lists, as the server's sentence does.
  */
-function removalRecurringWords(server: string | null, name: string) {
-  return server
-    ? server.replace(
-        /Remove them from (it|each) before removing them from the Group\.$/,
-        'Remove them from $1 on the web before removing them from the Group.',
-      )
-    : `A recurring Expense still includes ${name}. Remove them from it on the web before removing them from the Group.`;
+function removalRecurringWords(details: unknown, name: string) {
+  const named = brokenRecurringExpenses.safeParse(details);
+  if (!named.success)
+    return `A recurring Expense still includes ${name}. Remove them from it on the web before removing them from the Group.`;
+  const expenses = named.data.recurringExpenses,
+    many = expenses.length > 1;
+  return `${recurringNames(expenses)} still ${many ? 'include' : 'includes'} ${name}. Remove them from ${many ? 'each' : 'it'} on the web before removing them from the Group.`;
 }
 /** No role change under way, failed or confirmed (#1252). */
 function idleMemberRole(): MemberRoleState {
@@ -779,6 +792,31 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       (next.screen !== 'members' || next.detail.id !== next.memberRemoval.groupId)
     )
       next = { ...next, memberRemoval: closedRemoval() };
+    // A read meanwhile closes a Remove sheet with nothing left to ask (MembersRolesNotes): its
+    // member is no longer listed, which a Snackbar says, or, while it waits for you, you're no
+    // longer an admin (user story 22).
+    const asking = next.memberRemoval,
+      read = asking.status === 'removing' ? null : next.detail.data;
+    if (asking.status !== 'closed' && asking.userId && asking.name && read?.id === asking.groupId) {
+      const listed = read.members.some((member) => member.user.id === asking.userId);
+      // A refusal on show stays: losing admin may be what it explains.
+      const waiting = asking.status === 'confirm' || asking.status === 'error';
+      if (!listed || (waiting && !isGroupAdmin(read, next.auth.user?.id)))
+        next = {
+          ...next,
+          memberRemoval: closedRemoval(),
+          ...(!listed && next.memberRole.status !== 'changing'
+            ? {
+                memberRole: confirmedOnMembers(
+                  read.id,
+                  asking.userId,
+                  asking.name,
+                  noLongerInGroup(asking.name),
+                ),
+              }
+            : {}),
+        };
+    }
     if (
       next.toReview.groupId &&
       (next.screen !== 'group' || next.detail.id !== next.toReview.groupId)
@@ -6611,13 +6649,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       memberRole: confirmedOnMembers(groupId, userId, name, noLongerInGroup(name)),
     });
   };
-  /** Members' Snackbar, which a role change and a removal share (#1253). */
-  const confirmedOnMembers = (
-    groupId: string,
-    userId: string,
-    name: string,
-    done: string,
-  ): MemberRoleState => ({ ...idleMemberRole(), groupId, userId, name, done });
 
   let removalRequest = 0;
   /**
@@ -6757,7 +6788,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             check: 'balances',
           }
         : refused?.status === 409 && code === 'RECURRING_EXPENSE_PROBLEM'
-          ? { status: 'refused', code, message: removalRecurringWords(server, name), check: 'web' }
+          ? {
+              status: 'refused',
+              code,
+              message: removalRecurringWords(refused?.details, name),
+              check: 'web',
+            }
           : refused?.status === 409 && code && server
             ? { status: 'refused', code, message: server, check: null }
             : refused?.status === 403 && reread && !isGroupAdmin(reread, self)
