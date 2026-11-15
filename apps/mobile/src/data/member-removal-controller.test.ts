@@ -377,6 +377,37 @@ describe('Removing a member', () => {
     expect(g.sent()).toEqual([]);
   });
 
+  // #1252 review, for removals: a Snackbar says so only when the Group read after it agrees.
+  it('says nothing when the read after a removal still lists them: the list speaks', async () => {
+    const f = await onMembers();
+    f.answer(() => Response.json({ data: { message: 'Member removed' }, status: 200 }));
+    f.controller.reviewRemoveMember(priyaId);
+    await f.controller.removeMember();
+    expect(listed(f)).toEqual([alexId, samId, priyaId]);
+    expect(f.controller.getSnapshot()).toMatchObject({
+      memberRemoval: closed,
+      memberRole: { done: null },
+    });
+  });
+
+  it('a sign-out while removing publishes nothing of it into the next session', async () => {
+    const f = await onMembers();
+    f.controller.reviewRemoveMember(priyaId);
+    const held = f.backend.hold('DELETE', memberPath(priyaId));
+    const removing = f.controller.removeMember();
+    await held.arrived;
+    await f.controller.signOut();
+    held.release();
+    await removing;
+    await f.controller.signIn('sam');
+    expect(f.controller.getSnapshot()).toMatchObject({
+      auth: { user: { id: samId } },
+      screen: 'groups',
+      memberRemoval: closed,
+      memberRole: { done: null },
+    });
+  });
+
   it('leaving the page closes the sheet', async () => {
     const f = await onMembers();
     f.controller.reviewRemoveMember(priyaId);

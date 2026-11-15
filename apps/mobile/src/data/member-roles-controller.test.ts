@@ -1,6 +1,6 @@
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 // An admin makes a member an admin or a member on Members and Group details (#1252). Fictional
 // people and Groups only.
@@ -323,10 +323,16 @@ describe('Changing a member’s role', () => {
       );
       return refusal(403, 'FORBIDDEN', 'Forbidden');
     });
+    expect([...f.cache.keys()].some((key) => key.includes(groupId))).toBe(true);
     await f.controller.changeMemberRole(samId, 'admin');
     const shown = f.controller.getSnapshot();
     expect(shown.detail).toMatchObject({ status: 'denied', data: null });
     expect(shown.memberRole.status).toBe('idle');
+    // As on any refusal: its place on Home and its saved copies go too.
+    expect(shown.groups.data.map(({ id }) => id)).toEqual([]);
+    await vi.waitFor(() =>
+      expect([...f.cache.keys()].filter((key) => key.includes(groupId))).toEqual([]),
+    );
   });
 
   it('says a member removed meanwhile is no longer in the Group', async () => {
@@ -368,12 +374,85 @@ describe('Changing a member’s role', () => {
     const changing = f.controller.changeMemberRole(samId, 'admin');
     await held.arrived;
     await f.controller.back();
+    f.sent();
     held.release();
     await changing;
     expect(f.controller.getSnapshot()).toMatchObject({
       screen: 'group',
       memberRole: { status: 'idle', done: null, message: null },
     });
+    // The change may have been made: the Group view reads the Group again after its answer.
+    await vi.waitFor(() => expect(f.sent()).toContain(`GET /api/groups/${groupId}`));
+  });
+
+  it('a sign-out while a change is sent publishes nothing of it into the next session', async () => {
+    const f = await onMembers();
+    const held = f.backend.hold('PATCH', rolePath(samId));
+    const changing = f.controller.changeMemberRole(samId, 'admin');
+    await held.arrived;
+    await f.controller.signOut();
+    held.release();
+    await changing;
+    await f.controller.signIn('sam');
+    expect(f.controller.getSnapshot()).toMatchObject({
+      auth: { user: { id: samId } },
+      screen: 'groups',
+      memberRole: { status: 'idle', done: null, message: null, userId: null },
+    });
+  });
+
+  // #1252 review: a Snackbar says a change was made only when this tap made it.
+  it('says nothing was made when the server refused, though the read shows the role already given', async () => {
+    const f = await onMembers({ [alexId]: 'admin', [samId]: 'member', [priyaId]: 'admin' });
+    const words = 'This Group changed. Reload and try again.';
+    f.answer((userId, role) => {
+      // Another admin gave Sam the role a moment before; this request is refused.
+      f.setRole(userId, role);
+      return refusal(409, 'GROUP_CHANGED', words);
+    });
+    await f.controller.changeMemberRole(samId, 'admin');
+    expect(roleOf(f, samId)).toBe('admin');
+    expect(f.controller.getSnapshot().memberRole).toMatchObject({
+      status: 'failed',
+      message: words,
+      done: null,
+    });
+  });
+
+  it('says nothing when the read after a change shows another role: the list speaks', async () => {
+    const f = await onMembers();
+    f.answer((userId, role) => {
+      // Made, then put back by another admin before the read.
+      f.setRole(userId, role);
+      const answered = Response.json({
+        data: structuredClone(f.backend.world.groups[0]),
+        status: 200,
+      });
+      f.setRole(userId, 'member');
+      return answered;
+    });
+    await f.controller.changeMemberRole(samId, 'admin');
+    expect(roleOf(f, samId)).toBe('member');
+    expect(f.controller.getSnapshot().memberRole).toMatchObject({
+      status: 'idle',
+      message: null,
+      done: null,
+    });
+  });
+
+  it('sends no second change while the first is unanswered, across a visit to the Group', async () => {
+    const f = await onMembers({ [alexId]: 'admin', [samId]: 'member', [priyaId]: 'member' });
+    const held = f.backend.hold('PATCH', rolePath(samId));
+    const first = f.controller.changeMemberRole(samId, 'admin');
+    await held.arrived;
+    await f.controller.back();
+    f.controller.openMembers();
+    await f.controller.changeMemberRole(priyaId, 'admin');
+    expect(f.roleBodies).toEqual([{ role: 'admin' }]);
+    held.release();
+    await first;
+    await f.controller.changeMemberRole(priyaId, 'admin');
+    expect(f.roleBodies).toEqual([{ role: 'admin' }, { role: 'admin' }]);
   });
 
   it('leaving the page clears a failure', async () => {
