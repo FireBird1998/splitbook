@@ -187,6 +187,33 @@ it('covering the Group holds the float and the clouds where they are; Motion off
   act(() => shown.view.unmount());
 });
 
+it('everything that follows the float (island lift, shadow) is back at rest when the float reaches 2', async () => {
+  emitAppState('active');
+  setReduceMotion(false);
+  const shown = await scene('day');
+  const floats = new Set(
+    timing.mock.calls.filter(([, config]) => config.easing !== Easing.linear).map(([v]) => v),
+  );
+  type Derived = { interpolation: { inputRange: number[]; outputRange: number[] }; of: unknown };
+  const followers: Derived[] = [];
+  const walk = (style: unknown) => {
+    if (Array.isArray(style)) return style.forEach(walk);
+    if (!style || typeof style !== 'object') return;
+    if ('interpolation' in style && floats.has((style as Derived).of))
+      return followers.push(style as Derived);
+    Object.values(style).forEach(walk);
+  };
+  for (const node of shown.view.root.findAll((node) => node.props.style != null))
+    walk(node.props.style);
+  // The lift of every island that floats, and its shadow's fade and tightening.
+  expect(followers.length).toBeGreaterThan(3);
+  for (const { interpolation } of followers) {
+    expect(interpolation.inputRange).toEqual([0, 1, 2]);
+    expect(interpolation.outputRange[2]).toBe(interpolation.outputRange[0]);
+  }
+  act(() => shown.view.unmount());
+});
+
 it('night movement (window flicker, lantern, halo) starts no clock and draws nothing by day', async () => {
   emitAppState('active');
   setReduceMotion(false);

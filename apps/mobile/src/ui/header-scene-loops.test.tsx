@@ -212,8 +212,14 @@ it('a cloud held part-way across carries on from there, then makes whole crossin
   await act(async () => {
     view = create(<Cloud state="running" />);
   });
+  const first = playing();
   act(() => (seen.drift as Animated.Value).setValue(42));
   await act(async () => view.update(<Cloud state="paused" />));
+  expect(value(seen.drift)).toBe(42);
+  // A crossing that reports its end after the pause starts nothing.
+  const made = timing.mock.calls.length;
+  finish(first);
+  expect(timing.mock.calls.length).toBe(made);
   expect(value(seen.drift)).toBe(42);
   await act(async () => view.update(<Cloud state="running" />));
   // From where it was held to the right edge, at the same speed.

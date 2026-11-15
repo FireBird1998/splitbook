@@ -61,8 +61,6 @@ it.each([320, 380, 412, 600, 840])(
         expect(left(travel.entry) + cloud.w * SCENE_UNIT).toBeLessThanOrEqual(
           -frameWidth / 2 - tilt,
         );
-        expect(travel.start === 0 || travel.start === travel.entry).toBe(true);
-        expect(travel.exit).toBeGreaterThan(travel.start);
         // Slow enough to read as weather: between 3 and 10 dp a second.
         expect(travel.dpPerSecond).toBeGreaterThan(3);
         expect(travel.dpPerSecond).toBeLessThan(10);

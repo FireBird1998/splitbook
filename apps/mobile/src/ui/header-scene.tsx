@@ -13,7 +13,9 @@ import {
   useCloudDrift,
   useForeground,
   useSceneClocks,
+  riseBetween,
   useSceneRise,
+  type SceneMotion,
 } from './header-scene-motion';
 import type { HeaderSceneSprites, SceneSprite } from './header-scene-sprite';
 import { headerSceneMotionAvailable } from '../config';
@@ -53,8 +55,7 @@ const fill = (sprite: SceneSprite) =>
     width: sprite.w * SCENE_UNIT,
     height: sprite.h * SCENE_UNIT,
   }) as const;
-const lift = (rise: Animated.Value) =>
-  rise.interpolate({ inputRange: [0, 1], outputRange: [0, -FLOAT_RISE * SCENE_UNIT] });
+const lift = (rise: Animated.Value) => riseBetween(rise, 0, -FLOAT_RISE * SCENE_UNIT);
 
 type Clocks = Map<number, Animated.Value>;
 /** A part's own movement as native-driver styles: slides and fades from its tracks' clocks. */
@@ -102,8 +103,8 @@ const Piece = memo(function Piece({
   clocks: Clocks;
   /** Motion is on for this phone: parts wear their movement, whether or not the clocks run. */
   lively: boolean;
-  /** The scene is running and this is a cloud. Parts do not take this, so a pause redraws none. */
-  drifting: boolean;
+  /** The scene's motion for a cloud; a part is always still, so a pause redraws none. */
+  drifting: SceneMotion;
   night: boolean;
   frameWidth: number;
 }) {
@@ -170,10 +171,8 @@ const Piece = memo(function Piece({
           : sprite.kind === 'shadow'
             ? {
                 // The shadow tightens and fades as the island rises away from it.
-                opacity: rise.interpolate({ inputRange: [0, 1], outputRange: [1, 0.8] }),
-                transform: [
-                  { scale: rise.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] }) },
-                ],
+                opacity: riseBetween(rise, 1, 0.8),
+                transform: [{ scale: riseBetween(rise, 1, 0.96) }],
               }
             : { transform: floats },
       ]}
@@ -232,9 +231,12 @@ export default function HeaderScene({
   const time = headerTimeOfDay(header.time, new Date().getHours());
   const position = useHeaderTilt(moving && tilt);
   const frameWidth = useWindowDimensions().width;
-  const rise7 = useSceneRise(moving, 7);
-  const rise9 = useSceneRise(moving, 9);
-  const rise11 = useSceneRise(moving, 11);
+  // A pause holds the float and the clouds where they are, since the scene can still be seen;
+  // with Motion off or Remove animations they rest where the still scene has them.
+  const sceneMotion: SceneMotion = moving ? 'running' : lively ? 'paused' : 'still';
+  const rise7 = useSceneRise(sceneMotion, 7);
+  const rise9 = useSceneRise(sceneMotion, 9);
+  const rise11 = useSceneRise(sceneMotion, 11);
   const [rises] = useState<Rises>(() => ({ 7: rise7, 9: rise9, 11: rise11 }));
   // One clock per period that something on screen uses: the glow layer and night-only movement
   // start no clock while the scene does not show them.
@@ -349,7 +351,7 @@ export default function HeaderScene({
                     rises={rises}
                     clocks={clocks}
                     lively={lively}
-                    drifting={moving && sprite.kind === 'cloud'}
+                    drifting={sprite.kind === 'cloud' ? sceneMotion : 'still'}
                     night={time === 'night'}
                     frameWidth={frameWidth}
                   />
@@ -370,7 +372,7 @@ export default function HeaderScene({
                     rises={rises}
                     clocks={clocks}
                     lively={lively}
-                    drifting={moving && sprite.kind === 'cloud'}
+                    drifting={sprite.kind === 'cloud' ? sceneMotion : 'still'}
                     night={time === 'night'}
                     frameWidth={frameWidth}
                   />
