@@ -7,7 +7,12 @@ import {
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { LeaveGroupState, MemberRoleState, MobileGroup } from '../data/types';
+import type {
+  LeaveGroupState,
+  MemberRemovalState,
+  MemberRoleState,
+  MobileGroup,
+} from '../data/types';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import {
   findHosts,
@@ -141,6 +146,25 @@ const roleActions = (state: Partial<MemberRoleState> = {}, offline = false) => (
   onDismissDone: vi.fn(),
 });
 
+const removalClosed: MemberRemovalState = {
+  groupId: null,
+  userId: null,
+  name: null,
+  status: 'closed',
+  code: null,
+  message: null,
+  check: null,
+};
+const removalActions = (state: Partial<MemberRemovalState> = {}, offline = false) => ({
+  state: { ...removalClosed, ...(state.status ? { groupId: household.id } : {}), ...state },
+  offline,
+  onReview: vi.fn(),
+  onConfirm: vi.fn(),
+  onCancel: vi.fn(),
+  onCheck: vi.fn(),
+  onOpenWeb: vi.fn(),
+});
+
 function page(overrides: Partial<Parameters<typeof GroupMembers>[0]> = {}) {
   const props = {
     group: household,
@@ -149,6 +173,7 @@ function page(overrides: Partial<Parameters<typeof GroupMembers>[0]> = {}) {
     invite: { onPress: vi.fn(), disabled: false, offline: false },
     leave: leaveActions(),
     roles: roleActions(),
+    removal: removalActions(),
     ...overrides,
   };
   return { root: render(<GroupMembers {...props} />), props };
@@ -489,6 +514,157 @@ describe('Changing a member’s role (#1252)', () => {
   });
 });
 
+describe('Removing a member (#1253)', () => {
+  const removeSheet = (root: ReactTestInstance) => sheetTitled(root, 'Remove ');
+  const buttonIn = (root: ReactTestInstance, label: string) =>
+    root.findAll(
+      (n) =>
+        typeof n.type === 'string' &&
+        n.props.accessibilityRole === 'button' &&
+        n.props.accessibilityLabel === label,
+    );
+  const refused = (code: string, message: string, check: 'balances' | 'web' | null = null) =>
+    removalActions({
+      status: 'refused',
+      userId: samId,
+      name: 'Sam Chen',
+      code,
+      message,
+      check,
+    });
+
+  it('offers Remove from Group, in red, for a member and an admin: it asks first', () => {
+    const { root, props } = page();
+    press(root, 'Sam Chen, Member, options');
+    expect(text(options(root))).toContain('You’ll be asked to confirm');
+    press(options(root), 'Remove from Group, You’ll be asked to confirm');
+    expect(props.removal.onReview).toHaveBeenCalledExactlyOnceWith(samId);
+    expect(options(root).props.visible).toBe(false);
+    press(root, 'Priya Shah, Admin, options');
+    press(options(root), 'Remove from Group, You’ll be asked to confirm');
+    expect(props.removal.onReview).toHaveBeenLastCalledWith(priyaId);
+  });
+
+  it('asks in a sheet naming the member and the Group, with Cancel and a red Remove', () => {
+    const { root, props } = page({
+      removal: removalActions({ status: 'confirm', userId: samId, name: 'Sam Chen' }),
+    });
+    const sheet = removeSheet(root);
+    expect(sheet.props.visible).toBe(true);
+    expect(text(sheet)).toContain('Remove Sam Chen from Maple House?');
+    expect(text(sheet)).toContain(
+      'Sam won’t see this Group or its balances any more. The Expenses and payments they’re part of stay for everyone else.',
+    );
+    expect(text(sheet)).toContain('They can rejoin with an invite.');
+    press(sheet, 'Cancel');
+    expect(props.removal.onCancel).toHaveBeenCalledOnce();
+    press(sheet, 'Remove from Group');
+    expect(props.removal.onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it('shows progress while removing, and can’t be dismissed or sent twice', () => {
+    const { root } = page({
+      removal: removalActions({ status: 'removing', userId: samId, name: 'Sam Chen' }),
+    });
+    const sheet = removeSheet(root);
+    expect(
+      sheet.findAll(
+        (n) => typeof n.type === 'string' && n.props.accessibilityRole === 'progressbar',
+      ),
+    ).not.toHaveLength(0);
+    expect(one(buttonIn(sheet, 'Remove from Group')).props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+    expect(one(buttonIn(sheet, 'Cancel')).props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+  });
+
+  it('not settled up: the server’s sentence, Go to Balances, Close, and no Remove', () => {
+    const words = 'Sam Chen owes ₹300.00 in this Group. Settle up before removing them.';
+    const { root, props } = page({ removal: refused('OPEN_BALANCE', words, 'balances') });
+    const sheet = removeSheet(root);
+    expect(text(one(sheet.findAll((n) => n.props.accessibilityRole === 'alert')))).toBe(words);
+    expect(text(sheet)).not.toContain('They can rejoin with an invite.');
+    expect(buttonIn(sheet, 'Remove from Group')).toEqual([]);
+    press(sheet, 'Go to Balances');
+    expect(props.removal.onCheck).toHaveBeenCalledOnce();
+    press(sheet, 'Close');
+    expect(props.removal.onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('a recurring Expense: Android’s sentence and Open on the web, nothing that can’t fix it', () => {
+    const words =
+      'Rent (recurring) still includes Sam Chen. Remove them from it on the web before removing them from the Group.';
+    const { root, props } = page({
+      removal: refused('RECURRING_EXPENSE_PROBLEM', words, 'web'),
+    });
+    const sheet = removeSheet(root);
+    expect(text(sheet)).toContain(words);
+    expect(buttonIn(sheet, 'Remove from Group')).toEqual([]);
+    expect(buttonIn(sheet, 'Go to Balances')).toEqual([]);
+    press(sheet, 'Open on the web');
+    expect(props.removal.onOpenWeb).toHaveBeenCalledOnce();
+  });
+
+  it('the Group changed: an error, with the explanation and Remove kept, to try again', () => {
+    const words = 'This Group changed while you were removing this member. Try again.';
+    const { root, props } = page({ removal: refused('REMOVAL_CONFLICT', words) });
+    const sheet = removeSheet(root);
+    expect(text(one(sheet.findAll((n) => n.props.accessibilityRole === 'alert')))).toBe(words);
+    expect(text(sheet)).toContain('They can rejoin with an invite.');
+    press(sheet, 'Remove from Group');
+    expect(props.removal.onConfirm).toHaveBeenCalledOnce();
+    expect(buttonIn(sheet, 'Cancel')).toHaveLength(1);
+  });
+
+  it('the last admin: the server’s sentence in place of the text and the button', () => {
+    const words = 'Maple House needs an admin. Make someone else an admin first.';
+    const { root } = page({ removal: refused('LAST_ADMIN', words) });
+    const sheet = removeSheet(root);
+    expect(text(sheet)).toContain(words);
+    expect(text(sheet)).not.toContain('They can rejoin with an invite.');
+    expect(buttonIn(sheet, 'Remove from Group')).toEqual([]);
+    expect(buttonIn(sheet, 'Close')).toHaveLength(1);
+  });
+
+  it('a failure keeps Remove, to try again', () => {
+    const { root } = page({
+      removal: removalActions({
+        status: 'error',
+        userId: samId,
+        name: 'Sam Chen',
+        message: 'Couldn’t remove Sam Chen. Try again.',
+      }),
+    });
+    const sheet = removeSheet(root);
+    expect(text(one(sheet.findAll((n) => n.props.accessibilityRole === 'alert')))).toBe(
+      'Couldn’t remove Sam Chen. Try again.',
+    );
+    expect(one(buttonIn(sheet, 'Remove from Group')).props.accessibilityState).toMatchObject({
+      disabled: false,
+    });
+  });
+
+  it('offline: Remove is off in both sheets, with the note', () => {
+    const { root, props } = page({
+      roles: roleActions({}, true),
+      removal: removalActions({ status: 'confirm', userId: samId, name: 'Sam Chen' }, true),
+    });
+    const sheet = removeSheet(root);
+    expect(one(buttonIn(sheet, 'Remove from Group')).props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+    expect(text(sheet)).toContain(rolesNeedConnection);
+    act(() => renderer!.update(<GroupMembers {...props} removal={removalActions({}, true)} />));
+    press(root, 'Sam Chen, Member, options');
+    const option = one(buttonIn(options(root), 'Remove from Group, You’ll be asked to confirm'));
+    expect(option.props.accessibilityState).toEqual({ disabled: true, busy: false });
+    act(() => option.props.onPress?.());
+    expect(props.removal.onReview).not.toHaveBeenCalled();
+  });
+});
+
 describe('Leave Group', () => {
   it('is the last action on the page, a destructive one that opens the sheet', () => {
     const { root, props } = page();
@@ -662,6 +838,7 @@ describe.each(['light', 'dark'] as const)('Members at large text in %s (#639)', 
             invite={{ onPress: vi.fn(), disabled: false, offline: false }}
             leave={leaveActions()}
             roles={roleActions()}
+            removal={removalActions()}
           />
         </ThemeContext.Provider>,
       );
@@ -689,6 +866,7 @@ describe.each(['light', 'dark'] as const)('Members’ details at large text in %
             invite={{ onPress: vi.fn(), disabled: false, offline: false }}
             leave={leaveActions()}
             roles={roleActions()}
+            removal={removalActions()}
           />
         </ThemeContext.Provider>,
       );
@@ -745,6 +923,7 @@ describe.each(['light', 'dark'] as const)('Member roles at large text in %s (#12
           name: 'Priya Shah',
           role: 'member',
         }),
+        removal: removalActions(),
       };
       const failed = roleActions({
         status: 'failed',
@@ -791,6 +970,43 @@ describe.each(['light', 'dark'] as const)('Member roles at large text in %s (#12
       expect(new Set(icons.map((n) => `${n.props.name}:${n.props.size}`))).toEqual(
         new Set(['ellipsis-vertical:20', 'shield-checkmark-outline:22']),
       );
+    },
+  );
+
+  // #1253 (MembersRoles130 phone 27): a refusal in the Remove sheet wraps inside its Banner and its
+  // button keeps one line.
+  it.each(largeTextWindows)(
+    'reads a refusal in the Remove sheet in full, $width dp at $fontScale× text',
+    (size) => {
+      setWindow(size);
+      act(() => {
+        renderer = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <GroupMembers
+              group={household}
+              currentUserId={you}
+              back={{ label: 'Back to Group', onPress: vi.fn() }}
+              invite={{ onPress: vi.fn(), disabled: false, offline: false }}
+              leave={leaveActions()}
+              roles={roleActions()}
+              removal={removalActions({
+                status: 'refused',
+                userId: samId,
+                name: 'Sam Chen',
+                code: 'OPEN_BALANCE',
+                message: 'Sam Chen owes ₹300.00 in this Group. Settle up before removing them.',
+                check: 'balances',
+              })}
+            />
+          </ThemeContext.Provider>,
+        );
+      });
+      const [modal] = findHosts(
+        renderer!.toJSON() as never,
+        (p, type) => type === 'Modal' && p.visible === true,
+      );
+      expect(modal).toBeDefined();
+      expect(unreadText(modal!, size.fontScale, size.width)).toEqual([]);
     },
   );
 });

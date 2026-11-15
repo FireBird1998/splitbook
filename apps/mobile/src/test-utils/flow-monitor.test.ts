@@ -44,6 +44,32 @@ function publisher() {
 }
 
 describe('the public flow monitor', () => {
+  // #1253: a removal is its own flow, sent only by the command that sends it.
+  it('checks the member removal flow: declared steps, and removing only through its command', () => {
+    const { controller, publish } = publisher();
+    const check = monitorFlows(controller);
+    const memberRemoval = controller.getSnapshot().memberRemoval;
+    publish({
+      ...controller.getSnapshot(),
+      memberRemoval: { ...memberRemoval, status: 'confirm' },
+    });
+    publish({
+      ...controller.getSnapshot(),
+      memberRemoval: { ...memberRemoval, status: 'removing' },
+    });
+    publish({ ...controller.getSnapshot(), memberRemoval: { ...memberRemoval, status: 'closed' } });
+    publish({
+      ...controller.getSnapshot(),
+      memberRemoval: { ...memberRemoval, status: 'refused' },
+    });
+    expect(() => check.assertValid()).toThrow(
+      [
+        'memberRemoval: removing without removeMember',
+        'memberRemoval: undeclared closed → refused',
+      ].join('\n'),
+    );
+    check.stop();
+  });
   // #1252: a role change is its own flow, started only by the command that sends it.
   it('checks the member role flow: declared steps, and changing only through its command', () => {
     const { controller, publish } = publisher();
