@@ -837,6 +837,17 @@ it, `Cannot demote the last admin. Promote another member first.` and
 `Cannot remove the last admin.`). Removing yourself returns **400**
 `You cannot remove yourself. Use leave group instead.`
 
+A role change is checked again at the moment it is made (#1261), so two admins who
+step down at once, or make each other a member, never leave the Group with no admin.
+The change applies only while the caller is still an admin, the member is still in the
+Group with the role it read, and, to make someone a member, another admin remains.
+Otherwise it is decided again on the Group as it is now: the last admin gets **409**
+`LAST_ADMIN` as above, a caller who is no longer an admin **403**, and a member who has
+left **404**. If the Group keeps changing under three tries, **409**
+`code: "STALE_REVISION"`. Activity records `group_updated` with
+`changes.memberRole` holding the member's `old` and `new` role, `old` being the role the
+change replaced.
+
 ### DELETE /api/groups/[id]/members/[userId]
 
 An admin removes another member, with no body. The member is removed only when they

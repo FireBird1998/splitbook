@@ -432,6 +432,14 @@ export const readExceptions = [
   },
   {
     path: 'apps/web/src/lib/services/group.service.ts',
+    within: 'MethodDeclaration GroupService.updateMemberRole#1/ArrowFunction <callback>#4',
+    operation: 'membership',
+    site: "Group.findOneAndUpdate({$and:[{_id:groupId},{members:{$elemMatch:{user:actorId,role:'admin'}}},{members:{$elemMatch:{user:targetUserId,role:previousRole}}},...keepsAnAdmin,],},{$set:{'members.$[target].role':newRole}},{arrayFilters:[{'target.user':newmongoose.Types.ObjectId(targetUserId)}],returnDocument:'after',},)",
+    reason:
+      'Membership or role validation for this member-started write (including its replay/response); not a ledger read entry point.',
+  },
+  {
+    path: 'apps/web/src/lib/services/group.service.ts',
     within: 'MethodDeclaration GroupService.departureBlock#1',
     operation: 'recurring',
     site: 'recurringExpenseService.materializeDueExpenses(groupId)',
