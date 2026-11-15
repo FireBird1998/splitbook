@@ -418,6 +418,14 @@ function removalRefusal(
   name: string,
   lostAdminIn: string | null,
 ): Pick<MemberRemovalState, 'status' | 'code' | 'message' | 'check'> {
+  // A read showing the admin a member explains it, whatever the refusal (#1253 review).
+  if (lostAdminIn)
+    return {
+      status: 'refused',
+      code: 'FORBIDDEN',
+      message: noLongerAdmin(lostAdminIn),
+      check: null,
+    };
   const refused = failure instanceof RequestError && failure.status === 409 ? failure : null;
   const code = refused?.code ?? null,
     server = refused?.serverMessage?.trim() || null;
@@ -436,13 +444,6 @@ function removalRefusal(
       check: 'web',
     };
   if (code && server) return { status: 'refused', code, message: server, check: null };
-  if (lostAdminIn)
-    return {
-      status: 'refused',
-      code: 'FORBIDDEN',
-      message: noLongerAdmin(lostAdminIn),
-      check: null,
-    };
   return {
     status: 'error',
     code: null,
@@ -832,8 +833,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (next.leave.status !== 'closed' && next.screen !== 'members')
       next = { ...next, leave: closedLeave() };
     // A role change's progress, failure and Snackbar belong to the Members page they were made on.
+    // A change still being made stays shown, so a later visit sees it under way (#1253 review).
     if (
-      (next.memberRole.status !== 'idle' || next.memberRole.done !== null) &&
+      (next.memberRole.status === 'failed' || next.memberRole.done !== null) &&
       (next.screen !== 'members' || next.detail.id !== next.memberRole.groupId)
     )
       next = { ...next, memberRole: idleMemberRole() };
@@ -6653,12 +6655,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       reread,
       /** The server gave no answer: a reply lost on the way back, which the read can confirm. */
       replyLost: failure instanceof RequestError && failure.networkFailure,
-      /** The Group's name, when the write was refused and the read shows the admin a member now. */
+      /**
+       * The Group's name, when the write wasn't made and the read shows the admin a member now:
+       * that explains it, whatever the refusal's code (a 403, or a 409 when the role was lost
+       * between the server's checks), or a lost reply (#1253 review).
+       */
       lostAdminIn:
-        failure instanceof RequestError &&
-        failure.status === 403 &&
-        reread &&
-        !isGroupAdmin(reread, snapshot.auth.user?.id)
+        failure !== null && reread && !isGroupAdmin(reread, snapshot.auth.user?.id)
           ? reread.name
           : null,
     };
@@ -6712,7 +6715,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     ).finally(() => {
       if (roleSending === owner) roleSending = null;
     });
-    if (!sent) return;
+    if (!sent) {
+      // Answered on another page, or a later visit: the change is no longer under way.
+      if (current(owner) && attempt === roleRequest && latest().memberRole.status === 'changing')
+        publish({ ...snapshot, memberRole: idleMemberRole() });
+      return;
+    }
     const { failure, reread, replyLost, lostAdminIn } = sent;
     /** The Group as the change's answer gave it. */
     let changeAnswer: MobileGroup | null = null;
@@ -6749,11 +6757,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       failure instanceof RequestError && failure.status === 409
         ? failure.serverMessage?.trim()
         : null;
-    const message =
-      server ||
-      (lostAdminIn
-        ? noLongerAdmin(lostAdminIn)
-        : `Couldn’t make ${name} ${roleComplement[role]}. Try again.`);
+    const message = lostAdminIn
+      ? noLongerAdmin(lostAdminIn)
+      : server || `Couldn’t make ${name} ${roleComplement[role]}. Try again.`;
     publish({ ...snapshot, memberRole: { ...settled, status: 'failed', message, done: null } });
   };
   /**
@@ -6776,10 +6782,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const reviewRemoveMember = (userId: string) => {
     const acting = actingOn(userId);
+    // One write at a time, a role change from an earlier visit included (#1253 review).
     if (
       !acting ||
       snapshot.memberRemoval.status !== 'closed' ||
-      snapshot.memberRole.status === 'changing'
+      snapshot.memberRole.status === 'changing' ||
+      roleSending === generation
     )
       return;
     publish({
@@ -6849,8 +6857,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (failure === null || (reread && !stillListed)) {
       // Removed by this request, its reply lost or not; or by someone else meanwhile. A Snackbar
       // says so unless the Group read after it still lists them: then the list speaks for itself.
+      // Only the server's answer can say this request removed them: after a lost reply, they may
+      // have left, or another admin removed them (#1253 review).
       const done =
-        failure !== null && !replyLost
+        failure !== null
           ? noLongerInGroup(name)
           : stillListed
             ? null

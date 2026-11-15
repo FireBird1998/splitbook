@@ -599,7 +599,9 @@ export function GroupMembers({
     openedFor.current = member;
     setSelected(member.user.id);
   };
-  const changing = roles.state.status === 'changing' ? roles.state : null;
+  // A change under way on this Group, from this visit or an earlier one (#1253 review).
+  const changing =
+    roles.state.status === 'changing' && roles.state.groupId === group?.id ? roles.state : null;
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <TopBar
