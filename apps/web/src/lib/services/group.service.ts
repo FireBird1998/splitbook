@@ -443,7 +443,7 @@ export class GroupService {
 
   /**
    * Update a member's role. Only admins can do this.
-   * Cannot demote the last admin.
+   * Cannot demote the last admin, even when two admins step down at the same moment (#1261).
    */
   async updateMemberRole(
     groupId: string,
@@ -453,40 +453,68 @@ export class GroupService {
   ) {
     await connectDB();
 
-    const group = await Group.findById(groupId);
-    if (!group) return null;
+    // Another role change, removal or leave can commit between the read and the update; the
+    // update then matches nothing and we decide again on what is there now.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const group = await Group.findById(groupId).select('members name').lean();
+      if (!group) return null;
 
-    // Check admin permission
-    const actor = group.members.find((m) => m.user.toString() === actorId);
-    if (!actor || actor.role !== 'admin') {
-      throw new Refusal('FORBIDDEN');
-    }
-
-    const target = group.members.find((m) => m.user.toString() === targetUserId);
-    if (!target) return null;
-
-    // Prevent demoting the last admin
-    if (newRole === 'member' && target.role === 'admin') {
-      const adminCount = group.members.filter((m) => m.role === 'admin').length;
-      if (adminCount <= 1) {
-        throw new Refusal('LAST_ADMIN', { variant: 'demotion', groupName: group.name });
+      // Check admin permission
+      const actor = group.members.find((m) => m.user.toString() === actorId);
+      if (!actor || actor.role !== 'admin') {
+        throw new Refusal('FORBIDDEN');
       }
-    }
 
-    const previousRole = target.role;
-    target.role = newRole;
-    await withGroupMutation(groupId, async () => group.save());
+      const target = group.members.find((m) => m.user.toString() === targetUserId);
+      if (!target) return null;
 
-    await activityService.log(groupId, 'group_updated', actorId, {
-      changes: {
-        memberRole: {
-          old: { userId: targetUserId, role: previousRole },
-          new: { userId: targetUserId, role: newRole },
+      // Prevent demoting the last admin
+      if (newRole === 'member' && target.role === 'admin') {
+        const adminCount = group.members.filter((m) => m.role === 'admin').length;
+        if (adminCount <= 1) {
+          throw new Refusal('LAST_ADMIN', { variant: 'demotion', groupName: group.name });
+        }
+      }
+
+      // At the moment of the update: the actor is still an admin, the member is still here with
+      // the role Activity will record as the old one, and making someone a member leaves another
+      // admin.
+      const previousRole = target.role;
+      const keepsAnAdmin =
+        newRole === 'member'
+          ? [{ members: { $elemMatch: { role: 'admin', user: { $ne: targetUserId } } } }]
+          : [];
+      const changed = await withGroupMutation(groupId, async () =>
+        Group.findOneAndUpdate(
+          {
+            $and: [
+              { _id: groupId },
+              { members: { $elemMatch: { user: actorId, role: 'admin' } } },
+              { members: { $elemMatch: { user: targetUserId, role: previousRole } } },
+              ...keepsAnAdmin,
+            ],
+          },
+          { $set: { 'members.$[target].role': newRole } },
+          {
+            arrayFilters: [{ 'target.user': new mongoose.Types.ObjectId(targetUserId) }],
+            returnDocument: 'after',
+          },
+        ),
+      );
+      if (!changed) continue;
+
+      await activityService.log(groupId, 'group_updated', actorId, {
+        changes: {
+          memberRole: {
+            old: { userId: targetUserId, role: previousRole },
+            new: { userId: targetUserId, role: newRole },
+          },
         },
-      },
-    });
+      });
 
-    return this.readAfterUpdate(await group.populate('members.user', PERSON_FIELDS), actorId);
+      return this.readAfterUpdate(await changed.populate('members.user', PERSON_FIELDS), actorId);
+    }
+    throw new Refusal('STALE_REVISION');
   }
 
   /**
