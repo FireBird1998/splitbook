@@ -13,13 +13,12 @@ const failures = [
   ['invalid body', 'error', 'Couldn’t confirm notification settings. Retry.'],
 ] as const;
 type Failure = (typeof failures)[number][0];
-async function enabledPhone(options: { monitor?: false } = {}) {
+async function enabledPhone() {
   const server = fakeSplitbook();
   server.world.notifications = { ...notificationPreferences };
   const timer = manualTimer();
   const native = notificationNative();
   const phone = testPhone(server, {
-    ...options,
     now,
     parts: { notifications: native, timer: timer.timer },
   });
@@ -374,8 +373,7 @@ it.each(['HTTP 500', 'disabled'] as const)(
 it.each(['receipt', 'tap'] as const)(
   'retires an in-flight %s when a disable is pending instead of joining a skipped read',
   async (kind) => {
-    // The existing controller allows loading → pending; the flow table omits that transition.
-    const { app, server, envelope, holdRead, reads } = await enabledPhone({ monitor: false });
+    const { app, server, envelope, holdRead, reads } = await enabledPhone();
     server.reply('POST', path, () =>
       Response.json({
         data: {
@@ -416,8 +414,7 @@ it.each(['receipt', 'tap'] as const)(
   },
 );
 it('a category change retires an earlier check even if a later same-session read succeeds', async () => {
-  // The existing controller allows loading → pending; the flow table omits that transition.
-  const { app, server, envelope, holdRead } = await enabledPhone({ monitor: false });
+  const { app, server, envelope, holdRead } = await enabledPhone();
   const held = holdRead();
   const receipt = app.receiveNotification(envelope, { visible: false });
   await held.arrived;
@@ -435,6 +432,96 @@ it('a category change retires an earlier check even if a later same-session read
     held.release();
   }
 });
+// Lets a released reply reach the controller: the transport reads its body after a few ticks.
+const settle = async () => {
+  for (let tick = 0; tick < 5; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
+};
+const changes = {
+  'turns notifications off': {
+    change: (app: Awaited<ReturnType<typeof enabledPhone>>['app']) => app.disableNotifications(),
+    confirmed: {
+      ...notificationPreferences,
+      enabled: false,
+      expenseUpdates: false,
+      payments: false,
+      revision: 2,
+    },
+  },
+  'turns Payments off': {
+    change: (app: Awaited<ReturnType<typeof enabledPhone>>['app']) =>
+      app.setNotificationCategory('payments', false),
+    confirmed: { ...notificationPreferences, payments: false, revision: 2 },
+  },
+};
+it.each(
+  (Object.keys(changes) as (keyof typeof changes)[]).flatMap((kind) =>
+    (['while the change is pending', 'after the change is confirmed'] as const).map(
+      (when) => [kind, when] as const,
+    ),
+  ),
+)(
+  'a member who %s while a Settings read is in flight keeps that choice when the read answers %s',
+  async (kind, when) => {
+    const { app, server, envelope, holdRead } = await enabledPhone();
+    // The held read was answered before the change: the controls are still on, at revision 1.
+    const held = holdRead();
+    const receipt = app.receiveNotification(envelope, { visible: false });
+    await held.arrived;
+    expect(app.getSnapshot().notifications.status).toBe('loading');
+    const { change, confirmed } = changes[kind];
+    server.world.notifications = confirmed;
+    server.reply('POST', path, () => Response.json({ data: confirmed }));
+    const write = server.hold('POST', path);
+    const changing = change(app);
+    try {
+      await write.arrived;
+      expect(app.getSnapshot().notifications).toEqual({
+        status: 'pending',
+        confirmed: notificationPreferences,
+        hasConfirmed: true,
+        message: 'Confirming notification settings…',
+      });
+      // The change retires the check: the receipt is refused rather than judged by the old read.
+      expect(await within(receipt)).toBe(false);
+      if (when === 'while the change is pending') {
+        held.release();
+        await settle();
+        expect(app.getSnapshot().notifications).toEqual({
+          status: 'pending',
+          confirmed: notificationPreferences,
+          hasConfirmed: true,
+          message: 'Confirming notification settings…',
+        });
+        write.release();
+        await within(changing);
+      } else {
+        write.release();
+        await within(changing);
+        expect(app.getSnapshot().notifications).toEqual({
+          status: 'ready',
+          confirmed,
+          hasConfirmed: true,
+          message: '',
+        });
+        held.release();
+        await settle();
+      }
+      expect(app.getSnapshot().notifications).toEqual({
+        status: 'ready',
+        confirmed,
+        hasConfirmed: true,
+        message: '',
+      });
+      expect(server.requests.filter((r) => r.method === 'POST' && r.url.pathname === path)).toEqual(
+        [expect.objectContaining({ body: expect.objectContaining({ revision: 1 }) })],
+      );
+    } finally {
+      held.release();
+      write.release();
+      await changing;
+    }
+  },
+);
 it('does not join the next account’s notification check when the account changes between receipts', async () => {
   const { app, server, envelope, holdRead } = await enabledPhone();
   const held = holdRead();
