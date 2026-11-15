@@ -427,19 +427,21 @@
     "code": "LAST_ADMIN",
     "variant": "demotion",
     "data": {
-      "variant": "demotion"
+      "variant": "demotion",
+      "groupName": "Maple House"
     },
     "status": 409,
-    "body": "{\"error\":\"Cannot demote the last admin. Promote another member first.\",\"status\":409,\"code\":\"LAST_ADMIN\"}"
+    "body": "{\"error\":\"Maple House needs an admin. Make someone else an admin first.\",\"status\":409,\"code\":\"LAST_ADMIN\"}"
   },
   {
     "code": "LAST_ADMIN",
     "variant": "removal",
     "data": {
-      "variant": "removal"
+      "variant": "removal",
+      "groupName": "Maple House"
     },
     "status": 409,
-    "body": "{\"error\":\"Cannot remove the last admin.\",\"status\":409,\"code\":\"LAST_ADMIN\"}"
+    "body": "{\"error\":\"Maple House needs an admin. Make someone else an admin first.\",\"status\":409,\"code\":\"LAST_ADMIN\"}"
   },
   {
     "code": "SELF_REMOVE",

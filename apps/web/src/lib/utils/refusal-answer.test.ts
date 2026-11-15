@@ -12,11 +12,13 @@ describe('serverError answers typed refusals', () => {
       '{"error":"Only the payer or recipient can record this payment","status":422,"code":"FORBIDDEN_SETTLEMENT"}',
     );
   });
-  it('codes the last-admin removal answer', async () => {
-    const answer = serverError(new Refusal('LAST_ADMIN', { variant: 'removal' }));
+  it('codes the last-admin removal answer, naming the Group (#1250)', async () => {
+    const answer = serverError(
+      new Refusal('LAST_ADMIN', { variant: 'removal', groupName: 'Maple House' }),
+    );
     expect(answer.status).toBe(409);
     expect(await answer.text()).toBe(
-      '{"error":"Cannot remove the last admin.","status":409,"code":"LAST_ADMIN"}',
+      '{"error":"Maple House needs an admin. Make someone else an admin first.","status":409,"code":"LAST_ADMIN"}',
     );
   });
   it('answers data carried by a currency refusal', async () => {

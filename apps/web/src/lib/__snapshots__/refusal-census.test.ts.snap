@@ -1410,7 +1410,7 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Cannot demote the last admin. Promote another member first.","status":409,"code":"LAST_ADMIN"}",
+      "body": "{"error":"Maple House needs an admin. Make someone else an admin first.","status":409,"code":"LAST_ADMIN"}",
       "hasCode": true,
       "status": 409,
     },
@@ -1516,7 +1516,7 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
   },
   {
     "answer": {
-      "body": "{"error":"Cannot remove the last admin.","status":409,"code":"LAST_ADMIN"}",
+      "body": "{"error":"Maple House needs an admin. Make someone else an admin first.","status":409,"code":"LAST_ADMIN"}",
       "hasCode": true,
       "status": 409,
     },

@@ -27,7 +27,7 @@ test('member rule violations answer with their reason instead of a server error'
   });
   expect(demoted.status(), await demoted.text()).toBe(409);
   expect((await demoted.json()).error).toBe(
-    'Cannot demote the last admin. Promote another member first.',
+    'Synthetic access household needs an admin. Make someone else an admin first.',
   );
 
   const removed = await ledger.alex.delete(memberPath(ledger.groupA, 'alex'));
@@ -79,7 +79,7 @@ test('a member action from a stale admin page is refused, not announced as done'
   const alerts = await recordAlerts(page);
   await enter(page, ledger.alex, `/groups/${ledger.groupA}/settings`);
   await page.getByRole('button', { name: /^Actions for member Sam/ }).click();
-  const demote = page.getByRole('menuitem', { name: 'Demote to Member' });
+  const demote = page.getByRole('menuitem', { name: 'Make member' });
   await expect(demote).toBeVisible();
 
   // Sam removes Alex's admin role while Alex's page still offers the action.
@@ -90,7 +90,7 @@ test('a member action from a stale admin page is refused, not announced as done'
 
   // The refusal refreshes the page, which now reflects Alex's actual access.
   await expect(page.getByText('Only admins can change this Group’s settings.')).toBeVisible();
-  expect(await alerts()).not.toContain('Demoted to member');
+  expect(await alerts()).not.toContain('Sam Chen is now a member');
   expect(await memberRoles(ledger.sam, ledger.groupA)).toEqual({
     [DEMO_PERSONA_IDS.alex]: 'member',
     [DEMO_PERSONA_IDS.sam]: 'admin',
@@ -105,10 +105,10 @@ test('a refused member action shows the server’s reason', async ({ page, ledge
     route.fulfill({ status: 409, json: { error: reason, status: 409 } }),
   );
   await page.getByRole('button', { name: /^Actions for member Sam/ }).click();
-  await page.getByRole('menuitem', { name: 'Promote to Admin' }).click();
+  await page.getByRole('menuitem', { name: 'Make admin' }).click();
 
   await expect(page.getByRole('alert').filter({ hasText: reason })).toBeVisible();
-  await expect(page.getByText('Promoted to admin')).toHaveCount(0);
+  await expect(page.getByText('Sam Chen is now an admin')).toHaveCount(0);
   expect(await memberRoles(ledger.alex, ledger.groupA)).toEqual({
     [DEMO_PERSONA_IDS.alex]: 'admin',
     [DEMO_PERSONA_IDS.sam]: 'member',
@@ -272,7 +272,7 @@ test('removing a member who still owes says why on the Members card, until it is
   );
   await enter(page, ledger.alex, `/groups/${ledger.groupA}/settings`);
   await page.getByRole('button', { name: /^Actions for member Sam/ }).click();
-  await page.getByRole('menuitem', { name: 'Remove' }).click();
+  await page.getByRole('menuitem', { name: 'Remove from Group' }).click();
 
   const refusal = page.getByRole('alert').filter({
     hasText: /Sam Chen owes .*150\.00 in this Group\. Settle up before removing them\./,
@@ -285,7 +285,9 @@ test('removing a member who still owes says why on the Members card, until it is
   // Longer than the 3-second snackbar it replaced: a sentence like this needs reading time.
   await page.waitForTimeout(4_000);
   await expect(refusal).toBeVisible();
-  await expect(page.getByText('Member removed')).toHaveCount(0);
+  await expect(page.getByText('Sam Chen was removed from Synthetic access household')).toHaveCount(
+    0,
+  );
   await refusal.getByRole('button', { name: 'Close' }).click();
   await expect(refusal).toHaveCount(0);
   expect(await memberRoles(ledger.alex, ledger.groupA)).toEqual({
