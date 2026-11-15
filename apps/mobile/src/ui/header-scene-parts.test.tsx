@@ -160,6 +160,33 @@ it.each([
   act(() => shown.view.unmount());
 });
 
+it('covering the Group holds the float and the clouds where they are; Motion off puts them back at rest', async () => {
+  emitAppState('active');
+  setReduceMotion(false);
+  const shown = await scene('day');
+  const moved = (picked: (config: Record<string, unknown>) => boolean) => [
+    ...new Set(timing.mock.calls.filter(([, config]) => picked(config)).map(([value]) => value)),
+  ];
+  // The float eases; a cloud drifts straight, out to the far side.
+  const floats = moved((config) => config.easing !== Easing.linear) as Animated.Value[];
+  const clouds = moved(
+    (config) => config.easing === Easing.linear && config.toValue !== 1,
+  ) as Animated.Value[];
+  expect(floats).toHaveLength(3);
+  expect(clouds).toHaveLength(beach.sprites.filter((sprite) => sprite.kind === 'cloud').length);
+  const at = (value: Animated.Value) => (value as unknown as { value: number }).value;
+  act(() => {
+    for (const float of floats) float.setValue(0.6);
+    for (const cloud of clouds) cloud.setValue(42);
+  });
+  await act(async () => shown.update({ visible: false }));
+  expect(floats.map(at)).toEqual([0.6, 0.6, 0.6]);
+  expect(clouds.map(at)).toEqual(clouds.map(() => 42));
+  await act(async () => shown.update({ motion: false }));
+  expect([...floats, ...clouds].map(at).every((value) => value === 0)).toBe(true);
+  act(() => shown.view.unmount());
+});
+
 it('night movement (window flicker, lantern, halo) starts no clock and draws nothing by day', async () => {
   emitAppState('active');
   setReduceMotion(false);
