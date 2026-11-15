@@ -355,7 +355,13 @@ export function elementMotion(
     if (merged['animation-duration'])
       animation.seconds = Number.parseFloat(merged['animation-duration']);
     if (merged['animation-delay']) animation.delay = Number.parseFloat(merged['animation-delay']);
-    if (merged['animation-direction'] === 'reverse') animation.reverse = true;
+    const direction = merged['animation-direction'];
+    if (direction === 'reverse') animation.reverse = true;
+    else if (direction !== undefined && direction !== 'normal')
+      throw new Error(`Unsupported Header scene animation direction: ${direction}`);
+    for (const property of ['animation-play-state', 'animation-fill-mode'])
+      if (merged[property] !== undefined)
+        throw new Error(`Unsupported Header scene animation property: ${property}`);
     if (node.durationSeconds !== undefined) animation.seconds = node.durationSeconds;
     if (node.delaySeconds !== undefined) animation.delay = node.delaySeconds;
     if (animation.name === 'none') continue;

@@ -120,6 +120,12 @@ it.each([
   ['step-start', '.vq .a { animation: go 4s step-start infinite; }'],
   ['a timing longhand', '.vq .a { animation: go 4s infinite; animation-timing-function: linear; }'],
   ['a repeat longhand', '.vq .a { animation: go 4s infinite; animation-iteration-count: 2; }'],
+  [
+    'a back-and-forth direction longhand',
+    '.vq .a { animation: go 4s linear infinite; animation-direction: alternate; }',
+  ],
+  ['a play state', '.vq .a { animation: go 4s linear infinite; animation-play-state: paused; }'],
+  ['a fill mode', '.vq .a { animation: go 4s linear infinite; animation-fill-mode: both; }'],
   ['a compound selector', '.vq .a.b { animation: go 4s linear infinite; }'],
   ['a selector ending on a tag', '.vq .a polygon { animation: go 4s linear infinite; }'],
   ['another time of day', '.vq.t-sunset .a { animation: go 4s linear infinite; }'],

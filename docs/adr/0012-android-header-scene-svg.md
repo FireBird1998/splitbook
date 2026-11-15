@@ -45,7 +45,8 @@ at night the window flicker, lantern bob and halo pulse. The rules:
   stops; the app never restates a period or a path. What the generator cannot
   play stops the build with a message: a direction other than `reverse`, a
   finite repeat, `step-start`, `step-end` and steps that jump at the start,
-  timing or repeat written as longhands or inside keyframes, a transform other
+  timing or repeat written as longhands or inside keyframes, a play state or
+  fill mode, a transform other
   than a px slide, a single scale or a turn in degrees, a positive delay, a
   selector that does not end on one class under `.vq` or `.vq.t-night`, and a
   night rule that replaces a day animation.
@@ -59,7 +60,10 @@ at night the window flicker, lantern bob and halo pulse. The rules:
   reach, that art is drawn again, cut to the reach, on top of the part. The
   generator derives this from drawing order; nothing is placed by hand. The glow
   layer has no covers: its lights are see-through and would brighten if drawn
-  twice.
+  twice. A cover
+  is cut from its part's own island only: art of another island drawn later in
+  the same layer (the far layer has several) is not considered. No part reaches
+  another island today.
 - **Turbines.** Eco city's rotors turn inside a slanted group. Android has no
   skew, so the picture holds the rotor unslanted and a holder applies the slant
   as a fixed turn, stretch and turn (its singular values), which Android can
@@ -68,10 +72,14 @@ at night the window flicker, lantern bob and halo pulse. The rules:
   background stop every clock. With Motion off or Remove animations a part rests
   where the web's still scene has it; one that is only seen while it moves (a
   drop, a snowflake, a ripple) is not drawn. A scene that is only paused (off
-  screen, covered, in the background) keeps its parts in the pose its clocks
-  restart from, so nothing jumps when it comes back into view.
+  screen, covered, in the background) can still be seen, under the Group's
+  options for one, so each clock stops where it is and the next run finishes
+  that cycle before looping: no part jumps at the pause or after it. The float
+  and the clouds still return to rest at a pause (up to 3 scene units for an
+  island; a cloud goes back to where it started), as they have since #1208.
 - **Night.** The glow layer and night-only movement are mounted, and their
-  clocks started, only when the scene shows them.
+  clocks started, only when the scene shows them. When the time of day
+  changes, only those clocks start or stop; the rest run on.
 
 The existing reduce-motion watcher wins over the phone's Motion choice. React
 Native reports reduce motion on Android only when the transition animation scale

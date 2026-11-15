@@ -170,10 +170,12 @@ it('night movement (window flicker, lantern, halo) starts no clock and draws not
   timing.mockClear();
   const night = await scene('night');
   const nightClocks = clockPeriods();
+  const byNight = night.pictures();
   act(() => night.view.unmount());
   // The glow layer and its parts exist only when the scene shows them.
-  expect(night.pictures).toBeDefined();
   expect(byDay).toBe(beach.sprites.filter((sprite) => sprite.layer !== 'glow').length);
+  expect(byNight).toBe(byDay + beach.sprites.filter((sprite) => sprite.layer === 'glow').length);
+  expect(byNight).toBeGreaterThan(byDay + 3);
   const glowOnly = [...periodsOf(glow, true)].filter(
     (seconds) => !periodsOf(main, false).has(seconds),
   );
@@ -199,12 +201,17 @@ it('the settings preview moves its parts; with motion unavailable nothing does',
   act(() => off.view.unmount());
 });
 
-it('clocks return to the start when they stop, so a stopped scene is the still scene', async () => {
+it('a pause holds each clock where it is, and the next run finishes that cycle first', async () => {
   const seen: { clocks?: Map<number, Animated.Value> } = {};
-  function Probe({ on }: { on: boolean }) {
-    seen.clocks = useSceneClocks(on, [1.2, 34]);
+  function Probe({ on, periods = [1.2, 34] }: { on: boolean; periods?: number[] }) {
+    seen.clocks = useSceneClocks(on, periods);
     return null;
   }
+  const at = (seconds: number) => (seen.clocks!.get(seconds) as unknown as { value: number }).value;
+  const timings = (seconds: number) =>
+    timing.mock.calls
+      .filter(([value]) => value === seen.clocks!.get(seconds))
+      .map(([, config]) => config.duration);
   emitAppState('active');
   setReduceMotion(false);
   let view!: ReturnType<typeof create>;
@@ -212,8 +219,53 @@ it('clocks return to the start when they stop, so a stopped scene is the still s
     view = create(<Probe on />);
   });
   expect([...seen.clocks!.keys()]).toEqual([1.2, 34]);
+  expect(timings(34)).toEqual([34_000]);
+  expect(loop).toHaveBeenCalledTimes(2);
+  // The native driver has carried the walker 40% of the way round.
   act(() => seen.clocks!.get(34)!.setValue(0.4));
   await act(async () => view.update(<Probe on={false} />));
-  expect((seen.clocks!.get(34) as unknown as { value: number }).value).toBe(0);
+  for (const result of loop.mock.results) expect(result.value.stop).toHaveBeenCalled();
+  // Paused, not reset: a scene still on screen under a sheet does not jump.
+  expect(at(34)).toBe(0.4);
+
+  await act(async () => view.update(<Probe on />));
+  // The remaining 60% of the 34 s cycle, straight, before whole cycles resume.
+  expect(timings(34).at(-1)).toBeCloseTo(20_400);
+  expect(at(34)).toBe(0.4);
+  const rest = timing.mock.results.at(-1)!.value;
+  expect(rest.start).toHaveBeenCalledTimes(1);
+  const loops = loop.mock.calls.length;
+  act(() => rest.start.mock.calls[0][0]({ finished: true }));
+  expect(loop.mock.calls.length).toBe(loops + 1);
+  expect(at(34)).toBe(0);
+  // The clock that was at its start simply looped again.
+  expect(timings(1.2)).toEqual([1200, 1200]);
   act(() => view.unmount());
+});
+
+it('a period that is no longer shown stops its own clock and leaves the others running', async () => {
+  const seen: { clocks?: Map<number, Animated.Value> } = {};
+  function Probe({ periods }: { periods: number[] }) {
+    seen.clocks = useSceneClocks(true, periods);
+    return null;
+  }
+  emitAppState('active');
+  setReduceMotion(false);
+  let view!: ReturnType<typeof create>;
+  await act(async () => {
+    view = create(<Probe periods={[1.2, 7, 34]} />);
+  });
+  const [drops, flicker, walk] = loop.mock.results.map((result) => result.value);
+  // Night ends: the 7 s flicker goes, the drops and the walker carry on untouched.
+  await act(async () => view.update(<Probe periods={[1.2, 34]} />));
+  expect(flicker.stop).toHaveBeenCalledTimes(1);
+  expect(drops.stop).not.toHaveBeenCalled();
+  expect(walk.stop).not.toHaveBeenCalled();
+  expect(loop).toHaveBeenCalledTimes(3);
+  // Night returns: only the flicker starts.
+  await act(async () => view.update(<Probe periods={[1.2, 7, 34]} />));
+  expect(loop).toHaveBeenCalledTimes(4);
+  expect(drops.start).toHaveBeenCalledTimes(1);
+  act(() => view.unmount());
+  for (const result of loop.mock.results) expect(result.value.stop).toHaveBeenCalled();
 });

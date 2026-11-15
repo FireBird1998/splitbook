@@ -97,35 +97,69 @@ export function useCloudDrift(
 /**
  * One 0-to-1 clock per period, running straight on the native driver. Every part with that
  * period reads its place from the same clock, so a scene runs a dozen loops, not one per part.
+ *
+ * A pause stops a clock where it is and the next run carries on from there, because a paused
+ * scene can still be on screen (under the Group's options, say): nothing may jump when it stops
+ * or starts. A clock whose period is no longer wanted stops; the others are left running.
  */
 export function useSceneClocks(enabled: boolean, periods: readonly number[]) {
   const reduced = useReducedMotion();
   const [clocks] = useState(() => new Map<number, Animated.Value>());
+  const [running] = useState(() => new Map<number, Animated.CompositeAnimation>());
   for (const seconds of periods)
     if (!clocks.has(seconds)) clocks.set(seconds, new Animated.Value(0));
   const key = periods.join(',');
   useEffect(() => {
-    if (!enabled || reduced) return;
-    const running = key
-      .split(',')
-      .filter(Boolean)
-      .map((seconds) =>
-        Animated.loop(
-          Animated.timing(clocks.get(Number(seconds))!, {
-            toValue: 1,
-            duration: Number(seconds) * 1000,
-            easing: Easing.linear,
-            useNativeDriver: true,
-            isInteraction: false,
-          }),
-        ),
-      );
-    running.forEach((loop) => loop.start());
-    return () => {
-      running.forEach((loop) => loop.stop());
-      clocks.forEach((clock) => clock.setValue(0));
-    };
-  }, [enabled, reduced, clocks, key]);
+    const wanted = new Set(enabled && !reduced ? key.split(',').filter(Boolean).map(Number) : []);
+    for (const [seconds, animation] of running)
+      if (!wanted.has(seconds)) {
+        running.delete(seconds);
+        animation.stop();
+        // Read where the native driver left it, so the clock holds that place while paused.
+        const clock = clocks.get(seconds)!;
+        clock.stopAnimation((value) => clock.setValue(value));
+      }
+    for (const seconds of wanted) {
+      if (running.has(seconds)) continue;
+      const clock = clocks.get(seconds)!;
+      const run = (toValue: number, duration: number) =>
+        Animated.timing(clock, {
+          toValue,
+          duration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+          isInteraction: false,
+        });
+      const cycle = () => {
+        // The end of one cycle and the start of the next are the same pose.
+        clock.setValue(0);
+        const whole = Animated.loop(run(1, seconds * 1000));
+        running.set(seconds, whole);
+        whole.start();
+      };
+      // Holds the clock's turn while its place is read back from the native driver.
+      const waiting = { start() {}, stop() {}, reset() {} } as Animated.CompositeAnimation;
+      running.set(seconds, waiting);
+      clock.stopAnimation((from) => {
+        // Stopped again, or started by another pass, before the place came back.
+        if (running.get(seconds) !== waiting) return;
+        if (!(from > 0 && from < 1)) return cycle();
+        // The rest of the cycle it was paused in, then whole cycles.
+        const rest = run(1, (1 - from) * seconds * 1000);
+        running.set(seconds, rest);
+        rest.start(({ finished }) => {
+          if (finished && running.get(seconds) === rest) cycle();
+        });
+      });
+    }
+  }, [enabled, reduced, clocks, running, key]);
+  useEffect(
+    () => () => {
+      for (const animation of running.values()) animation.stop();
+      running.clear();
+    },
+    [running],
+  );
   return clocks;
 }
 
