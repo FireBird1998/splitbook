@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory, MemberRole } from '@splitbook/shared/types';
-import { isGroupAdmin, namesInSentence, removalSendable } from '../data/member-roles';
+import { isGroupAdmin, otherAdmins, removalSendable } from '../data/member-roles';
+import { joinGroupNames } from './review-run-copy';
 import { firstName } from '@splitbook/shared/cross-currency-payment';
 import type {
   LeaveGroupState,
@@ -394,53 +395,66 @@ function MemberOptionsSheet({
 }
 
 /**
- * Remove from Group's confirm (#1253): what removing means, named for the member and the Group.
- * A refusal that leaves nothing to send shows in place of the explanation and the button, with
- * the way forward where there is one; the Group changing meanwhile, or a failure, keeps Remove to
- * try again. Not dismissible while the removal is sent.
+ * An admin's member write that asks first, as a sheet over Members (#1253, #1254): its
+ * explanation and its button, or, once a refusal leaves nothing to send, that refusal in place of
+ * both, with the way forward where there is one. A failure keeps the button to try again. Not
+ * dismissible while the write is sent; offline the button is off, with the note.
  */
-function RemoveMemberSheet({
-  group,
-  removal,
+function MemberWriteSheet({
+  visible,
+  title,
+  status,
+  blocked,
+  offline,
+  message,
+  progress,
+  keeping,
+  action,
+  forward,
+  onCancel,
+  children,
 }: {
-  group: MobileGroup;
-  removal: MemberRemovalActions;
+  visible: boolean;
+  title: string;
+  status: 'confirm' | 'sending' | 'refused' | 'error';
+  /** A refusal that leaves nothing to send. */
+  blocked: boolean;
+  offline: boolean;
+  message: string | null;
+  /** What the progress line says while the write is sent. */
+  progress: string;
+  /** What Cancel keeps, for the screen reader: "keeping Priya Shah in this Group". */
+  keeping: string;
+  action: { label: string; destructive?: boolean; onPress: () => void };
+  /** Once blocked: the way forward, such as Go to Balances. */
+  forward?: ReactNode;
+  onCancel: () => void;
+  /** The explanation, hidden once blocked. */
+  children: ReactNode;
 }) {
-  const { state, offline } = removal;
-  const removing = state.status === 'removing';
-  const blocked = state.status === 'refused' && !removalSendable(state);
-  const name = state.name ?? '';
+  const sending = status === 'sending';
+  const close = blocked ? 'Close' : 'Cancel';
   return (
     <BottomSheet
-      visible={state.status !== 'closed' && state.groupId === group.id}
-      title={`Remove ${name} from ${group.name}?`}
+      visible={visible}
+      title={title}
       titleLines={3}
-      doneLabel={blocked ? 'Close' : 'Cancel'}
-      dismissLabel={`${blocked ? 'Close' : 'Cancel'}, keeping ${name} in this Group`}
-      dismissible={!removing}
-      onDone={removal.onCancel}
+      doneLabel={close}
+      dismissLabel={`${close}, ${keeping}`}
+      dismissible={!sending}
+      onDone={onCancel}
       footer={
         blocked ? (
-          state.check === 'balances' ? (
-            <CompactButton label="Go to Balances" variant="tonal" block onPress={removal.onCheck} />
-          ) : state.check === 'web' ? (
-            <CompactButton
-              label="Open on the web"
-              icon="open-outline"
-              variant="tonal"
-              block
-              onPress={removal.onOpenWeb}
-            />
-          ) : null
+          (forward ?? null)
         ) : (
           <>
             <CompactButton
-              label="Remove from Group"
-              destructive
+              label={action.label}
+              destructive={action.destructive}
               block
-              disabled={removing || offline}
+              disabled={sending || offline}
               hint={offline ? memberChangesNeedConnection : undefined}
-              onPress={removal.onConfirm}
+              onPress={action.onPress}
             />
             {offline ? (
               <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
@@ -451,32 +465,76 @@ function RemoveMemberSheet({
         )
       }
     >
-      {removing ? (
+      {sending ? (
         <View style={{ marginHorizontal: -20 }}>
-          <LinearProgress label={`Removing ${name}`} />
+          <LinearProgress label={progress} />
         </View>
       ) : null}
-      {state.message ? (
-        <Banner tone={blocked ? 'warning' : 'error'} message={state.message} />
-      ) : null}
-      {blocked ? null : (
-        <>
-          <CompactText>
-            {firstName(name)} won’t see this Group or its balances any more. The Expenses and
-            payments they’re part of stay for everyone else.
-          </CompactText>
-          <CompactText>They can rejoin with an invite.</CompactText>
-        </>
-      )}
+      {message ? <Banner tone={blocked ? 'warning' : 'error'} message={message} /> : null}
+      {blocked ? null : children}
     </BottomSheet>
+  );
+}
+
+/**
+ * Remove from Group's confirm (#1253): what removing means, named for the member and the Group.
+ * Not settled up offers Balances, and a broken recurring Expense the web; the Group changing
+ * meanwhile keeps Remove to try again.
+ */
+function RemoveMemberSheet({
+  group,
+  removal,
+}: {
+  group: MobileGroup;
+  removal: MemberRemovalActions;
+}) {
+  const { state } = removal;
+  const name = state.name ?? '';
+  return (
+    <MemberWriteSheet
+      visible={state.status !== 'closed' && state.groupId === group.id}
+      title={`Remove ${name} from ${group.name}?`}
+      status={
+        state.status === 'removing'
+          ? 'sending'
+          : state.status === 'closed'
+            ? 'confirm'
+            : state.status
+      }
+      blocked={state.status === 'refused' && !removalSendable(state)}
+      offline={removal.offline}
+      message={state.message}
+      progress={`Removing ${name}`}
+      keeping={`keeping ${name} in this Group`}
+      action={{ label: 'Remove from Group', destructive: true, onPress: removal.onConfirm }}
+      forward={
+        state.check === 'balances' ? (
+          <CompactButton label="Go to Balances" variant="tonal" block onPress={removal.onCheck} />
+        ) : state.check === 'web' ? (
+          <CompactButton
+            label="Open on the web"
+            icon="open-outline"
+            variant="tonal"
+            block
+            onPress={removal.onOpenWeb}
+          />
+        ) : undefined
+      }
+      onCancel={removal.onCancel}
+    >
+      <CompactText>
+        {firstName(name)} won’t see this Group or its balances any more. The Expenses and payments
+        they’re part of stay for everyone else.
+      </CompactText>
+      <CompactText>They can rejoin with an invite.</CompactText>
+    </MemberWriteSheet>
   );
 }
 
 /**
  * Step down to member's confirm (#1254): what it means, and who stays an admin. Not red: nothing
  * is lost, and another admin can undo it. A refusal, such as the last admin after the other one
- * left, shows in place of the explanation and the button; a failure keeps Step down to try again.
- * Not dismissible while it is sent.
+ * left, only closes.
  */
 function StepDownSheet({
   group,
@@ -487,61 +545,37 @@ function StepDownSheet({
   currentUserId: string;
   stepDown: StepDownActions;
 }) {
-  const { state, offline } = stepDown;
-  const stepping = state.status === 'stepping';
-  const refused = state.status === 'refused';
-  const staying = group.members
-    .filter((member) => member.role === 'admin' && member.user.id !== currentUserId)
-    .map((member) => member.user.name);
+  const { state } = stepDown;
+  const staying = otherAdmins(group, currentUserId).map((member) => member.user.name);
   return (
-    <BottomSheet
+    <MemberWriteSheet
       visible={state.status !== 'closed' && state.groupId === group.id}
       title="Step down to member?"
-      doneLabel={refused ? 'Close' : 'Cancel'}
-      dismissLabel={`${refused ? 'Close' : 'Cancel'}, staying an admin`}
-      dismissible={!stepping}
-      onDone={stepDown.onCancel}
-      footer={
-        refused ? null : (
-          <>
-            <CompactButton
-              label="Step down"
-              block
-              disabled={stepping || offline}
-              hint={offline ? memberChangesNeedConnection : undefined}
-              onPress={stepDown.onConfirm}
-            />
-            {offline ? (
-              <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-                {memberChangesNeedConnection}
-              </CompactText>
-            ) : null}
-          </>
-        )
+      status={
+        state.status === 'stepping'
+          ? 'sending'
+          : state.status === 'closed'
+            ? 'confirm'
+            : state.status
       }
+      blocked={state.status === 'refused'}
+      offline={stepDown.offline}
+      message={state.message}
+      progress="Stepping down to member"
+      keeping="staying an admin"
+      action={{ label: 'Step down', onPress: stepDown.onConfirm }}
+      onCancel={stepDown.onCancel}
     >
-      {stepping ? (
-        <View style={{ marginHorizontal: -20 }}>
-          <LinearProgress label="Stepping down to member" />
-        </View>
+      <CompactText>
+        You’ll stay in {group.name} and keep adding Expenses. You won’t be able to change Group
+        settings, Tags or members.
+      </CompactText>
+      {staying.length ? (
+        <CompactText>
+          {joinGroupNames(staying)} {staying.length > 1 ? 'stay admins' : 'stays an admin'}.
+        </CompactText>
       ) : null}
-      {state.message ? (
-        <Banner tone={refused ? 'warning' : 'error'} message={state.message} />
-      ) : null}
-      {refused ? null : (
-        <>
-          <CompactText>
-            You’ll stay in {group.name} and keep adding Expenses. You won’t be able to change Group
-            settings, Tags or members.
-          </CompactText>
-          {staying.length ? (
-            <CompactText>
-              {namesInSentence(staying)} {staying.length > 1 ? 'stay admins' : 'stays an admin'}.
-            </CompactText>
-          ) : null}
-        </>
-      )}
-    </BottomSheet>
+    </MemberWriteSheet>
   );
 }
 
@@ -584,9 +618,7 @@ export function GroupMembers({
 }) {
   const theme = useTheme();
   const isAdmin = isGroupAdmin(group, currentUserId);
-  const anotherAdmin = !!group?.members.some(
-    (member) => member.role === 'admin' && member.user.id !== currentUserId,
-  );
+  const anotherAdmin = !!group && otherAdmins(group, currentUserId).length > 0;
   /** The member whose options are open. */
   const [selected, setSelected] = useState<string | null>(null);
   const selectedMember =

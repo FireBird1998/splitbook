@@ -19,7 +19,7 @@ const rolePath = (userId: string) => `/api/groups/${groupId}/members/${userId}`;
 const roleOf = (f: MembersFixture, userId: string) =>
   f.controller.getSnapshot().detail.data?.members.find(({ user }) => user.id === userId)?.role;
 const patches = (sent: string[]) => sent.filter((call) => call.startsWith('PATCH '));
-const closed = { groupId: null, status: 'closed', code: null, message: null };
+const closed = { groupId: null, status: 'closed', message: null };
 
 describe('Stepping down to member', () => {
   it('asks first, and sends nothing until confirmed', async () => {
@@ -29,7 +29,6 @@ describe('Stepping down to member', () => {
     expect(f.controller.getSnapshot().stepDown).toEqual({
       groupId,
       status: 'confirm',
-      code: null,
       message: null,
     });
     f.controller.cancelStepDown();
@@ -84,7 +83,6 @@ describe('Stepping down to member', () => {
     await f.controller.stepDown();
     expect(f.controller.getSnapshot().stepDown).toMatchObject({
       status: 'refused',
-      code: 'LAST_ADMIN',
       message: words,
     });
     expect(roleOf(f, alexId)).toBe('admin');

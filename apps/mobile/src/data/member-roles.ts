@@ -30,9 +30,18 @@ export function removalSendable({ status, code }: Pick<MemberRemovalState, 'stat
   );
 }
 
-/** People named in a sentence: "Sam Chen", "Priya Shah and Sam Chen", "A, B and C" (#1254). */
-export function namesInSentence(names: string[]) {
-  return names.length > 1
-    ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
-    : (names[0] ?? '');
+/** The Group's other admins, who'd stay if `userId` stepped down (#1254). */
+export function otherAdmins(
+  group: Pick<MobileGroup, 'members'>,
+  userId: string | null | undefined,
+) {
+  return group.members.filter((member) => member.role === 'admin' && member.user.id !== userId);
+}
+
+/** Whether `userId` is an admin with another admin beside them, so they may step down (#1254). */
+export function canStepDown(
+  group: Pick<MobileGroup, 'members'> | null | undefined,
+  userId: string | null | undefined,
+) {
+  return !!group && isGroupAdmin(group, userId) && otherAdmins(group, userId).length > 0;
 }

@@ -433,7 +433,6 @@ export interface MemberRemovalState {
 export interface StepDownState {
   groupId: string | null;
   status: 'closed' | 'confirm' | 'stepping' | 'refused' | 'error';
-  code: string | null;
   message: string | null;
 }
 

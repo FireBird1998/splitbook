@@ -166,12 +166,7 @@ const removalActions = (state: Partial<MemberRemovalState> = {}, offline = false
   onOpenWeb: vi.fn(),
 });
 
-const stepDownClosed: StepDownState = {
-  groupId: null,
-  status: 'closed',
-  code: null,
-  message: null,
-};
+const stepDownClosed: StepDownState = { groupId: null, status: 'closed', message: null };
 const stepDownActions = (state: Partial<StepDownState> = {}, offline = false) => ({
   state: { ...stepDownClosed, ...(state.status ? { groupId: household.id } : {}), ...state },
   offline,
@@ -769,7 +764,7 @@ describe('Stepping down to member (#1254)', () => {
   it('the last admin after a race: the server’s sentence in place of the text and the button', () => {
     const words = 'Maple House needs an admin. Make someone else an admin first.';
     const { root } = page({
-      stepDown: stepDownActions({ status: 'refused', code: 'LAST_ADMIN', message: words }),
+      stepDown: stepDownActions({ status: 'refused', message: words }),
     });
     const sheet = stepDownSheet(root);
     expect(text(one(sheet.findAll((n) => n.props.accessibilityRole === 'alert')))).toBe(words);
