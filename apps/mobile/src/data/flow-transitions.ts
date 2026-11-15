@@ -1,6 +1,6 @@
 import type { ExpenseEditor } from './expense-draft';
 import type { SettlementState } from './settlement';
-import type { GroupCreation, LeaveGroupState } from './types';
+import type { GroupCreation, LeaveGroupState, MemberRoleState } from './types';
 
 type Transitions<S extends string> = Readonly<Record<S, readonly S[]>>;
 
@@ -78,6 +78,16 @@ export const leaveTransitions = {
   refused: ['closed', 'checking', 'leaving'],
   error: ['closed', 'checking', 'leaving'],
 } as const satisfies Transitions<LeaveGroupState['status']>;
+
+/**
+ * An admin's change to a member's role (#1252): sent once, never resent. A failure stays until
+ * another change or leaving the page; changing → idle is also leaving the page while it is sent.
+ */
+export const memberRoleTransitions = {
+  idle: ['changing'],
+  changing: ['idle', 'failed'],
+  failed: ['idle', 'changing'],
+} as const satisfies Transitions<MemberRoleState['status']>;
 
 /** Notification preferences are confirmed only by authenticated backend replies. */
 export const notificationTransitions = {

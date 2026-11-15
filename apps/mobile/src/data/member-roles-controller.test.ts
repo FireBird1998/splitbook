@@ -247,7 +247,8 @@ describe('Changing a member’s role', () => {
 
   it('reports a dropped request and resends nothing; the read after it shows what the server has', async () => {
     const f = await onMembers();
-    const dropped = f.backend.hold('PATCH', rolePath(samId));
+    // Dropped on the way: the server never got it.
+    const dropped = f.backend.hold('PATCH', rolePath(samId), { at: 'request' });
     const second = f.controller.changeMemberRole(samId, 'admin');
     await dropped.arrived;
     dropped.release('lost-reply');

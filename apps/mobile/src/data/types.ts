@@ -382,6 +382,25 @@ export interface LeaveGroupState {
   check: GroupDestination | null;
 }
 
+/**
+ * An admin's change to another member's role on Members and Group details (#1252). Sent at once,
+ * with no confirm: 'changing' while the server is asked, then the Group as the server has it.
+ * 'failed' explains a refusal or a failure above the Group's details; nothing is sent again.
+ */
+export interface MemberRoleState {
+  groupId: string | null;
+  /** The member whose role is being changed, or whose change failed. */
+  userId: string | null;
+  /** Their name when the change began, for the words that follow it. */
+  name: string | null;
+  /** The role being given. */
+  role: 'admin' | 'member' | null;
+  status: 'idle' | 'changing' | 'failed';
+  message: string | null;
+  /** The last change's confirmation, a Snackbar naming the person, until dismissed or left. */
+  done: string | null;
+}
+
 /** Confirms something that ended on Home, such as leaving a Group. Leaving Home ends it. */
 export interface HomeSnackbar {
   message: string;
@@ -526,6 +545,8 @@ export interface MobileSnapshot {
   homeSnackbar: HomeSnackbar | null;
   /** Leave Group, a sheet over Members and Group details. */
   leave: LeaveGroupState;
+  /** An admin's change to a member's role, on Members and Group details. */
+  memberRole: MemberRoleState;
   settlement: SettlementState;
   /** The current Group's unconfirmed payment, kept for an explicit retry from Balances. */
   pendingPayment: PendingPayment | null;

@@ -494,6 +494,12 @@ function Members({ controller }: { controller: MobileController }) {
         onCancel: controller.cancelLeaveGroup,
         onCheck: noop,
       }}
+      roles={{
+        state: snapshot.memberRole,
+        offline: snapshot.offline.active,
+        onChange: noop,
+        onDismissDone: noop,
+      }}
     />
   );
 }

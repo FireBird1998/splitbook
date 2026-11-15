@@ -264,8 +264,11 @@ export function IconTile({
   tone = 'brand',
 }: {
   icon: IconName;
-  /** `neutral` marks something set aside, such as an archived Tag. */
-  tone?: 'brand' | 'info' | 'warning' | 'neutral';
+  /**
+   * `neutral` marks something set aside, such as an archived Tag; `negative` an option that
+   * removes something, such as Remove from Group.
+   */
+  tone?: 'brand' | 'info' | 'warning' | 'neutral' | 'negative';
 }) {
   const theme = useTheme();
   const colors = {
@@ -273,6 +276,7 @@ export function IconTile({
     info: [theme.info.bg, theme.status.info],
     warning: [theme.warning.bg, theme.status.warning],
     neutral: [theme.surfaceMuted, theme.textSecondary],
+    negative: [theme.negative.bg, theme.status.negative],
   }[tone];
   return (
     <View
@@ -293,11 +297,20 @@ export function IconTile({
 }
 
 /** A CompactAvatar's box, in dp. */
-export const avatarSize = { regular: 32, small: 26 } as const;
+export const avatarSize = { regular: 32, small: 26, large: 44 } as const;
 
-export function CompactAvatar({ name, small = false }: { name: string; small?: boolean }) {
+/** A member's initials in a tile: `large` heads a sheet about them, as Member options. */
+export function CompactAvatar({
+  name,
+  small = false,
+  large = false,
+}: {
+  name: string;
+  small?: boolean;
+  large?: boolean;
+}) {
   const theme = useTheme();
-  const size = small ? avatarSize.small : avatarSize.regular;
+  const size = large ? avatarSize.large : small ? avatarSize.small : avatarSize.regular;
   return (
     <View
       accessibilityElementsHidden
@@ -305,7 +318,7 @@ export function CompactAvatar({ name, small = false }: { name: string; small?: b
       style={{
         width: size,
         height: size,
-        borderRadius: small ? 9 : 11,
+        borderRadius: large ? 14 : small ? 9 : 11,
         backgroundColor: theme.brand.bg,
         alignItems: 'center',
         justifyContent: 'center',
@@ -317,7 +330,7 @@ export function CompactAvatar({ name, small = false }: { name: string; small?: b
         tone="brand"
         weight="semibold"
         maxFontSizeMultiplier={1.3}
-        style={{ fontSize: small ? 10.5 : 12 }}
+        style={{ fontSize: large ? 15 : small ? 10.5 : 12 }}
       >
         {initials(name)}
       </CompactText>
@@ -385,6 +398,7 @@ export const ListRow = memo(function ListRow({
   trailingWidth,
   onPress,
   disabled = false,
+  busy,
   accessibilityLabel,
   highlighted = false,
   titleLines = 1,
@@ -414,6 +428,11 @@ export const ListRow = memo(function ListRow({
   onPress?: () => void;
   /** A pressable row that can't be used just now, such as while its list updates. */
   disabled?: boolean;
+  /**
+   * What the row's change is doing while the server is asked, such as "Making admin…" (#1252):
+   * it replaces the meta, dims the row and keeps it from being pressed until it clears.
+   */
+  busy?: string;
   /** Read in full without `onPress` too: the row is then one stop for the screen reader. */
   accessibilityLabel?: string;
   highlighted?: boolean;
@@ -426,12 +445,15 @@ export const ListRow = memo(function ListRow({
   const whole = useLargestText();
   const tap = useTap();
   const firstLine = useLineBox('body');
-  const rowDisabled = disabled || trailingSwitch?.disabled === true;
+  const rowDisabled = disabled || busy !== undefined || trailingSwitch?.disabled === true;
   const rowPress = trailingSwitch
     ? () => {
         if (!rowDisabled) trailingSwitch.onChange(!trailingSwitch.value);
       }
-    : onPress;
+    : onPress && busy !== undefined
+      ? () => undefined
+      : onPress;
+  const shownMeta = busy ?? meta;
   const wraps = column && !trailingSwitch;
   const after = trailingLoading ? <TrailingSkeleton /> : trailing;
   const main = (
@@ -440,9 +462,9 @@ export const ListRow = memo(function ListRow({
         <CompactText weight="semibold" tone={titleTone} numberOfLines={whole ? 0 : titleLines}>
           {title}
         </CompactText>
-        {meta ? (
+        {shownMeta ? (
           <CompactText variant="caption" tone={metaTone} numberOfLines={whole ? 0 : metaLines}>
-            {meta}
+            {shownMeta}
           </CompactText>
         ) : null}
       </View>
@@ -534,26 +556,75 @@ export const ListRow = memo(function ListRow({
     <Pressable
       ref={rowRef}
       accessibilityRole={trailingSwitch ? 'switch' : 'button'}
-      accessibilityLabel={accessibilityLabel ?? [title, meta, note].filter(Boolean).join(', ')}
+      accessibilityLabel={
+        busy !== undefined
+          ? [title, busy].join(', ')
+          : (accessibilityLabel ?? [title, meta, note].filter(Boolean).join(', '))
+      }
       accessibilityState={
         trailingSwitch
           ? { checked: trailingSwitch.value, disabled: rowDisabled }
-          : rowDisabled
-            ? { disabled: true }
-            : undefined
+          : busy !== undefined
+            ? { disabled: true, busy: true }
+            : rowDisabled
+              ? { disabled: true }
+              : undefined
       }
       disabled={rowDisabled}
       {...tap.on(rowPress)}
       style={({ pressed }) => [
         style,
         pressed && !tap.dragged && { backgroundColor: theme.surfaceMuted },
-        rowDisabled && { opacity: 0.45 },
+        rowDisabled && { opacity: busy !== undefined ? 0.55 : 0.45 },
       ]}
     >
       {content}
     </Pressable>
   );
 });
+
+/**
+ * One of a sheet's options (#1252): a tile, a title and a second line that explains it, as in a
+ * member's or a Tag's options. `negative` is an option that removes something, in the error
+ * colour on its tile and title. A disabled option stays readable, with its reason in its line.
+ */
+export function OptionRow({
+  icon,
+  title,
+  meta,
+  tone = 'brand',
+  disabled = false,
+  onPress,
+  accessibilityLabel,
+}: {
+  icon: IconName;
+  title: string;
+  meta: string;
+  tone?: 'brand' | 'neutral' | 'negative';
+  disabled?: boolean;
+  /** Left out for an option that can't be chosen at all, read as plain text. */
+  onPress?: () => void;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <ListRow
+      leading={<IconTile icon={icon} tone={tone} />}
+      title={title}
+      titleTone={tone === 'negative' ? 'negative' : 'primary'}
+      meta={meta}
+      metaLines={3}
+      disabled={disabled}
+      onPress={
+        onPress
+          ? () => {
+              if (!disabled) onPress();
+            }
+          : undefined
+      }
+      accessibilityLabel={accessibilityLabel}
+    />
+  );
+}
 
 /** A wrapped caption's lines end at the row's end, under its amount, as one line does. */
 const captionEnd = { textAlign: 'right' } as const;

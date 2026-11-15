@@ -1628,13 +1628,14 @@ function MembersScreen() {
   const shareInvite = useShareInvite();
   const state = useMobileSnapshot(
     controller,
-    ({ auth, detail, groups, share, offline, leave, toReview }) => ({
+    ({ auth, detail, groups, share, offline, leave, memberRole, toReview }) => ({
       auth,
       detail,
       groups,
       share,
       offline,
       leave,
+      memberRole,
       toReview,
     }),
     sameSelection,
@@ -1661,6 +1662,12 @@ function MembersScreen() {
         onConfirm: () => void controller.leaveGroup(),
         onCancel: controller.cancelLeaveGroup,
         onCheck: () => void controller.showLeaveCheck(),
+      }}
+      roles={{
+        state: state.memberRole,
+        offline: state.offline.active,
+        onChange: (userId, role) => void controller.changeMemberRole(userId, role),
+        onDismissDone: controller.dismissMemberRoleDone,
       }}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
       unavailable={state.detail.message}

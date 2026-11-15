@@ -436,7 +436,7 @@ describe('Buttons and rows', () => {
     );
     const row = one(byRole(root, 'button', 'Priya Shah, Making admin…'));
     expect(row.props.accessibilityState).toEqual({ disabled: true, busy: true });
-    expect(text(row)).toBe('Priya ShahMaking admin…');
+    expect(text(row)).toBe('Priya Shah Making admin…');
     expect(flatten(row.props.style({ pressed: false })).opacity).toBe(0.55);
     press(row);
     expect(open).not.toHaveBeenCalled();
@@ -477,9 +477,13 @@ describe('Buttons and rows', () => {
     );
     press(admin!);
     expect(choose).toHaveBeenCalledOnce();
+    // The title's own colour comes last, over the text's default.
     const titleColour = (node: ReactTestInstance, title: string) =>
-      flatten(one(node.findAll((n) => isHost(n, 'Text') && n.props.children === title)).props.style)
-        .color;
+      node
+        .findAll((n) => isHost(n, 'Text') && text(n) === title)
+        .flatMap((n) => [n.props.style].flat(Infinity))
+        .filter((style) => style && 'color' in style)
+        .at(-1)?.color;
     expect(titleColour(admin!, 'Make admin')).toBe(lightTokens.text);
     expect(titleColour(remove!, 'Remove from Group')).toBe(lightTokens.status.negative);
     const tileColour = (node: ReactTestInstance) =>
