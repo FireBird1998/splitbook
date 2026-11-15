@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { onlineManager } from '@tanstack/query-core';
 import { testPhone, notificationNative } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
 import type { MobileDependencies, MobileTimer } from './types';
@@ -207,6 +208,8 @@ function phone() {
     app,
     posts,
     server,
+    /** The fake Splitbook behind the device route, for holding a request. */
+    backend,
     maintenance: () => posts.filter((post) => post.maintenance === true),
     /** `GET /api/notifications/device` requests so far. */
     gets: () => gets,
@@ -237,6 +240,38 @@ async function optedIn(device = phone(), timer?: MobileTimer) {
 }
 
 describe('a token change keeps an opted-in phone registered (#844)', () => {
+  it('a member’s change made offline stops a maintenance read in flight, so its answer can’t undo the change (#1245)', async () => {
+    const { device, first } = await optedIn();
+    const before = first.controller.getSnapshot().notifications;
+    const read = device.backend.hold('GET', /^\/api\/notifications\/device\?/);
+    first.rotate('private-token-2');
+    await read.arrived;
+    const offline = {
+      ...before,
+      status: 'offline',
+      message: 'Connect to confirm notification settings.',
+    };
+    onlineManager.setOnline(false);
+    try {
+      await first.controller.disableNotifications();
+      expect(first.controller.getSnapshot().notifications).toEqual(offline);
+      read.release();
+      for (let tick = 0; tick < 5; tick++) await settle();
+      expect(first.controller.getSnapshot().notifications).toEqual(offline);
+    } finally {
+      read.release();
+      onlineManager.setOnline(true);
+    }
+    expect(device.maintenance()).toEqual([]);
+    await first.controller.retryNotifications();
+    expect(first.controller.getSnapshot().notifications).toMatchObject({
+      status: 'ready',
+      confirmed: { enabled: false },
+      message: '',
+    });
+    expect(device.registration()).toMatchObject({ enabled: false });
+    expect(device.maintenance()).toEqual([]);
+  });
   it('a native token change re-registers under the existing consent, with no permission prompt', async () => {
     const { device, first } = await optedIn();
     const before = first.controller.getSnapshot().notifications.confirmed;

@@ -88,6 +88,7 @@ export const notificationTransitions = {
   pending: ['ready', 'denied', 'blocked', 'offline', 'error', 'off'],
   // ready → blocked: foreground return to Settings after Android revokes permission.
   ready: ['loading', 'pending', 'offline', 'off', 'blocked'],
+  // No offline → ready: only a new read (loading) or a change (pending) leaves offline (#1245).
   offline: ['loading', 'pending', 'off'],
   denied: ['loading', 'pending', 'offline', 'off'],
   // blocked → ready: foreground return to Settings after permission is granted in Android.
