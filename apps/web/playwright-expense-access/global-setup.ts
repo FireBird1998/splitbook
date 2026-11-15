@@ -243,13 +243,47 @@ export async function startIsolatedApp(
   }
 }
 
+/**
+ * Each test removes the Groups it made when it ends (#1260). A Group still here after the last
+ * test was made some way the ledger fixture does not note, and Groups made like that would pile
+ * up on the shared personas again, so the run fails and names them.
+ */
+async function expectNoGroupsLeft() {
+  const name = process.env.EXPENSE_ACCESS_TEST_DB;
+  if (!name) return;
+  const client = new MongoClient(expenseAccessMongoUri(name), { serverSelectionTimeoutMS: 5_000 });
+  try {
+    const left = await client
+      .db(name)
+      .collection<{ name: string }>('groups')
+      .find({}, { projection: { name: 1 } })
+      .toArray();
+    if (left.length)
+      throw new Error(
+        `${left.length} Groups outlived the tests that made them, for example ${left
+          .slice(0, 5)
+          .map((group) => `"${group.name}" (${group._id})`)
+          .join(', ')}`,
+      );
+  } finally {
+    await client.close();
+  }
+}
+
 export default async function globalSetup() {
   // CI verifies the production server without paying route compilation costs
   // during browser assertions. Local runs keep the faster development startup.
   // The expense-access journeys cover recurring Expenses, which are off by default (#289),
   // and To review's lost-reply recovery (#406), which needs a replica set.
-  return startIsolatedApp('demo', undefined, Boolean(process.env.CI), {
+  const cleanup = await startIsolatedApp('demo', undefined, Boolean(process.env.CI), {
     recurringExpenses: true,
     persistentDrafts: true,
   });
+  return async () => {
+    try {
+      await expectNoGroupsLeft();
+    } finally {
+      await cleanup();
+    }
+  };
 }
