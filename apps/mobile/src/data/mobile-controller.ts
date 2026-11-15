@@ -6485,6 +6485,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   let roleRequest = 0;
   /**
+   * The session whose role change is sent and not yet answered. A second change waits for it,
+   * even on a later visit to Members, whose own state no longer shows the first (#1252 review).
+   */
+  let roleSending: number | null = null;
+  /**
    * Make admin or Make member in a member's options (#1252): an admin changes another member's
    * role, sent at once and only online. Whatever the answer, the Group is read again so the roles
    * shown are the server's, never a guess; a change whose reply was lost counts as made once that
@@ -6506,6 +6511,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       target.role === role ||
       !isGroupAdmin(group, self) ||
       snapshot.memberRole.status === 'changing' ||
+      roleSending === generation ||
       snapshot.offline.active
     )
       return;
@@ -6524,10 +6530,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       /** The Group as the change's answer gave it. */
       changeAnswer: MobileGroup | null = null;
     try {
+      roleSending = owner;
       const value = await request(`/api/groups/${groupId}/members/${userId}`, owner, {
         method: 'PATCH',
         body: { role },
       }).finally(() => {
+        if (roleSending === owner) roleSending = null;
         // Whatever the answer, the Group may have changed.
         if (current(owner)) invalidateReads(`group:${groupId}`);
       });
