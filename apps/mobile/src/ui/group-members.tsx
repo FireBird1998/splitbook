@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory, MemberRole } from '@splitbook/shared/types';
-import { isGroupAdmin, removalSendable } from '../data/member-roles';
+import { isGroupAdmin, namesInSentence, removalSendable } from '../data/member-roles';
 import { firstName } from '@splitbook/shared/cross-currency-payment';
 import type {
   LeaveGroupState,
   MemberRemovalState,
   MemberRoleState,
   MobileGroup,
+  StepDownState,
 } from '../data/types';
 import {
   Banner,
@@ -75,6 +76,16 @@ export interface MemberRemovalActions {
   onCheck: () => void;
   /** Open on the web, where a broken recurring Expense is fixed. */
   onOpenWeb: () => void;
+}
+
+/** Step down to member (#1254): the sheet's state and what each of its buttons does. */
+export interface StepDownActions {
+  state: StepDownState;
+  offline: boolean;
+  /** Step down to member, chosen in your own row's options: asks first. */
+  onReview: () => void;
+  onConfirm: () => void;
+  onCancel: () => void;
 }
 
 /** Leave Group: the sheet's state and what each of its buttons does. */
@@ -188,16 +199,21 @@ function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGro
     (state.status !== 'refused' ||
       ['LEAVE_CONFLICT', 'GROUP_DELETION_CONFIRMATION_REQUIRED'].includes(state.code ?? ''));
   const ready = ['confirm', 'refused', 'error'].includes(state.status);
+  // The last admin makes someone else an admin first, on the list behind the sheet (#1254).
+  const lastAdmin = state.status === 'refused' && state.code === 'LAST_ADMIN';
   return (
     <BottomSheet
       visible={state.status !== 'closed' && state.groupId === group.id}
       title={`Leave ${group.name}?`}
-      doneLabel="Cancel"
-      dismissLabel="Cancel, staying in this Group"
+      doneLabel={lastAdmin ? 'Close' : 'Cancel'}
+      dismissLabel={`${lastAdmin ? 'Close' : 'Cancel'}, staying in this Group`}
       dismissible={!leaving}
       onDone={leave.onCancel}
       footer={
         <>
+          {lastAdmin ? (
+            <CompactButton label="Choose an admin" variant="tonal" block onPress={leave.onCancel} />
+          ) : null}
           {state.check ? (
             <CompactButton
               label={state.check === 'balances' ? 'Go to Balances' : 'Go to Expenses'}
@@ -267,14 +283,20 @@ const roleText: Record<MemberRole, { name: string; making: string }> = {
  */
 function MemberOptionsSheet({
   member,
+  you,
   roles,
   onRemove,
+  onStepDown,
   onClose,
 }: {
   member: Member | null;
+  /** Your own row: only Step down to member, since leaving is Leave Group (#1254). */
+  you: boolean;
   roles: MemberRoleActions;
   /** Remove from Group: closes these options for its confirm (#1253). */
   onRemove: (userId: string) => void;
+  /** Step down to member: closes these options for its confirm (#1254). */
+  onStepDown: () => void;
   onClose: () => void;
 }) {
   const unavailable = roles.offline || roles.state.status === 'changing';
@@ -300,43 +322,60 @@ function MemberOptionsSheet({
           >
             <CompactAvatar name={member.user.name} large />
             <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-              <CompactText weight="semibold">{member.user.name}</CompactText>
+              <CompactText weight="semibold">
+                {you ? `${member.user.name}${SEPARATOR}You` : member.user.name}
+              </CompactText>
               <CompactText variant="caption" tone="secondary">
                 {roleText[member.role].name}
               </CompactText>
             </View>
           </View>
-          <Card>
-            {member.role === 'admin' ? (
+          {you ? (
+            <Card>
               <OptionRow
                 icon="person-outline"
-                title="Make member"
-                meta="Keeps adding Expenses; can’t change the Group"
+                title="Step down to member"
+                meta="You’ll be asked to confirm"
                 disabled={unavailable}
-                onPress={() => choose('member')}
+                onPress={() => {
+                  onClose();
+                  onStepDown();
+                }}
               />
-            ) : (
+            </Card>
+          ) : (
+            <Card>
+              {member.role === 'admin' ? (
+                <OptionRow
+                  icon="person-outline"
+                  title="Make member"
+                  meta="Keeps adding Expenses; can’t change the Group"
+                  disabled={unavailable}
+                  onPress={() => choose('member')}
+                />
+              ) : (
+                <OptionRow
+                  icon="shield-checkmark-outline"
+                  title="Make admin"
+                  meta="Can change Group settings, Tags and members"
+                  disabled={unavailable}
+                  onPress={() => choose('admin')}
+                />
+              )}
+              <Divider inset={66} />
               <OptionRow
-                icon="shield-checkmark-outline"
-                title="Make admin"
-                meta="Can change Group settings, Tags and members"
+                icon="person-remove-outline"
+                tone="negative"
+                title="Remove from Group"
+                meta="You’ll be asked to confirm"
                 disabled={unavailable}
-                onPress={() => choose('admin')}
+                onPress={() => {
+                  onClose();
+                  onRemove(member.user.id);
+                }}
               />
-            )}
-            <Divider inset={66} />
-            <OptionRow
-              icon="person-remove-outline"
-              tone="negative"
-              title="Remove from Group"
-              meta="You’ll be asked to confirm"
-              disabled={unavailable}
-              onPress={() => {
-                onClose();
-                onRemove(member.user.id);
-              }}
-            />
-          </Card>
+            </Card>
+          )}
           {roles.offline ? (
             <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
               {memberChangesNeedConnection}
@@ -427,6 +466,79 @@ function RemoveMemberSheet({
   );
 }
 
+/**
+ * Step down to member's confirm (#1254): what it means, and who stays an admin. Not red: nothing
+ * is lost, and another admin can undo it. A refusal, such as the last admin after the other one
+ * left, shows in place of the explanation and the button; a failure keeps Step down to try again.
+ * Not dismissible while it is sent.
+ */
+function StepDownSheet({
+  group,
+  currentUserId,
+  stepDown,
+}: {
+  group: MobileGroup;
+  currentUserId: string;
+  stepDown: StepDownActions;
+}) {
+  const { state, offline } = stepDown;
+  const stepping = state.status === 'stepping';
+  const refused = state.status === 'refused';
+  const staying = group.members
+    .filter((member) => member.role === 'admin' && member.user.id !== currentUserId)
+    .map((member) => member.user.name);
+  return (
+    <BottomSheet
+      visible={state.status !== 'closed' && state.groupId === group.id}
+      title="Step down to member?"
+      doneLabel={refused ? 'Close' : 'Cancel'}
+      dismissLabel={`${refused ? 'Close' : 'Cancel'}, staying an admin`}
+      dismissible={!stepping}
+      onDone={stepDown.onCancel}
+      footer={
+        refused ? null : (
+          <>
+            <CompactButton
+              label="Step down"
+              block
+              disabled={stepping || offline}
+              hint={offline ? memberChangesNeedConnection : undefined}
+              onPress={stepDown.onConfirm}
+            />
+            {offline ? (
+              <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+                {memberChangesNeedConnection}
+              </CompactText>
+            ) : null}
+          </>
+        )
+      }
+    >
+      {stepping ? (
+        <View style={{ marginHorizontal: -20 }}>
+          <LinearProgress label="Stepping down to member" />
+        </View>
+      ) : null}
+      {state.message ? (
+        <Banner tone={refused ? 'warning' : 'error'} message={state.message} />
+      ) : null}
+      {refused ? null : (
+        <>
+          <CompactText>
+            You’ll stay in {group.name} and keep adding Expenses. You won’t be able to change Group
+            settings, Tags or members.
+          </CompactText>
+          {staying.length ? (
+            <CompactText>
+              {namesInSentence(staying)} {staying.length > 1 ? 'stay admins' : 'stays an admin'}.
+            </CompactText>
+          ) : null}
+        </>
+      )}
+    </BottomSheet>
+  );
+}
+
 /** A change's short note, naming the person; it has no action and goes after a while. */
 function DoneNote({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   const notice = useMemo(() => ({ message }), [message]);
@@ -447,6 +559,7 @@ export function GroupMembers({
   leave,
   roles,
   removal,
+  stepDown,
   notice,
   unavailable,
 }: {
@@ -458,12 +571,16 @@ export function GroupMembers({
   leave: LeaveGroupActions;
   roles: MemberRoleActions;
   removal: MemberRemovalActions;
+  stepDown: StepDownActions;
   /** Shown above the details, e.g. the offline notice. */
   notice?: ReactNode;
   unavailable?: string | null;
 }) {
   const theme = useTheme();
   const isAdmin = isGroupAdmin(group, currentUserId);
+  const anotherAdmin = !!group?.members.some(
+    (member) => member.role === 'admin' && member.user.id !== currentUserId,
+  );
   /** The member whose options are open. */
   const [selected, setSelected] = useState<string | null>(null);
   const selectedMember =
@@ -521,8 +638,9 @@ export function GroupMembers({
               {group.members.map((member, index) => {
                 const you = member.user.id === currentUserId;
                 const role = roleText[member.role].name;
-                // An admin opens another member's options from their row (#1252).
-                const actionable = isAdmin && !you;
+                // An admin opens another member's options from their row (#1252), and their own
+                // while another admin exists, for Step down (#1254).
+                const actionable = isAdmin && (!you || anotherAdmin);
                 const shield =
                   member.role === 'admin' ? (
                     <Icon name="shield-checkmark-outline" size={22} color={theme.brand.main} />
@@ -595,10 +713,15 @@ export function GroupMembers({
       {group && isAdmin ? (
         <MemberOptionsSheet
           member={selectedMember}
+          you={selectedMember?.user.id === currentUserId}
           roles={roles}
           onRemove={removal.onReview}
+          onStepDown={stepDown.onReview}
           onClose={() => setSelected(null)}
         />
+      ) : null}
+      {group ? (
+        <StepDownSheet group={group} currentUserId={currentUserId} stepDown={stepDown} />
       ) : null}
       {group ? <RemoveMemberSheet group={group} removal={removal} /> : null}
       {roles.state.done ? (

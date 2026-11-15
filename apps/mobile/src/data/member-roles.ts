@@ -29,3 +29,10 @@ export function removalSendable({ status, code }: Pick<MemberRemovalState, 'stat
     (status === 'refused' && code === 'REMOVAL_CONFLICT')
   );
 }
+
+/** People named in a sentence: "Sam Chen", "Priya Shah and Sam Chen", "A, B and C" (#1254). */
+export function namesInSentence(names: string[]) {
+  return names.length > 1
+    ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+    : (names[0] ?? '');
+}

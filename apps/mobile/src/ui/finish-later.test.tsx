@@ -510,6 +510,13 @@ function Members({ controller }: { controller: MobileController }) {
         onCheck: noop,
         onOpenWeb: noop,
       }}
+      stepDown={{
+        state: snapshot.stepDown,
+        offline: snapshot.offline.active,
+        onReview: noop,
+        onConfirm: noop,
+        onCancel: noop,
+      }}
     />
   );
 }

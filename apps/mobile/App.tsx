@@ -1625,7 +1625,7 @@ function MembersScreen() {
   const native = useHeldUpdateNativeOverlays();
   const state = useMobileSnapshot(
     controller,
-    ({ auth, detail, groups, share, offline, leave, memberRole, memberRemoval, toReview }) => ({
+    ({
       auth,
       detail,
       groups,
@@ -1634,6 +1634,18 @@ function MembersScreen() {
       leave,
       memberRole,
       memberRemoval,
+      stepDown,
+      toReview,
+    }) => ({
+      auth,
+      detail,
+      groups,
+      share,
+      offline,
+      leave,
+      memberRole,
+      memberRemoval,
+      stepDown,
       toReview,
     }),
     sameSelection,
@@ -1678,6 +1690,13 @@ function MembersScreen() {
         onOpenWeb: () => {
           if (group) openGroupSettingsOnWeb(group.id, native.alert);
         },
+      }}
+      stepDown={{
+        state: state.stepDown,
+        offline: state.offline.active,
+        onReview: controller.reviewStepDown,
+        onConfirm: () => void controller.stepDown(),
+        onCancel: controller.cancelStepDown,
       }}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
       unavailable={state.detail.message}
