@@ -16,7 +16,10 @@ vi.mock('expo-constants', () => ({ default: {} }));
 vi.mock('./widgets-native', () => ({
   createWidgetsStore: () => ({
     read: native.read,
-    setup: async () => ({ kind: 'group', widgetId: 7, accountId: 'alex', groupId: 'goa' }),
+    readSetup: async () => ({
+      setup: { kind: 'group', widgetId: 7, accountId: 'alex', groupId: 'goa' },
+      unreadable: false,
+    }),
   }),
 }));
 vi.mock('react-native-android-widget/src/api/register-widget-task-handler', () => ({

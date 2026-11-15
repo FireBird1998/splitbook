@@ -1,7 +1,8 @@
 import { mobileBuildSettings, widgetKey } from './config';
 import { drawOverview } from './overview-widget-draw';
 import { drawQuick } from './quick-widget-draw';
-import { legacyBalancesSetup } from '@splitbook/shared/widget-setup';
+import { legacyBalancesSetup, widgetSetupRequired } from '@splitbook/shared/widget-setup';
+import { drawWidgetSetup } from './widget-setup-draw';
 import { personWidget } from '@splitbook/shared/person-widget';
 import { drawPerson } from './person-widget-draw';
 import { drawGroup } from './group-widget-draw';
@@ -18,13 +19,17 @@ const widgetStore = createWidgetsStore(widgetKey(mobileBuildSettings, __DEV__));
 
 async function representation(info: WidgetInfo) {
   const record = await widgetStore.read();
+  const { setup, unreadable } = await widgetStore.readSetup(info.widgetId);
+  const size = { width: info.width, height: info.height, pixelRatio: info.screenInfo.density };
+  if (unreadable) {
+    const view = widgetSetupRequired(info.widgetId, size, info.screenInfo.fontScale);
+    return { light: drawWidgetSetup(view, lightTokens), dark: drawWidgetSetup(view, darkTokens) };
+  }
   if (info.widgetName === 'Quick') {
-    const setup = await widgetStore.setup(info.widgetId);
     const selected =
       setup?.kind === 'quick'
         ? setup
         : { kind: 'quick' as const, widgetId: info.widgetId, groupId: null, accountId: '' };
-    const size = { width: info.width, height: info.height, pixelRatio: info.screenInfo.density };
     return {
       light: drawQuick(
         record.copy,
@@ -45,7 +50,6 @@ async function representation(info: WidgetInfo) {
     };
   }
   if (info.widgetName === 'Person') {
-    const setup = await widgetStore.setup(info.widgetId);
     const selected =
       setup?.kind === 'person'
         ? setup
@@ -58,7 +62,7 @@ async function representation(info: WidgetInfo) {
     const view = personWidget(
       record.copy,
       selected,
-      { width: info.width, height: info.height, pixelRatio: info.screenInfo.density },
+      size,
       record.session,
       Date.now(),
       info.screenInfo.fontScale,
@@ -66,7 +70,6 @@ async function representation(info: WidgetInfo) {
     return { light: drawPerson(view, lightTokens), dark: drawPerson(view, darkTokens) };
   }
   if (info.widgetName === 'Group') {
-    const setup = await widgetStore.setup(info.widgetId);
     const selected =
       setup?.kind === 'group'
         ? setup
@@ -76,7 +79,6 @@ async function representation(info: WidgetInfo) {
             groupId: '',
             accountId: '',
           };
-    const size = { width: info.width, height: info.height, pixelRatio: info.screenInfo.density };
     return {
       light: drawGroup(
         record.copy,
@@ -98,8 +100,6 @@ async function representation(info: WidgetInfo) {
       ),
     };
   }
-  const setup = await widgetStore.setup(info.widgetId);
-  const size = { width: info.width, height: info.height, pixelRatio: info.screenInfo.density };
   const view = overviewWidget(
     record.copy,
     {
@@ -153,8 +153,8 @@ export function registerAndroidWidgets() {
     if (!['Balances', 'Group', 'Quick', 'Person'].includes(widgetInfo.widgetName)) return;
     await serializeDraw(async () => {
       if (widgetInfo.widgetName === 'Balances' && widgetAction === 'WIDGET_UPDATE') {
-        const saved = await widgetStore.setup(widgetInfo.widgetId);
-        if (!saved) {
+        const { setup: saved, unreadable } = await widgetStore.readSetup(widgetInfo.widgetId);
+        if (!saved && !unreadable) {
           const placed = (await getWidgetInfo('Balances')).some(
             (info) => info.widgetId === widgetInfo.widgetId,
           );

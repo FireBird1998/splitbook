@@ -7,6 +7,7 @@ const native = vi.hoisted(() => ({
   getWidgetInfo: vi.fn(),
 }));
 vi.mock('./config', () => ({ mobileBuildSettings: {}, widgetKey: () => 'development' }));
+vi.mock('expo-constants', () => ({ default: {} }));
 vi.mock('./person-widget-draw', () => ({ drawPerson: vi.fn() }));
 vi.mock('./group-widget-draw', () => ({ drawGroup: native.drawGroup }));
 vi.mock('./overview-widget-draw', () => ({ drawOverview: vi.fn() }));
@@ -14,7 +15,10 @@ vi.mock('./quick-widget-draw', () => ({ drawQuick: native.drawQuick }));
 vi.mock('./widgets-native', () => ({
   createWidgetsStore: () => ({
     read: async () => ({ copy: null, session: { status: 'signed-out' } }),
-    setup: async () => ({ kind: 'group', widgetId: 7, accountId: 'alex', groupId: 'maple' }),
+    readSetup: async () => ({
+      setup: { kind: 'group', widgetId: 7, accountId: 'alex', groupId: 'maple' },
+      unreadable: false,
+    }),
   }),
 }));
 vi.mock('react-native-android-widget/src/api/register-widget-task-handler', () => ({
