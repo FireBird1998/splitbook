@@ -280,6 +280,25 @@ describe('Changing a member’s role', () => {
     await vi.waitFor(() => expect(f.sent()).toContain(`GET /api/groups/${groupId}`));
   });
 
+  // #1262 (2): answered on a later visit to the same Group's Members, a refusal shows there.
+  it('shows a refusal answered on a later visit to the same Group’s Members', async () => {
+    const f = await onMembers();
+    const words = 'This Group changed. Reload and try again.';
+    // Held before the server answers, so its answer is the refusal set below.
+    const held = f.backend.hold('PATCH', rolePath(samId), { at: 'request' });
+    const changing = f.controller.changeMemberRole(samId, 'admin');
+    await held.arrived;
+    await f.controller.back();
+    f.controller.openMembers();
+    f.answerRole(() => refusal(409, 'GROUP_CHANGED', words));
+    held.release();
+    await changing;
+    expect(f.controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      memberRole: { status: 'failed', userId: samId, message: words },
+    });
+  });
+
   it('a sign-out while a change is sent publishes nothing of it into the next session', async () => {
     const f = await onMembers();
     const held = f.backend.hold('PATCH', rolePath(samId));

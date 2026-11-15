@@ -406,6 +406,35 @@ describe('Changing a member’s role (#1252)', () => {
     expect(props.roles.onChange).not.toHaveBeenCalled();
   });
 
+  // #1262 (3): a change under way on another Group keeps these options waiting, and says why.
+  it('says why the options wait while another Group’s role change is being made', () => {
+    const { root, props } = page({
+      roles: roleActions({
+        status: 'changing',
+        groupId: 'b00000000000000000000009',
+        userId: samId,
+        name: 'Sam Chen',
+        role: 'admin',
+      }),
+    });
+    // Nothing on this Group's list is busy.
+    expect(text(root)).not.toContain('Making admin…');
+    press(root, 'Priya Shah, Admin, options');
+    const sheet = options(root);
+    expect(text(sheet)).toContain('Another role change is still being made.');
+    const action = one(
+      sheet.findAll(
+        (n) =>
+          typeof n.type === 'string' &&
+          n.props.accessibilityRole === 'button' &&
+          String(n.props.accessibilityLabel).startsWith('Make member'),
+      ),
+    );
+    expect(action.props.accessibilityState).toEqual({ disabled: true, busy: false });
+    act(() => action.props.onPress?.());
+    expect(props.roles.onChange).not.toHaveBeenCalled();
+  });
+
   it('explains a failed change above the Group’s details', () => {
     const { root } = page({
       roles: roleActions({

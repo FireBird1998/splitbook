@@ -159,6 +159,91 @@ describe('Stepping down to member', () => {
     expect(patches(f.sent())).toEqual([]);
   });
 
+  // #1262 (1): a step-down made with its reply lost, then tried again into a 403, was made.
+  it('counts a step-down as made once a later read shows you a member, after a lost reply', async () => {
+    const f = await onMembers();
+    let calls = 0;
+    f.answerRole((userId, role) => {
+      calls += 1;
+      if (calls === 1) {
+        // Made, but the reply is lost, and the read after it fails too.
+        f.setRole(userId, role);
+        f.backend.reply(
+          'GET',
+          `/api/groups/${groupId}`,
+          () => Response.json({ error: 'Internal error' }, { status: 500 }),
+          { once: true },
+        );
+        throw new TypeError('Network request failed');
+      }
+      // Tried again: Alex is no longer an admin, so the server refuses.
+      return refusal(403, 'FORBIDDEN', 'Forbidden');
+    });
+    f.controller.reviewStepDown();
+    await f.controller.stepDown();
+    expect(f.controller.getSnapshot().stepDown).toMatchObject({
+      status: 'error',
+      message: 'Couldn’t step down. Try again.',
+    });
+    await f.controller.stepDown();
+    expect(roleOf(f, alexId)).toBe('member');
+    expect(f.controller.getSnapshot()).toMatchObject({
+      stepDown: closed,
+      memberRole: { done: 'You’re now a member of Maple House' },
+    });
+  });
+
+  it('counts it as made when a refresh after a lost reply shows you a member', async () => {
+    const f = await onMembers();
+    f.answerRole((userId, role) => {
+      f.setRole(userId, role);
+      f.backend.reply(
+        'GET',
+        `/api/groups/${groupId}`,
+        () => Response.json({ error: 'Internal error' }, { status: 500 }),
+        { once: true },
+      );
+      throw new TypeError('Network request failed');
+    });
+    f.controller.reviewStepDown();
+    await f.controller.stepDown();
+    expect(f.controller.getSnapshot().stepDown.status).toBe('error');
+    await f.controller.refresh();
+    expect(roleOf(f, alexId)).toBe('member');
+    expect(f.controller.getSnapshot()).toMatchObject({
+      stepDown: closed,
+      memberRole: { done: 'You’re now a member of Maple House' },
+    });
+  });
+
+  // #1262 (4): confirmed, with the read after it failed: the member's view from the answer.
+  it.each([
+    ['answered with a failure', () => Response.json({ error: 'Internal error' }, { status: 500 })],
+    [
+      'lost on the way',
+      () => {
+        throw new TypeError('Network request failed');
+      },
+    ],
+  ])(
+    'shows the member’s view from a confirmed step-down whose read after it was %s',
+    async (_, read) => {
+      const f = await onMembers();
+      f.answerRole((userId, role) => {
+        f.setRole(userId, role);
+        f.backend.reply('GET', `/api/groups/${groupId}`, read, { once: true });
+        return undefined;
+      });
+      f.controller.reviewStepDown();
+      await f.controller.stepDown();
+      expect(roleOf(f, alexId)).toBe('member');
+      expect(f.controller.getSnapshot()).toMatchObject({
+        stepDown: closed,
+        memberRole: { done: 'You’re now a member of Maple House' },
+      });
+    },
+  );
+
   it('leaving the page closes it', async () => {
     const f = await onMembers();
     f.controller.reviewStepDown();

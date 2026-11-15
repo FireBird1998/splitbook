@@ -1537,6 +1537,18 @@ export function createGroupQueries(session: GroupSession) {
       staleTime: STALE,
     }),
     /**
+     * A role change answered with the Group as the server now has it (#1262): it stands verified,
+     * as the Group's read would, and is saved as its row, so what Members shows is the answer
+     * when the read after the change couldn't land.
+     */
+    groupAnswered(groupId: string, value: unknown) {
+      const key = groupQueryKey(groupId);
+      const verified: Envelope = { source: 'network', refreshedAt: Date.now(), value };
+      client.setQueryData(key, verified, { updatedAt: verified.refreshedAt });
+      engine.save(key, { owner: session.generation(), owns: queryOwner(client, key) }, verified);
+      return verified;
+    },
+    /**
      * A currency added to the Group answered with its currencies (#722): they stand verified now,
      * and are saved as the read's row.
      */
