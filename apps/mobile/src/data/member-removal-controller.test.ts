@@ -203,13 +203,11 @@ describe('Removing a member', () => {
 
   it('says a broken recurring Expense is fixed on the web, in Android’s own sentence', async () => {
     const f = await onMembers();
+    // Built from the recurring Expenses the refusal names, not from the server's wording.
     f.answer(() =>
-      refusal(
-        409,
-        'RECURRING_EXPENSE_PROBLEM',
-        'Rent (recurring) still includes Priya Shah. Remove them from it before removing them from the Group.',
-        { recurringExpenses: [{ id: 'e00000000000000000000001', description: 'Rent' }] },
-      ),
+      refusal(409, 'RECURRING_EXPENSE_PROBLEM', 'Rent (recurring) is in the way.', {
+        recurringExpenses: [{ id: 'e00000000000000000000001', description: 'Rent' }],
+      }),
     );
     f.controller.reviewRemoveMember(priyaId);
     await f.controller.removeMember();
@@ -223,20 +221,21 @@ describe('Removing a member', () => {
     f.controller.cancelRemoveMember();
 
     f.answer(() =>
-      refusal(
-        409,
-        'RECURRING_EXPENSE_PROBLEM',
-        'Rent (recurring) and Wi-Fi (recurring) still include Priya Shah. Remove them from each before removing them from the Group.',
-      ),
+      refusal(409, 'RECURRING_EXPENSE_PROBLEM', 'Rent and Wi-Fi are in the way.', {
+        recurringExpenses: [
+          { id: 'e00000000000000000000001', description: 'Rent' },
+          { id: 'e00000000000000000000002', description: 'Wi-Fi' },
+        ],
+      }),
     );
     f.controller.reviewRemoveMember(priyaId);
     await f.controller.removeMember();
     expect(f.controller.getSnapshot().memberRemoval.message).toBe(
       'Rent (recurring) and Wi-Fi (recurring) still include Priya Shah. Remove them from each on the web before removing them from the Group.',
     );
-    // With no words of the server's, Android still says where it is fixed.
+    // Without the Expenses named, Android still says where it is fixed.
     f.controller.cancelRemoveMember();
-    f.answer(() => refusal(409, 'RECURRING_EXPENSE_PROBLEM', ''));
+    f.answer(() => refusal(409, 'RECURRING_EXPENSE_PROBLEM', 'Something is in the way.'));
     f.controller.reviewRemoveMember(priyaId);
     await f.controller.removeMember();
     expect(f.controller.getSnapshot().memberRemoval.message).toBe(
@@ -406,6 +405,33 @@ describe('Removing a member', () => {
       memberRemoval: closed,
       memberRole: { done: null },
     });
+  });
+
+  // MembersRolesNotes: the member removed by someone else while the sheet is open.
+  it('closes the sheet when a read no longer lists the member, saying so', async () => {
+    const f = await onMembers();
+    f.controller.reviewRemoveMember(priyaId);
+    f.removeMember(priyaId);
+    await f.controller.refresh();
+    expect(listed(f)).toEqual([alexId, samId]);
+    expect(f.controller.getSnapshot()).toMatchObject({
+      memberRemoval: closed,
+      memberRole: { done: 'Priya Shah is no longer in this Group' },
+    });
+    expect(removals(f.sent())).toEqual([]);
+  });
+
+  // User story 22: made a member by another admin while the sheet is open.
+  it('closes the sheet when a read shows you are no longer an admin', async () => {
+    const f = await onMembers();
+    f.controller.reviewRemoveMember(priyaId);
+    f.setRole(alexId, 'member');
+    await f.controller.refresh();
+    expect(f.controller.getSnapshot()).toMatchObject({
+      memberRemoval: closed,
+      memberRole: { done: null },
+    });
+    expect(removals(f.sent())).toEqual([]);
   });
 
   it('leaving the page closes the sheet', async () => {
