@@ -865,8 +865,29 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       (next.stepDown.status === 'confirm' || next.stepDown.status === 'error') &&
       readForStepDown?.id === next.stepDown.groupId &&
       !canStepDown(readForStepDown, next.auth.user?.id)
-    )
-      next = { ...next, stepDown: closedStepDown() };
+    ) {
+      const self = next.auth.user?.id;
+      // A step-down whose reply was lost, shown made by this read (#1262).
+      const madeEarlier =
+        !!self &&
+        stepDownLostFor(readForStepDown.id) &&
+        readForStepDown.members.find((member) => member.user.id === self)?.role === 'member';
+      if (madeEarlier) stepDownUnconfirmed = null;
+      next = {
+        ...next,
+        stepDown: closedStepDown(),
+        ...(madeEarlier && self && next.memberRole.status !== 'changing'
+          ? {
+              memberRole: confirmedOnMembers(
+                readForStepDown.id,
+                self,
+                readForStepDown.members.find((member) => member.user.id === self)?.user.name ?? '',
+                `You’re now a member of ${readForStepDown.name}`,
+              ),
+            }
+          : {}),
+      };
+    }
     // A read meanwhile closes a Remove sheet with nothing left to ask (MembersRolesNotes): its
     // member is no longer listed, which a Snackbar says, or, while it waits for you, you're no
     // longer an admin (user story 22).
@@ -6941,6 +6962,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   let stepDownRequest = 0;
   /**
+   * A step-down sent whose reply was lost, not yet confirmed: a later read showing the admin a
+   * member counts it as made, whether a retry's or a refresh's (#1262).
+   */
+  let stepDownUnconfirmed: { groupId: string; owner: number } | null = null;
+  const stepDownLostFor = (groupId: string) =>
+    stepDownUnconfirmed?.groupId === groupId && stepDownUnconfirmed.owner === generation;
+  /**
    * Step down to member on your own row (#1254): offered to an admin while another admin exists,
    * and it asks first, naming who stays an admin.
    */
@@ -7004,7 +7032,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!sent) return;
     const { failure, replyLost, lostAdminIn, shown } = sent;
     const nowMember = shown?.members.find((each) => each.user.id === self)?.role === 'member';
-    if (failure === null || (replyLost && nowMember)) {
+    if (failure === null || ((replyLost || stepDownLostFor(groupId)) && nowMember)) {
+      stepDownUnconfirmed = null;
       // Made: the page is the member's view now. A Snackbar says so where the Group shown agrees.
       publish({
         ...snapshot,
@@ -7022,6 +7051,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       return;
     }
+    if (replyLost) stepDownUnconfirmed = { groupId, owner };
     // A refusal explained, by the server's words or a lost admin role, only closes; anything
     // else can be tried again.
     const explained =
