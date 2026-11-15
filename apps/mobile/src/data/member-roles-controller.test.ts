@@ -376,6 +376,15 @@ describe('Changing a member’s role', () => {
     });
   });
 
+  it('leaving the page clears a failure', async () => {
+    const f = await onMembers();
+    f.answer(() => Response.json({ error: 'Internal error' }, { status: 500 }));
+    await f.controller.changeMemberRole(samId, 'admin');
+    expect(f.controller.getSnapshot().memberRole.status).toBe('failed');
+    await f.controller.back();
+    expect(f.controller.getSnapshot().memberRole).toMatchObject({ status: 'idle', message: null });
+  });
+
   it('a new change clears an earlier failure', async () => {
     const f = await onMembers();
     f.answer(() => Response.json({ error: 'Internal error' }, { status: 500 }));
