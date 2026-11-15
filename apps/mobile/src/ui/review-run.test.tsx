@@ -1186,6 +1186,13 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
             onCheck: noop,
             onOpenWeb: noop,
           }}
+          stepDown={{
+            state: snapshot.stepDown,
+            offline: false,
+            onReview: noop,
+            onConfirm: noop,
+            onCancel: noop,
+          }}
         />
       );
     }

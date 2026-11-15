@@ -1,6 +1,12 @@
 import type { ExpenseEditor } from './expense-draft';
 import type { SettlementState } from './settlement';
-import type { GroupCreation, LeaveGroupState, MemberRemovalState, MemberRoleState } from './types';
+import type {
+  GroupCreation,
+  LeaveGroupState,
+  MemberRemovalState,
+  MemberRoleState,
+  StepDownState,
+} from './types';
 
 type Transitions<S extends string> = Readonly<Record<S, readonly S[]>>;
 
@@ -100,6 +106,18 @@ export const memberRemovalTransitions = {
   refused: ['closed', 'removing'],
   error: ['closed', 'removing'],
 } as const satisfies Transitions<MemberRemovalState['status']>;
+
+/**
+ * Step down to member (#1254): asked first, sent once. Only a failure offers it again; a refusal,
+ * such as the last admin after a race, only closes. Leaving the page closes it.
+ */
+export const stepDownTransitions = {
+  closed: ['confirm'],
+  confirm: ['closed', 'stepping'],
+  stepping: ['closed', 'refused', 'error'],
+  refused: ['closed'],
+  error: ['closed', 'stepping'],
+} as const satisfies Transitions<StepDownState['status']>;
 
 /** Notification preferences are confirmed only by authenticated backend replies. */
 export const notificationTransitions = {

@@ -12,6 +12,7 @@ import type {
   MemberRemovalState,
   MemberRoleState,
   MobileGroup,
+  StepDownState,
 } from '../data/types';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import {
@@ -165,6 +166,15 @@ const removalActions = (state: Partial<MemberRemovalState> = {}, offline = false
   onOpenWeb: vi.fn(),
 });
 
+const stepDownClosed: StepDownState = { groupId: null, status: 'closed', message: null };
+const stepDownActions = (state: Partial<StepDownState> = {}, offline = false) => ({
+  state: { ...stepDownClosed, ...(state.status ? { groupId: household.id } : {}), ...state },
+  offline,
+  onReview: vi.fn(),
+  onConfirm: vi.fn(),
+  onCancel: vi.fn(),
+});
+
 function page(overrides: Partial<Parameters<typeof GroupMembers>[0]> = {}) {
   const props = {
     group: household,
@@ -174,6 +184,7 @@ function page(overrides: Partial<Parameters<typeof GroupMembers>[0]> = {}) {
     leave: leaveActions(),
     roles: roleActions(),
     removal: removalActions(),
+    stepDown: stepDownActions(),
     ...overrides,
   };
   return { root: render(<GroupMembers {...props} />), props };
@@ -309,9 +320,9 @@ describe('Changing a member’s role (#1252)', () => {
     const { root } = page();
     expect(byRole(root, 'button', 'Priya Shah, Admin, options')).toHaveLength(1);
     expect(byRole(root, 'button', 'Sam Chen, Member, options')).toHaveLength(1);
-    // Your own row offers nothing yet: Leave Group is how you leave.
-    expect(spoken(root)).toContain('Alex Rivera, You, Admin');
-    expect(dots(root)).toEqual([0, 1, 1]);
+    // Your own row has dots too while another admin exists, for Step down (#1254).
+    expect(byRole(root, 'button', 'Alex Rivera, You, Admin, options')).toHaveLength(1);
+    expect(dots(root)).toEqual([1, 1, 1]);
     expect(options(root).props.visible).toBe(false);
     press(root, 'Sam Chen, Member, options');
     expect(options(root).props.visible).toBe(true);
@@ -672,6 +683,152 @@ describe('Removing a member (#1253)', () => {
   });
 });
 
+describe('Stepping down to member (#1254)', () => {
+  const stepDownSheet = (root: ReactTestInstance) => sheetTitled(root, 'Step down to member?');
+  const buttonIn = (root: ReactTestInstance, label: string) =>
+    root.findAll(
+      (n) =>
+        typeof n.type === 'string' &&
+        n.props.accessibilityRole === 'button' &&
+        n.props.accessibilityLabel === label,
+    );
+  const onlyAdmin: MobileGroup = {
+    ...household,
+    members: household.members.map((m) =>
+      m.user.id === priyaId ? { ...m, role: 'member' as const } : m,
+    ),
+  };
+
+  it('gives your own row three dots while another admin exists, offering only Step down', () => {
+    const { root, props } = page();
+    press(root, 'Alex Rivera, You, Admin, options');
+    const sheet = options(root);
+    expect(sheet.props.visible).toBe(true);
+    expect(text(sheet)).toContain('Alex Rivera · You');
+    expect(text(sheet)).not.toContain('Make member');
+    expect(text(sheet)).not.toContain('Remove from Group');
+    press(sheet, 'Step down to member, You’ll be asked to confirm');
+    expect(props.stepDown.onReview).toHaveBeenCalledOnce();
+    expect(options(root).props.visible).toBe(false);
+  });
+
+  it('gives the only admin’s own row no dots, and nothing to tap', () => {
+    const { root } = page({ group: onlyAdmin });
+    expect(spoken(root)).toContain('Alex Rivera, You, Admin');
+    expect(byRole(root, 'button', 'Alex Rivera, You, Admin, options')).toEqual([]);
+  });
+
+  it('asks first, naming who stays an admin, with Cancel and a filled Step down', () => {
+    const { root, props } = page({ stepDown: stepDownActions({ status: 'confirm' }) });
+    const sheet = stepDownSheet(root);
+    expect(sheet.props.visible).toBe(true);
+    expect(text(sheet)).toContain(
+      'You’ll stay in Maple House and keep adding Expenses. You won’t be able to change Group settings, Tags or members.',
+    );
+    expect(text(sheet)).toContain('Priya Shah stays an admin.');
+    press(sheet, 'Cancel');
+    expect(props.stepDown.onCancel).toHaveBeenCalledOnce();
+    press(sheet, 'Step down');
+    expect(props.stepDown.onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it('names every other admin who stays', () => {
+    const { root } = page({
+      group: {
+        ...household,
+        members: household.members.map((m) =>
+          m.user.id === samId ? { ...m, role: 'admin' as const } : m,
+        ),
+      },
+      stepDown: stepDownActions({ status: 'confirm' }),
+    });
+    expect(text(stepDownSheet(root))).toContain('Priya Shah and Sam Chen stay admins.');
+  });
+
+  it('shows progress while stepping down, and can’t be dismissed or sent twice', () => {
+    const { root } = page({ stepDown: stepDownActions({ status: 'stepping' }) });
+    const sheet = stepDownSheet(root);
+    expect(
+      sheet.findAll(
+        (n) => typeof n.type === 'string' && n.props.accessibilityRole === 'progressbar',
+      ),
+    ).not.toHaveLength(0);
+    expect(one(buttonIn(sheet, 'Step down')).props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+    expect(one(buttonIn(sheet, 'Cancel')).props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+  });
+
+  it('the last admin after a race: the server’s sentence in place of the text and the button', () => {
+    const words = 'Maple House needs an admin. Make someone else an admin first.';
+    const { root } = page({
+      stepDown: stepDownActions({ status: 'refused', message: words }),
+    });
+    const sheet = stepDownSheet(root);
+    expect(text(one(sheet.findAll((n) => n.props.accessibilityRole === 'alert')))).toBe(words);
+    expect(text(sheet)).not.toContain('You’ll stay in Maple House');
+    expect(buttonIn(sheet, 'Step down')).toEqual([]);
+    expect(buttonIn(sheet, 'Close')).toHaveLength(1);
+  });
+
+  it('a failure keeps Step down, to try again', () => {
+    const { root } = page({
+      stepDown: stepDownActions({ status: 'error', message: 'Couldn’t step down. Try again.' }),
+    });
+    const sheet = stepDownSheet(root);
+    expect(text(one(sheet.findAll((n) => n.props.accessibilityRole === 'alert')))).toBe(
+      'Couldn’t step down. Try again.',
+    );
+    expect(one(buttonIn(sheet, 'Step down')).props.accessibilityState).toMatchObject({
+      disabled: false,
+    });
+  });
+
+  it('closes your own options once no other admin is left', () => {
+    const { root, props } = page();
+    press(root, 'Alex Rivera, You, Admin, options');
+    expect(options(root).props.visible).toBe(true);
+    act(() => renderer!.update(<GroupMembers {...props} group={onlyAdmin} />));
+    expect(options(root).props.visible).toBe(false);
+    expect(props.stepDown.onReview).not.toHaveBeenCalled();
+  });
+
+  // Board MembersRolesDone 16: the screen becomes the member's view.
+  it('after stepping down: your own row plain, the member’s line, and the Snackbar', () => {
+    const { root } = page({
+      group: {
+        ...household,
+        members: household.members.map((m) =>
+          m.user.id === you ? { ...m, role: 'member' as const } : m,
+        ),
+      },
+      roles: roleActions({ done: 'You’re now a member of Maple House' }),
+    });
+    expect(spoken(root)).toContain('Alex Rivera, You, Member');
+    expect(
+      byRole(root, 'button').filter((b) => /options$/.test(b.props.accessibilityLabel)),
+    ).toEqual([]);
+    expect(text(root)).toContain('Only admins can change roles or remove members.');
+    expect(text(one(hosts(root, (p) => p.accessibilityLiveRegion === 'polite')))).toBe(
+      'You’re now a member of Maple House',
+    );
+  });
+
+  it('offline: Step down is off, with the note', () => {
+    const { root } = page({
+      roles: roleActions({}, true),
+      stepDown: stepDownActions({ status: 'confirm' }, true),
+    });
+    const sheet = stepDownSheet(root);
+    expect(one(buttonIn(sheet, 'Step down')).props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+    expect(text(sheet)).toContain(memberChangesNeedConnection);
+  });
+});
+
 describe('Leave Group', () => {
   it('is the last action on the page, a destructive one that opens the sheet', () => {
     const { root, props } = page();
@@ -754,17 +911,26 @@ describe('Leave Group', () => {
     expect(props.leave.onCheck).toHaveBeenCalledOnce();
   });
 
-  it('only closes when the member is the last admin', () => {
+  // #1254 (MembersRolesOffline 24): Android makes admins now, so the last admin chooses one here.
+  it('offers the last admin Choose an admin, which closes the sheet onto the list', () => {
     const message = 'Make someone else an admin before you leave.';
-    const { root } = page({
+    const { root, props } = page({
       leave: leaveActions({ status: 'refused', code: 'LAST_ADMIN', message }),
     });
     const modal = sheet(root);
-    expect(text(one(byRole(modal, 'alert')))).toBe(message);
+    expect(text(one(byRole(modal, 'warning').concat(byRole(modal, 'alert'))))).toBe(message);
+    expect(text(modal)).not.toContain('web');
     expect(byRole(modal, 'button').map((button) => button.props.accessibilityLabel)).toEqual([
-      'Cancel, staying in this Group',
-      'Cancel',
+      'Close, staying in this Group',
+      'Close',
+      'Choose an admin',
     ]);
+    press(modal, 'Choose an admin');
+    expect(props.leave.onCancel).toHaveBeenCalledOnce();
+    // What the admin must do first, in the warning tone, with nothing else (board 24).
+    expect(text(modal)).not.toContain(leaveExplanation);
+    const alert = one(byRole(modal, 'alert'));
+    expect(flatten(alert.props.style).backgroundColor).toBe(getSemanticTokens('light').warning.bg);
   });
 
   it('names a recurring Expense that still includes the member, and only closes (#257)', () => {
@@ -846,6 +1012,7 @@ describe.each(['light', 'dark'] as const)('Members at large text in %s (#639)', 
             leave={leaveActions()}
             roles={roleActions()}
             removal={removalActions()}
+            stepDown={stepDownActions()}
           />
         </ThemeContext.Provider>,
       );
@@ -874,6 +1041,7 @@ describe.each(['light', 'dark'] as const)('Members’ details at large text in %
             leave={leaveActions()}
             roles={roleActions()}
             removal={removalActions()}
+            stepDown={stepDownActions()}
           />
         </ThemeContext.Provider>,
       );
@@ -931,6 +1099,7 @@ describe.each(['light', 'dark'] as const)('Member roles at large text in %s (#12
           role: 'member',
         }),
         removal: removalActions(),
+        stepDown: stepDownActions(),
       };
       const failed = roleActions({
         status: 'failed',
@@ -1004,6 +1173,7 @@ describe.each(['light', 'dark'] as const)('Member roles at large text in %s (#12
                 message: 'Sam Chen owes ₹300.00 in this Group. Settle up before removing them.',
                 check: 'balances',
               })}
+              stepDown={stepDownActions()}
             />
           </ThemeContext.Provider>,
         );

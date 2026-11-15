@@ -424,6 +424,18 @@ export interface MemberRemovalState {
   check: 'balances' | 'web' | null;
 }
 
+/**
+ * Step down to member, a sheet over Members and Group details (#1254): an admin's own role change,
+ * offered while another admin exists. It asks first; 'stepping' while the server is asked;
+ * 'refused' is the server's answer, such as the last admin after a race; 'error' any other
+ * failure, after which it can be tried again. Nothing is queued or sent again on its own.
+ */
+export interface StepDownState {
+  groupId: string | null;
+  status: 'closed' | 'confirm' | 'stepping' | 'refused' | 'error';
+  message: string | null;
+}
+
 /** Confirms something that ended on Home, such as leaving a Group. Leaving Home ends it. */
 export interface HomeSnackbar {
   message: string;
@@ -575,6 +587,8 @@ export interface MobileSnapshot {
   memberRole: MemberRoleState;
   /** Remove from Group, a sheet over Members and Group details. */
   memberRemoval: MemberRemovalState;
+  /** Step down to member, a sheet over Members and Group details. */
+  stepDown: StepDownState;
   settlement: SettlementState;
   /** The current Group's unconfirmed payment, kept for an explicit retry from Balances. */
   pendingPayment: PendingPayment | null;

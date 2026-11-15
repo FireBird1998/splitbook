@@ -215,7 +215,8 @@ describe('Removing a member', () => {
     expect(listed(f)).toEqual([alexId, samId]);
   });
 
-  it('confirms a removal whose reply was lost once the Group no longer lists them', async () => {
+  // #1253 review: a lost reply can't say who removed her; she may have left, or another admin.
+  it('says a member is no longer in the Group once a removal whose reply was lost no longer lists them', async () => {
     const f = await onMembers();
     f.answerRemoval((userId) => {
       f.removeMember(userId);
@@ -226,8 +227,61 @@ describe('Removing a member', () => {
     expect(listed(f)).toEqual([alexId, samId]);
     expect(f.controller.getSnapshot()).toMatchObject({
       memberRemoval: closed,
-      memberRole: { done: 'Priya Shah was removed from Maple House' },
+      memberRole: { done: 'Priya Shah is no longer in this Group' },
     });
+  });
+
+  // #1253 review: whatever the refusal, a read that shows you a member explains it; nothing
+  // offers a Remove that would do nothing.
+  it('says you are no longer an admin when the read after any refusal shows it, with no Remove', async () => {
+    const f = await onMembers();
+    f.answerRemoval(() => {
+      f.setRole(alexId, 'member');
+      return refusal(
+        409,
+        'REMOVAL_CONFLICT',
+        'This Group changed while you were removing this member. Try again.',
+      );
+    });
+    f.controller.reviewRemoveMember(priyaId);
+    await f.controller.removeMember();
+    expect(f.controller.getSnapshot().memberRemoval).toMatchObject({
+      status: 'refused',
+      code: 'FORBIDDEN',
+      message: 'You’re no longer an admin of Maple House.',
+    });
+    await f.controller.removeMember();
+    expect(removals(f.sent())).toHaveLength(1);
+  });
+
+  it('keeps the sheet saying you are no longer an admin after a lost reply', async () => {
+    const f = await onMembers();
+    f.answerRemoval(() => {
+      f.setRole(alexId, 'member');
+      throw new TypeError('Network request failed');
+    });
+    f.controller.reviewRemoveMember(priyaId);
+    await f.controller.removeMember();
+    expect(f.controller.getSnapshot().memberRemoval).toMatchObject({
+      status: 'refused',
+      code: 'FORBIDDEN',
+      message: 'You’re no longer an admin of Maple House.',
+    });
+  });
+
+  it('starts no removal while a role change from an earlier visit is unanswered', async () => {
+    const f = await onMembers();
+    const held = f.backend.hold('PATCH', `/api/groups/${groupId}/members/${samId}`);
+    const changing = f.controller.changeMemberRole(samId, 'admin');
+    await held.arrived;
+    await f.controller.back();
+    f.controller.openMembers();
+    f.controller.reviewRemoveMember(priyaId);
+    expect(f.controller.getSnapshot().memberRemoval).toEqual(closed);
+    held.release();
+    await changing;
+    f.controller.reviewRemoveMember(priyaId);
+    expect(f.controller.getSnapshot().memberRemoval.status).toBe('confirm');
   });
 
   it('treats losing the admin role elsewhere as a refusal: the Group stays, as the member’s view', async () => {

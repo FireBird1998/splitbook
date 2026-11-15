@@ -7,6 +7,7 @@ import {
   leaveTransitions,
   memberRoleTransitions,
   memberRemovalTransitions,
+  stepDownTransitions,
   notificationTransitions,
   notificationOpeningTransitions,
   headerSettingsTransitions,
@@ -19,6 +20,7 @@ const tables = {
   leave: leaveTransitions,
   memberRole: memberRoleTransitions,
   memberRemoval: memberRemovalTransitions,
+  stepDown: stepDownTransitions,
   notifications: notificationTransitions,
   notificationOpening: notificationOpeningTransitions,
 };
@@ -31,7 +33,8 @@ export function monitorFlows(controller: MobileController) {
   let saves = 0,
     leaves = 0,
     roleChanges = 0,
-    removals = 0;
+    removals = 0,
+    stepDowns = 0;
   const violations: string[] = [];
   for (const command of [
     'saveExpense',
@@ -72,6 +75,15 @@ export function monitorFlows(controller: MobileController) {
       removals--;
     }
   };
+  const stepDown = controller.stepDown;
+  controller.stepDown = async () => {
+    stepDowns++;
+    try {
+      return await stepDown();
+    } finally {
+      stepDowns--;
+    }
+  };
   const saveHeader = controller.saveHeader;
   controller.saveHeader = async () => {
     saves++;
@@ -90,6 +102,7 @@ export function monitorFlows(controller: MobileController) {
       'leave',
       'memberRole',
       'memberRemoval',
+      'stepDown',
       'notifications',
       'notificationOpening',
     ] as const) {
@@ -105,6 +118,7 @@ export function monitorFlows(controller: MobileController) {
         violations.push('memberRole: changing without changeMemberRole');
       if (to === 'removing' && !removals)
         violations.push('memberRemoval: removing without removeMember');
+      if (to === 'stepping' && !stepDowns) violations.push('stepDown: stepping without stepDown');
     }
     const headerFrom = previous.headerSettings?.status,
       headerTo = next.headerSettings?.status;

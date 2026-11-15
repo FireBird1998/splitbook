@@ -29,3 +29,19 @@ export function removalSendable({ status, code }: Pick<MemberRemovalState, 'stat
     (status === 'refused' && code === 'REMOVAL_CONFLICT')
   );
 }
+
+/** The Group's other admins, who'd stay if `userId` stepped down (#1254). */
+export function otherAdmins(
+  group: Pick<MobileGroup, 'members'>,
+  userId: string | null | undefined,
+) {
+  return group.members.filter((member) => member.role === 'admin' && member.user.id !== userId);
+}
+
+/** Whether `userId` is an admin with another admin beside them, so they may step down (#1254). */
+export function canStepDown(
+  group: Pick<MobileGroup, 'members'> | null | undefined,
+  userId: string | null | undefined,
+) {
+  return !!group && isGroupAdmin(group, userId) && otherAdmins(group, userId).length > 0;
+}

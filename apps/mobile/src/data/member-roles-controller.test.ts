@@ -314,6 +314,20 @@ describe('Changing a member’s role', () => {
     });
   });
 
+  // #1253 review: a refusal whose read shows you a member is explained as that, whatever its code.
+  it('says you are no longer an admin when the read after any refusal shows it', async () => {
+    const f = await onMembers();
+    f.answerRole(() => {
+      f.setRole(alexId, 'member');
+      return refusal(409, 'GROUP_CHANGED', 'This Group changed. Reload and try again.');
+    });
+    await f.controller.changeMemberRole(samId, 'admin');
+    expect(f.controller.getSnapshot().memberRole).toMatchObject({
+      status: 'failed',
+      message: 'You’re no longer an admin of Maple House.',
+    });
+  });
+
   it('says nothing when the read after a change shows another role: the list speaks', async () => {
     const f = await onMembers();
     f.answerRole((userId, role) => {
@@ -342,10 +356,17 @@ describe('Changing a member’s role', () => {
     await held.arrived;
     await f.controller.back();
     f.controller.openMembers();
+    // The later visit shows the change still being made: its row busy, the options waiting.
+    expect(f.controller.getSnapshot().memberRole).toMatchObject({
+      status: 'changing',
+      userId: samId,
+      role: 'admin',
+    });
     await f.controller.changeMemberRole(priyaId, 'admin');
     expect(f.roleBodies).toEqual([{ role: 'admin' }]);
     held.release();
     await first;
+    expect(f.controller.getSnapshot().memberRole.status).toBe('idle');
     await f.controller.changeMemberRole(priyaId, 'admin');
     expect(f.roleBodies).toEqual([{ role: 'admin' }, { role: 'admin' }]);
   });

@@ -25,7 +25,7 @@ import {
 } from '@splitbook/shared/api-paths';
 import { groupCurrencySettingsSchema } from '@splitbook/shared/group-currency-settings';
 import { emptyTagManager, tagManager } from './tag-manager';
-import { isGroupAdmin, removalSendable, roleComplement } from './member-roles';
+import { canStepDown, isGroupAdmin, removalSendable, roleComplement } from './member-roles';
 import { recurringNames } from '@splitbook/shared/refusals';
 import { z } from 'zod';
 import type { MemberRole } from '@splitbook/shared/types';
@@ -218,6 +218,7 @@ import type {
   MemberRemovalState,
   MemberRoleState,
   MobileGroup,
+  StepDownState,
   MobileConfig,
   MobileDependencies,
   MobileSnapshot,
@@ -379,6 +380,22 @@ const confirmedOnMembers = (
   name: string,
   done: string,
 ): MemberRoleState => ({ ...idleMemberRole(), groupId, userId, name, done });
+/** The Step down sheet closed: nothing asked or under way (#1254). */
+function closedStepDown(): StepDownState {
+  return { groupId: null, status: 'closed', message: null };
+}
+/**
+ * A member write's refusal in words (#1252–#1254): a read showing the admin a member explains it,
+ * whatever its code; otherwise the server's words for a 409, or `fallback`.
+ */
+function writeRefusalWords(failure: unknown, lostAdminIn: string | null, fallback: string) {
+  if (lostAdminIn) return noLongerAdmin(lostAdminIn);
+  const server =
+    failure instanceof RequestError && failure.status === 409
+      ? failure.serverMessage?.trim()
+      : null;
+  return server || fallback;
+}
 /** The Remove sheet closed: nothing asked or under way (#1253). */
 function closedRemoval(): MemberRemovalState {
   return {
@@ -409,6 +426,14 @@ function removalRefusal(
   name: string,
   lostAdminIn: string | null,
 ): Pick<MemberRemovalState, 'status' | 'code' | 'message' | 'check'> {
+  // A read showing the admin a member explains it, whatever the refusal (#1253 review).
+  if (lostAdminIn)
+    return {
+      status: 'refused',
+      code: 'FORBIDDEN',
+      message: noLongerAdmin(lostAdminIn),
+      check: null,
+    };
   const refused = failure instanceof RequestError && failure.status === 409 ? failure : null;
   const code = refused?.code ?? null,
     server = refused?.serverMessage?.trim() || null;
@@ -427,17 +452,10 @@ function removalRefusal(
       check: 'web',
     };
   if (code && server) return { status: 'refused', code, message: server, check: null };
-  if (lostAdminIn)
-    return {
-      status: 'refused',
-      code: 'FORBIDDEN',
-      message: noLongerAdmin(lostAdminIn),
-      check: null,
-    };
   return {
     status: 'error',
     code: null,
-    message: `Couldn’t remove ${name}. Try again.`,
+    message: writeRefusalWords(failure, null, `Couldn’t remove ${name}. Try again.`),
     check: null,
   };
 }
@@ -465,9 +483,8 @@ function idleMemberRole(): MemberRoleState {
 /** The server's refusals to let a member leave, with fallbacks for its own words. */
 const leaveRefusals: Record<string, string> = {
   OPEN_BALANCE: 'Settle up before you leave this Group.',
-  // Android can't change roles, as Members says (#877).
-  LAST_ADMIN:
-    'Make someone else an admin before you leave. Changing roles is done on the web for now.',
+  // Android makes admins since #1252: Choose an admin shows the list (#1254).
+  LAST_ADMIN: 'Make someone else an admin before you leave.',
   LEAVE_CONFLICT: 'This Group changed while you were leaving. Try again.',
   // #257: the server's words name the recurring Expense, in its problem state, that includes them.
   RECURRING_EXPENSE_PROBLEM:
@@ -479,12 +496,12 @@ const leaveRefusals: Record<string, string> = {
 };
 /**
  * A refusal in the server's words, except where they send the member to what Android can't do
- * (#877): the last admin is told roles are changed on the web, and an admin whose recurring
- * Expense still includes them is told to remove themselves from it there.
+ * (#877): an admin whose recurring Expense still includes them is told to remove themselves from
+ * it on the web. The last admin reads the server's words since #1254, as Android makes admins.
  */
 function leaveRefusalWords(code: string, server: string | null): string {
   const words = server?.trim();
-  if (code === 'LAST_ADMIN' || !words) return leaveRefusals[code];
+  if (!words) return leaveRefusals[code];
   return code === 'RECURRING_EXPENSE_PROBLEM'
     ? words.replace(
         /Remove yourself from (it|them), then leave\.$/,
@@ -536,6 +553,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     leave: closedLeave(),
     memberRole: idleMemberRole(),
     memberRemoval: closedRemoval(),
+    stepDown: closedStepDown(),
     settlement: emptySettlement(),
     pendingPayment: null,
     keptDraft: null,
@@ -823,8 +841,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (next.leave.status !== 'closed' && next.screen !== 'members')
       next = { ...next, leave: closedLeave() };
     // A role change's progress, failure and Snackbar belong to the Members page they were made on.
+    // A change still being made stays shown, so a later visit sees it under way (#1253 review).
     if (
-      (next.memberRole.status !== 'idle' || next.memberRole.done !== null) &&
+      (next.memberRole.status === 'failed' || next.memberRole.done !== null) &&
       (next.screen !== 'members' || next.detail.id !== next.memberRole.groupId)
     )
       next = { ...next, memberRole: idleMemberRole() };
@@ -834,6 +853,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       (next.screen !== 'members' || next.detail.id !== next.memberRemoval.groupId)
     )
       next = { ...next, memberRemoval: closedRemoval() };
+    // And Step down's, which a read also closes while it waits for the admin once there is
+    // nothing left to ask: they're no longer an admin, or no other admin would stay (#1254).
+    if (
+      next.stepDown.status !== 'closed' &&
+      (next.screen !== 'members' || next.detail.id !== next.stepDown.groupId)
+    )
+      next = { ...next, stepDown: closedStepDown() };
+    const readForStepDown = next.detail.data;
+    if (
+      (next.stepDown.status === 'confirm' || next.stepDown.status === 'error') &&
+      readForStepDown?.id === next.stepDown.groupId &&
+      !canStepDown(readForStepDown, next.auth.user?.id)
+    )
+      next = { ...next, stepDown: closedStepDown() };
     // A read meanwhile closes a Remove sheet with nothing left to ask (MembersRolesNotes): its
     // member is no longer listed, which a Snackbar says, or, while it waits for you, you're no
     // longer an admin (user story 22).
@@ -6290,7 +6323,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (
       route.screen !== 'members' ||
       snapshot.leave.status === 'leaving' ||
-      snapshot.memberRemoval.status === 'removing'
+      snapshot.memberRemoval.status === 'removing' ||
+      snapshot.stepDown.status === 'stepping'
     )
       return;
     if (lostGroups.has(route.groupId)) {
@@ -6629,12 +6663,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       reread,
       /** The server gave no answer: a reply lost on the way back, which the read can confirm. */
       replyLost: failure instanceof RequestError && failure.networkFailure,
-      /** The Group's name, when the write was refused and the read shows the admin a member now. */
+      /**
+       * The Group's name, when the write wasn't made and the read shows the admin a member now:
+       * that explains it, whatever the refusal's code (a 403, or a 409 when the role was lost
+       * between the server's checks), or a lost reply (#1253 review).
+       */
       lostAdminIn:
-        failure instanceof RequestError &&
-        failure.status === 403 &&
-        reread &&
-        !isGroupAdmin(reread, snapshot.auth.user?.id)
+        failure !== null && reread && !isGroupAdmin(reread, snapshot.auth.user?.id)
           ? reread.name
           : null,
     };
@@ -6674,34 +6709,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ...snapshot,
       memberRole: { groupId, userId, name, role, status: 'changing', message: null, done: null },
     });
-    roleSending = owner;
-    const sent = await sendMemberWrite(
-      {
-        groupId,
-        userId,
-        options: { method: 'PATCH', body: { role } },
-        outdated: [`group:${groupId}`],
-      },
-      owner,
-      onPage,
-      () => publish({ ...snapshot, memberRole: idleMemberRole() }),
-    ).finally(() => {
-      if (roleSending === owner) roleSending = null;
-    });
-    if (!sent) return;
-    const { failure, reread, replyLost, lostAdminIn } = sent;
-    /** The Group as the change's answer gave it. */
-    let changeAnswer: MobileGroup | null = null;
-    if (failure === null)
-      try {
-        changeAnswer = parseGroup(sent.answer);
-      } catch {
-        // The change was made; the read that followed shows it, or the next one will.
-      }
-    if (!reread && changeAnswer)
-      publish({ ...snapshot, detail: { ...snapshot.detail, data: changeAnswer } });
-    /** The Group as the page shows it now: read again, or as the change's own answer gave it. */
-    const shown = reread ?? changeAnswer;
+    const sent = await sendRoleWrite({ groupId, userId, role }, owner, onPage, () =>
+      publish({ ...snapshot, memberRole: idleMemberRole() }),
+    );
+    if (!sent) {
+      // Answered on another page, or a later visit: the change is no longer under way.
+      if (current(owner) && attempt === roleRequest && latest().memberRole.status === 'changing')
+        publish({ ...snapshot, memberRole: idleMemberRole() });
+      return;
+    }
+    const { failure, reread, replyLost, lostAdminIn, shown } = sent;
     const changed = shown?.members.find((member) => member.user.id === userId);
     const settled = { groupId, userId, name, role, status: 'idle' as const, message: null };
     if (reread && !changed) {
@@ -6721,16 +6738,51 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       return;
     }
-    const server =
-      failure instanceof RequestError && failure.status === 409
-        ? failure.serverMessage?.trim()
-        : null;
-    const message =
-      server ||
-      (lostAdminIn
-        ? noLongerAdmin(lostAdminIn)
-        : `Couldn’t make ${name} ${roleComplement[role]}. Try again.`);
+    const message = writeRefusalWords(
+      failure,
+      lostAdminIn,
+      `Couldn’t make ${name} ${roleComplement[role]}. Try again.`,
+    );
     publish({ ...snapshot, memberRole: { ...settled, status: 'failed', message, done: null } });
+  };
+  /**
+   * Sends a role change: an admin's for another member (#1252), or their own step down (#1254).
+   * One per session at a time, whatever page shows meanwhile (#1252 review). `shown` is the
+   * Group the page shows after it: the read after it, or the change's own answer when that read
+   * couldn't land.
+   */
+  const sendRoleWrite = async (
+    change: { groupId: string; userId: string; role: MemberRole },
+    owner: number,
+    onPage: () => boolean,
+    denied: () => void,
+  ) => {
+    roleSending = owner;
+    const sent = await sendMemberWrite(
+      {
+        groupId: change.groupId,
+        userId: change.userId,
+        options: { method: 'PATCH', body: { role: change.role } },
+        outdated: [`group:${change.groupId}`],
+      },
+      owner,
+      onPage,
+      denied,
+    ).finally(() => {
+      if (roleSending === owner) roleSending = null;
+    });
+    if (!sent) return null;
+    /** The Group as the change's answer gave it. */
+    let changeAnswer: MobileGroup | null = null;
+    if (sent.failure === null)
+      try {
+        changeAnswer = parseGroup(sent.answer);
+      } catch {
+        // The change was made; the read that followed shows it, or the next one will.
+      }
+    if (!sent.reread && changeAnswer)
+      publish({ ...snapshot, detail: { ...snapshot.detail, data: changeAnswer } });
+    return { ...sent, shown: sent.reread ?? changeAnswer };
   };
   /**
    * The member whose options were open is no longer listed, as a read found (MembersRolesNotes):
@@ -6752,10 +6804,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const reviewRemoveMember = (userId: string) => {
     const acting = actingOn(userId);
+    // One write at a time, a role change from an earlier visit included (#1253 review).
     if (
       !acting ||
       snapshot.memberRemoval.status !== 'closed' ||
-      snapshot.memberRole.status === 'changing'
+      snapshot.memberRole.status === 'changing' ||
+      roleSending === generation
     )
       return;
     publish({
@@ -6820,13 +6874,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       () => publish({ ...snapshot, memberRemoval: closedRemoval() }),
     );
     if (!sent) return;
-    const { failure, reread, replyLost } = sent;
+    const { failure, reread } = sent;
     const stillListed = reread?.members.some((member) => member.user.id === userId);
     if (failure === null || (reread && !stillListed)) {
       // Removed by this request, its reply lost or not; or by someone else meanwhile. A Snackbar
       // says so unless the Group read after it still lists them: then the list speaks for itself.
+      // Only the server's answer can say this request removed them: after a lost reply, they may
+      // have left, or another admin removed them (#1253 review).
       const done =
-        failure !== null && !replyLost
+        failure !== null
           ? noLongerInGroup(name)
           : stillListed
             ? null
@@ -6868,6 +6924,106 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     removalRequest += 1;
     await closeMembersOnto(groupId, 'balances', { memberRemoval: closedRemoval() });
+  };
+
+  let stepDownRequest = 0;
+  /**
+   * Step down to member on your own row (#1254): offered to an admin while another admin exists,
+   * and it asks first, naming who stays an admin.
+   */
+  const reviewStepDown = () => {
+    const group = shownGroup(snapshot),
+      self = snapshot.auth.user?.id;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      route.screen !== 'members' ||
+      !group ||
+      !canStepDown(group, self) ||
+      snapshot.stepDown.status !== 'closed' ||
+      snapshot.memberRole.status === 'changing'
+    )
+      return;
+    publish({
+      ...snapshot,
+      stepDown: { groupId: group.id, status: 'confirm', message: null },
+    });
+  };
+  /** Cancel, Close, Back and the scrim close the Step down sheet; nothing was sent. Not while sent. */
+  const cancelStepDown = () => {
+    if (['closed', 'stepping'].includes(snapshot.stepDown.status)) return;
+    stepDownRequest += 1;
+    publish({ ...snapshot, stepDown: closedStepDown() });
+  };
+  /**
+   * Step down on its sheet: the admin's own role change to member, sent only online and again only
+   * when asked, after a failure. Whatever the answer, the Group is read again, so the page becomes
+   * the member's view from the server's roles; a reply lost after it was made counts once that read
+   * shows it. A refusal, such as the last admin after the other admin left, stays in the server's
+   * words.
+   */
+  const stepDown = async () => {
+    const state = snapshot.stepDown,
+      group = shownGroup(snapshot),
+      self = snapshot.auth.user?.id;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      route.screen !== 'members' ||
+      !group ||
+      !self ||
+      group.id !== state.groupId ||
+      (state.status !== 'confirm' && state.status !== 'error') ||
+      !canStepDown(group, self) ||
+      roleSending === generation ||
+      snapshot.offline.active
+    )
+      return;
+    const owner = generation,
+      attempt = ++stepDownRequest,
+      view = route,
+      groupId = group.id,
+      groupName = group.name,
+      name = group.members.find((member) => member.user.id === self)?.user.name ?? '';
+    const onPage = () => current(owner) && view === route && attempt === stepDownRequest;
+    publish({ ...snapshot, stepDown: { ...state, status: 'stepping', message: null } });
+    const sent = await sendRoleWrite({ groupId, userId: self, role: 'member' }, owner, onPage, () =>
+      publish({ ...snapshot, stepDown: closedStepDown() }),
+    );
+    if (!sent) return;
+    const { failure, replyLost, lostAdminIn, shown } = sent;
+    const nowMember = shown?.members.find((each) => each.user.id === self)?.role === 'member';
+    if (failure === null || (replyLost && nowMember)) {
+      // Made: the page is the member's view now. A Snackbar says so where the Group shown agrees.
+      publish({
+        ...snapshot,
+        stepDown: closedStepDown(),
+        ...(nowMember
+          ? {
+              memberRole: confirmedOnMembers(
+                groupId,
+                self,
+                name,
+                `You’re now a member of ${groupName}`,
+              ),
+            }
+          : {}),
+      });
+      return;
+    }
+    // A refusal explained, by the server's words or a lost admin role, only closes; anything
+    // else can be tried again.
+    const explained =
+      !!lostAdminIn ||
+      (failure instanceof RequestError &&
+        failure.status === 409 &&
+        !!failure.serverMessage?.trim());
+    publish({
+      ...snapshot,
+      stepDown: {
+        ...state,
+        status: explained ? 'refused' : 'error',
+        message: writeRefusalWords(failure, lostAdminIn, 'Couldn’t step down. Try again.'),
+      },
+    });
   };
   /** The role change's Snackbar went, after its time or dismissed. */
   const dismissMemberRoleDone = () => {
@@ -9068,6 +9224,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     cancelRemoveMember,
     removeMember,
     showRemovalBalances,
+    reviewStepDown,
+    cancelStepDown,
+    stepDown,
     showLeaveCheck,
     accountStorage,
     openSettlements,
