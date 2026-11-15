@@ -1,4 +1,3 @@
-import { Component, type ReactNode } from 'react';
 import { act, create, type ReactTestRenderer, type ReactTestInstance } from 'react-test-renderer';
 import { afterAll, afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
@@ -17,6 +16,7 @@ const native = vi.hoisted(() => {
   return {
     databases: new Map<string, DatabaseSync>(),
     handler: null as WidgetTaskHandler | null,
+    info: vi.fn<() => Promise<WidgetInfo[]>>(async () => []),
     request: vi.fn(() => {
       throw new Error('Widgets and setup must not fetch');
     }),
@@ -71,7 +71,7 @@ vi.mock('react-native-android-widget/src/api/register-widget-task-handler', () =
   },
 }));
 vi.mock('react-native-android-widget/src/api/get-widget-info', () => ({
-  getWidgetInfo: async () => [],
+  getWidgetInfo: native.info,
 }));
 vi.mock('react-native-android-widget/src/api/request-widget-update-by-id', () => ({
   requestWidgetUpdateById: vi.fn(),
@@ -189,6 +189,8 @@ function damaged(row: 'session' | 'setup', damage: Damage, kind: Kind, phone: Ph
     return JSON.stringify(
       row === 'session' ? { status: 'authenticated' } : { kind: setupFor(kind).kind },
     );
+  if (damage === 'wrong loading type') return JSON.stringify({ ...alex, loading: 'false' });
+  if (damage === 'wrong widget id') return JSON.stringify({ ...setupFor(kind), widgetId: 8 });
   const value = row === 'session' ? sessionFor(phone) : setupFor(kind);
   if (damage === 'intact') return JSON.stringify(value);
   if (damage === 'unknown version') return JSON.stringify({ ...value, version: 99 });
@@ -233,22 +235,6 @@ const screenText = (root: ReactTestInstance) =>
     .findAll((n) => (n.type as unknown) === 'Text')
     .flatMap((n) => n.children.filter((c): c is string => typeof c === 'string'));
 const failure = (error: unknown) => (error instanceof Error ? error.name : String(error));
-// Only test scaffolding catches render errors: production has no substitute setup error screen.
-class SetupBoundary extends Component<
-  { children: ReactNode; caught: string[] },
-  { failed: boolean }
-> {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  componentDidCatch(error: Error) {
-    this.props.caught.push(failure(error));
-  }
-  render() {
-    return this.state.failed ? null : this.props.children;
-  }
-}
 let screen: ReactTestRenderer | undefined;
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -257,6 +243,7 @@ beforeEach(() => {
   vi.stubEnv('TZ', 'UTC');
   vi.spyOn(Date, 'now').mockReturnValue(now);
   native.request.mockClear();
+  native.info.mockResolvedValue([]);
 });
 afterEach(() => {
   if (screen)
@@ -349,15 +336,15 @@ async function observe(
   expect(rawRow()).toBe(raw);
   const keptPreviousFrame = displayed === previous;
   if (keptPreviousFrame) expect(displayed).toEqual(previous);
-  const renderErrors: string[] = [];
   const setResult = vi.fn();
-  await act(async () => {
-    screen = create(
-      <SetupBoundary caught={renderErrors}>
-        <WidgetSetup widgetInfo={infoFor(kind)} setResult={setResult} renderWidget={vi.fn()} />
-      </SetupBoundary>,
-    );
-  });
+  const mountSetup = async () => {
+    await act(async () => {
+      screen = create(
+        <WidgetSetup widgetInfo={infoFor(kind)} setResult={setResult} renderWidget={vi.fn()} />,
+      );
+    });
+  };
+  await mountSetup();
   const setupText = screenText(screen!.root);
   const buttons = screen!.root.findAll(
     (n) =>
@@ -387,66 +374,128 @@ async function observe(
     drawn: displayed!,
     setup: {
       text: setupText.join('\n'),
-      renderErrors,
       button: buttonText,
       disabled: buttonDisabled,
       afterSave: afterSave.join('\n') === setupText.join('\n') ? 'unchanged' : afterSave.join('\n'),
       result: setResult.mock.calls.map((call) => call[0]),
     },
     rowAfterSave: rawRow() === raw ? 'kept' : rawRow() === null ? 'removed' : 'overwritten',
-    rawAfterSave: rawRow(),
     rowAfterOpening: 'kept',
     requests: native.request.mock.calls.length,
+    async recover() {
+      // Opening the app republishes its trusted session and the reads it already makes.
+      await store.setSession(alex);
+      await store.write(copy);
+      act(() => screen!.unmount());
+      setResult.mockClear();
+      await mountSetup();
+      const save = screen!.root
+        .findAll((n) => (n.type as unknown) === 'Pressable')
+        .find(
+          (n) =>
+            n.props.accessibilityRole === 'button' &&
+            screenText(n).some((text) => text === 'Save' || text === 'Add widget'),
+        )!;
+      expect(save).toBeDefined();
+      expect(save.props.disabled).not.toBe(true);
+      await act(async () => {
+        await save.props.onPress();
+      });
+      expect(setResult).toHaveBeenCalledExactlyOnceWith('ok');
+      const saved = await store.setup(7);
+      expect(saved).toMatchObject({ kind: setupFor(kind).kind, widgetId: 7 });
+      if (saved && saved.kind !== 'balances') expect(saved.accountId).toBe('alex');
+      expect((await store.read()).session).toEqual(alex);
+      await draw();
+      expect(native.request).not.toHaveBeenCalled();
+      return { saved, drawn: displayed! };
+    },
   };
 }
 
-// These names describe the observations, including failures; none specifies a new fallback.
+// The owner's fallback applies to unusable fields; an extra version is still accepted.
 const observations = [
-  [
-    'session',
-    'invalid JSON',
-    'rejects the read and redraw with SyntaxError, keeping the last frame',
-  ],
-  [
-    'session',
-    'missing required fields',
-    'accepts a missing account id but draws the other-account message',
-  ],
-  ['session', 'wrong types', 'accepts a numeric account id but draws the other-account message'],
-  ['session', 'unknown version', 'ignores an extra version and uses the remaining session fields'],
-  ['session', 'empty string', 'draws signed out without rewriting the empty session'],
-  [
-    'session',
-    'JSON null',
-    'returns a null session, then redraw and setup rendering throw TypeError',
-  ],
-  ['setup', 'invalid JSON', 'rejects the read and redraw with SyntaxError, keeping the last frame'],
-  ['setup', 'missing required fields', 'accepts missing setup fields without deleting the row'],
-  [
-    'setup',
-    'wrong types',
-    'accepts wrong field types; a matching Person redraw throws while other kinds still draw',
-  ],
-  ['setup', 'unknown version', 'ignores an extra version and uses the remaining setup fields'],
-  ['setup', 'empty string', 'rejects the read and redraw with SyntaxError, keeping the last frame'],
-  ['setup', 'JSON null', 'rejects the read and redraw with TypeError, keeping the last frame'],
+  ['session', 'invalid JSON'],
+  ['session', 'missing required fields'],
+  ['session', 'wrong types'],
+  ['session', 'wrong loading type'],
+  ['session', 'unknown version'],
+  ['session', 'empty string'],
+  ['session', 'JSON null'],
+  ['setup', 'invalid JSON'],
+  ['setup', 'missing required fields'],
+  ['setup', 'wrong types'],
+  ['setup', 'wrong widget id'],
+  ['setup', 'unknown version'],
+  ['setup', 'empty string'],
+  ['setup', 'JSON null'],
 ] as const;
-const cases = observations.flatMap(([row, damage, observed]) =>
-  kinds.flatMap((kind) => phones.map((phone) => ({ row, damage, kind, phone, observed }))),
+const cases = observations.flatMap(([row, damage]) =>
+  kinds.flatMap((kind) => phones.map((phone) => ({ row, damage, kind, phone }))),
 );
-for (const { row, damage, kind, phone, observed } of cases) {
-  it(`${kind} · ${row} · ${damage} · ${phone}: ${observed}`, async () => {
-    expect(await observe(row, damage, kind, phone)).toMatchSnapshot();
+const privateWords = /Maple House|Sam|₹/;
+function replaced(observed: Awaited<ReturnType<typeof observe>>) {
+  expect(observed.storageError).toBeNull();
+  expect(observed.drawError).toBeNull();
+  expect(observed.renderAttempts).toBe(1);
+  expect(observed.keptPreviousFrame).toBe(false);
+  expect(observed.setup.text).not.toMatch(/Could not read|Could not save/);
+  expect(observed.rowAfterOpening).toBe('kept');
+  expect(observed.requests).toBe(0);
+}
+for (const { row, damage, kind, phone } of cases) {
+  const usable = damage === 'unknown version';
+  const outcome = usable
+    ? 'accepts extra version metadata and keeps the account guard'
+    : row === 'session'
+      ? 'replaces the old frame with signed out; app session publication recovers'
+      : 'replaces the old frame with Set up this widget again; saving repairs the row';
+  it(`${kind} · ${row} · ${damage} · ${phone}: ${outcome}`, async () => {
+    const observed = await observe(row, damage, kind, phone);
+    replaced(observed);
+    if (!usable) {
+      expect(JSON.stringify(observed.drawn)).not.toMatch(privateWords);
+      if (row === 'session') {
+        expect(observed.stored).toEqual({ status: 'signed-out' });
+        expect(observed.drawn.text.join(' ')).toContain('Sign in');
+        expect(observed.setup.text).not.toMatch(privateWords);
+        expect(observed.rowAfterSave).toBe('kept');
+      } else {
+        expect(observed.stored).toBeNull();
+        expect(observed.drawn.text.join(' ')).toBe('Set up this widget again');
+        expect(observed.drawn.spoken).toContain('Set up this widget again');
+        if (phone === 'same account' || kind === 'Balances') {
+          expect(observed.setup.button).toBe('Add widget');
+          expect(observed.setup.disabled).toBe(false);
+          expect(observed.setup.result).toEqual(['ok']);
+          expect(observed.rowAfterSave).toBe('overwritten');
+        } else {
+          expect(observed.setup.button).toBe('Open Splitbook');
+          expect(observed.setup.text).not.toMatch(privateWords);
+          expect(observed.rowAfterSave).toBe('kept');
+        }
+      }
+    } else if (phone === 'same account') {
+      expect(observed.drawn.text.join(' ')).toContain(
+        kind === 'Quick' ? 'Maple House' : '₹1,480.00',
+      );
+    } else expect(JSON.stringify(observed.drawn)).not.toMatch(privateWords);
+    const recovered = await observed.recover();
+    expect(recovered.drawn.text.join(' ')).toContain(
+      kind === 'Quick' ? 'Add expense' : '₹1,480.00',
+    );
   });
 }
 it.each(kinds.flatMap((kind) => phones.map((phone) => ({ kind, phone }))))(
-  '$kind · intact rows · $phone: draws current-account data or replaces the old frame with the account guard',
+  '$kind · intact rows · $phone: replaces the frame and keeps the account guard',
   async ({ kind, phone }) => {
     const observed = await observe('session', 'intact', kind, phone);
-    expect(observed.keptPreviousFrame).toBe(false);
-    if (phone !== 'same account')
-      expect(JSON.stringify(observed.drawn)).not.toMatch(/Maple House|Sam|₹/);
-    expect(observed).toMatchSnapshot();
+    replaced(observed);
+    if (phone !== 'same account') expect(JSON.stringify(observed.drawn)).not.toMatch(privateWords);
+    else
+      expect(observed.drawn.text.join(' ')).toContain(
+        kind === 'Quick' ? 'Maple House' : '₹1,480.00',
+      );
   },
 );
 it.each(
@@ -456,11 +505,77 @@ it.each(
     ),
   ),
 )(
-  '$kind · $damage setup · $phone: even a real copy purge cannot replace the last frame while setup is unreadable',
+  '$kind · $damage setup · $phone: a copy purge replaces the old frame even when setup is unreadable',
   async ({ kind, damage, phone }) => {
     const observed = await observe('setup', damage, kind, phone, true);
-    expect(observed.keptPreviousFrame).toBe(true);
-    expect(observed.drawn.text.join(' ')).toContain(kind === 'Quick' ? 'Maple House' : '₹1,480.00');
-    expect(observed).toMatchSnapshot();
+    replaced(observed);
+    expect(JSON.stringify(observed.drawn)).not.toMatch(privateWords);
+    expect(observed.drawn.text.join(' ')).toBe('Set up this widget again');
+    await observed.recover();
   },
 );
+
+it('keeps absent Overview preferences on the legacy update path without treating them as damaged', async () => {
+  native.databases
+    .get('splitbook-widgets.db')
+    ?.exec(
+      'DELETE FROM widget_setup; DELETE FROM widget_state; DELETE FROM widget_group_evictions;',
+    );
+  const store = createWidgetsStore(environment);
+  await store.setSession(alex);
+  await store.write(copy);
+  expect(await store.readSetup(7)).toEqual({ setup: null, unreadable: false });
+  registerAndroidWidgets();
+  native.info.mockResolvedValue([infoFor('Balances')]);
+  const renderWidget = vi.fn((representation: WidgetRepresentation) => {
+    if (!('light' in representation)) throw new Error('Missing widget themes');
+    expect(texts(buildWidgetTree(representation.light))).toContain('₹1,480.00');
+  });
+  await native.handler!({
+    widgetInfo: infoFor('Balances'),
+    widgetAction: 'WIDGET_UPDATE',
+    renderWidget,
+  });
+  expect(renderWidget).toHaveBeenCalledOnce();
+  expect(await store.setup(7)).toEqual({ kind: 'balances', widgetId: 7, hideAmounts: false });
+  expect(native.request).not.toHaveBeenCalled();
+});
+it('does not overwrite a damaged Overview preference during its legacy update check', async () => {
+  native.databases
+    .get('splitbook-widgets.db')
+    ?.exec(
+      'DELETE FROM widget_setup; DELETE FROM widget_state; DELETE FROM widget_group_evictions;',
+    );
+  const store = createWidgetsStore(environment);
+  await store.setSession(alex);
+  await store.write(copy);
+  await store.saveSetup(setupFor('Balances'));
+  const db = native.databases.get('splitbook-widgets.db')!;
+  db.prepare('UPDATE widget_setup SET setup = ? WHERE environment = ? AND widget_id = 7').run(
+    '{unreadable',
+    environment,
+  );
+  registerAndroidWidgets();
+  native.info.mockResolvedValue([infoFor('Balances')]);
+  const renderWidget = vi.fn((representation: WidgetRepresentation) => {
+    if (!('light' in representation)) throw new Error('Missing widget themes');
+    const tree = buildWidgetTree(representation.light);
+    expect(texts(tree).join(' ')).toBe('Set up this widget again');
+    expect(JSON.stringify(tree)).not.toMatch(privateWords);
+  });
+  await native.handler!({
+    widgetInfo: infoFor('Balances'),
+    widgetAction: 'WIDGET_UPDATE',
+    renderWidget,
+  });
+  expect(renderWidget).toHaveBeenCalledOnce();
+  expect(await store.readSetup(7)).toEqual({ setup: null, unreadable: true });
+  expect(
+    (
+      db
+        .prepare('SELECT setup FROM widget_setup WHERE environment = ? AND widget_id = 7')
+        .get(environment) as { setup: string }
+    ).setup,
+  ).toBe('{unreadable');
+  expect(native.request).not.toHaveBeenCalled();
+});
