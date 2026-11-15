@@ -273,6 +273,11 @@ test('removing a member who still owes says why on the Members card, until it is
   await enter(page, ledger.alex, `/groups/${ledger.groupA}/settings`);
   await page.getByRole('button', { name: /^Actions for member Sam/ }).click();
   await page.getByRole('menuitem', { name: 'Remove from Group' }).click();
+  // #1251: Remove asks first.
+  await page
+    .getByRole('dialog', { name: 'Remove Sam Chen from Synthetic access household?' })
+    .getByRole('button', { name: 'Remove from Group' })
+    .click();
 
   const refusal = page.getByRole('alert').filter({
     hasText: /Sam Chen owes .*150\.00 in this Group\. Settle up before removing them\./,

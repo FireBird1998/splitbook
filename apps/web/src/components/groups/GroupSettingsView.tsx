@@ -48,6 +48,9 @@ import { validateTripDates } from '@splitbook/shared/trip-setup';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
 import RecurringExpensesSection from '@/components/groups/RecurringExpensesSection';
 import RefusalAlert, { refusalFrom, type Refusal } from '@/components/groups/RefusalAlert';
+import MemberConfirmDialog, {
+  type MemberConfirmation,
+} from '@/components/groups/MemberConfirmDialog';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { SEPARATOR } from '@splitbook/shared/separator';
 
@@ -104,6 +107,7 @@ function GroupSettingsContent({
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [memberLoading, setMemberLoading] = useState(false);
   const [memberRefusal, setMemberRefusal] = useState<Refusal | null>(null);
+  const [confirming, setConfirming] = useState<MemberConfirmation | null>(null);
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteLinkLoading, setInviteLinkLoading] = useState(false);
@@ -153,15 +157,14 @@ function GroupSettingsContent({
 
   const currentUserMember = members.find((m) => m.user._id === userId);
   const isAdmin = currentUserMember?.role === 'admin';
+  const otherAdmins = members.filter((m) => m.role === 'admin' && m.user._id !== userId);
   const currenciesSection = (
     <GroupCurrenciesSection
       groupId={groupId}
       groupName={group.name}
       viewerId={userId}
       isAdmin={isAdmin}
-      adminNames={members
-        .filter((m) => m.role === 'admin' && m.user._id !== userId)
-        .map((m) => m.user.name)}
+      adminNames={otherAdmins.map((m) => m.user.name)}
       onNotify={(message) => setSnackbar({ open: true, message })}
     />
   );
@@ -262,7 +265,7 @@ function GroupSettingsContent({
 
   const selectedMemberData = members.find((m) => m.user._id === selectedMember);
 
-  const handleMemberAction = async (action: 'promote' | 'demote' | 'remove') => {
+  const handleMemberAction = async (action: 'promote' | 'demote' | 'remove' | 'step-down') => {
     if (!selectedMember) return;
     // Named as the list shows them now: a removed member is gone from the next read.
     const name = selectedMemberData?.user.name;
@@ -289,14 +292,15 @@ function GroupSettingsContent({
         setMemberRefusal(refusalFrom(await res.json().catch(() => null), 'Action failed'));
         return;
       }
+      // After stepping down, the next read shows the member's settings, with this Snackbar.
       setSnackbar({
         open: true,
-        message:
-          action === 'remove'
-            ? `${name} was removed from ${group.name}`
-            : action === 'promote'
-              ? `${name} is now an admin`
-              : `${name} is now a member`,
+        message: {
+          remove: `${name} was removed from ${group.name}`,
+          promote: `${name} is now an admin`,
+          demote: `${name} is now a member`,
+          'step-down': `You’re now a member of ${group.name}`,
+        }[action],
       });
     } catch {
       setSnackbar({ open: true, message: 'Action failed' });
@@ -304,7 +308,17 @@ function GroupSettingsContent({
       setMemberLoading(false);
       setMemberMenuAnchor(null);
       setSelectedMember(null);
+      setConfirming(null);
     }
+  };
+  /** Remove and Step down ask first: the menu closes, and the member stays selected. */
+  const confirmFirst = (confirmation: MemberConfirmation) => {
+    setMemberMenuAnchor(null);
+    setConfirming(confirmation);
+  };
+  const cancelConfirmation = () => {
+    setConfirming(null);
+    setSelectedMember(null);
   };
 
   const handleGenerateInviteLink = async () => {
@@ -520,7 +534,8 @@ function GroupSettingsContent({
                   </Box>
                 </Stack>
 
-                {m.user._id !== userId && (
+                {/* Your own row has a menu only while another admin would stay (#1251). */}
+                {(m.user._id !== userId || otherAdmins.length > 0) && (
                   <IconButton
                     size="small"
                     aria-label={`Actions for member ${m.user.name}`}
@@ -555,7 +570,15 @@ function GroupSettingsContent({
             }}
             slotProps={{ paper: { sx: { minWidth: 180 } } }}
           >
-            {selectedMemberData?.role === 'member' && (
+            {selectedMember === userId && (
+              <MuiMenuItem onClick={() => confirmFirst('step-down')} disabled={memberLoading}>
+                <ListItemIcon>
+                  <PersonIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>Step down to member</ListItemText>
+              </MuiMenuItem>
+            )}
+            {selectedMember !== userId && selectedMemberData?.role === 'member' && (
               <MuiMenuItem onClick={() => handleMemberAction('promote')} disabled={memberLoading}>
                 <ListItemIcon>
                   <AdminPanelSettingsIcon fontSize="small" />
@@ -563,7 +586,7 @@ function GroupSettingsContent({
                 <ListItemText>Make admin</ListItemText>
               </MuiMenuItem>
             )}
-            {selectedMemberData?.role === 'admin' && (
+            {selectedMember !== userId && selectedMemberData?.role === 'admin' && (
               <MuiMenuItem onClick={() => handleMemberAction('demote')} disabled={memberLoading}>
                 <ListItemIcon>
                   <PersonIcon fontSize="small" />
@@ -571,13 +594,27 @@ function GroupSettingsContent({
                 <ListItemText>Make member</ListItemText>
               </MuiMenuItem>
             )}
-            <MuiMenuItem onClick={() => handleMemberAction('remove')} disabled={memberLoading}>
-              <ListItemIcon>
-                <PersonRemoveIcon fontSize="small" sx={{ color: 'error.main' }} />
-              </ListItemIcon>
-              <ListItemText sx={{ color: 'error.main' }}>Remove from Group</ListItemText>
-            </MuiMenuItem>
+            {selectedMember !== userId && (
+              <MuiMenuItem onClick={() => confirmFirst('remove')} disabled={memberLoading}>
+                <ListItemIcon>
+                  <PersonRemoveIcon fontSize="small" sx={{ color: 'error.main' }} />
+                </ListItemIcon>
+                <ListItemText sx={{ color: 'error.main' }}>Remove from Group</ListItemText>
+              </MuiMenuItem>
+            )}
           </Menu>
+
+          {confirming && selectedMemberData && (
+            <MemberConfirmDialog
+              confirming={confirming}
+              memberName={selectedMemberData.user.name}
+              groupName={group.name}
+              staying={otherAdmins.map((m) => m.user.name)}
+              busy={memberLoading}
+              onCancel={cancelConfirmation}
+              onConfirm={() => void handleMemberAction(confirming)}
+            />
+          )}
         </Paper>
 
         {assistantSection}
