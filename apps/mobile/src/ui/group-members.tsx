@@ -291,6 +291,7 @@ const roleText: Record<MemberRole, { name: string; making: string }> = {
 function MemberOptionsSheet({
   member,
   you,
+  waitingElsewhere,
   roles,
   onRemove,
   onStepDown,
@@ -299,6 +300,8 @@ function MemberOptionsSheet({
   member: Member | null;
   /** Your own row: only Step down to member, since leaving is Leave Group (#1254). */
   you: boolean;
+  /** Another Group's role change is still being made, so these options wait for it (#1262). */
+  waitingElsewhere: boolean;
   roles: MemberRoleActions;
   /** Remove from Group: closes these options for its confirm (#1253). */
   onRemove: (userId: string) => void;
@@ -386,6 +389,10 @@ function MemberOptionsSheet({
           {roles.offline ? (
             <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
               {memberChangesNeedConnection}
+            </CompactText>
+          ) : waitingElsewhere ? (
+            <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+              Another role change is still being made.
             </CompactText>
           ) : null}
         </>
@@ -757,6 +764,7 @@ export function GroupMembers({
         <MemberOptionsSheet
           member={selectedMember}
           you={selectedMember?.user.id === currentUserId}
+          waitingElsewhere={roles.state.status === 'changing' && roles.state.groupId !== group.id}
           roles={roles}
           onRemove={removal.onReview}
           onStepDown={stepDown.onReview}
