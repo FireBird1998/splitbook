@@ -25,7 +25,7 @@ import {
 } from '@splitbook/shared/api-paths';
 import { groupCurrencySettingsSchema } from '@splitbook/shared/group-currency-settings';
 import { emptyTagManager, tagManager } from './tag-manager';
-import { isGroupAdmin, roleComplement } from './member-roles';
+import { isGroupAdmin, removalSendable, roleComplement } from './member-roles';
 import { recurringNames } from '@splitbook/shared/refusals';
 import { z } from 'zod';
 import type { MemberRole } from '@splitbook/shared/types';
@@ -399,6 +399,48 @@ const brokenRecurringExpenses = z.object({
  * fixed on the web, since Android can't repair a recurring Expense (#1253, as for leaving, #877).
  * It names the Expenses the refusal lists, as the server's sentence does.
  */
+/**
+ * How the Remove sheet explains a removal that wasn't made (#1253): the server's refusals in its
+ * words, but a broken recurring Expense in Android's; a lost admin role, named for the Group; any
+ * other failure, with Remove kept to try again.
+ */
+function removalRefusal(
+  failure: unknown,
+  name: string,
+  lostAdminIn: string | null,
+): Pick<MemberRemovalState, 'status' | 'code' | 'message' | 'check'> {
+  const refused = failure instanceof RequestError && failure.status === 409 ? failure : null;
+  const code = refused?.code ?? null,
+    server = refused?.serverMessage?.trim() || null;
+  if (code === 'OPEN_BALANCE')
+    return {
+      status: 'refused',
+      code,
+      message: server ?? `${name} isn’t settled up in this Group. Settle up before removing them.`,
+      check: 'balances',
+    };
+  if (code === 'RECURRING_EXPENSE_PROBLEM')
+    return {
+      status: 'refused',
+      code,
+      message: removalRecurringWords(refused?.details, name),
+      check: 'web',
+    };
+  if (code && server) return { status: 'refused', code, message: server, check: null };
+  if (lostAdminIn)
+    return {
+      status: 'refused',
+      code: 'FORBIDDEN',
+      message: noLongerAdmin(lostAdminIn),
+      check: null,
+    };
+  return {
+    status: 'error',
+    code: null,
+    message: `Couldn’t remove ${name}. Try again.`,
+    check: null,
+  };
+}
 function removalRecurringWords(details: unknown, name: string) {
   const named = brokenRecurringExpenses.safeParse(details);
   if (!named.success)
@@ -6517,8 +6559,85 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     leaveRequest += 1;
-    navigate(groupAt(groupId, check), { leave: closedLeave() });
-    await openGroup(groupId, true, check);
+    await closeMembersOnto(groupId, check, { leave: closedLeave() });
+  };
+
+  /** The member an admin is about to act on, as the page shows them: null when no admin may. */
+  const actingOn = (userId: string) => {
+    const group = shownGroup(snapshot),
+      self = snapshot.auth.user?.id,
+      target = group?.members.find((member) => member.user.id === userId);
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      route.screen !== 'members' ||
+      !group ||
+      !target ||
+      !self ||
+      userId === self ||
+      !isGroupAdmin(group, self)
+    )
+      return null;
+    return { group, target };
+  };
+  /**
+   * Sends an admin's write to a member (#1252, #1253), then reads the Group again whatever the
+   * answer, so the page shows the server's members. Null once the page was left or the session
+   * ended meanwhile, or when the Group itself refused or was gone: the page then says so, and
+   * `denied` resets the write's own state.
+   */
+  const sendMemberWrite = async (
+    write: { groupId: string; userId: string; options: RequestOptions; outdated: string[] },
+    owner: number,
+    onPage: () => boolean,
+    denied: () => void,
+  ) => {
+    /** The write's refusal or failure; null once the server answered that it was made. */
+    let failure: unknown = null,
+      answer: unknown = null;
+    try {
+      answer = await request(
+        `/api/groups/${write.groupId}/members/${write.userId}`,
+        owner,
+        write.options,
+      ).finally(() => {
+        // Whatever the answer, these may have changed.
+        if (current(owner)) invalidateReads(...write.outdated);
+      });
+    } catch (error) {
+      if (!current(owner) || error instanceof Superseded) return null;
+      failure = error;
+    }
+    /** The Group read again after the write, whatever its answer. */
+    let reread: MobileGroup | null = null;
+    try {
+      reread = await readMembersGroup(write.groupId, owner, { fresh: true, wanted: onPage });
+    } catch (error) {
+      if (!onPage() || error instanceof Superseded) return null;
+      if (error instanceof RequestError && [403, 404].includes(error.status)) {
+        // The Group itself refuses or is gone: the page says so, as on any denial.
+        dropDeniedGroup(write.groupId, error);
+        unshowGroup();
+        denied();
+        return null;
+      }
+      // Not read: the page keeps showing what it had.
+    }
+    if (!onPage()) return null;
+    return {
+      failure,
+      answer,
+      reread,
+      /** The server gave no answer: a reply lost on the way back, which the read can confirm. */
+      replyLost: failure instanceof RequestError && failure.networkFailure,
+      /** The Group's name, when the write was refused and the read shows the admin a member now. */
+      lostAdminIn:
+        failure instanceof RequestError &&
+        failure.status === 403 &&
+        reread &&
+        !isGroupAdmin(reread, snapshot.auth.user?.id)
+          ? reread.name
+          : null,
+    };
   };
 
   let roleRequest = 0;
@@ -6535,19 +6654,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * them. Nothing is queued, kept or sent again.
    */
   const changeMemberRole = async (userId: string, role: MemberRole) => {
-    const group = shownGroup(snapshot),
-      self = snapshot.auth.user?.id,
-      target = group?.members.find((member) => member.user.id === userId);
+    const acting = actingOn(userId);
     if (
-      snapshot.auth.status !== 'authenticated' ||
-      route.screen !== 'members' ||
-      !group ||
-      !target ||
-      !self ||
-      userId === self ||
+      !acting ||
       (role !== 'admin' && role !== 'member') ||
-      target.role === role ||
-      !isGroupAdmin(group, self) ||
+      acting.target.role === role ||
       snapshot.memberRole.status === 'changing' ||
       roleSending === generation ||
       snapshot.offline.active
@@ -6556,56 +6667,41 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = generation,
       attempt = ++roleRequest,
       view = route,
-      groupId = group.id,
-      name = target.user.name;
-    const onPage = () => current(owner) && view === route;
+      groupId = acting.group.id,
+      name = acting.target.user.name;
+    const onPage = () => current(owner) && view === route && attempt === roleRequest;
     publish({
       ...snapshot,
       memberRole: { groupId, userId, name, role, status: 'changing', message: null, done: null },
     });
-    /** The change's refusal or failure; null once the server answered that it made it. */
-    let failure: unknown = null,
-      /** The Group as the change's answer gave it. */
-      changeAnswer: MobileGroup | null = null;
-    try {
-      roleSending = owner;
-      const value = await request(`/api/groups/${groupId}/members/${userId}`, owner, {
-        method: 'PATCH',
-        body: { role },
-      }).finally(() => {
-        if (roleSending === owner) roleSending = null;
-        // Whatever the answer, the Group may have changed.
-        if (current(owner)) invalidateReads(`group:${groupId}`);
-      });
+    roleSending = owner;
+    const sent = await sendMemberWrite(
+      {
+        groupId,
+        userId,
+        options: { method: 'PATCH', body: { role } },
+        outdated: [`group:${groupId}`],
+      },
+      owner,
+      onPage,
+      () => publish({ ...snapshot, memberRole: idleMemberRole() }),
+    ).finally(() => {
+      if (roleSending === owner) roleSending = null;
+    });
+    if (!sent) return;
+    const { failure, reread, replyLost, lostAdminIn } = sent;
+    /** The Group as the change's answer gave it. */
+    let changeAnswer: MobileGroup | null = null;
+    if (failure === null)
       try {
-        changeAnswer = parseGroup(value);
+        changeAnswer = parseGroup(sent.answer);
       } catch {
-        // The change was made; the read that follows shows it.
+        // The change was made; the read that followed shows it, or the next one will.
       }
-    } catch (error) {
-      if (!current(owner) || error instanceof Superseded) return;
-      failure = error;
-    }
-    /** The Group read again after the change, whatever its answer. */
-    let reread: MobileGroup | null = null;
-    try {
-      reread = await readMembersGroup(groupId, owner, { fresh: true, wanted: onPage });
-    } catch (error) {
-      if (!onPage() || error instanceof Superseded) return;
-      if (error instanceof RequestError && [403, 404].includes(error.status)) {
-        // The Group itself refuses or is gone: the page says so, as on any denial.
-        dropDeniedGroup(groupId, error);
-        unshowGroup();
-        if (attempt === roleRequest) publish({ ...snapshot, memberRole: idleMemberRole() });
-        return;
-      }
-      // Not read: the page keeps showing what it had, or the change's own answer.
-    }
-    if (!onPage() || attempt !== roleRequest) return;
-    if (!reread && changeAnswer && failure === null)
+    if (!reread && changeAnswer)
       publish({ ...snapshot, detail: { ...snapshot.detail, data: changeAnswer } });
     /** The Group as the page shows it now: read again, or as the change's own answer gave it. */
-    const shown = reread ?? (failure === null ? changeAnswer : null);
+    const shown = reread ?? changeAnswer;
     const changed = shown?.members.find((member) => member.user.id === userId);
     const settled = { groupId, userId, name, role, status: 'idle' as const, message: null };
     if (reread && !changed) {
@@ -6615,7 +6711,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // Made by this tap: the server said so, or its reply was lost and the Group shows it. A
     // Snackbar says so only where the Group shown agrees; otherwise the list speaks for itself.
     // A refusal the server answered is never taken for a change made, whatever the read shows.
-    const replyLost = failure instanceof RequestError && failure.networkFailure;
     if (failure === null || (replyLost && changed?.role === role)) {
       publish({
         ...snapshot,
@@ -6626,15 +6721,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       return;
     }
+    const server =
+      failure instanceof RequestError && failure.status === 409
+        ? failure.serverMessage?.trim()
+        : null;
     const message =
-      failure instanceof RequestError && failure.status === 409 && failure.serverMessage?.trim()
-        ? failure.serverMessage.trim()
-        : failure instanceof RequestError &&
-            failure.status === 403 &&
-            reread &&
-            !isGroupAdmin(reread, self)
-          ? noLongerAdmin(reread.name)
-          : `Couldn’t make ${name} ${roleComplement[role]}. Try again.`;
+      server ||
+      (lostAdminIn
+        ? noLongerAdmin(lostAdminIn)
+        : `Couldn’t make ${name} ${roleComplement[role]}. Try again.`);
     publish({ ...snapshot, memberRole: { ...settled, status: 'failed', message, done: null } });
   };
   /**
@@ -6656,17 +6751,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * the Group. Never for yourself (that is Leave Group), and only for an admin.
    */
   const reviewRemoveMember = (userId: string) => {
-    const group = shownGroup(snapshot),
-      self = snapshot.auth.user?.id,
-      target = group?.members.find((member) => member.user.id === userId);
+    const acting = actingOn(userId);
     if (
-      snapshot.auth.status !== 'authenticated' ||
-      route.screen !== 'members' ||
-      !group ||
-      !target ||
-      !self ||
-      userId === self ||
-      !isGroupAdmin(group, self) ||
+      !acting ||
       snapshot.memberRemoval.status !== 'closed' ||
       snapshot.memberRole.status === 'changing'
     )
@@ -6674,9 +6761,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       memberRemoval: {
-        groupId: group.id,
+        groupId: acting.group.id,
         userId,
-        name: target.user.name,
+        name: acting.target.user.name,
         status: 'confirm',
         code: null,
         message: null,
@@ -6699,75 +6786,51 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const removeMember = async () => {
     const state = snapshot.memberRemoval,
-      group = shownGroup(snapshot),
-      self = snapshot.auth.user?.id;
-    const sendable =
-      state.status === 'confirm' ||
-      state.status === 'error' ||
-      (state.status === 'refused' && state.code === 'REMOVAL_CONFLICT');
+      acting = state.userId ? actingOn(state.userId) : null;
     if (
-      snapshot.auth.status !== 'authenticated' ||
-      route.screen !== 'members' ||
-      !group ||
-      group.id !== state.groupId ||
+      !acting ||
+      acting.group.id !== state.groupId ||
       !state.userId ||
       !state.name ||
-      !sendable ||
-      !isGroupAdmin(group, self) ||
+      !removalSendable(state) ||
       snapshot.offline.active
     )
       return;
     const owner = generation,
       attempt = ++removalRequest,
       view = route,
-      groupId = group.id,
+      groupId = acting.group.id,
+      groupName = acting.group.name,
       { userId, name } = state;
-    const onPage = () => current(owner) && view === route;
+    const onPage = () => current(owner) && view === route && attempt === removalRequest;
     publish({
       ...snapshot,
       memberRemoval: { ...state, status: 'removing', code: null, message: null, check: null },
     });
-    /** The removal's refusal or failure; null once the server answered that it was made. */
-    let failure: unknown = null;
-    try {
-      await request(`/api/groups/${groupId}/members/${userId}`, owner, {
-        method: 'DELETE',
-      }).finally(() => {
-        // Whatever the answer, the members, Balances and the Groups list may have changed.
-        if (current(owner)) invalidateReads(`group:${groupId}`, `balances:${groupId}`, 'groups');
-      });
-    } catch (error) {
-      if (!current(owner) || error instanceof Superseded) return;
-      failure = error;
-    }
-    /** The Group read again after the removal, whatever its answer. */
-    let reread: MobileGroup | null = null;
-    try {
-      reread = await readMembersGroup(groupId, owner, { fresh: true, wanted: onPage });
-    } catch (error) {
-      if (!onPage() || error instanceof Superseded) return;
-      if (error instanceof RequestError && [403, 404].includes(error.status)) {
-        // The Group itself refuses or is gone: the page says so, as on any denial.
-        dropDeniedGroup(groupId, error);
-        unshowGroup();
-        if (attempt === removalRequest) publish({ ...snapshot, memberRemoval: closedRemoval() });
-        return;
-      }
-      // Not read: the page keeps showing what it had.
-    }
-    if (!onPage() || attempt !== removalRequest) return;
-    const answered =
-      failure instanceof RequestError && !failure.networkFailure && failure.status > 0;
+    const sent = await sendMemberWrite(
+      {
+        groupId,
+        userId,
+        options: { method: 'DELETE' },
+        // The members, Balances and the Groups list's member count.
+        outdated: [`group:${groupId}`, `balances:${groupId}`, 'groups'],
+      },
+      owner,
+      onPage,
+      () => publish({ ...snapshot, memberRemoval: closedRemoval() }),
+    );
+    if (!sent) return;
+    const { failure, reread, replyLost } = sent;
     const stillListed = reread?.members.some((member) => member.user.id === userId);
     if (failure === null || (reread && !stillListed)) {
       // Removed by this request, its reply lost or not; or by someone else meanwhile. A Snackbar
       // says so unless the Group read after it still lists them: then the list speaks for itself.
       const done =
-        failure !== null && answered
+        failure !== null && !replyLost
           ? noLongerInGroup(name)
           : stillListed
             ? null
-            : `${name} was removed from ${group.name}`;
+            : `${name} was removed from ${groupName}`;
       publish({
         ...snapshot,
         memberRemoval: closedRemoval(),
@@ -6775,41 +6838,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       return;
     }
-    const refused = failure instanceof RequestError ? failure : null;
-    const code = refused?.code ?? null,
-      server = refused?.serverMessage?.trim() || null;
-    const outcome: Pick<MemberRemovalState, 'status' | 'code' | 'message' | 'check'> =
-      refused?.status === 409 && code === 'OPEN_BALANCE'
-        ? {
-            status: 'refused',
-            code,
-            message:
-              server ?? `${name} isn’t settled up in this Group. Settle up before removing them.`,
-            check: 'balances',
-          }
-        : refused?.status === 409 && code === 'RECURRING_EXPENSE_PROBLEM'
-          ? {
-              status: 'refused',
-              code,
-              message: removalRecurringWords(refused?.details, name),
-              check: 'web',
-            }
-          : refused?.status === 409 && code && server
-            ? { status: 'refused', code, message: server, check: null }
-            : refused?.status === 403 && reread && !isGroupAdmin(reread, self)
-              ? {
-                  status: 'refused',
-                  code: 'FORBIDDEN',
-                  message: noLongerAdmin(reread.name),
-                  check: null,
-                }
-              : {
-                  status: 'error',
-                  code: null,
-                  message: `Couldn’t remove ${name}. Try again.`,
-                  check: null,
-                };
-    publish({ ...snapshot, memberRemoval: { ...state, ...outcome } });
+    publish({
+      ...snapshot,
+      memberRemoval: { ...state, ...removalRefusal(failure, name, sent.lostAdminIn) },
+    });
+  };
+  /** Closes Members onto one of its Group's destinations, where what blocks a change shows. */
+  const closeMembersOnto = async (
+    groupId: string,
+    destination: GroupDestination,
+    reset: Partial<Omit<MobileSnapshot, RouteFields>>,
+  ) => {
+    navigate(groupAt(groupId, destination), reset);
+    await openGroup(groupId, true, destination);
   };
   /**
    * Go to Balances on the Remove sheet: closes it and this page, and opens the Group's Balances,
@@ -6826,8 +6867,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     removalRequest += 1;
-    navigate(groupAt(groupId, 'balances'), { memberRemoval: closedRemoval() });
-    await openGroup(groupId, true, 'balances');
+    await closeMembersOnto(groupId, 'balances', { memberRemoval: closedRemoval() });
   };
   /** The role change's Snackbar went, after its time or dismissed. */
   const dismissMemberRoleDone = () => {

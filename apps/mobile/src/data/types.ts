@@ -398,7 +398,10 @@ export interface MemberRoleState {
   role: MemberRole | null;
   status: 'idle' | 'changing' | 'failed';
   message: string | null;
-  /** The last change's confirmation, a Snackbar naming the person, until dismissed or left. */
+  /**
+   * Members' last confirmation, a Snackbar naming the person, until dismissed or left: a role
+   * change, a removal (#1253), or a member found gone.
+   */
   done: string | null;
 }
 
@@ -565,7 +568,10 @@ export interface MobileSnapshot {
   homeSnackbar: HomeSnackbar | null;
   /** Leave Group, a sheet over Members and Group details. */
   leave: LeaveGroupState;
-  /** An admin's change to a member's role, on Members and Group details. */
+  /**
+   * An admin's change to a member's role, on Members and Group details. Its `done` is the page's
+   * Snackbar, which a removal shares (#1253).
+   */
   memberRole: MemberRoleState;
   /** Remove from Group, a sheet over Members and Group details. */
   memberRemoval: MemberRemovalState;

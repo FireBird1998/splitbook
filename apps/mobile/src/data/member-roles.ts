@@ -1,5 +1,5 @@
 import type { MemberRole } from '@splitbook/shared/types';
-import type { MobileGroup } from './types';
+import type { MemberRemovalState, MobileGroup } from './types';
 
 /** Whether this account is one of the Group's admins, as the Group read shows it. */
 export function isGroupAdmin(
@@ -17,3 +17,15 @@ export const roleComplement: Record<MemberRole, string> = {
   admin: 'an admin',
   member: 'a member',
 };
+
+/**
+ * Whether the Remove sheet can send the removal (#1253): once confirmed, after a failure, or after
+ * the Group changed meanwhile. Every other refusal leaves nothing to send.
+ */
+export function removalSendable({ status, code }: Pick<MemberRemovalState, 'status' | 'code'>) {
+  return (
+    status === 'confirm' ||
+    status === 'error' ||
+    (status === 'refused' && code === 'REMOVAL_CONFLICT')
+  );
+}

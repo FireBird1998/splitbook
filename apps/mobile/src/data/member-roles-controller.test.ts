@@ -1,129 +1,24 @@
-import { testPhone } from '../test-utils/test-phone';
-import { fakeSplitbook } from '../test-utils/fake-splitbook';
+import {
+  alexId,
+  groupId,
+  onMembersPage,
+  priyaId,
+  refusal,
+  samId,
+  type MembersFixture,
+  type Role,
+} from '../test-utils/members-fixture';
 import { describe, expect, it, vi } from 'vitest';
 
 // An admin makes a member an admin or a member on Members and Group details (#1252). Fictional
 // people and Groups only.
-const alexId = 'a00000000000000000000001',
-  samId = 'a00000000000000000000002',
-  priyaId = 'a00000000000000000000003';
-const groupId = 'b00000000000000000000001';
-const iso = '2026-11-15T12:00:00.000Z',
-  now = Date.parse(iso);
-const person = (id: string, name: string, slug: string) => ({
-  id,
-  name,
-  email: `${slug}@example.test`,
-  image: null,
-});
-const alex = person(alexId, 'Alex Rivera', 'alex'),
-  sam = person(samId, 'Sam Chen', 'sam'),
-  priya = person(priyaId, 'Priya Shah', 'priya');
-type Role = 'admin' | 'member';
-
-function fixture(roles: Record<string, Role> = { [alexId]: 'admin', [samId]: 'member' }) {
-  const people = [alex, sam, priya].filter(({ id }) => roles[id]);
-  const group = {
-    _id: groupId,
-    name: 'Maple House',
-    createdBy: alexId,
-    category: 'home',
-    defaultCurrency: 'INR',
-    members: people.map(({ id, ...user }) => ({
-      user: { ...user, _id: id },
-      role: roles[id],
-      joinedAt: iso,
-    })),
-    tags: [],
-    createdAt: iso,
-    updatedAt: iso,
-  };
-  const backend = fakeSplitbook();
-  backend.world.people.alex = alex;
-  backend.world.people.sam = sam;
-  backend.world.people.priya = priya;
-  backend.world.groups = [group];
-  backend.world.groupsByAccount[alexId] = [group];
-  backend.world.home = { buckets: [], groups: [{ groupId, balances: [] }] };
-  backend.world.expenses[groupId] = {
-    expenses: [],
-    pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
-    summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
-  };
-  backend.world.balances[groupId] = { byCurrency: [] };
-  /** What the server holds: a role change the server made shows in every later read. */
-  const setRole = (userId: string, role: Role) => {
-    const member = group.members.find(({ user }) => user._id === userId);
-    if (member) member.role = role;
-  };
-  const removeMember = (userId: string) => {
-    group.members = group.members.filter(({ user }) => user._id !== userId);
-  };
-  let answer: ((userId: string, role: Role) => Response | undefined) | null = null;
-  const roleBodies: unknown[] = [];
-  backend.reply('PATCH', '*', ({ url, body }) => {
-    const match = new RegExp(`^/api/groups/${groupId}/members/([a-f\\d]{24})$`).exec(url.pathname);
-    if (!match) return undefined;
-    roleBodies.push(body);
-    const role = body?.role as Role;
-    const special = answer?.(match[1], role);
-    if (special) return special;
-    setRole(match[1], role);
-    return Response.json({ data: group, status: 200 });
-  });
-  const phone = testPhone(backend, {
-    origin: 'http://localhost:4147',
-    now,
-    parts: {
-      pendingInvitation: undefined,
-      draftRequests: undefined,
-      tagRequests: undefined,
-      groupCreations: undefined,
-      netInfo: undefined,
-      newSubmissionKey: undefined,
-    },
-  });
-  phone.stores.owner.value = alexId;
-  const controller = phone.open();
-  return {
-    controller,
-    backend,
-    roleBodies,
-    setRole,
-    removeMember,
-    /** How the server answers the next role changes; undefined lets it make the change. */
-    answer: (respond: (userId: string, role: Role) => Response | undefined) => {
-      answer = respond;
-    },
-    /** Requests made since the last call, as "METHOD /path". */
-    sent: (() => {
-      let seen = 0;
-      return () => {
-        const all = backend.sent({ query: false });
-        const fresh = all.slice(seen);
-        seen = all.length;
-        return fresh;
-      };
-    })(),
-    cache: phone.stores.savedQueries.records,
-  };
-}
-
-/** Signed in as Alex, on Maple House's Members and Group details. */
-async function onMembers(roles?: Record<string, Role>) {
-  const f = fixture(roles);
-  await f.controller.signIn('alex');
-  await f.controller.openGroup(groupId);
-  f.controller.openMembers();
-  f.sent();
-  return f;
-}
+const onMembers = (roles: Record<string, Role> = { [alexId]: 'admin', [samId]: 'member' }) =>
+  onMembersPage(roles);
+type Fixture = MembersFixture;
 
 const rolePath = (userId: string) => `/api/groups/${groupId}/members/${userId}`;
-const roleOf = (f: ReturnType<typeof fixture>, userId: string) =>
+const roleOf = (f: Fixture, userId: string) =>
   f.controller.getSnapshot().detail.data?.members.find(({ user }) => user.id === userId)?.role;
-const refusal = (status: number, code: string, error: string) =>
-  Response.json({ error, status, code }, { status });
 
 describe('Changing a member’s role', () => {
   it('makes a member an admin at once: the row says so while sent, then the server’s roles and a Snackbar', async () => {
@@ -229,7 +124,7 @@ describe('Changing a member’s role', () => {
 
   it('explains a failure above the details, shows the server’s roles and never resends', async () => {
     const f = await onMembers();
-    f.answer(() => Response.json({ error: 'Internal error' }, { status: 500 }));
+    f.answerRole(() => Response.json({ error: 'Internal error' }, { status: 500 }));
     await f.controller.changeMemberRole(samId, 'admin');
     expect(f.controller.getSnapshot().memberRole).toMatchObject({
       groupId,
@@ -265,7 +160,7 @@ describe('Changing a member’s role', () => {
 
   it('confirms a change whose reply was lost once the server shows it made', async () => {
     const f = await onMembers();
-    f.answer((userId, role) => {
+    f.answerRole((userId, role) => {
       // The server made the change, then the reply was lost on the way back.
       f.setRole(userId, role);
       throw new TypeError('Network request failed');
@@ -283,7 +178,7 @@ describe('Changing a member’s role', () => {
   it('shows the last-admin refusal in the server’s words', async () => {
     const f = await onMembers({ [alexId]: 'admin', [priyaId]: 'admin' });
     const words = 'Maple House needs an admin. Make someone else an admin first.';
-    f.answer(() => refusal(409, 'LAST_ADMIN', words));
+    f.answerRole(() => refusal(409, 'LAST_ADMIN', words));
     await f.controller.changeMemberRole(priyaId, 'member');
     expect(f.controller.getSnapshot().memberRole).toMatchObject({
       status: 'failed',
@@ -294,7 +189,7 @@ describe('Changing a member’s role', () => {
 
   it('treats losing the admin role elsewhere as a refusal: the Group stays and reads as the member’s view', async () => {
     const f = await onMembers();
-    f.answer(() => {
+    f.answerRole(() => {
       // Another admin made Alex a member a moment ago.
       f.setRole(alexId, 'member');
       return refusal(403, 'FORBIDDEN', 'Forbidden');
@@ -316,7 +211,7 @@ describe('Changing a member’s role', () => {
 
   it('shows the Group as unavailable when the read after a refusal is refused too', async () => {
     const f = await onMembers();
-    f.answer(() => {
+    f.answerRole(() => {
       f.backend.world.groupsByAccount[alexId] = [];
       f.backend.reply('GET', `/api/groups/${groupId}`, () =>
         refusal(403, 'FORBIDDEN', 'Forbidden'),
@@ -337,7 +232,7 @@ describe('Changing a member’s role', () => {
 
   it('says a member removed meanwhile is no longer in the Group', async () => {
     const f = await onMembers();
-    f.answer(() => {
+    f.answerRole(() => {
       f.removeMember(samId);
       return refusal(404, 'NOT_FOUND', 'Group not found');
     });
@@ -405,7 +300,7 @@ describe('Changing a member’s role', () => {
   it('says nothing was made when the server refused, though the read shows the role already given', async () => {
     const f = await onMembers({ [alexId]: 'admin', [samId]: 'member', [priyaId]: 'admin' });
     const words = 'This Group changed. Reload and try again.';
-    f.answer((userId, role) => {
+    f.answerRole((userId, role) => {
       // Another admin gave Sam the role a moment before; this request is refused.
       f.setRole(userId, role);
       return refusal(409, 'GROUP_CHANGED', words);
@@ -421,7 +316,7 @@ describe('Changing a member’s role', () => {
 
   it('says nothing when the read after a change shows another role: the list speaks', async () => {
     const f = await onMembers();
-    f.answer((userId, role) => {
+    f.answerRole((userId, role) => {
       // Made, then put back by another admin before the read.
       f.setRole(userId, role);
       const answered = Response.json({
@@ -457,7 +352,7 @@ describe('Changing a member’s role', () => {
 
   it('leaving the page clears a failure', async () => {
     const f = await onMembers();
-    f.answer(() => Response.json({ error: 'Internal error' }, { status: 500 }));
+    f.answerRole(() => Response.json({ error: 'Internal error' }, { status: 500 }));
     await f.controller.changeMemberRole(samId, 'admin');
     expect(f.controller.getSnapshot().memberRole.status).toBe('failed');
     await f.controller.back();
@@ -466,10 +361,10 @@ describe('Changing a member’s role', () => {
 
   it('a new change clears an earlier failure', async () => {
     const f = await onMembers();
-    f.answer(() => Response.json({ error: 'Internal error' }, { status: 500 }));
+    f.answerRole(() => Response.json({ error: 'Internal error' }, { status: 500 }));
     await f.controller.changeMemberRole(samId, 'admin');
     expect(f.controller.getSnapshot().memberRole.status).toBe('failed');
-    f.answer(() => undefined);
+    f.answerRole(() => undefined);
     await f.controller.changeMemberRole(samId, 'admin');
     expect(f.controller.getSnapshot().memberRole).toMatchObject({
       status: 'idle',

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory, MemberRole } from '@splitbook/shared/types';
-import { isGroupAdmin } from '../data/member-roles';
+import { isGroupAdmin, removalSendable } from '../data/member-roles';
+import { firstName } from '@splitbook/shared/cross-currency-payment';
 import type {
   LeaveGroupState,
   MemberRemovalState,
@@ -45,7 +46,7 @@ export const leaveExplanation =
 export const leaveDiscardsDraft =
   'Your Expense draft for this Group is kept on this device. Leaving discards it.';
 
-export const rolesNeedConnection = 'Changing roles or removing members needs a connection.';
+export const memberChangesNeedConnection = 'Changing roles or removing members needs a connection.';
 const adminHint = 'Tap a member to change their role or remove them.';
 const memberHint = 'Only admins can change roles or remove members.';
 /** How long a change's Snackbar stays, unless Android's accessibility timeout extends it. */
@@ -338,7 +339,7 @@ function MemberOptionsSheet({
           </Card>
           {roles.offline ? (
             <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-              {rolesNeedConnection}
+              {memberChangesNeedConnection}
             </CompactText>
           ) : null}
         </>
@@ -362,9 +363,8 @@ function RemoveMemberSheet({
 }) {
   const { state, offline } = removal;
   const removing = state.status === 'removing';
-  const blocked = state.status === 'refused' && state.code !== 'REMOVAL_CONFLICT';
+  const blocked = state.status === 'refused' && !removalSendable(state);
   const name = state.name ?? '';
-  const firstName = name.split(/\s+/)[0] || name;
   return (
     <BottomSheet
       visible={state.status !== 'closed' && state.groupId === group.id}
@@ -394,12 +394,12 @@ function RemoveMemberSheet({
               destructive
               block
               disabled={removing || offline}
-              hint={offline ? rolesNeedConnection : undefined}
+              hint={offline ? memberChangesNeedConnection : undefined}
               onPress={removal.onConfirm}
             />
             {offline ? (
               <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-                {rolesNeedConnection}
+                {memberChangesNeedConnection}
               </CompactText>
             ) : null}
           </>
@@ -417,8 +417,8 @@ function RemoveMemberSheet({
       {blocked ? null : (
         <>
           <CompactText>
-            {firstName} won’t see this Group or its balances any more. The Expenses and payments
-            they’re part of stay for everyone else.
+            {firstName(name)} won’t see this Group or its balances any more. The Expenses and
+            payments they’re part of stay for everyone else.
           </CompactText>
           <CompactText>They can rejoin with an invite.</CompactText>
         </>
@@ -569,7 +569,7 @@ export function GroupMembers({
               </CompactText>
             ) : null}
             <CompactText variant="small" tone="secondary">
-              {!isAdmin ? memberHint : roles.offline ? rolesNeedConnection : adminHint}
+              {!isAdmin ? memberHint : roles.offline ? memberChangesNeedConnection : adminHint}
             </CompactText>
             <View style={{ gap: 6, paddingTop: 12 }}>
               <CompactButton

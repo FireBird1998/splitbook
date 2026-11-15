@@ -504,14 +504,14 @@ async function verify() {
     const pays = async (payer: typeof alex, payerId: string, forId: string) => {
       const response = await payer.authorized(`/api/groups/${household._id}/expenses`, 'POST', {
         description: 'Mobile 1253 shared cost',
-        amount: 12.34,
+        amount: 300,
         currency: 'INR',
         date: new Date().toISOString(),
         category: 'other',
         tagId,
-        paidBy: [{ user: payerId, amount: 12.34 }],
+        paidBy: [{ user: payerId, amount: 300 }],
         splitMethod: 'unequal',
-        splitBetween: [{ user: forId, amount: 12.34 }],
+        splitBetween: [{ user: forId, amount: 300 }],
       });
       observe(response.status === 201, 'Could not record an Expense for the removal check.', {
         status: response.status,

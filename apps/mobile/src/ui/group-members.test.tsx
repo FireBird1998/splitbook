@@ -32,7 +32,7 @@ const {
   leaveDiscardsDraft,
   leaveExplanation,
   leaveNeedsConnection,
-  rolesNeedConnection,
+  memberChangesNeedConnection,
 } = await import('./group-members');
 
 const you = 'a00000000000000000000001',
@@ -440,12 +440,12 @@ describe('Changing a member’s role (#1252)', () => {
       leave: leaveActions({}, true),
       roles: roleActions({}, true),
     });
-    expect(text(root)).toContain(rolesNeedConnection);
+    expect(text(root)).toContain(memberChangesNeedConnection);
     expect(text(root)).not.toContain('Tap a member');
     press(root, 'Sam Chen, Member, options');
     const sheet = options(root);
     expect(sheet.props.visible).toBe(true);
-    expect(text(sheet)).toContain(rolesNeedConnection);
+    expect(text(sheet)).toContain(memberChangesNeedConnection);
     const action = one(
       sheet.findAll(
         (n) =>
@@ -655,7 +655,7 @@ describe('Removing a member (#1253)', () => {
     expect(one(buttonIn(sheet, 'Remove from Group')).props.accessibilityState).toMatchObject({
       disabled: true,
     });
-    expect(text(sheet)).toContain(rolesNeedConnection);
+    expect(text(sheet)).toContain(memberChangesNeedConnection);
     act(() => renderer!.update(<GroupMembers {...props} removal={removalActions({}, true)} />));
     press(root, 'Sam Chen, Member, options');
     const option = one(buttonIn(options(root), 'Remove from Group, You’ll be asked to confirm'));
