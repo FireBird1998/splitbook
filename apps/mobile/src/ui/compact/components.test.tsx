@@ -264,6 +264,29 @@ describe('Choice controls', () => {
     expect(onChange).toHaveBeenCalledWith('several');
   });
 
+  // #1267: the Header scene page keeps its choices from changing while it saves. A control told
+  // whether it is disabled always says so, both ways: Android keeps a state it was given once.
+  it.each([true, false])('segmented control disabled=%s reports it and ignores presses', (off) => {
+    const onChange = vi.fn();
+    const root = render(
+      <SegmentedControl
+        label="Header style"
+        value="scene"
+        onChange={onChange}
+        disabled={off}
+        options={[
+          { value: 'scene', label: 'Scene' },
+          { value: 'classic', label: 'Classic' },
+        ]}
+      />,
+    );
+    expect(byRole(root, 'radio').map((r) => r.props.accessibilityState)).toEqual([
+      { checked: true, disabled: off },
+      { checked: false, disabled: off },
+    ]);
+    expect(byRole(root, 'radio').map((r) => r.props.disabled)).toEqual([off, off]);
+  });
+
   // #829: in dark mode the chosen segment's surface is darker than its track, so the choice read
   // mostly by its text's tone. It carries a 1px border in the theme's border colour, in both
   // modes, so it reads by its shape too; the others show none, and every text keeps its tone.
