@@ -82,7 +82,9 @@ export const leaveTransitions = {
 /** Notification preferences are confirmed only by authenticated backend replies. */
 export const notificationTransitions = {
   off: ['loading', 'pending', 'offline'],
-  loading: ['ready', 'blocked', 'offline', 'error', 'off'],
+  // loading → pending: a member's change during a Settings read retires that read, whose late
+  // answer is then dropped, so the change's confirmed reply is the one that stands.
+  loading: ['ready', 'pending', 'blocked', 'offline', 'error', 'off'],
   pending: ['ready', 'denied', 'blocked', 'offline', 'error', 'off'],
   // ready → blocked: foreground return to Settings after Android revokes permission.
   ready: ['loading', 'pending', 'offline', 'off', 'blocked'],
