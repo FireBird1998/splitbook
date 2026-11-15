@@ -501,6 +501,15 @@ function Members({ controller }: { controller: MobileController }) {
         onMemberGone: noop,
         onDismissDone: noop,
       }}
+      removal={{
+        state: snapshot.memberRemoval,
+        offline: snapshot.offline.active,
+        onReview: noop,
+        onConfirm: noop,
+        onCancel: noop,
+        onCheck: noop,
+        onOpenWeb: noop,
+      }}
     />
   );
 }

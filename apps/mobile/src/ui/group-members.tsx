@@ -3,7 +3,12 @@ import { ScrollView, View } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory, MemberRole } from '@splitbook/shared/types';
 import { isGroupAdmin } from '../data/member-roles';
-import type { LeaveGroupState, MemberRoleState, MobileGroup } from '../data/types';
+import type {
+  LeaveGroupState,
+  MemberRemovalState,
+  MemberRoleState,
+  MobileGroup,
+} from '../data/types';
 import {
   Banner,
   BottomSheet,
@@ -55,6 +60,20 @@ export interface MemberRoleActions {
   /** The member whose options were open is no longer listed. */
   onMemberGone: (userId: string, name: string) => void;
   onDismissDone: () => void;
+}
+
+/** Remove from Group (#1253): the sheet's state and what each of its buttons does. */
+export interface MemberRemovalActions {
+  state: MemberRemovalState;
+  offline: boolean;
+  /** Remove from Group, chosen in a member's options: asks first. */
+  onReview: (userId: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  /** Go to Balances, where an open balance shows. */
+  onCheck: () => void;
+  /** Open on the web, where a broken recurring Expense is fixed. */
+  onOpenWeb: () => void;
 }
 
 /** Leave Group: the sheet's state and what each of its buttons does. */
@@ -248,10 +267,13 @@ const roleText: Record<MemberRole, { name: string; making: string }> = {
 function MemberOptionsSheet({
   member,
   roles,
+  onRemove,
   onClose,
 }: {
   member: Member | null;
   roles: MemberRoleActions;
+  /** Remove from Group: closes these options for its confirm (#1253). */
+  onRemove: (userId: string) => void;
   onClose: () => void;
 }) {
   const unavailable = roles.offline || roles.state.status === 'changing';
@@ -301,6 +323,18 @@ function MemberOptionsSheet({
                 onPress={() => choose('admin')}
               />
             )}
+            <Divider inset={66} />
+            <OptionRow
+              icon="person-remove-outline"
+              tone="negative"
+              title="Remove from Group"
+              meta="You’ll be asked to confirm"
+              disabled={unavailable}
+              onPress={() => {
+                onClose();
+                onRemove(member.user.id);
+              }}
+            />
           </Card>
           {roles.offline ? (
             <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
@@ -309,6 +343,86 @@ function MemberOptionsSheet({
           ) : null}
         </>
       ) : null}
+    </BottomSheet>
+  );
+}
+
+/**
+ * Remove from Group's confirm (#1253): what removing means, named for the member and the Group.
+ * A refusal that leaves nothing to send shows in place of the explanation and the button, with
+ * the way forward where there is one; the Group changing meanwhile, or a failure, keeps Remove to
+ * try again. Not dismissible while the removal is sent.
+ */
+function RemoveMemberSheet({
+  group,
+  removal,
+}: {
+  group: MobileGroup;
+  removal: MemberRemovalActions;
+}) {
+  const { state, offline } = removal;
+  const removing = state.status === 'removing';
+  const blocked = state.status === 'refused' && state.code !== 'REMOVAL_CONFLICT';
+  const name = state.name ?? '';
+  const firstName = name.split(/\s+/)[0] || name;
+  return (
+    <BottomSheet
+      visible={state.status !== 'closed' && state.groupId === group.id}
+      title={`Remove ${name} from ${group.name}?`}
+      titleLines={3}
+      doneLabel={blocked ? 'Close' : 'Cancel'}
+      dismissLabel={`${blocked ? 'Close' : 'Cancel'}, keeping ${name} in this Group`}
+      dismissible={!removing}
+      onDone={removal.onCancel}
+      footer={
+        blocked ? (
+          state.check === 'balances' ? (
+            <CompactButton label="Go to Balances" variant="tonal" block onPress={removal.onCheck} />
+          ) : state.check === 'web' ? (
+            <CompactButton
+              label="Open on the web"
+              icon="open-outline"
+              variant="tonal"
+              block
+              onPress={removal.onOpenWeb}
+            />
+          ) : null
+        ) : (
+          <>
+            <CompactButton
+              label="Remove from Group"
+              destructive
+              block
+              disabled={removing || offline}
+              hint={offline ? rolesNeedConnection : undefined}
+              onPress={removal.onConfirm}
+            />
+            {offline ? (
+              <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+                {rolesNeedConnection}
+              </CompactText>
+            ) : null}
+          </>
+        )
+      }
+    >
+      {removing ? (
+        <View style={{ marginHorizontal: -20 }}>
+          <LinearProgress label={`Removing ${name}`} />
+        </View>
+      ) : null}
+      {state.message ? (
+        <Banner tone={blocked ? 'warning' : 'error'} message={state.message} />
+      ) : null}
+      {blocked ? null : (
+        <>
+          <CompactText>
+            {firstName} won’t see this Group or its balances any more. The Expenses and payments
+            they’re part of stay for everyone else.
+          </CompactText>
+          <CompactText>They can rejoin with an invite.</CompactText>
+        </>
+      )}
     </BottomSheet>
   );
 }
@@ -322,8 +436,8 @@ function DoneNote({ message, onDismiss }: { message: string; onDismiss: () => vo
 
 /**
  * Members and Group details: the Group's details, then its members with their roles and Invite,
- * and Leave Group. An admin taps another member for their options and changes their role there
- * (#1252); removals stay on the web.
+ * and Leave Group. An admin taps another member for their options: a role change (#1252) or
+ * Remove from Group, which asks first (#1253).
  */
 export function GroupMembers({
   group,
@@ -332,6 +446,7 @@ export function GroupMembers({
   invite,
   leave,
   roles,
+  removal,
   notice,
   unavailable,
 }: {
@@ -342,6 +457,7 @@ export function GroupMembers({
   invite: { onPress: () => void; disabled: boolean; offline: boolean };
   leave: LeaveGroupActions;
   roles: MemberRoleActions;
+  removal: MemberRemovalActions;
   /** Shown above the details, e.g. the offline notice. */
   notice?: ReactNode;
   unavailable?: string | null;
@@ -480,9 +596,11 @@ export function GroupMembers({
         <MemberOptionsSheet
           member={selectedMember}
           roles={roles}
+          onRemove={removal.onReview}
           onClose={() => setSelected(null)}
         />
       ) : null}
+      {group ? <RemoveMemberSheet group={group} removal={removal} /> : null}
       {roles.state.done ? (
         <DoneNote message={roles.state.done} onDismiss={roles.onDismissDone} />
       ) : null}

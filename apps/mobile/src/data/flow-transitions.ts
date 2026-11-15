@@ -1,6 +1,6 @@
 import type { ExpenseEditor } from './expense-draft';
 import type { SettlementState } from './settlement';
-import type { GroupCreation, LeaveGroupState, MemberRoleState } from './types';
+import type { GroupCreation, LeaveGroupState, MemberRemovalState, MemberRoleState } from './types';
 
 type Transitions<S extends string> = Readonly<Record<S, readonly S[]>>;
 
@@ -88,6 +88,18 @@ export const memberRoleTransitions = {
   changing: ['idle', 'failed'],
   failed: ['idle', 'changing'],
 } as const satisfies Transitions<MemberRoleState['status']>;
+
+/**
+ * Remove from Group (#1253): asked first, sent once. Only the Group changing meanwhile, or a
+ * failure, offers Remove again; every other refusal only closes. Leaving the page closes it.
+ */
+export const memberRemovalTransitions = {
+  closed: ['confirm'],
+  confirm: ['closed', 'removing'],
+  removing: ['closed', 'refused', 'error'],
+  refused: ['closed', 'removing'],
+  error: ['closed', 'removing'],
+} as const satisfies Transitions<MemberRemovalState['status']>;
 
 /** Notification preferences are confirmed only by authenticated backend replies. */
 export const notificationTransitions = {

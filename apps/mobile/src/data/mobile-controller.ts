@@ -213,6 +213,7 @@ import type {
   GroupSnackbar,
   KeptDraft,
   LeaveGroupState,
+  MemberRemovalState,
   MemberRoleState,
   MobileGroup,
   MobileConfig,
@@ -367,6 +368,32 @@ function closedLeave(): LeaveGroupState {
 
 /** What's said when a member is no longer listed in the Group the page shows. */
 const noLongerInGroup = (name: string) => `${name} is no longer in this Group`;
+/** An admin's change refused (403) once the Group read after it shows they're a member now. */
+const noLongerAdmin = (groupName: string) => `You’re no longer an admin of ${groupName}.`;
+/** The Remove sheet closed: nothing asked or under way (#1253). */
+function closedRemoval(): MemberRemovalState {
+  return {
+    groupId: null,
+    userId: null,
+    name: null,
+    status: 'closed',
+    code: null,
+    message: null,
+    check: null,
+  };
+}
+/**
+ * A broken recurring Expense that still includes the member, in the server's words but saying
+ * it is fixed on the web: Android can't repair a recurring Expense (#1253, as for leaving, #877).
+ */
+function removalRecurringWords(server: string | null, name: string) {
+  return server
+    ? server.replace(
+        /Remove them from (it|each) before removing them from the Group\.$/,
+        'Remove them from $1 on the web before removing them from the Group.',
+      )
+    : `A recurring Expense still includes ${name}. Remove them from it on the web before removing them from the Group.`;
+}
 /** No role change under way, failed or confirmed (#1252). */
 function idleMemberRole(): MemberRoleState {
   return {
@@ -453,6 +480,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     homeSnackbar: null,
     leave: closedLeave(),
     memberRole: idleMemberRole(),
+    memberRemoval: closedRemoval(),
     settlement: emptySettlement(),
     pendingPayment: null,
     keptDraft: null,
@@ -745,6 +773,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       (next.screen !== 'members' || next.detail.id !== next.memberRole.groupId)
     )
       next = { ...next, memberRole: idleMemberRole() };
+    // So does the Remove sheet.
+    if (
+      next.memberRemoval.status !== 'closed' &&
+      (next.screen !== 'members' || next.detail.id !== next.memberRemoval.groupId)
+    )
+      next = { ...next, memberRemoval: closedRemoval() };
     if (
       next.toReview.groupId &&
       (next.screen !== 'group' || next.detail.id !== next.toReview.groupId)
@@ -6173,7 +6207,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   /** Android Back and the arrow return to the destination, Month and scroll it opened from. */
   const closeMembers = async () => {
-    if (route.screen !== 'members' || snapshot.leave.status === 'leaving') return;
+    if (
+      route.screen !== 'members' ||
+      snapshot.leave.status === 'leaving' ||
+      snapshot.memberRemoval.status === 'removing'
+    )
+      return;
     if (lostGroups.has(route.groupId)) {
       if (!(await clearLostRecords(route.groupId, generation))) return;
       const invitation = openWaitingInvitation();
@@ -6539,7 +6578,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             failure.status === 403 &&
             reread &&
             !isGroupAdmin(reread, self)
-          ? `You’re no longer an admin of ${reread.name}.`
+          ? noLongerAdmin(reread.name)
           : `Couldn’t make ${name} ${roleComplement[role]}. Try again.`;
     publish({ ...snapshot, memberRole: { ...settled, status: 'failed', message, done: null } });
   };
@@ -6552,8 +6591,186 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (route.screen !== 'members' || !groupId || snapshot.memberRole.status === 'changing') return;
     publish({
       ...snapshot,
-      memberRole: { ...idleMemberRole(), groupId, userId, name, done: noLongerInGroup(name) },
+      memberRole: confirmedOnMembers(groupId, userId, name, noLongerInGroup(name)),
     });
+  };
+  /** Members' Snackbar, which a role change and a removal share (#1253). */
+  const confirmedOnMembers = (
+    groupId: string,
+    userId: string,
+    name: string,
+    done: string,
+  ): MemberRoleState => ({ ...idleMemberRole(), groupId, userId, name, done });
+
+  let removalRequest = 0;
+  /**
+   * Remove from Group in a member's options (#1253): the sheet asks first, naming the member and
+   * the Group. Never for yourself (that is Leave Group), and only for an admin.
+   */
+  const reviewRemoveMember = (userId: string) => {
+    const group = shownGroup(snapshot),
+      self = snapshot.auth.user?.id,
+      target = group?.members.find((member) => member.user.id === userId);
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      route.screen !== 'members' ||
+      !group ||
+      !target ||
+      !self ||
+      userId === self ||
+      !isGroupAdmin(group, self) ||
+      snapshot.memberRemoval.status !== 'closed' ||
+      snapshot.memberRole.status === 'changing'
+    )
+      return;
+    publish({
+      ...snapshot,
+      memberRemoval: {
+        groupId: group.id,
+        userId,
+        name: target.user.name,
+        status: 'confirm',
+        code: null,
+        message: null,
+        check: null,
+      },
+    });
+  };
+  /** Cancel, Close, Back and the scrim close the Remove sheet; nothing was sent. Not while removing. */
+  const cancelRemoveMember = () => {
+    if (['closed', 'removing'].includes(snapshot.memberRemoval.status)) return;
+    removalRequest += 1;
+    publish({ ...snapshot, memberRemoval: closedRemoval() });
+  };
+  /**
+   * Remove from Group on the sheet: sent only online, and again only when the admin asks, after the
+   * Group changed meanwhile or a failure. Whatever the answer, the Group is read again: a member
+   * no longer listed was removed (a lost reply included). A refusal stays on the sheet in the
+   * server's words, with Balances for an open balance; a broken recurring Expense says it is
+   * fixed on the web, which Android can't do.
+   */
+  const removeMember = async () => {
+    const state = snapshot.memberRemoval,
+      group = shownGroup(snapshot),
+      self = snapshot.auth.user?.id;
+    const sendable =
+      state.status === 'confirm' ||
+      state.status === 'error' ||
+      (state.status === 'refused' && state.code === 'REMOVAL_CONFLICT');
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      route.screen !== 'members' ||
+      !group ||
+      group.id !== state.groupId ||
+      !state.userId ||
+      !state.name ||
+      !sendable ||
+      !isGroupAdmin(group, self) ||
+      snapshot.offline.active
+    )
+      return;
+    const owner = generation,
+      attempt = ++removalRequest,
+      view = route,
+      groupId = group.id,
+      { userId, name } = state;
+    const onPage = () => current(owner) && view === route;
+    publish({
+      ...snapshot,
+      memberRemoval: { ...state, status: 'removing', code: null, message: null, check: null },
+    });
+    /** The removal's refusal or failure; null once the server answered that it was made. */
+    let failure: unknown = null;
+    try {
+      await request(`/api/groups/${groupId}/members/${userId}`, owner, {
+        method: 'DELETE',
+      }).finally(() => {
+        // Whatever the answer, the members, Balances and the Groups list may have changed.
+        if (current(owner)) invalidateReads(`group:${groupId}`, `balances:${groupId}`, 'groups');
+      });
+    } catch (error) {
+      if (!current(owner) || error instanceof Superseded) return;
+      failure = error;
+    }
+    /** The Group read again after the removal, whatever its answer. */
+    let reread: MobileGroup | null = null;
+    try {
+      reread = await readMembersGroup(groupId, owner, { fresh: true, wanted: onPage });
+    } catch (error) {
+      if (!onPage() || error instanceof Superseded) return;
+      if (error instanceof RequestError && [403, 404].includes(error.status)) {
+        // The Group itself refuses or is gone: the page says so, as on any denial.
+        dropDeniedGroup(groupId, error);
+        unshowGroup();
+        if (attempt === removalRequest) publish({ ...snapshot, memberRemoval: closedRemoval() });
+        return;
+      }
+      // Not read: the page keeps showing what it had.
+    }
+    if (!onPage() || attempt !== removalRequest) return;
+    const answered =
+      failure instanceof RequestError && !failure.networkFailure && failure.status > 0;
+    if (failure === null || (reread && !reread.members.some((m) => m.user.id === userId))) {
+      // Removed by this request, its reply lost or not; or by someone else meanwhile.
+      const done =
+        failure !== null && answered
+          ? noLongerInGroup(name)
+          : `${name} was removed from ${group.name}`;
+      publish({
+        ...snapshot,
+        memberRemoval: closedRemoval(),
+        memberRole: confirmedOnMembers(groupId, userId, name, done),
+      });
+      return;
+    }
+    const refused = failure instanceof RequestError ? failure : null;
+    const code = refused?.code ?? null,
+      server = refused?.serverMessage?.trim() || null;
+    const outcome: Pick<MemberRemovalState, 'status' | 'code' | 'message' | 'check'> =
+      refused?.status === 409 && code === 'OPEN_BALANCE'
+        ? {
+            status: 'refused',
+            code,
+            message:
+              server ?? `${name} isn’t settled up in this Group. Settle up before removing them.`,
+            check: 'balances',
+          }
+        : refused?.status === 409 && code === 'RECURRING_EXPENSE_PROBLEM'
+          ? { status: 'refused', code, message: removalRecurringWords(server, name), check: 'web' }
+          : refused?.status === 409 && code && server
+            ? { status: 'refused', code, message: server, check: null }
+            : refused?.status === 403 && reread && !isGroupAdmin(reread, self)
+              ? {
+                  status: 'refused',
+                  code: 'FORBIDDEN',
+                  message: noLongerAdmin(reread.name),
+                  check: null,
+                }
+              : {
+                  status: 'error',
+                  code: null,
+                  message: `Couldn’t remove ${name}. Try again.`,
+                  check: null,
+                };
+    publish({ ...snapshot, memberRemoval: { ...state, ...outcome } });
+  };
+  /**
+   * Go to Balances on the Remove sheet: closes it and this page, and opens the Group's Balances,
+   * where the member's open balance shows.
+   */
+  const showRemovalBalances = async () => {
+    const { groupId, check, status } = snapshot.memberRemoval;
+    if (
+      snapshot.screen !== 'members' ||
+      !groupId ||
+      check !== 'balances' ||
+      status === 'removing' ||
+      snapshot.detail.id !== groupId
+    )
+      return;
+    removalRequest += 1;
+    navigate(groupAt(groupId, 'balances'), { memberRemoval: closedRemoval() });
+    await openGroup(groupId, true, 'balances');
   };
   /** The role change's Snackbar went, after its time or dismissed. */
   const dismissMemberRoleDone = () => {
@@ -8750,6 +8967,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     changeMemberRole,
     noteMemberGone,
     dismissMemberRoleDone,
+    reviewRemoveMember,
+    cancelRemoveMember,
+    removeMember,
+    showRemovalBalances,
     showLeaveCheck,
     accountStorage,
     openSettlements,

@@ -494,6 +494,63 @@ async function verify() {
     await alex.controller.back();
     checks.push('Make admin and Make member read back, and a lost admin role refused in place');
 
+    // #1253: Alex removes Sam on Members. Sam owes him first, so the server refuses in its own
+    // words, with Balances; once Sam has paid him back, the removal goes through and is read back.
+    // Sam then rejoins by the invite link, for the checks after this one.
+    const householdTags = z.object({ data: z.object({ tags: z.array(z.object({ _id: id })) }) });
+    const tagId = householdTags.parse(
+      await (await alex.authorized(`/api/groups/${household._id}`)).json(),
+    ).data.tags[0]._id;
+    const pays = async (payer: typeof alex, payerId: string, forId: string) => {
+      const response = await payer.authorized(`/api/groups/${household._id}/expenses`, 'POST', {
+        description: 'Mobile 1253 shared cost',
+        amount: 12.34,
+        currency: 'INR',
+        date: new Date().toISOString(),
+        category: 'other',
+        tagId,
+        paidBy: [{ user: payerId, amount: 12.34 }],
+        splitMethod: 'unequal',
+        splitBetween: [{ user: forId, amount: 12.34 }],
+      });
+      observe(response.status === 201, 'Could not record an Expense for the removal check.', {
+        status: response.status,
+      });
+    };
+    await pays(alex, alexId, samId);
+    alex.controller.openMembers();
+    alex.controller.reviewRemoveMember(samId);
+    await alex.controller.removeMember();
+    const notSettled = alex.controller.getSnapshot().memberRemoval;
+    observe(
+      notSettled.status === 'refused' &&
+        notSettled.code === 'OPEN_BALANCE' &&
+        notSettled.check === 'balances' &&
+        !!notSettled.message?.startsWith(`${samName} owes`) &&
+        notSettled.message.endsWith('Settle up before removing them.') &&
+        (await serverRole(samId)) === 'member',
+      'Removing a member who isn’t settled up was not refused in the server’s words.',
+      { status: notSettled.status, code: notSettled.code, check: notSettled.check },
+    );
+    alex.controller.cancelRemoveMember();
+    await pays(sam, samId, alexId);
+    alex.controller.reviewRemoveMember(samId);
+    await alex.controller.removeMember();
+    const afterRemoval = alex.controller.getSnapshot();
+    observe(
+      afterRemoval.memberRemoval.status === 'closed' &&
+        afterRemoval.memberRole.done === `${samName} was removed from ${householdName}` &&
+        !afterRemoval.detail.data?.members.some((m) => m.user.id === samId) &&
+        (await serverRole(samId)) === undefined,
+      'The removal did not reach the server or was not read back.',
+      { removal: afterRemoval.memberRemoval.status, done: afterRemoval.memberRole.done },
+    );
+    await alex.controller.back();
+    await sam.controller.openInvitation(invitationUrl);
+    await sam.controller.joinInvitation();
+    observe((await serverRole(samId)) === 'member', 'Sam could not rejoin after the removal.', {});
+    checks.push('A removal refused while not settled up, then made and read back');
+
     const beforeRejectedLink = sam.requests;
     await sam.controller.openInvitation('https://unsupported.example.invalid/join/00000000');
     observe(

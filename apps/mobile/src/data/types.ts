@@ -402,6 +402,25 @@ export interface MemberRoleState {
   done: string | null;
 }
 
+/**
+ * Remove from Group, a sheet over Members and Group details (#1253). It asks first; 'removing'
+ * while the server is asked and the sheet can't be dismissed; 'refused' is the server's answer
+ * (`code`), with a way forward where there is one (`check`); 'error' is any other failure, after
+ * which Remove can be tried again. Nothing is queued or sent again on its own.
+ */
+export interface MemberRemovalState {
+  groupId: string | null;
+  userId: string | null;
+  /** Their name when the sheet opened, for its title and words. */
+  name: string | null;
+  status: 'closed' | 'confirm' | 'removing' | 'refused' | 'error';
+  /** Why the server refused: OPEN_BALANCE, RECURRING_EXPENSE_PROBLEM, REMOVAL_CONFLICT, LAST_ADMIN or FORBIDDEN. */
+  code: string | null;
+  message: string | null;
+  /** Where what blocks it is fixed: the Group's Balances, or the Group on the web. */
+  check: 'balances' | 'web' | null;
+}
+
 /** Confirms something that ended on Home, such as leaving a Group. Leaving Home ends it. */
 export interface HomeSnackbar {
   message: string;
@@ -548,6 +567,8 @@ export interface MobileSnapshot {
   leave: LeaveGroupState;
   /** An admin's change to a member's role, on Members and Group details. */
   memberRole: MemberRoleState;
+  /** Remove from Group, a sheet over Members and Group details. */
+  memberRemoval: MemberRemovalState;
   settlement: SettlementState;
   /** The current Group's unconfirmed payment, kept for an explicit retry from Balances. */
   pendingPayment: PendingPayment | null;
