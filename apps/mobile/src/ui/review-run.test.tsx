@@ -1177,6 +1177,15 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
             onMemberGone: noop,
             onDismissDone: noop,
           }}
+          removal={{
+            state: snapshot.memberRemoval,
+            offline: false,
+            onReview: noop,
+            onConfirm: noop,
+            onCancel: noop,
+            onCheck: noop,
+            onOpenWeb: noop,
+          }}
         />
       );
     }

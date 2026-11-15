@@ -6,6 +6,7 @@ import {
   creationTransitions,
   leaveTransitions,
   memberRoleTransitions,
+  memberRemovalTransitions,
   notificationTransitions,
   notificationOpeningTransitions,
   headerSettingsTransitions,
@@ -17,6 +18,7 @@ const tables = {
   creation: creationTransitions,
   leave: leaveTransitions,
   memberRole: memberRoleTransitions,
+  memberRemoval: memberRemovalTransitions,
   notifications: notificationTransitions,
   notificationOpening: notificationOpeningTransitions,
 };
@@ -28,7 +30,8 @@ export function monitorFlows(controller: MobileController) {
   let previous = controller.getSnapshot();
   let saves = 0,
     leaves = 0,
-    roleChanges = 0;
+    roleChanges = 0,
+    removals = 0;
   const violations: string[] = [];
   for (const command of [
     'saveExpense',
@@ -60,6 +63,15 @@ export function monitorFlows(controller: MobileController) {
       roleChanges--;
     }
   };
+  const removeMember = controller.removeMember;
+  controller.removeMember = async () => {
+    removals++;
+    try {
+      return await removeMember();
+    } finally {
+      removals--;
+    }
+  };
   const saveHeader = controller.saveHeader;
   controller.saveHeader = async () => {
     saves++;
@@ -77,6 +89,7 @@ export function monitorFlows(controller: MobileController) {
       'creation',
       'leave',
       'memberRole',
+      'memberRemoval',
       'notifications',
       'notificationOpening',
     ] as const) {
@@ -90,6 +103,8 @@ export function monitorFlows(controller: MobileController) {
       if (to === 'leaving' && !leaves) violations.push('leave: leaving without leaveGroup');
       if (to === 'changing' && !roleChanges)
         violations.push('memberRole: changing without changeMemberRole');
+      if (to === 'removing' && !removals)
+        violations.push('memberRemoval: removing without removeMember');
     }
     const headerFrom = previous.headerSettings?.status,
       headerTo = next.headerSettings?.status;

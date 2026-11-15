@@ -124,6 +124,14 @@ void SplashScreen.preventAutoHideAsync();
 
 /** A link out of the app, such as a rate source's attribution (#728); one that can't open does nothing. */
 const openOutside = (url: string) => void Linking.openURL(url).catch(() => undefined);
+/**
+ * The Group's settings on the web, for what Android doesn't do: removing a currency, or repairing
+ * a recurring Expense that blocks removing a member (#1253).
+ */
+const openGroupSettingsOnWeb = (groupId: string, alert: (title: string, message: string) => void) =>
+  void Linking.openURL(new URL(`/groups/${groupId}/settings`, environment.webOrigin).href).catch(
+    () => alert('Couldn’t open the Group’s settings', 'Check your browser and try again.'),
+  );
 
 /**
  * Each controller's start, its session restored once per controller rather than once per mount,
@@ -1459,16 +1467,7 @@ function GroupScreen() {
           adding={state.currencyAdd}
           onAdd={(currency) => controller.addGroupCurrency(currency)}
           // Removing one is on the web for now: the Group's settings there.
-          onOpenWeb={() => {
-            void Linking.openURL(
-              new URL(`/groups/${group.id}/settings`, environment.webOrigin).href,
-            ).catch(() => {
-              native.alert(
-                'Couldn’t open the Group’s settings',
-                'Check your browser and try again.',
-              );
-            });
-          }}
+          onOpenWeb={() => openGroupSettingsOnWeb(group.id, native.alert)}
           onRetry={() => void controller.openCurrencies(group.id)}
           onClose={() => controller.closeCurrencies()}
         />
@@ -1623,9 +1622,10 @@ function GroupScreen() {
 /** Members and Group details: a full screen over the Group, which Back returns to. */
 function MembersScreen() {
   const shareInvite = useShareInvite();
+  const native = useHeldUpdateNativeOverlays();
   const state = useMobileSnapshot(
     controller,
-    ({ auth, detail, groups, share, offline, leave, memberRole, toReview }) => ({
+    ({ auth, detail, groups, share, offline, leave, memberRole, memberRemoval, toReview }) => ({
       auth,
       detail,
       groups,
@@ -1633,6 +1633,7 @@ function MembersScreen() {
       offline,
       leave,
       memberRole,
+      memberRemoval,
       toReview,
     }),
     sameSelection,
@@ -1666,6 +1667,17 @@ function MembersScreen() {
         onChange: (userId, role) => void controller.changeMemberRole(userId, role),
         onMemberGone: controller.noteMemberGone,
         onDismissDone: controller.dismissMemberRoleDone,
+      }}
+      removal={{
+        state: state.memberRemoval,
+        offline: state.offline.active,
+        onReview: controller.reviewRemoveMember,
+        onConfirm: () => void controller.removeMember(),
+        onCancel: controller.cancelRemoveMember,
+        onCheck: () => void controller.showRemovalBalances(),
+        onOpenWeb: () => {
+          if (group) openGroupSettingsOnWeb(group.id, native.alert);
+        },
       }}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
       unavailable={state.detail.message}
