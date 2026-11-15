@@ -457,9 +457,9 @@ describe('Buttons and rows', () => {
     );
     const root = render(row('Making admin…'));
     act(() => renderer!.update(row()));
-    expect(one(byRole(root, 'button', 'Priya Shah, Admin, options')).props.accessibilityState).toEqual(
-      { disabled: false, busy: false },
-    );
+    expect(
+      one(byRole(root, 'button', 'Priya Shah, Admin, options')).props.accessibilityState,
+    ).toEqual({ disabled: false, busy: false });
   });
 
   // #1252: a sheet's option, shared by Member options and a Tag's options: a tile, a title and
@@ -510,7 +510,7 @@ describe('Buttons and rows', () => {
       one(node.findAll((n) => isHost(n, 'Ionicons'))).props.color;
     expect(tileColour(admin!)).toBe(lightTokens.brand.main);
     expect(tileColour(remove!)).toBe(lightTokens.status.negative);
-    expect(archive!.props.accessibilityState).toEqual({ disabled: true });
+    expect(archive!.props.accessibilityState).toEqual({ disabled: true, busy: false });
     press(archive!);
     expect(choose).toHaveBeenCalledOnce();
   });

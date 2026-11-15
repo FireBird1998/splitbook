@@ -565,11 +565,9 @@ export const ListRow = memo(function ListRow({
       accessibilityState={
         trailingSwitch
           ? { checked: trailingSwitch.value, disabled: rowDisabled }
-          : busy !== undefined
-            ? { disabled: true, busy: true }
-            : rowDisabled
-              ? { disabled: true }
-              : undefined
+          : // Both, always: Android keeps a state it was given once the prop goes, so a row that
+            // was busy would go on saying so (#1252).
+            { disabled: rowDisabled, busy: busy !== undefined }
       }
       disabled={rowDisabled}
       {...tap.on(rowPress)}

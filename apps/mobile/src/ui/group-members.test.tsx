@@ -365,7 +365,7 @@ describe('Changing a member’s role (#1252)', () => {
           String(n.props.accessibilityLabel).startsWith('Make member'),
       ),
     );
-    expect(action.props.accessibilityState).toEqual({ disabled: true });
+    expect(action.props.accessibilityState).toEqual({ disabled: true, busy: false });
     act(() => action.props.onPress?.());
     expect(props.roles.onChange).not.toHaveBeenCalled();
   });
@@ -429,7 +429,7 @@ describe('Changing a member’s role (#1252)', () => {
           String(n.props.accessibilityLabel).startsWith('Make admin'),
       ),
     );
-    expect(action.props.accessibilityState).toEqual({ disabled: true });
+    expect(action.props.accessibilityState).toEqual({ disabled: true, busy: false });
     act(() => action.props.onPress?.());
     expect(props.roles.onChange).not.toHaveBeenCalled();
   });
