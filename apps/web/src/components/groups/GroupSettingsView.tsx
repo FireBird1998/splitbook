@@ -260,8 +260,12 @@ function GroupSettingsContent({
     }
   };
 
+  const selectedMemberData = members.find((m) => m.user._id === selectedMember);
+
   const handleMemberAction = async (action: 'promote' | 'demote' | 'remove') => {
     if (!selectedMember) return;
+    // Named as the list shows them now: a removed member is gone from the next read.
+    const name = selectedMemberData?.user.name;
     setMemberLoading(true);
     setMemberRefusal(null);
     try {
@@ -289,10 +293,10 @@ function GroupSettingsContent({
         open: true,
         message:
           action === 'remove'
-            ? 'Member removed'
+            ? `${name} was removed from ${group.name}`
             : action === 'promote'
-              ? 'Promoted to admin'
-              : 'Demoted to member',
+              ? `${name} is now an admin`
+              : `${name} is now a member`,
       });
     } catch {
       setSnackbar({ open: true, message: 'Action failed' });
@@ -350,8 +354,6 @@ function GroupSettingsContent({
   };
 
   const tags = group.tags.filter((tag) => !tag.isDeleted);
-
-  const selectedMemberData = members.find((m) => m.user._id === selectedMember);
 
   return (
     <Container maxWidth={settingsWidth} disableGutters>
@@ -558,7 +560,7 @@ function GroupSettingsContent({
                 <ListItemIcon>
                   <AdminPanelSettingsIcon fontSize="small" />
                 </ListItemIcon>
-                <ListItemText>Promote to Admin</ListItemText>
+                <ListItemText>Make admin</ListItemText>
               </MuiMenuItem>
             )}
             {selectedMemberData?.role === 'admin' && (
@@ -566,14 +568,14 @@ function GroupSettingsContent({
                 <ListItemIcon>
                   <PersonIcon fontSize="small" />
                 </ListItemIcon>
-                <ListItemText>Demote to Member</ListItemText>
+                <ListItemText>Make member</ListItemText>
               </MuiMenuItem>
             )}
             <MuiMenuItem onClick={() => handleMemberAction('remove')} disabled={memberLoading}>
               <ListItemIcon>
                 <PersonRemoveIcon fontSize="small" sx={{ color: 'error.main' }} />
               </ListItemIcon>
-              <ListItemText sx={{ color: 'error.main' }}>Remove</ListItemText>
+              <ListItemText sx={{ color: 'error.main' }}>Remove from Group</ListItemText>
             </MuiMenuItem>
           </Menu>
         </Paper>

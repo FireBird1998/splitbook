@@ -281,12 +281,10 @@ export const refusalVocabulary = {
   LAST_ADMIN: {
     status: 409,
     words: 'Make someone else an admin before you leave.',
+    // #1250: in the words of the buttons both apps offer, Make admin and Make member.
     variants: {
-      demotion: {
-        status: 409,
-        words: 'Cannot demote the last admin. Promote another member first.',
-      },
-      removal: { status: 409, words: 'Cannot remove the last admin.' },
+      demotion: { status: 409, words: lastAdminWords },
+      removal: { status: 409, words: lastAdminWords },
     },
   },
   LEAVE_CONFLICT: {
@@ -482,7 +480,9 @@ type VariantData<C extends RequestRefusalCode> = {
       ? V extends 'removal'
         ? { memberName: string }
         : object
-      : object);
+      : C extends 'LAST_ADMIN'
+        ? { groupName: string }
+        : object);
 }[Variant<C>];
 export type RefusalData<C extends RequestRefusalCode> = (
   | (Data<C> & { variant?: never })
@@ -566,6 +566,9 @@ function leaveRecurringWords(data: RefusalContext) {
       ? `Remove yourself from ${them}, then leave.`
       : `Ask an admin to remove you from ${them}, then leave.`)
   );
+}
+function lastAdminWords(data: RefusalContext) {
+  return `${data.groupName} needs an admin. Make someone else an admin first.`;
 }
 function removalRecurringWords(data: RefusalContext) {
   const expenses = data.recurringExpenses!;
