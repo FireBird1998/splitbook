@@ -260,6 +260,10 @@ export function notificationControls(d: {
     };
     retry = repeat;
     if (!d.online()) {
+      // Unsent, the change still retires every read in flight, maintenance's too: a late answer
+      // must not replace the offline controls or clear this Retry (#1245).
+      operation++;
+      stopMaintenance();
       set('offline', 'Connect to confirm notification settings.');
       return;
     }
