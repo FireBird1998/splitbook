@@ -45,6 +45,7 @@ const {
   IconTile,
   LinearProgress,
   ListRow,
+  OptionRow,
   Money,
   RowAmount,
   SectionHeader,
@@ -418,6 +419,76 @@ describe('Buttons and rows', () => {
   it('list rows without an action are not buttons', () => {
     const root = render(<ListRow title="Sam Chen" meta="Member" />);
     expect(byRole(root, 'button')).toHaveLength(0);
+  });
+
+  // #1252: a row whose change is being made dims, says so in place of its second line, and
+  // can't be pressed again until the server answers.
+  it('a busy row dims, says what it is doing and can’t be pressed', () => {
+    const open = vi.fn();
+    const root = render(
+      <ListRow
+        title="Priya Shah"
+        meta="Member"
+        busy="Making admin…"
+        accessibilityLabel="Priya Shah, Member, options"
+        onPress={open}
+      />,
+    );
+    const row = one(byRole(root, 'button', 'Priya Shah, Making admin…'));
+    expect(row.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(text(row)).toBe('Priya ShahMaking admin…');
+    expect(flatten(row.props.style({ pressed: false })).opacity).toBe(0.55);
+    press(row);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  // #1252: a sheet's option, shared by Member options and a Tag's options: a tile, a title and
+  // a second line that explains it, and a red variant for one that removes something.
+  it('an option row is a button with a tile, its title and the line that explains it', () => {
+    const lightTokens = getSemanticTokens('light');
+    const choose = vi.fn();
+    const root = render(
+      <ThemeContext.Provider value={lightTokens}>
+        <OptionRow
+          icon="shield-checkmark-outline"
+          title="Make admin"
+          meta="Can change Group settings, Tags and members"
+          onPress={choose}
+        />
+        <OptionRow
+          icon="person-remove-outline"
+          title="Remove from Group"
+          meta="You’ll be asked to confirm"
+          tone="negative"
+          onPress={choose}
+        />
+        <OptionRow
+          icon="archive-outline"
+          title="Archive"
+          meta="A Group needs one active Tag."
+          disabled
+          onPress={choose}
+        />
+      </ThemeContext.Provider>,
+    );
+    const [admin, remove, archive] = byRole(root, 'button');
+    expect(admin!.props.accessibilityLabel).toBe(
+      'Make admin, Can change Group settings, Tags and members',
+    );
+    press(admin!);
+    expect(choose).toHaveBeenCalledOnce();
+    const titleColour = (node: ReactTestInstance, title: string) =>
+      flatten(one(node.findAll((n) => isHost(n, 'Text') && n.props.children === title)).props.style)
+        .color;
+    expect(titleColour(admin!, 'Make admin')).toBe(lightTokens.text);
+    expect(titleColour(remove!, 'Remove from Group')).toBe(lightTokens.status.negative);
+    const tileColour = (node: ReactTestInstance) =>
+      one(node.findAll((n) => isHost(n, 'Ionicons'))).props.color;
+    expect(tileColour(admin!)).toBe(lightTokens.brand.main);
+    expect(tileColour(remove!)).toBe(lightTokens.status.negative);
+    expect(archive!.props.accessibilityState).toEqual({ disabled: true });
+    press(archive!);
+    expect(choose).toHaveBeenCalledOnce();
   });
 });
 

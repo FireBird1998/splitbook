@@ -44,6 +44,23 @@ function publisher() {
 }
 
 describe('the public flow monitor', () => {
+  // #1252: a role change is its own flow, started only by the command that sends it.
+  it('checks the member role flow: declared steps, and changing only through its command', () => {
+    const { controller, publish } = publisher();
+    const check = monitorFlows(controller);
+    const memberRole = controller.getSnapshot().memberRole;
+    publish({ ...controller.getSnapshot(), memberRole: { ...memberRole, status: 'changing' } });
+    publish({ ...controller.getSnapshot(), memberRole: { ...memberRole, status: 'failed' } });
+    publish({ ...controller.getSnapshot(), memberRole: { ...memberRole, status: 'idle' } });
+    publish({ ...controller.getSnapshot(), memberRole: { ...memberRole, status: 'failed' } });
+    expect(() => check.assertValid()).toThrow(
+      [
+        'memberRole: changing without changeMemberRole',
+        'memberRole: undeclared idle → failed',
+      ].join('\n'),
+    );
+    check.stop();
+  });
   it('fails on an undeclared publication even without a request', () => {
     const { controller, publish } = publisher();
     const check = monitorFlows(controller);

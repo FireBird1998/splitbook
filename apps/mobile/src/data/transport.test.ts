@@ -417,6 +417,24 @@ describe('the hooks', () => {
     expect(await caught(t.request(path, 1))).toMatchObject({ kind: 'access-denied', status });
     expect(t.hooks).toEqual(denied ? [`denied: ${groupId} ${status}`] : []);
   });
+
+  // #1252: a member route refuses an admin who lost only the admin role with the same 403 it
+  // gives someone outside the Group, so the Group stays until its own read tells them apart.
+  it.each(['PATCH', 'DELETE'] as const)(
+    'keeps the Group on a 403 from a member route (%s), for its own read to decide',
+    async (method) => {
+      const t = setup(async () =>
+        Response.json({ error: 'Forbidden', status: 403, code: 'FORBIDDEN' }, { status: 403 }),
+      );
+      const path = `/api/groups/${groupId}/members/a00000000000000000000002`;
+      expect(await caught(t.request(path, 1, { method }))).toMatchObject({
+        kind: 'access-denied',
+        status: 403,
+        code: 'FORBIDDEN',
+      });
+      expect(t.hooks).toEqual([]);
+    },
+  );
 });
 
 describe('cleaning up after each request', () => {
