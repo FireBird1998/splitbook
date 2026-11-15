@@ -6558,16 +6558,25 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!onPage() || attempt !== roleRequest) return;
     if (!reread && changeAnswer && failure === null)
       publish({ ...snapshot, detail: { ...snapshot.detail, data: changeAnswer } });
-    const changed = reread?.members.find((member) => member.user.id === userId);
+    /** The Group as the page shows it now: read again, or as the change's own answer gave it. */
+    const shown = reread ?? (failure === null ? changeAnswer : null);
+    const changed = shown?.members.find((member) => member.user.id === userId);
     const settled = { groupId, userId, name, role, status: 'idle' as const, message: null };
     if (reread && !changed) {
       publish({ ...snapshot, memberRole: { ...settled, done: noLongerInGroup(name) } });
       return;
     }
-    if (failure === null || changed?.role === role) {
+    // Made by this tap: the server said so, or its reply was lost and the Group shows it. A
+    // Snackbar says so only where the Group shown agrees; otherwise the list speaks for itself.
+    // A refusal the server answered is never taken for a change made, whatever the read shows.
+    const replyLost = failure instanceof RequestError && failure.networkFailure;
+    if (failure === null || (replyLost && changed?.role === role)) {
       publish({
         ...snapshot,
-        memberRole: { ...settled, done: `${name} is now ${roleComplement[role]}` },
+        memberRole: {
+          ...settled,
+          done: changed?.role === role ? `${name} is now ${roleComplement[role]}` : null,
+        },
       });
       return;
     }
@@ -6710,16 +6719,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!onPage() || attempt !== removalRequest) return;
     const answered =
       failure instanceof RequestError && !failure.networkFailure && failure.status > 0;
-    if (failure === null || (reread && !reread.members.some((m) => m.user.id === userId))) {
-      // Removed by this request, its reply lost or not; or by someone else meanwhile.
+    const stillListed = reread?.members.some((member) => member.user.id === userId);
+    if (failure === null || (reread && !stillListed)) {
+      // Removed by this request, its reply lost or not; or by someone else meanwhile. A Snackbar
+      // says so unless the Group read after it still lists them: then the list speaks for itself.
       const done =
         failure !== null && answered
           ? noLongerInGroup(name)
-          : `${name} was removed from ${group.name}`;
+          : stillListed
+            ? null
+            : `${name} was removed from ${group.name}`;
       publish({
         ...snapshot,
         memberRemoval: closedRemoval(),
-        memberRole: confirmedOnMembers(groupId, userId, name, done),
+        ...(done ? { memberRole: confirmedOnMembers(groupId, userId, name, done) } : {}),
       });
       return;
     }
