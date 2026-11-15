@@ -417,7 +417,7 @@ TalkBack adds the second initial only when two visible rows share a first name a
 initials differ ("You pay Priya S"), so speech agrees with the avatars.
 Older copies without initials keep rendering the first letter until the next Group and
 Balances reads rewrite them. An unreadable copy falls back to the no-copy state without
-wiping setup or blocking future reads.
+wiping setup or blocking future reads. An unreadable Widget session row draws signed out; an unreadable setup row draws “Set up this widget again” and opens setup as new, keeping the row until Save replaces it.
 
 ## Quick actions widget (#1183)
 
