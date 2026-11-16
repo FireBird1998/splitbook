@@ -166,3 +166,18 @@ it('keeps Tilt in phone SecureStore, outside the account purge contract', async 
   expect(local.stores).not.toContain(sceneTilt);
   expect(sceneTilt).not.toHaveProperty('clear');
 });
+
+it('keeps Spending by day in phone SecureStore, outside the account purge contract (#1274)', async () => {
+  const { spendingByDay } = await import('./data/spending-by-day');
+  const SecureStore = await import('expo-secure-store');
+  await spendingByDay.select(true);
+  expect(SecureStore.setItemAsync).toHaveBeenCalledWith('splitbook.spending-by-day', 'on');
+  const local = wired.dependencies!.accountLocal as { stores: unknown[] };
+  expect(local.stores).not.toContain(spendingByDay);
+  expect(spendingByDay).not.toHaveProperty('clear');
+});
+
+it('gives the controller the phone’s Spending by day switch, so turning it on reads the Month (#1274)', async () => {
+  const { spendingByDay } = await import('./data/spending-by-day');
+  expect(wired.dependencies!.spendingByDay).toBe(spendingByDay);
+});

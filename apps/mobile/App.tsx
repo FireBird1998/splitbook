@@ -2,6 +2,7 @@ import { HeaderScenePlaceholder } from './src/ui/header-scene-card';
 import { HeaderSettings } from './src/ui/header-settings';
 import { sceneTilt } from './src/data/scene-tilt';
 import { sceneMotion } from './src/data/scene-motion';
+import { spendingByDay } from './src/data/spending-by-day';
 import {
   HeldUpdateSurfaceContext,
   useHeldUpdateSurfaces,
@@ -534,6 +535,7 @@ function TaskScreen() {
   const theme = useTheme();
   const [confirm, confirmation] = useConfirm();
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
+  const spending = useSyncExternalStore(spendingByDay.subscribe, spendingByDay.getSnapshot);
   const feedback = state.feedback;
   const scroll = useRef<ScrollViewInstance>(null);
   const scrollContent = useRef<ViewInstance>(null);
@@ -672,6 +674,10 @@ function TaskScreen() {
                     }
                   : undefined
               }
+              spendingByDay={{
+                ...spending,
+                onChange: (value) => void spendingByDay.select(value),
+              }}
               user={state.auth.user!}
               appearance={preference.mode}
               onAppearanceChange={(mode) => void appearance.select(mode)}

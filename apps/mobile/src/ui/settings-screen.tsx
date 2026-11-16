@@ -27,8 +27,17 @@ export const signOutClears =
 export const signOutInterruptedSave =
   'If a save was interrupted, check your saved history after signing in before creating it again.';
 
+/** Spending by day (#1274): a switch kept on this phone, off until the member turns it on. */
+export interface SettingsSpendingByDay {
+  enabled: boolean;
+  /** The phone couldn’t read or keep the choice. */
+  message: string | null;
+  onChange: (enabled: boolean) => void;
+}
+
 export interface SettingsScreenProps {
   notifications?: NotificationSettingsProps;
+  spendingByDay: SettingsSpendingByDay;
   user: SessionUser;
   appearance: SettingsAppearance;
   onAppearanceChange: (value: SettingsAppearance) => void;
@@ -76,6 +85,7 @@ const row = {
 /** Content only; the parent screen supplies the top bar, scrolling and Android Back behavior. */
 export function SettingsScreen({
   notifications,
+  spendingByDay,
   user,
   appearance,
   onAppearanceChange,
@@ -111,6 +121,26 @@ export function SettingsScreen({
       </CompactText>
 
       {notifications ? <NotificationSettings {...notifications} /> : null}
+      {/* Board SpendAndSettings: Home’s one switch, then what it does as it is now set. */}
+      <View style={{ gap: 6 }}>
+        <SectionHeader title="Home" />
+        <Card>
+          <ListRow
+            leading={<IconTile icon="calendar-outline" />}
+            title="Spending by day"
+            titleLines={0}
+            meta="Your share of spending this month, on Home, with a calendar of each day."
+            metaLines={0}
+            trailingSwitch={{ value: spendingByDay.enabled, onChange: spendingByDay.onChange }}
+          />
+        </Card>
+        <CompactText variant="small" tone="secondary" style={{ paddingHorizontal: 2 }}>
+          {spendingByDay.enabled
+            ? 'On. It counts your share of each Expense. Payments between members are left out.'
+            : 'Off. Home shows your balances and Groups, as it does today.'}
+        </CompactText>
+        {spendingByDay.message ? <Banner tone="error" message={spendingByDay.message} /> : null}
+      </View>
       <View style={{ gap: 6 }}>
         <SectionHeader title="Appearance" />
         <Card>

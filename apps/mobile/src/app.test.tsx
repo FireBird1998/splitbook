@@ -799,6 +799,31 @@ describe('App Settings notification permission on resume', () => {
   });
 });
 
+// #1274: the phone switch, as Settings shows it; the module keeps it for the whole file.
+describe('App Settings: Spending by day', () => {
+  it('is off at first and turns on from its row, which then says what it counts', async () => {
+    const { spendingByDay } = await import('./data/spending-by-day');
+    const app = await renderApp();
+    try {
+      await app.press('Account and settings');
+      expect(app.pressable('Spending by day, ').props.accessibilityState).toMatchObject({
+        checked: false,
+      });
+      expect(app.text()).toContain('Off. Home shows your balances and Groups, as it does today.');
+      await app.press('Spending by day, ');
+      expect(spendingByDay.getSnapshot().enabled).toBe(true);
+      expect(app.pressable('Spending by day, ').props.accessibilityState).toMatchObject({
+        checked: true,
+      });
+      expect(app.text()).toContain(
+        'On. It counts your share of each Expense. Payments between members are left out.',
+      );
+    } finally {
+      await spendingByDay.select(false);
+    }
+  });
+});
+
 describe('App Settings sign-out', () => {
   it('lists in Settings everything the sign-out confirmation says is cleared', async () => {
     const app = await renderApp();

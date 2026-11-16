@@ -263,6 +263,7 @@ describe('Settings → Account (#622)', () => {
     act(() => {
       renderer = create(
         <SettingsScreen
+          spendingByDay={{ enabled: false, message: null, onChange: vi.fn() }}
           user={{
             id: 'a00000000000000000000001',
             name: 'Alex Rivera',

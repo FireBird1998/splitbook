@@ -844,8 +844,11 @@ export function createHomeQueries(session: HomeSession) {
             (scope !== 'groups' && scope !== 'home')
           )
             return;
+          // Only Home's own figures verify Home for the widgets: the other reads in its scope, such
+          // as a Month of Spending by day (#1274), may answer while they are still read again.
           if (
             scope === 'home' &&
+            queryKeyPath(query.queryKey) === homePath &&
             event.action.type === 'success' &&
             !event.action.manual &&
             (query.state.data as Envelope | undefined)?.source === 'network'

@@ -28,11 +28,13 @@ import {
   tripSummaryPath,
   userActivityPath,
   userSpendingPath,
+  spendingByDayPath,
   type ActivityPageQuery,
   type GroupInsightsQuery,
   type TripSummaryQuery,
   type UserActivityQuery,
   type UserSpendingQuery,
+  type SpendingByDayQuery,
 } from './api-paths';
 import type { ExpenseFilters } from './types';
 
@@ -121,6 +123,13 @@ export const userActivityKey = (account: QueryAccount, activity?: UserActivityQu
 /** Home's spending chart. In the `home` scope: whatever must reach Home's totals reaches it too. */
 export const userSpendingKey = (account: QueryAccount, spending: UserSpendingQuery) =>
   accountKey('home', account, userSpendingPath(spending));
+
+/**
+ * One Month of Spending by day (#1274). In the `home` scope: whatever must reach Home's totals,
+ * such as an Expense write or a Group joined or lost, reaches it too.
+ */
+export const spendingByDayKey = (account: QueryAccount, spending: SpendingByDayQuery) =>
+  accountKey('home', account, spendingByDayPath(spending));
 
 export const invitationsKey = (account: QueryAccount) =>
   accountKey('invitations', account, invitationsPath());
