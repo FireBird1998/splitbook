@@ -127,7 +127,11 @@ const november = (over: Partial<SpendingScreenState> = {}): SpendingScreenState 
 
 function render(
   state: SpendingScreenState,
-  { mode = 'light', offline = false }: { mode?: 'light' | 'dark'; offline?: boolean } = {},
+  {
+    mode = 'light',
+    offline = false,
+    known = ['INR', 'EUR'],
+  }: { mode?: 'light' | 'dark'; offline?: boolean; known?: string[] } = {},
 ) {
   const calls = {
     onMonth: vi.fn(),
@@ -144,6 +148,11 @@ function render(
           today={today}
           me={me}
           zeroCurrency="INR"
+          knownCurrencies={known}
+          groups={[
+            { id: maple._id, category: 'home' },
+            { id: goa._id, category: 'trip' },
+          ]}
           offline={offline}
           {...calls}
         />
@@ -204,7 +213,20 @@ describe('Spending (#1276)', () => {
     expect(cellText('2026-11-01')).toEqual(['1', '12,000']);
     expect(cellText('2026-11-03')).toEqual(['3']);
     expect(cell('2026-11-16').props.accessibilityState).toEqual({ selected: true });
-    expect(look(cell('2026-11-16'))).toMatchObject({ borderWidth: 2 });
+    // Outlined outside the cell, as the board draws it.
+    const ring = cell('2026-11-16').find((node) => node.props.testID === 'spending-chosen');
+    expect(look(ring)).toMatchObject({ position: 'absolute', top: -3, borderWidth: 2 });
+    // Its Group's icon on each row.
+    expect(
+      screen!.root
+        .findAll((node) => typeof node.props.icon === 'string')
+        .map((node) => node.props.icon),
+    ).toEqual(expect.arrayContaining(['home-outline', 'airplane-outline']));
+    // The Month's total at the board's 26.
+    const sizes = screen!.root
+      .findAll((node) => (node.type as unknown) === 'Text' && node.props.children === '₹23,500.00')
+      .map((node) => StyleSheet.flatten(node.props.style).fontSize);
+    expect(sizes).toContain(26);
     expect(cell('2026-11-17').props.accessibilityRole).toBeUndefined();
     act(() => cell('2026-11-02').props.onPress());
     expect(calls.onDay).toHaveBeenCalledWith('2026-11-02');
@@ -251,7 +273,11 @@ describe('Spending (#1276)', () => {
     expect(texts()).toContain('Your share in August');
     expect(texts()).toContain('Nothing shared in August');
     expect(texts()).toContain('Expenses you have a share in show here on the day they happened.');
-    expect(byRole('tab')).toHaveLength(0);
+    // This Month's currencies keep their tabs, at zero, so nothing jumps while paging.
+    expect(byRole('tab').map((tab) => tab.props.accessibilityLabel)).toEqual([
+      'INR, ₹0.00',
+      'EUR, €0.00',
+    ]);
     expect(cell('2026-08-31').props.accessibilityLabel).toBe('31 August, nothing');
     act(() => labelled('Next month').props.onPress());
     expect(calls.onMonth).toHaveBeenCalledWith('2026-09');
@@ -294,6 +320,11 @@ describe('Spending (#1276)', () => {
     expect(cellText('2026-11-01')).toEqual(['1', '12K']);
     expect(cellText('2026-11-07')).toEqual(['7', '1.2K']);
     expect(cellText('2026-11-05')).toEqual(['5', '420']);
+    // A share that still doesn't fit the cell shrinks to it, never cut.
+    const amount = cell('2026-11-07').find(
+      (node) => (node.type as unknown) === 'Text' && node.props.adjustsFontSizeToFit === true,
+    );
+    expect(amount.props.numberOfLines).toBe(1);
   });
 
   it('while it loads, draws the grid’s frame and shows no total', () => {
@@ -334,6 +365,27 @@ describe('Spending (#1276)', () => {
     });
     expect(texts().some((text) => text.startsWith('Saved '))).toBe(true);
     expect(texts()).toContain('₹23,500.00');
+  });
+
+  it('says a failed read with nothing to show as the usual error notice, with Try again', () => {
+    const calls = render(
+      november({
+        read: read([], {
+          status: 'error',
+          data: null,
+          refreshedAt: null,
+          message: 'Couldn’t load your spending. Please try again.',
+        }),
+      }),
+    );
+    const notice = screen!.root.find(
+      (node) =>
+        (node.type as unknown) === 'Text' &&
+        node.props.children === 'Couldn’t load your spending. Please try again.',
+    );
+    expect(notice.props.accessibilityRole).toBe('alert');
+    act(() => labelled('Try again').props.onPress());
+    expect(calls.onRetry).toHaveBeenCalledOnce();
   });
 
   it('keeps the figures beside a failed read, with the usual retry', () => {
