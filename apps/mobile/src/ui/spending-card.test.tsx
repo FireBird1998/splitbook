@@ -218,6 +218,26 @@ describe('the Spending card (#1275)', () => {
     },
   );
 
+  it.each([
+    [1, 9],
+    [1.3, 13],
+    [1.2999999523, 13],
+    [2, 13],
+  ])(
+    'draws each currency’s grid at the one-currency size once it sits under the figure (%s)',
+    (fontScale, cell) => {
+      setWindow({ fontScale });
+      const euros: [string, number][] = [['2026-11-12', 1_400]];
+      render(month([currency('INR', rupeeDays), currency('EUR', euros)]));
+      // 100%: beside each figure, the small grid (75 dp); stacked, SpendAndHome 6's (109 dp).
+      expect(grids()).toHaveLength(2);
+      for (const grid of grids()) {
+        const day = grid.find((node) => node.props.testID === 'spending-day-2026-11-12');
+        expect(StyleSheet.flatten(day.props.style)).toMatchObject({ width: cell, height: cell });
+      }
+    },
+  );
+
   it('runs its tint from the surface to the bright brand blue in dark', () => {
     render(usual(), { mode: 'dark' });
     const theme = getSemanticTokens('dark');
