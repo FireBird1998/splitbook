@@ -1000,7 +1000,7 @@ describe('Spending: its Months, days and currencies (#1276)', () => {
     expect(controller.getSnapshot().screen).toBe('spending');
     expect(shown(controller)).toMatchObject({
       month: '2026-11',
-      day: '2026-11-16',
+      day: todayHere,
       currency: null,
       read: { month: '2026-11', status: 'ready', data: { currencies: [{ currency: 'INR' }] } },
     });
@@ -1088,7 +1088,7 @@ describe('Spending: its Months, days and currencies (#1276)', () => {
     expect(shown(controller)!.month).toBe('2025-12');
     // Back to this Month: on today again.
     await controller.showSpendingMonth('2026-11');
-    expect(shown(controller)).toMatchObject({ month: '2026-11', day: '2026-11-16' });
+    expect(shown(controller)).toMatchObject({ month: '2026-11', day: todayHere });
   });
 
   it('picks a day of the Month shown, never a day to come, and a currency', async () => {
@@ -1179,11 +1179,14 @@ describe('Spending: its Months, days and currencies (#1276)', () => {
   it('draws the new day as today after midnight, once the app returns to the foreground (QA round)', async () => {
     const f = fixture();
     const controller = await onSpending(f);
-    expect(controller.getSnapshot().spending.today).toBe('2026-11-16');
-    vi.setSystemTime(Date.parse('2026-11-17T06:30:00.000Z'));
+    expect(controller.getSnapshot().spending.today).toBe(todayHere);
+    // A day later on the phone's clock: the next date in its zone.
+    const tomorrow = new Date(`${todayHere}T12:00:00Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    vi.setSystemTime(start + 86_400_000);
     await controller.refresh('foreground');
     await settle();
-    expect(controller.getSnapshot().spending.today).toBe('2026-11-17');
+    expect(controller.getSnapshot().spending.today).toBe(tomorrow.toISOString().slice(0, 10));
   });
 
   it.each(['a lost Group', 'the switch turned off', 'a change of account'] as const)(
