@@ -1,5 +1,6 @@
 import { configureSceneTiltStorage } from './data/scene-tilt';
 import { configureSceneMotionStorage } from './data/scene-motion';
+import { configureSpendingByDayStorage } from './data/spending-by-day';
 import { androidWidgetsEnabled } from './widgets-flag';
 import { createWidgetsNative, createWidgetsStore } from './widgets-native';
 import { createNotificationNative, readNotificationInstallation } from './notifications-native';
@@ -71,6 +72,10 @@ void configureSceneTiltStorage({
 void configureSceneMotionStorage({
   load: () => SecureStore.getItemAsync('splitbook.header-motion'),
   save: (value) => SecureStore.setItemAsync('splitbook.header-motion', value),
+});
+void configureSpendingByDayStorage({
+  load: () => SecureStore.getItemAsync('splitbook.spending-by-day'),
+  save: (value) => SecureStore.setItemAsync('splitbook.spending-by-day', value),
 });
 const tagRequests = createAccountGroupRecordStore(controllerConfig.apiBaseUrl, 'tag-request');
 const draftRequests = createAccountGroupRecordStore(controllerConfig.apiBaseUrl, 'draft-request');
