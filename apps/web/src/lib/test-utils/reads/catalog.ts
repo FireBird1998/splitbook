@@ -214,6 +214,14 @@ export const acrossReads: HttpRead[] = [
     scope: 'across',
   },
   {
+    name: 'Spending by day',
+    file: 'user/spending/days/route.ts',
+    load: () => import('@/app/api/user/spending/days/route'),
+    path: () => '/api/user/spending/days?tz=UTC&month=2026-11',
+    addsDue: true,
+    scope: 'across',
+  },
+  {
     name: 'Home Activity',
     file: 'user/activity/route.ts',
     load: () => import('@/app/api/user/activity/route'),

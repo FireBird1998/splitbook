@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { memberSpendingByMonth, type InsightExpense } from './insights';
 import { MoneyValidationError } from './exact-money';
-import { dayShareReadAloud, dayTint, memberSpendingByDay } from './spending-by-day';
+import {
+  SPENDING_BY_DAY_MONTHS,
+  dayShareReadAloud,
+  dayTint,
+  memberSpendingByDay,
+  readSpendingByDayMonth,
+  spendingByDayMonths,
+} from './spending-by-day';
 
 // Fictional people and Groups.
 const alex = 'a00000000000000000000001';
@@ -253,5 +260,58 @@ describe('a day read aloud', () => {
   it('says the date and the full amount, never the short form', () => {
     expect(dayShareReadAloud('2026-11-13', 124_000_000, 'INR')).toBe('13 November, ₹1,240,000.00');
     expect(dayShareReadAloud('2026-11-01', 50, 'EUR')).toBe('1 November, €0.50');
+  });
+});
+
+describe('the Months Spending by day can read (#1273)', () => {
+  const kolkata = { now: '2026-11-16T06:00:00.000Z', timeZone: 'Asia/Kolkata' };
+
+  it('are the current Month in the zone and the eleven before it, oldest first', () => {
+    expect(SPENDING_BY_DAY_MONTHS).toBe(12);
+    expect(spendingByDayMonths(kolkata)).toEqual([
+      '2025-12',
+      '2026-01',
+      '2026-02',
+      '2026-03',
+      '2026-04',
+      '2026-05',
+      '2026-06',
+      '2026-07',
+      '2026-08',
+      '2026-09',
+      '2026-10',
+      '2026-11',
+    ]);
+  });
+
+  it("follow the viewer's zone, not the server's", () => {
+    // 20:00 UTC on 30 November is already 1 December in Kolkata, and still November in New York.
+    const now = '2026-11-30T20:00:00.000Z';
+    expect(spendingByDayMonths({ now, timeZone: 'Asia/Kolkata' }).at(-1)).toBe('2026-12');
+    expect(spendingByDayMonths({ now, timeZone: 'America/New_York' }).at(-1)).toBe('2026-11');
+  });
+
+  it('let a client ask for any of those Months', () => {
+    expect(readSpendingByDayMonth('2026-11', kolkata)).toBe('2026-11');
+    expect(readSpendingByDayMonth('2025-12', kolkata)).toBe('2025-12');
+  });
+
+  it.each([
+    ['the Month before the twelve', '2025-11'],
+    ['a Month still to come', '2026-12'],
+    ['a malformed Month', '2026-13'],
+    ['a Month without its leading zero', '2026-9'],
+    ['a day', '2026-11-01'],
+    ['nothing', ''],
+    ['no value', null],
+    ['a number', 202611],
+  ])('refuse %s', (_label, month) => {
+    expect(() => readSpendingByDayMonth(month, kolkata)).toThrow(RangeError);
+  });
+
+  it('refuse an unknown zone', () => {
+    expect(() => spendingByDayMonths({ now: kolkata.now, timeZone: 'Mars/Phobos' })).toThrow(
+      RangeError,
+    );
   });
 });

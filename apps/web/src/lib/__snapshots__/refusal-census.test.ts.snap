@@ -4159,6 +4159,47 @@ exports[`refusal census, recorded on main before the vocabulary (#1079) > record
 ]
 `;
 
+exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/user/spending/days/route.ts through its exported handlers 1`] = `
+[
+  {
+    "answer": {
+      "body": "{"error":"Forbidden","status":403,"code":"FORBIDDEN"}",
+      "hasCode": true,
+      "status": 403,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "FORBIDDEN",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_MONTH",
+      "name": "Error",
+    },
+  },
+  {
+    "answer": {
+      "body": "{"error":"Internal server error","status":500}",
+      "hasCode": false,
+      "status": 500,
+    },
+    "method": "GET",
+    "thrown": {
+      "message": "INVALID_TIME_ZONE",
+      "name": "Error",
+    },
+  },
+]
+`;
+
 exports[`refusal census, recorded on main before the vocabulary (#1079) > records ../app/api/user/spending/route.ts through its exported handlers 1`] = `
 [
   {

@@ -385,6 +385,7 @@ The schedule is `0 18 * * *` UTC in `apps/web/vercel.json`. Production needs the
 | GET    | `/api/user/profile`          | Get current user                                      |
 | PATCH  | `/api/user/profile`          | Update profile                                        |
 | GET    | `/api/user/balances`         | Cross-group balances by currency                      |
+| GET    | `/api/user/spending/days`    | One Month of the member's Spending by day             |
 | GET    | `/api/user/assistant-groups` | The member's Groups as an assistant's page lists them |
 
 ### GET /api/user/profile
@@ -504,6 +505,95 @@ unchanged, and Android ignores it.
 other person pays the member). The web reads the field with
 `readHomeSuggestedPayments` (`@splitbook/shared/home-balances-read`), apart from
 the balances decoder, so a malformed list fails Needs you only.
+
+### GET /api/user/spending/days
+
+One Month of the member's Spending by day across their Groups (#1273), for the
+Android Home card and Spending screen (spec #1271). Per currency, it gives the
+member's own share of the Month, the days with spending, each day's share, and
+the Expenses they have a share in.
+
+**Query:**
+
+- `month` (required): the Month as `YYYY-MM`. It must be the current Month or
+  one of the eleven before it.
+- `tz` (required): the viewer's named IANA time zone, such as `Asia/Kolkata`. It
+  only decides which Month is current, as the phone's clock does. Days follow the
+  Expense day rule: an Expense belongs to the calendar day it is dated, read in
+  UTC as stored (#437), and no zone moves it.
+
+**What counts:** the member's undeleted Expenses in the Groups they are in today
+and that are not archived, as the Groups list shows them. Each counts for the
+member's own share of it:
+
+- An Expense they have no share in is left out, even when they paid for it.
+- Settlements, Drafts and To review items are not Expenses, and are not counted.
+- A currency Splitbook no longer supports is left out, as Home's spending does.
+- Currencies are never added together or converted.
+
+Like the other reads, it first adds the recurring Expenses that have fallen due.
+A Month's `totalMinor` equals that Month's figure in Home's spending
+(`GET /api/user/spending`): both use `memberShareMinor` and the Expense day rule
+(`@splitbook/shared/spending-by-day`).
+
+**Response:**
+
+```json
+{
+  "data": {
+    "month": "2026-11",
+    "timeZone": "Asia/Kolkata",
+    "currencies": [
+      {
+        "currency": "INR",
+        "totalMinor": 124284000,
+        "dayCount": 2,
+        "days": [
+          { "day": "2026-11-02", "shareMinor": 64000 },
+          { "day": "2026-11-13", "shareMinor": 124220000 }
+        ],
+        "expenses": [
+          {
+            "_id": "...",
+            "group": { "_id": "...", "name": "Maple House" },
+            "description": "Flat deposit",
+            "tag": "Rent",
+            "paidBy": [{ "_id": "...", "name": "Priya Shah" }],
+            "day": "2026-11-13",
+            "shareMinor": 124000000,
+            "amountMinor": 620000000
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+- Amounts are exact minor units of their own currency.
+- `shareMinor` is the member's share; `amountMinor` is the Expense's total.
+- `currencies` lists only currencies with a share: the one with the most such
+  Expenses first, then by code. A Month without spending has `currencies: []`.
+- `days` lists only days with a share, oldest first.
+- `expenses` is ordered by day, then by when each was added.
+- `paidBy` lists the payers in stored order, by id and name. A payer whose
+  account no longer exists has no `name`. A client writes "You paid" when a
+  payer's `_id` is the signed-in member's.
+- Group names, descriptions, Tags and names are written by members: show them
+  as text.
+
+The database work is one Month's Expenses in the member's Groups, read through
+the `{ group, isDeleted, date }` index; Expenses from other Months are not
+examined. Android decodes the reply with `parseSpendingByDayResponse`
+(`@splitbook/shared/spending-by-day-read`) and builds the path with
+`spendingByDayPath` (`@splitbook/shared/api-paths`).
+
+**Refusals:**
+
+- **400** `INVALID_TIME_ZONE` when `tz` is missing or not a named IANA zone.
+- **400** `INVALID_MONTH` when `month` is missing, malformed, or outside the
+  twelve Months.
+- **401** when signed out.
 
 ---
 
@@ -1518,7 +1608,7 @@ The owner clarified assistant money-tool parity on 12 November 2026.
 | Payments list                                                              | Yes                                                        |
 | Debt for a new batch or cross-currency single payment                      | Yes, after receipt lookup and before its write transaction |
 | Same-currency single payment and a confirmed payment receipt               | No Debt calculation                                        |
-| Home balances and member spending                                          | Yes                                                        |
+| Home balances, member spending and Spending by day                         | Yes                                                        |
 | Export and statement                                                       | Yes                                                        |
 | Rate suggestion                                                            | Metadata admission                                         |
 | Invite link                                                                | Metadata admission                                         |

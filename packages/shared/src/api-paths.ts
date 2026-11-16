@@ -145,6 +145,20 @@ export const userSpendingPath = ({ months, timeZone }: UserSpendingQuery) =>
     ['tz', timeZone],
   ])}`;
 
+export interface SpendingByDayQuery {
+  /** The Month, `YYYY-MM`: the current one or one of the eleven before it. */
+  month: string;
+  /** The viewer's named IANA time zone, such as `Asia/Kolkata`: it decides the current Month. */
+  timeZone: string;
+}
+
+/** One Month of the member's Spending by day across their Groups (#1273). */
+export const spendingByDayPath = ({ month, timeZone }: SpendingByDayQuery) =>
+  `/api/user/spending/days${query([
+    ['month', month],
+    ['tz', timeZone],
+  ])}`;
+
 export interface GroupInsightsQuery {
   /** The Month, `YYYY-MM`; the server's default is the current Month in the time zone. */
   month?: string;
