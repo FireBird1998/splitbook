@@ -277,7 +277,7 @@ export default function HeaderScene({
         sprite.layer === 'glow'
           ? glow[time] > 0
           : (layers as readonly string[]).includes(sprite.layer) &&
-            (!preview || sprite.seconds === island?.seconds),
+            (!preview || sprite.layer !== 'main' || sprite.seconds === island?.seconds),
       ),
     );
   }, [art, time, layers, preview]);
