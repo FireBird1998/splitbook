@@ -82,6 +82,7 @@ import {
 import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
+import { SpendingCard } from './src/ui/spending-card';
 import { AssistantsSnackbar, ConnectedAssistants } from './src/ui/connected-assistants';
 import { ControllerExpenseEditor } from './src/ui/controller-expense-editor';
 import { useMobileSnapshot, sameSelection } from './src/ui/use-mobile-snapshot';
@@ -798,6 +799,7 @@ const HomeScreen = memo(function HomeScreen() {
         widgetOpen: snapshot.widgetOpen,
         groups: snapshot.groups,
         home: snapshot.home,
+        spending: snapshot.spending,
         creation: snapshot.creation,
         invitation: snapshot.invitation,
         drafts: snapshot.drafts,
@@ -856,6 +858,7 @@ const HomeScreen = memo(function HomeScreen() {
   );
   const refresh = useCallback(() => void controller.refresh(), []);
   const refreshFigures = useCallback(() => void controller.refreshHome(), []);
+  const refreshSpending = useCallback(() => void controller.refreshSpending(), []);
   const openDraft = useCallback(
     (draft: MobileSnapshot['drafts'][number]) =>
       void controller.openExpense(draft.groupId, draft.expenseId ?? undefined),
@@ -909,6 +912,19 @@ const HomeScreen = memo(function HomeScreen() {
           silent={feedback.silent}
           onRefresh={refreshFigures}
         />
+        {/* Spending by day (#1275), while the phone's switch is on: nothing else on Home moves. */}
+        {state.spending.current && state.spending.today ? (
+          <SpendingCard
+            state={state.spending.current}
+            today={state.spending.today}
+            // A Month with nothing says its zero in the currency the member sees first.
+            currency={
+              state.home.data?.[0]?.currency ?? state.groups.data[0]?.defaultCurrency ?? 'INR'
+            }
+            offline={state.offline.active}
+            onRetry={refreshSpending}
+          />
+        ) : null}
         {state.creation.status === 'uncertain' && (
           <GroupCreationCheck
             message={state.creation.message}

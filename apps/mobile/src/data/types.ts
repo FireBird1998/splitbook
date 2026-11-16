@@ -522,6 +522,8 @@ export interface SpendingMonthState {
 /** Spending by day (#1271): the phone's switch, and the Month Home reads while it is on. */
 export interface SpendingState {
   enabled: boolean;
+  /** The phone's date, `YYYY-MM-DD`, on the clock and in the zone that decide its Month. */
+  today: string | null;
   /** This Month on the phone's clock and in its zone, while the switch is on and signed in. */
   current: SpendingMonthState | null;
 }

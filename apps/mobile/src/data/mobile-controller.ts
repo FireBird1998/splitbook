@@ -529,7 +529,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     heldNotificationSource: null,
     sharedDraftCollection: emptySharedDraftCollection(),
     assistants: emptyAssistants(),
-    spending: { enabled: false, current: null },
+    spending: { enabled: false, today: null, current: null },
     tagManager: emptyTagManager(),
     currencyAdd: { groupId: null, status: 'idle', message: null },
     headerSettings: null,
@@ -9353,6 +9353,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     back,
     refresh,
     refreshHome,
+    /** Retry on the Spending card: this Month, read again now (#1275). */
+    refreshSpending: () => spendingQueries.refresh(),
     refreshExpenses,
     refreshBalances,
     selectMonth,
