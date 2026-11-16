@@ -5,7 +5,9 @@ import { mkdtemp, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
 import { z } from 'zod';
-import { createMobileController, type MobileFetch } from '../src/data';
+import { dayKeyInZone } from '@splitbook/shared/zoned-calendar';
+import { createMobileController, type MobileController, type MobileFetch } from '../src/data';
+import { createPhoneSwitch } from '../src/data/phone-switch';
 import { FixtureActor, alexId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
 import { observe, present, reportVerifierFailure } from './verify-report';
@@ -430,6 +432,138 @@ async function verify(manifest: Manifest) {
   }
 }
 
+/** Waits for the controller's snapshot to be `ready`, or fails after `ms`. */
+function until(controller: MobileController, ready: () => boolean, what: string, ms = 20_000) {
+  return new Promise<void>((resolve, reject) => {
+    if (ready()) return resolve();
+    const timer = setTimeout(() => {
+      stop();
+      reject(new Error(`Timed out waiting for ${what}.`));
+    }, ms);
+    const stop = controller.subscribe(() => {
+      if (!ready()) return;
+      clearTimeout(timer);
+      stop();
+      resolve();
+    });
+  });
+}
+
+/**
+ * #1274: Spending by day through the real backend. With the phone's switch on, Home reads this
+ * Month; Alex adds an Expense split three ways today, and back on Home the Month is read again with
+ * today's share up by Alex's part of it, and the Expense listed with that share.
+ */
+async function verifySpendingByDay(manifest: Manifest) {
+  let cookie: string | null = null;
+  let account: string | null = null;
+  let cleanup = false;
+  const kept = new Map<string, unknown>();
+  const drafts = {
+    load: async (_account: string, group: string) => kept.get(group) ?? null,
+    save: async (_account: string, group: string, value: unknown) => {
+      kept.set(group, value);
+    },
+    remove: async (_account: string, group: string) => {
+      kept.delete(group);
+    },
+    clear: async () => {
+      kept.clear();
+    },
+  };
+  const spending = createPhoneSwitch(
+    { load: async () => 'on', save: async () => undefined },
+    'Spending by day',
+    false,
+  );
+  await spending.restore();
+  const controller = createMobileController(
+    { apiBaseUrl: origin, authOrigin: origin, developmentPersonaEnabled: true },
+    {
+      fetch: (url, init) => {
+        assert.equal(new URL(url).origin, origin);
+        return fetch(url, { ...init, redirect: 'error' });
+      },
+      credentials: {
+        load: async () => cookie,
+        save: async (value) => {
+          cookie = value;
+        },
+        clear: async () => {
+          cookie = null;
+        },
+      },
+      expenseDrafts: drafts,
+      newSubmissionKey: randomUUID,
+      spendingByDay: spending,
+      accountLocal: {
+        owner: {
+          load: async () => account,
+          save: async (value) => {
+            account = value;
+          },
+          clear: async () => {
+            account = null;
+          },
+        },
+        cleanupMarker: {
+          load: async () => cleanup,
+          mark: async () => {
+            cleanup = true;
+          },
+          clear: async () => {
+            cleanup = false;
+          },
+        },
+        stores: [drafts],
+      },
+    },
+  );
+  const today = dayKeyInZone(Date.now(), Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const rupees = () =>
+    controller
+      .getSnapshot()
+      .spending.current?.data?.currencies.find(({ currency }) => currency === 'INR');
+  const todayShare = () => rupees()?.days.find(({ day }) => day === today)?.shareMinor ?? 0;
+  try {
+    await controller.signIn('alex');
+    await until(
+      controller,
+      () => controller.getSnapshot().spending.current?.status === 'ready',
+      'this Month on Home',
+    );
+    const before = todayShare();
+    await controller.openExpense(manifest.groupId);
+    await controller.updateExpenseDraft({
+      amount: '30',
+      description: 'QA1274 spending by day',
+      tagId: manifest.tagId,
+    });
+    await controller.saveExpense();
+    assert.equal(controller.getSnapshot().expense.status, 'saved');
+    while (controller.getSnapshot().screen !== 'groups') await controller.back();
+    // ₹30.00 split three ways: Alex's part is ₹10.00.
+    await until(controller, () => todayShare() === before + 1_000, 'today’s share up by ₹10.00');
+    const listed = rupees()?.expenses.find(
+      (expense) => expense.description === 'QA1274 spending by day',
+    );
+    observe(
+      listed?.group._id === manifest.groupId &&
+        listed.day === today &&
+        listed.shareMinor === 1_000 &&
+        listed.amountMinor === 3_000,
+      'The new Expense is not in the Month with Alex’s share.',
+      { listed },
+    );
+    console.log(
+      'PASS: Spending by day: switch on, this Month read, an Expense added, today’s share up by Alex’s part.',
+    );
+  } finally {
+    await controller.signOut();
+    controller.dispose();
+  }
+}
+
 async function main() {
   await alex.signIn('alex');
   try {
@@ -449,6 +583,7 @@ async function main() {
       } else {
         try {
           await verify(manifest);
+          await verifySpendingByDay(manifest);
         } finally {
           await archive(manifest);
         }
