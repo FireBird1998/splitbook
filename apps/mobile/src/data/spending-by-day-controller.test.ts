@@ -24,6 +24,7 @@ const zedId = 'b00000000000000000000003';
 const expenseId = 'd00000000000000000000001';
 const tagId = 'c00000000000000000000001';
 const code = 'deadbeef';
+const draftId = 'e00000000000000000000001';
 const iso = '2026-11-16T06:30:00.000Z';
 const start = Date.parse(iso);
 /** The phone's zone, as the app reads it: tests run in UTC unless TZ names another (#227). */
@@ -184,6 +185,13 @@ function fixture() {
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
     const group = [maple, cabin, zed].find(({ _id }) => _id === id);
     if (!id || !group) return json({}, 404);
+    // A To review item saved as an Expense (ADR 0008): the Month changes as for a new Expense.
+    if (path === `/api/groups/${id}/drafts/save` && method === 'POST') {
+      server.share += 100;
+      return json({
+        data: [{ id: draftId, status: 'saved', expenseId: 'd00000000000000000000008' }],
+      });
+    }
     if (path === `/api/groups/${id}/leave` && method === 'POST') {
       server.listed = server.listed.filter(({ _id }) => _id !== id);
       return json({ data: { message: 'Left group', archived: false }, status: 200 });
@@ -233,7 +241,6 @@ function fixture() {
     newSubmissionKey: () => 'spending-by-day-attempt-0001',
     parts: {
       pendingInvitation: undefined,
-      draftRequests: undefined,
       tagRequests: undefined,
       spendingByDay: spending,
     },
@@ -697,6 +704,25 @@ describe('Spending by day: read again after the member’s own writes (#1274)', 
     expect(f.reads(november, sent)).toBeGreaterThan(0);
     expect(f.reads(november, sent)).toBe(f.reads(homePath, sent));
     expect(share(controller.getSnapshot())).toEqual([['INR', 119_900]]);
+  });
+
+  it('after a To review item is saved as an Expense', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    await controller.refreshHome();
+    await settle();
+    const sent = f.sent;
+    // The review the member confirmed: the save sends its id, revision and review.
+    await controller
+      .sharedDrafts(mapleId)
+      .save([{ draft: { id: draftId, revision: 1 }, review: 'a'.repeat(64) } as never], []);
+    await settle();
+    expect(f.reads(november, sent)).toBeGreaterThan(0);
+    expect(f.reads(november, sent)).toBe(f.reads(homePath, sent));
+    expect(share(controller.getSnapshot())).toEqual([['INR', 120_100]]);
   });
 
   it('after leaving a Group', async () => {
