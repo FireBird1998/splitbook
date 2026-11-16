@@ -29,6 +29,14 @@ const monthPrefix = `${spendingByDayPath({ month: '', timeZone: '' })}?`;
 /** A Month of Spending by day's key, among the `home` scope's. */
 const isMonthKey = (key: readonly unknown[]) =>
   key[0] === 'home' && String(key[key.length - 1]).startsWith(monthPrefix);
+/**
+ * Removes every saved Month of this account from the persister's rows: a cleanup at the next start
+ * removes them with Home's, whose scope they share.
+ */
+export async function removeMonthRows(rows: FindableRecordStore, accountId: string) {
+  for (const path of await rowPaths(rows, accountId))
+    if (path.startsWith(monthPrefix)) await rows.remove(accountId, path);
+}
 /** The Month a key asks for. */
 const askedMonth = (key: QueryKey) =>
   new URLSearchParams(queryKeyPath(key).slice(monthPrefix.length)).get('month');

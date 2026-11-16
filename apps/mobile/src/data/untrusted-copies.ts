@@ -5,6 +5,7 @@ import { removeGroupRows } from './group-queries';
 import { rowPaths } from './saved-read-engine';
 import { removeRecordRows } from './expense-queries';
 import { removeActivityRows } from './activity-queries';
+import { removeMonthRows } from './spending-queries';
 import { parseStoredExpenseDraft } from './expense-draft';
 import { parseSettlementAttempt } from './settlement';
 import { unresolvedTagRecord } from './tag-management';
@@ -47,9 +48,12 @@ export function untrustedCopies({
     if (!rows) return;
     const [name, groupId = ''] = scope.split(':');
     if (name === 'assistants') await rows.remove(accountId, connectedAssistantsPath());
-    else if (name === 'groups' || name === 'home')
-      await rows?.remove(accountId, name === 'groups' ? listPath : homePath);
-    else if (!groupId) {
+    else if (name === 'groups') await rows.remove(accountId, listPath);
+    else if (name === 'home') {
+      await rows.remove(accountId, homePath);
+      // Saved Months of Spending by day share Home's scope (#1274).
+      await removeMonthRows(rows, accountId);
+    } else if (!groupId) {
       // A journal that couldn't be read was replaced conservatively: its affected Groups are
       // unknown, so remove every saved Group view in this account before showing any of them.
       const groups = new Set(
