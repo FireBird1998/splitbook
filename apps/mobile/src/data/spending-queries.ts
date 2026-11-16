@@ -164,7 +164,8 @@ export function createSpendingQueries(session: SpendingSession) {
   const saved = new Set<string>();
   let observer: QueryObserver<Envelope, Error, Envelope, Envelope, QueryKey> | null = null,
     stop: () => void = () => undefined,
-    observed: string | null = null,
+    /** The key observed: its account, Month and zone. */
+    observed: QueryKey | null = null,
     pending = false;
 
   /** This Month on the phone's clock and in its zone. */
@@ -189,13 +190,14 @@ export function createSpendingQueries(session: SpendingSession) {
     }
     return answer;
   };
-  const options = (
-    month: string,
+  const optionsFor = (
+    queryKey: QueryKey,
   ): QueryObserverOptions<Envelope, Error, Envelope, Envelope, QueryKey> => ({
     ...engine.shared,
-    queryKey: keyOf(session.account().accountId, month),
+    queryKey,
     queryFn: ({ queryKey }) => read(queryKey),
   });
+  const options = (month: string) => optionsFor(keyOf(session.account().accountId, month));
 
   const unbind = () => {
     stop();
@@ -207,18 +209,19 @@ export function createSpendingQueries(session: SpendingSession) {
   const bind = () => {
     pending = false;
     if (!session.enabled() || !session.shows()) return unbind();
-    const month = currentMonth();
-    if (observer && observed === month) return;
+    // The whole key: a new zone within the same Month is another read (#1274 review).
+    const key = keyOf(session.account().accountId, currentMonth());
+    if (observer && observed && hashKey(observed) === hashKey(key)) return;
     unbind();
-    observed = month;
-    const next = new QueryObserver(client, options(month));
+    observed = key;
+    const next = new QueryObserver(client, optionsFor(key));
     observer = next;
     stop = next.subscribe(() => undefined);
   };
   /** The observer takes its query again once a scope's queries were replaced, and reads anew. */
   const rebind = () => {
     if (!observer || !observed) return;
-    const next = options(observed);
+    const next = optionsFor(observed);
     engine.rebind(() => observer!.setOptions(next));
   };
 
@@ -298,6 +301,12 @@ export function createSpendingQueries(session: SpendingSession) {
       const predicate = ({ queryKey }: { queryKey: readonly unknown[] }) => isMonthKey(queryKey);
       await client.cancelQueries({ predicate });
       client.removeQueries({ predicate });
+      // Turned on again meanwhile: what it observed was just removed, so it observes this Month
+      // afresh, and reads it (#1274 review).
+      if (observer) {
+        unbind();
+        bind();
+      }
       await forgetSaved();
     },
     forget,
