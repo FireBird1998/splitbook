@@ -243,6 +243,9 @@ describe("a day's tint", () => {
     expect(dayTint(2_499, 'EUR')).toBe(3);
     expect(dayTint(2_500, 'EUR')).toBe(4);
     expect(dayTint(2_500, 'USD')).toBe(4);
+    // A currency Splitbook no longer supports, read at 2 places as stored (#810).
+    expect(dayTint(499, 'DEM')).toBe(1);
+    expect(dayTint(500, 'DEM')).toBe(2);
   });
 });
 

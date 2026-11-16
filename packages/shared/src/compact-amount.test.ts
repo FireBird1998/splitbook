@@ -70,6 +70,7 @@ describe('a shortened amount', () => {
 
   it('writes the code before it when the currency cannot be formatted, as full amounts do', () => {
     expect(shortAmount(1_200_000, 'EURO')).toBe('EURO 12K');
+    expect(shortAmount(-1_200_000, 'EURO')).toBe('EURO -12K');
   });
 });
 
@@ -130,5 +131,9 @@ describe('a day cell', () => {
 
   it('is empty for a day with nothing', () => {
     expect(dayCellAmount(0, 'INR', 6)).toBe('');
+  });
+
+  it('refuses a negative share, which no day has', () => {
+    expect(() => dayCellAmount(-100, 'INR', 6)).toThrow(RangeError);
   });
 });
