@@ -316,10 +316,13 @@ it('Time of day is a full-width Auto row, then four tiles with their skies in on
   act(() => view.unmount());
 });
 
+// Android reports the scale as a 32-bit float: 130% arrives as 1.2999999523…
 it.each([
+  [1.15, 4],
+  [1.2999999523162842, 2],
   [1.3, 2],
   [2, 2],
-])('at %s× text the time tiles go two to a row', async (fontScale, perRow) => {
+])('at %s× text the time tiles go %s to a row', async (fontScale, perRow) => {
   setWindow({ fontScale });
   const view = await open(page({ draft: scene }));
   const [, ...tileRows] = rows(group(view, 'Time of day'));

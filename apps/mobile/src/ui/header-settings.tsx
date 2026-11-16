@@ -38,6 +38,7 @@ import {
   SegmentedControl,
   TopBar,
   radius,
+  useLargeText,
 } from './compact';
 import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
@@ -116,7 +117,7 @@ export function HeaderSettings({
   // would leave the choices too little room; then it scrolls with them.
   const pinned = height / fontScale >= PIN_MIN_ROOM;
   // At 130% text and more the four time tiles go two to a row, each its disc beside its word.
-  const large = fontScale >= 1.3;
+  const large = useLargeText();
   const saving = state.status === 'saving';
   const dimmed = state.draft.style === 'classic';
   // Scene and Time of day only apply to a scene: with Classic chosen they are greyed and kept
