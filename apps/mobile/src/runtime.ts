@@ -1,6 +1,6 @@
 import { configureSceneTiltStorage } from './data/scene-tilt';
 import { configureSceneMotionStorage } from './data/scene-motion';
-import { configureSpendingByDayStorage } from './data/spending-by-day';
+import { configureSpendingByDayStorage, spendingByDay } from './data/spending-by-day';
 import { androidWidgetsEnabled } from './widgets-flag';
 import { createWidgetsNative, createWidgetsStore } from './widgets-native';
 import { createNotificationNative, readNotificationInstallation } from './notifications-native';
@@ -126,6 +126,7 @@ export const controller = createMobileController(controllerConfig, {
     : undefined,
   fetch,
   savedQueries,
+  spendingByDay,
   netInfo: NetInfo,
   offlineIdentity,
   tagRequests,

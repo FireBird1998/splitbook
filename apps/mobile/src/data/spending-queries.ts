@@ -4,6 +4,7 @@ import {
   type QueryObserverOptions,
   type QueryState,
 } from '@tanstack/query-core';
+import { spendingByDayPath } from '@splitbook/shared/api-paths';
 import { queryKeyPath, spendingByDayKey, type QueryKey } from '@splitbook/shared/query-keys';
 import { monthKeyInZone } from '@splitbook/shared/zoned-calendar';
 import type { FindableRecordStore } from './account-record-storage';
@@ -15,15 +16,22 @@ import {
   type Envelope,
   type SavedReadPorts,
 } from './saved-read-engine';
-import { parseSpendingByDay } from './spending-by-day-read';
+import { parseSpendingByDay, type SpendingByDay } from './spending-by-day-read';
 import { RequestError, Superseded } from './transport';
 import type { MobileSnapshot, SpendingMonthState, SpendingState } from './types';
 
 /** Splitbook can't be reached, and this phone keeps no copy of the Month: the board's words. */
 export const spendingNotOnPhone = 'Your spending isn’t on this phone yet. Connect to load it.';
 const spendingFailed = 'Couldn’t load your spending. Please try again.';
-/** Every Month's row path starts so: the rows this view owns among the account's. */
-const monthPaths = '/api/user/spending/days?';
+const wrongMonth = 'The server returned spending for another Month. Please refresh.';
+/** Every Month's path starts so, whatever its Month and zone: the read's own path. */
+const monthPrefix = `${spendingByDayPath({ month: '', timeZone: '' })}?`;
+/** A Month of Spending by day's key, among the `home` scope's. */
+const isMonthKey = (key: readonly unknown[]) =>
+  key[0] === 'home' && String(key[key.length - 1]).startsWith(monthPrefix);
+/** The Month a key asks for. */
+const askedMonth = (key: QueryKey) =>
+  new URLSearchParams(queryKeyPath(key).slice(monthPrefix.length)).get('month');
 
 /** What the Spending by day read needs from the session that owns it: the controller. */
 export interface SpendingSession extends SavedReadPorts {
@@ -41,7 +49,14 @@ export interface SpendingSession extends SavedReadPorts {
 
 type Read = QueryState<Envelope, Error>;
 const parsed = parseOnce(parseSpendingByDay);
-const monthOf = (value: unknown) => parsed(value, '');
+/** The reply's Month, read once per answer. */
+const replyOf = (value: unknown): SpendingByDay => parsed(value, '');
+/** The reply, read, when it is for the Month its key asks for; a throw otherwise. */
+const replyFor = (key: QueryKey, value: unknown) => {
+  const reply = replyOf(value);
+  if (reply.month !== askedMonth(key)) throw new RequestError(wrongMonth);
+  return reply;
+};
 /** `shown` again when nothing in `next` differs from it, so an unchanged read publishes nothing. */
 const same = <T extends object>(shown: T | null, next: T): T =>
   shown && (Object.keys(next) as (keyof T)[]).every((field) => shown[field] === next[field])
@@ -65,7 +80,7 @@ const loading = (month: string): SpendingMonthState => ({
 function projectMonth(month: string, read: Read, shown: SpendingMonthState | null) {
   const was = shown?.month === month ? shown : loading(month);
   const answer = read.data;
-  const figures = answer ? monthOf(answer.value) : null;
+  const figures = answer ? replyOf(answer.value) : null;
   if (read.fetchStatus === 'fetching')
     return same(shown, {
       ...was,
@@ -92,14 +107,14 @@ function projectMonth(month: string, read: Read, shown: SpendingMonthState | nul
     });
   const error = read.status === 'error' && !(read.error instanceof Superseded) ? read.error : null;
   if (!error) return same(shown, was);
-  const unkept = error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
+  const notOnPhone = error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
   return same(shown, {
     ...was,
     status: 'error',
-    unsaved: unkept && was.data === null,
-    message: unkept
+    unsaved: notOnPhone && was.data === null,
+    message: notOnPhone
       ? spendingNotOnPhone
-      : error instanceof RequestError && error.serverMessage
+      : error instanceof RequestError && (error.serverMessage || error.message === wrongMonth)
         ? error.message
         : spendingFailed,
   });
@@ -116,15 +131,15 @@ export function createSpendingQueries(session: SpendingSession) {
   const { client, rows } = session;
   const engine = createSavedReadEngine(session, {
     path: (key) => queryKeyPath(key),
-    readable: (_key, value) => {
+    readable: (key, value) => {
       try {
-        monthOf(value);
+        replyFor(key, value);
         return true;
       } catch {
         return false;
       }
     },
-    ownsKey: (key) => key[0] === 'home' && queryKeyPath(key).startsWith(monthPaths),
+    ownsKey: isMonthKey,
     // A copy this phone couldn't remove is never shown again, with Home's.
     rowScope: { kind: 'account', distrust: () => ['home'] },
     refusal: 'forbidden-only',
@@ -142,11 +157,11 @@ export function createSpendingQueries(session: SpendingSession) {
     pending = false;
 
   /** This Month on the phone's clock and in its zone. */
-  const month = () => monthKeyInZone(session.now(), session.timeZone());
-  const keyOf = (accountId: string, of: string) =>
+  const currentMonth = () => monthKeyInZone(session.now(), session.timeZone());
+  const keyOf = (accountId: string, month: string) =>
     spendingByDayKey(
       { environment: session.environment, accountId },
-      { month: of, timeZone: session.timeZone() },
+      { month, timeZone: session.timeZone() },
     );
   const read = async (key: QueryKey): Promise<Envelope> => {
     const owner = session.generation(),
@@ -155,7 +170,7 @@ export function createSpendingQueries(session: SpendingSession) {
       key,
       // This phone's copy shows while the Month is first read.
       preview: client.getQueryState(key)?.data === undefined,
-      accept: (value) => void monthOf(value),
+      accept: (value) => void replyFor(key, value),
     });
     if (answer.source === 'network') {
       saved.add(queryKeyPath(key));
@@ -164,10 +179,10 @@ export function createSpendingQueries(session: SpendingSession) {
     return answer;
   };
   const options = (
-    of: string,
+    month: string,
   ): QueryObserverOptions<Envelope, Error, Envelope, Envelope, QueryKey> => ({
     ...engine.shared,
-    queryKey: keyOf(session.account().accountId, of),
+    queryKey: keyOf(session.account().accountId, month),
     queryFn: ({ queryKey }) => read(queryKey),
   });
 
@@ -181,11 +196,11 @@ export function createSpendingQueries(session: SpendingSession) {
   const bind = () => {
     pending = false;
     if (!session.enabled() || !session.shows()) return unbind();
-    const of = month();
-    if (observer && observed === of) return;
+    const month = currentMonth();
+    if (observer && observed === month) return;
     unbind();
-    observed = of;
-    const next = new QueryObserver(client, options(of));
+    observed = month;
+    const next = new QueryObserver(client, options(month));
     observer = next;
     stop = next.subscribe(() => undefined);
   };
@@ -196,14 +211,29 @@ export function createSpendingQueries(session: SpendingSession) {
     engine.rebind(() => observer!.setOptions(next));
   };
 
-  /** Every saved Month of this account, inside a lease write: the switch was turned off, or a lost Group. */
+  /** Removes every saved Month of this account, inside a lease write. */
   const forget = async (accountId: string) => {
     if (!rows) return;
     const paths = [...(await rowPaths(rows, accountId, saved))].filter((path) =>
-      path.startsWith(monthPaths),
+      path.startsWith(monthPrefix),
     );
     engine.drop(paths);
     await engine.forgetRows(accountId, paths);
+  };
+  /**
+   * Removes every saved Month of this account on the account queue: a lost Group's Expenses may be
+   * in one, or the switch was turned off. One that can't be removed is never shown again.
+   */
+  const forgetSaved = async () => {
+    const lease = session.lease(),
+      owner = session.generation();
+    if (!lease || !rows) return;
+    try {
+      await lease.write(() => forget(lease.accountId));
+    } catch (error) {
+      if (session.current(owner) && !(error instanceof Superseded))
+        session.distrust(lease.accountId, ['home']);
+    }
   };
 
   /** Spending by day as its query holds it, projected into `next`. */
@@ -213,14 +243,14 @@ export function createSpendingQueries(session: SpendingSession) {
     let spending: SpendingState;
     if (!enabled || !user) spending = same(next.spending, { enabled, current: null });
     else {
-      const of = month(),
-        read = client.getQueryCache().get<Envelope, Error>(hashKey(keyOf(user.id, of)))?.state;
+      const month = currentMonth(),
+        read = client.getQueryCache().get<Envelope, Error>(hashKey(keyOf(user.id, month)))?.state;
       const shown = next.spending.current;
       const current = read
-        ? projectMonth(of, read, shown)
-        : shown?.month === of
+        ? projectMonth(month, read, shown)
+        : shown?.month === month
           ? shown
-          : loading(of);
+          : loading(month);
       spending = same(next.spending, { enabled, current });
     }
     return spending === next.spending ? next : { ...next, spending };
@@ -244,7 +274,9 @@ export function createSpendingQueries(session: SpendingSession) {
      */
     async refresh() {
       if (!session.enabled() || session.snapshot().auth.status !== 'authenticated') return;
-      await client.fetchQuery({ ...options(month()), staleTime: -Infinity }).catch(() => undefined);
+      await client
+        .fetchQuery({ ...options(currentMonth()), staleTime: -Infinity })
+        .catch(() => undefined);
     },
     /**
      * The switch was turned off: nothing is observed or kept. Its queries go, and with them what
@@ -252,27 +284,18 @@ export function createSpendingQueries(session: SpendingSession) {
      */
     async off() {
       unbind();
-      const predicate = ({ queryKey }: { queryKey: readonly unknown[] }) =>
-        queryKey[0] === 'home' && String(queryKey[queryKey.length - 1]).startsWith(monthPaths);
+      const predicate = ({ queryKey }: { queryKey: readonly unknown[] }) => isMonthKey(queryKey);
       await client.cancelQueries({ predicate });
       client.removeQueries({ predicate });
-      const lease = session.lease();
-      if (!lease || !rows) return;
-      const owner = session.generation();
-      try {
-        await lease.write(() => forget(lease.accountId));
-      } catch (error) {
-        if (session.current(owner) && !(error instanceof Superseded))
-          session.distrust(lease.accountId, ['home']);
-      }
+      await forgetSaved();
     },
     forget,
+    forgetSaved,
     /** Answers that land publish what they change, wherever the member is. */
     listen() {
       return client.getQueryCache().subscribe((event) => {
         if (event.type !== 'updated' || event.action.type === 'invalidate') return;
-        const { queryKey } = event.query;
-        if (!String(queryKey[queryKey.length - 1]).startsWith(monthPaths)) return;
+        if (!isMonthKey(event.query.queryKey)) return;
         const shown = session.snapshot();
         if (project(shown) !== shown) session.publish({});
       });

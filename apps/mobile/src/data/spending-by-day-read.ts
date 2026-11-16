@@ -9,12 +9,23 @@ import { z } from 'zod';
  * reply through that parser instead.
  */
 const minor = z.number().int();
-const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+/** A calendar day that exists, as `YYYY-MM-DD`. */
+const day = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(
+    (value) => {
+      const date = new Date(`${value}T00:00:00Z`);
+      return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
+    },
+    { message: 'Not a calendar day' },
+  );
 const expenseSchema = z.object({
   _id: z.string().min(1),
   group: z.object({ _id: z.string().min(1), name: z.string() }),
   description: z.string(),
-  tag: z.string().nullable(),
+  /** An Expense with no Tag may send none. */
+  tag: z.string().nullish(),
   /** A payer's name is left out when their account no longer exists. */
   paidBy: z.array(z.object({ _id: z.string().min(1), name: z.string().optional() })),
   day,

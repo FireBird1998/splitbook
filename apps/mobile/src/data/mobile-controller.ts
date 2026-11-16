@@ -1530,7 +1530,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       for (const id of lost)
         invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
       // A saved Month may hold a lost Group's Expenses: every one goes, and is read again (#1274).
-      if (lost.size) forgetSpending();
+      if (lost.size) void spendingQueries.forgetSaved();
     },
     // Every view now keeps its saved copies in the persister (#223).
     retain: async (accountId, listed) => {
@@ -1546,25 +1546,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const spendingQueries = createSpendingQueries({
     ...session,
     environment: apiBase,
-    rows: dependencies.savedQueries,
     freshness,
     offline: () => offlineSession,
     enabled: () => dependencies.spendingByDay?.getSnapshot().enabled ?? false,
     shows: () => route.screen === 'groups' && snapshot.auth.status === 'authenticated',
     timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   });
-  /** Removes every saved Month of this account, on the account queue; one that stays is never shown. */
-  const forgetSpending = () => {
-    const lease = accountStorage(),
-      owner = generation;
-    if (!lease) return;
-    void lease
-      .write(() => spendingQueries.forget(lease.accountId))
-      .catch((error: unknown) => {
-        if (current(owner) && !(error instanceof Superseded))
-          untrusted.mark(lease.accountId, ['home'], now());
-      });
-  };
   /** Account → Connected assistants (#622), with its Saved copy among the account's others. */
   const assistantsData = createAssistants({
     ...session,
@@ -1904,7 +1891,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     group: groupQueries,
     expense: expenseQueries,
     activity: activityQueries,
-    home: homeQueries,
+    // Saved Months go wherever Home's saved figures go: a confirmed change makes both out of date.
+    home: {
+      forget: async (accountId, paths) => {
+        await homeQueries.forget(accountId, paths);
+        await spendingQueries.forget(accountId);
+      },
+    },
     untrusted,
     removed: (groupId) => widgets.forgetGroup(groupId),
   });
@@ -2704,6 +2697,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         await expenseQueries.forget(lease.accountId, groupId);
         await activityQueries.forget(lease.accountId, groupId);
         await homeQueries.forget(lease.accountId);
+        // A saved Month may hold the Group's Expenses (#1274).
+        await spendingQueries.forget(lease.accountId);
       });
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) throw error;
