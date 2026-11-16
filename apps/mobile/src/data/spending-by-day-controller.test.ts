@@ -33,6 +33,16 @@ const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const monthPath = (month: string) =>
   `/api/user/spending/days?month=${month}&tz=${encodeURIComponent(zone)}`;
 const november = monthPath('2026-11');
+/**
+ * The phone's date at the start, in its zone: 16 November in most, 15 November at UTC−11. It is
+ * November in every zone from UTC−12 to UTC+14, so the Month is the same.
+ */
+const todayHere = new Intl.DateTimeFormat('en-CA', {
+  timeZone: zone,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+}).format(start);
 const listPath = '/api/groups';
 const homePath = '/api/user/balances';
 const person = (user: typeof alex) => ({ _id: user.id, name: user.name, image: null });
@@ -349,7 +359,7 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
     expect(controller.getSnapshot().spending).toEqual({
       enabled: true,
       // The phone's date, on the clock and in the zone that decide its Month (#1275).
-      today: '2026-11-16',
+      today: todayHere,
       current: {
         month: '2026-11',
         status: 'ready',
