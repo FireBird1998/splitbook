@@ -876,8 +876,8 @@ describe('App Settings: Spending by day', () => {
   });
 });
 
-describe('App Spending (#1275)', () => {
-  it('opens from the Home card as a screen of its own, and Back returns Home', async () => {
+describe('App Spending (#1275, #1276)', () => {
+  it('opens from the Home card on this Month, and Back returns Home', async () => {
     const app = await renderApp();
     try {
       await app.press('Account and settings');
@@ -885,8 +885,9 @@ describe('App Spending (#1275)', () => {
       await app.androidBack();
       await vi.waitFor(() => expect(app.text()).toContain('See each day'));
       await app.press('Spending, September');
+      await vi.waitFor(() => expect(app.text()).toContain('September 2026'));
       expect(app.controller.getSnapshot().screen).toBe('spending');
-      expect(app.text()).toContain('Spending');
+      expect(app.text()).toContain(`Your share so far${SEPARATOR}1\u00a0day with spending`);
       expect(app.text()).not.toContain('Your balances');
       expect(await app.androidBack()).toBe(true);
       expect(app.controller.getSnapshot().screen).toBe('groups');

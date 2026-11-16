@@ -20,6 +20,7 @@ import {
   type MoneySize,
 } from './compact';
 import { readPhoneCalendar } from './day-format';
+import { monthName, spendingDays } from './spending-words';
 import { readTime, RetainedNotice } from './financial-views';
 import { Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
@@ -41,10 +42,6 @@ const grids = {
 } as const;
 const gridWidth = (size: keyof typeof grids) => 7 * grids[size].cell + 6 * grids[size].gap;
 
-/** A Month key's name in English, as a Group's Expenses spell their Month. */
-const monthName = (month: string) =>
-  new Date(`${month}-01T12:00:00`).toLocaleDateString('en', { month: 'long' });
-const spendingDays = (count: number) => `${counted(count, 'day')} with spending`;
 /** The figure and the Month's grid: side by side, or the grid under the figure at large text. */
 const figuresRow = (large: boolean): ViewStyle => ({
   flexDirection: large ? 'column' : 'row',
@@ -324,7 +321,13 @@ export const SpendingCard = memo(function SpendingCard({
                   {spendingDays(line.dayCount)}
                 </CompactText>
               </View>
-              <MonthTint month={state.month} today={today} currency={line} size="small" />
+              {/* Under the figure at large text, the one-currency size (SpendAndHome 6). */}
+              <MonthTint
+                month={state.month}
+                today={today}
+                currency={line}
+                size={large ? 'regular' : 'small'}
+              />
             </View>
           </View>
         );

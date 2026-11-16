@@ -83,6 +83,7 @@ import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
 import { SpendingCard } from './src/ui/spending-card';
+import { SpendingScreen } from './src/ui/spending-screen';
 import { AssistantsSnackbar, ConnectedAssistants } from './src/ui/connected-assistants';
 import { ControllerExpenseEditor } from './src/ui/controller-expense-editor';
 import { useMobileSnapshot, sameSelection } from './src/ui/use-mobile-snapshot';
@@ -313,14 +314,78 @@ function SplitBook() {
   return <AuthenticationScreen />;
 }
 
-/** Spending (#1275), opened from the Home card: its top bar and Back, until #1276 fills it. */
+/** The currency a Month with nothing says its zero in: the one the member sees first on Home. */
+function spendingZeroCurrency({ home, groups }: Pick<MobileSnapshot, 'home' | 'groups'>) {
+  return home.data?.[0]?.currency ?? groups.data[0]?.defaultCurrency ?? 'INR';
+}
+
+/** Spending, opened from the Home card (#1275): a Month of the member's share, day by day (#1276). */
 function SpendingRouteScreen() {
+  const theme = useTheme();
+  const state = useMobileSnapshot(
+    controller,
+    (snapshot) => ({
+      user: snapshot.auth.user,
+      spending: snapshot.spending,
+      offline: snapshot.offline,
+      home: snapshot.home,
+      groups: snapshot.groups,
+      pull: refreshFeedback(snapshot).pull,
+    }),
+    sameSelection,
+  );
+  const screen = state.spending.screen;
+  // This Month's currencies keep their tabs on the others; each row shows its Group's icon.
+  const known = useMemo(
+    () => state.spending.current?.data?.currencies.map(({ currency }) => currency) ?? [],
+    [state.spending.current],
+  );
+  const groups = useMemo(
+    () => state.groups.data.map(({ id, category }) => ({ id, category })),
+    [state.groups.data],
+  );
+  const openExpense = useCallback(
+    (groupId: string, expenseId: string) => void controller.openExpense(groupId, expenseId),
+    [],
+  );
+  const retry = useCallback(() => void controller.refresh(), []);
   return (
-    <TopBar
-      title="Spending"
-      subtitle={`Your share${SEPARATOR}all Groups`}
-      leading={{ kind: 'back', label: 'Back to Home', onPress: () => void controller.back() }}
-    />
+    <>
+      <TopBar
+        title="Spending"
+        subtitle={`Your share${SEPARATOR}all Groups`}
+        leading={{ kind: 'back', label: 'Back to Home', onPress: () => void controller.back() }}
+      />
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={state.pull}
+            onRefresh={() => void controller.refresh('pull')}
+            tintColor={theme.brand.main}
+            colors={[theme.brand.main]}
+          />
+        }
+      >
+        <OfflineNotice state={state.offline} savedShown={!!screen?.read.restored} />
+        {screen && state.spending.today && state.user ? (
+          <SpendingScreen
+            screen={screen}
+            today={state.spending.today}
+            me={state.user.id}
+            zeroCurrency={spendingZeroCurrency(state)}
+            knownCurrencies={known}
+            groups={groups}
+            offline={state.offline.active}
+            onMonth={controller.showSpendingMonth}
+            onDay={controller.chooseSpendingDay}
+            onCurrency={controller.chooseSpendingCurrency}
+            onExpense={openExpense}
+            onRetry={retry}
+          />
+        ) : null}
+      </ScrollView>
+    </>
   );
 }
 
@@ -935,10 +1000,7 @@ const HomeScreen = memo(function HomeScreen() {
           <SpendingCard
             state={state.spending.current}
             today={state.spending.today}
-            // A Month with nothing says its zero in the currency the member sees first.
-            zeroCurrency={
-              state.home.data?.[0]?.currency ?? state.groups.data[0]?.defaultCurrency ?? 'INR'
-            }
+            zeroCurrency={spendingZeroCurrency(state)}
             offline={state.offline.active}
             onOpen={openSpending}
             onRetry={refreshSpending}

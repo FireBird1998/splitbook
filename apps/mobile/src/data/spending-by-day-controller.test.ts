@@ -345,6 +345,7 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
       enabled: false,
       today: null,
       current: null,
+      screen: null,
     });
   });
 
@@ -360,6 +361,8 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
       enabled: true,
       // The phone's date, on the clock and in the zone that decide its Month (#1275).
       today: todayHere,
+      // Spending doesn't show (#1276).
+      screen: null,
       current: {
         month: '2026-11',
         status: 'ready',
@@ -435,6 +438,7 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
       enabled: false,
       today: null,
       current: null,
+      screen: null,
     });
     expect(f.spendingRows()).toEqual([]);
     const sent = f.sent;
@@ -974,4 +978,242 @@ describe('Spending, the screen the Home card opens (#1275)', () => {
     await controller.back();
     expect(controller.getSnapshot().screen).toBe('groups');
   });
+});
+
+describe('Spending: its Months, days and currencies (#1276)', () => {
+  const october = monthPath('2026-10');
+  /** Alex, with the switch on and this Month read on Home, opens Spending. */
+  async function onSpending(f: ReturnType<typeof fixture>) {
+    const controller = f.create();
+    await controller.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    await controller.openSpending();
+    await settle();
+    return controller;
+  }
+  const shown = (controller: Controller) => controller.getSnapshot().spending.screen;
+
+  it('opens on today in this Month, from the Month Home just read, and Back returns Home', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    expect(controller.getSnapshot().screen).toBe('spending');
+    expect(shown(controller)).toMatchObject({
+      month: '2026-11',
+      day: todayHere,
+      currency: null,
+      read: { month: '2026-11', status: 'ready', data: { currencies: [{ currency: 'INR' }] } },
+    });
+    // Twelve Months: this one and the eleven before it, oldest first.
+    expect(shown(controller)!.months).toEqual([
+      '2025-12',
+      '2026-01',
+      '2026-02',
+      '2026-03',
+      '2026-04',
+      '2026-05',
+      '2026-06',
+      '2026-07',
+      '2026-08',
+      '2026-09',
+      '2026-10',
+      '2026-11',
+    ]);
+    // Read on Home seconds ago: not read again.
+    expect(f.reads(november)).toBe(1);
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('groups');
+    expect(shown(controller)).toBeNull();
+  });
+  it('drops the Month it shows when a Group is lost meanwhile, and reads it again (#1274 review)', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    // A pull on Home reads the Groups list; Alex opens Spending before it answers.
+    f.server.listed = [maple];
+    later(1_000);
+    const list = f.hold(listPath);
+    const pull = controller.refresh('pull');
+    await list.reached;
+    await settle();
+    await controller.openSpending();
+    await settle();
+    expect(shown(controller)!.read).toMatchObject({
+      status: 'ready',
+      data: { currencies: [{ totalMinor: 120_000 }] },
+    });
+    // The list leaves Cabin Weekend out: the Month shown may hold its Expenses.
+    f.server.share = 50_000;
+    const again = f.hold(november);
+    list.release();
+    await again.reached;
+    await settle();
+    expect(controller.getSnapshot().screen).toBe('spending');
+    expect(shown(controller)!.read).toMatchObject({
+      status: 'loading',
+      data: null,
+      restored: false,
+    });
+    again.release();
+    await pull;
+    await settle();
+    expect(shown(controller)!.read).toMatchObject({
+      status: 'ready',
+      data: { currencies: [{ totalMinor: 50_000 }] },
+    });
+  });
+
+  it('pages back through the twelve Months, reads each, and stops at both ends', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    // Not past this Month.
+    await controller.showSpendingMonth('2026-12');
+    expect(shown(controller)!.month).toBe('2026-11');
+    await controller.showSpendingMonth('2026-10');
+    await settle();
+    expect(f.reads(october)).toBe(1);
+    expect(shown(controller)).toMatchObject({
+      month: '2026-10',
+      // Another Month opens on no day.
+      day: null,
+      read: { month: '2026-10', status: 'ready', data: { month: '2026-10', currencies: [] } },
+    });
+    // Not before the twelfth.
+    await controller.showSpendingMonth('2025-11');
+    expect(shown(controller)!.month).toBe('2026-10');
+    await controller.showSpendingMonth('2025-12');
+    await settle();
+    expect(shown(controller)!.month).toBe('2025-12');
+    // Back to this Month: on today again.
+    await controller.showSpendingMonth('2026-11');
+    expect(shown(controller)).toMatchObject({ month: '2026-11', day: todayHere });
+  });
+
+  it('picks a day of the Month shown, never a day to come, and a currency', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    controller.chooseSpendingDay('2026-11-02');
+    expect(shown(controller)!.day).toBe('2026-11-02');
+    controller.chooseSpendingDay('2026-11-20');
+    controller.chooseSpendingDay('2026-10-02');
+    expect(shown(controller)!.day).toBe('2026-11-02');
+    controller.chooseSpendingCurrency('EUR');
+    expect(shown(controller)!.currency).toBe('EUR');
+  });
+
+  it('opens an Expense in its Group from a day, and Back returns to Spending as it was', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    controller.chooseSpendingDay('2026-11-02');
+    await controller.openExpense(mapleId, expenseId);
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { groupId: mapleId, requestedExpenseId: expenseId },
+    });
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('spending');
+    expect(shown(controller)).toMatchObject({ month: '2026-11', day: '2026-11-02' });
+  });
+
+  it('reads the Month shown again on a pull', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    const sent = f.sent;
+    await controller.refresh('pull');
+    await settle();
+    expect(f.reads(november, sent)).toBe(1);
+  });
+
+  it('offline, shows a saved Month with its time and says a Month not on this phone isn’t', async () => {
+    const f = fixture();
+    const first = await onSpending(f);
+    first.dispose();
+    later(5_000);
+    f.connect(false);
+    const restarted = f.create();
+    await restarted.restore();
+    await restarted.openSpending();
+    await settle();
+    expect(shown(restarted)!.read).toMatchObject({
+      status: 'ready',
+      restored: true,
+      refreshedAt: start,
+    });
+    await restarted.showSpendingMonth('2026-10');
+    await settle();
+    expect(shown(restarted)!.read).toMatchObject({
+      month: '2026-10',
+      status: 'error',
+      unsaved: true,
+      data: null,
+    });
+  });
+
+  it('returns Home from an Expense, not to a bare Spending, once the switch is off (QA round)', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    await controller.openExpense(mapleId, expenseId);
+    await settle();
+    await f.spending.select(false);
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('groups');
+  });
+
+  it('moves to the oldest Month it can read when the one shown drops out of the twelve (QA round)', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    await controller.showSpendingMonth('2025-12');
+    await settle();
+    expect(shown(controller)!.month).toBe('2025-12');
+    // December comes: the twelve are January to December, and December 2025 is gone.
+    vi.setSystemTime(Date.parse('2026-12-01T12:00:00.000Z'));
+    await controller.refresh('foreground');
+    await settle();
+    expect(shown(controller)).toMatchObject({ month: '2026-01', day: null });
+    expect(shown(controller)!.months[0]).toBe('2026-01');
+  });
+
+  it('draws the new day as today after midnight, once the app returns to the foreground (QA round)', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    expect(controller.getSnapshot().spending.today).toBe(todayHere);
+    // A day later on the phone's clock: the next date in its zone.
+    const tomorrow = new Date(`${todayHere}T12:00:00Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    vi.setSystemTime(start + 86_400_000);
+    await controller.refresh('foreground');
+    await settle();
+    expect(controller.getSnapshot().spending.today).toBe(tomorrow.toISOString().slice(0, 10));
+  });
+
+  it.each(['a lost Group', 'the switch turned off', 'a change of account'] as const)(
+    'removes an older Month’s saved copy too, on %s (QA round)',
+    async (event) => {
+      const f = fixture();
+      const controller = await onSpending(f);
+      await controller.showSpendingMonth('2026-10');
+      await settle();
+      expect(f.row(october)).not.toBeNull();
+      if (event === 'a lost Group') {
+        await controller.back();
+        f.server.listed = [maple];
+        later(31_000);
+        await controller.refresh('pull');
+      }
+      if (event === 'the switch turned off') await f.spending.select(false);
+      if (event === 'a change of account') {
+        await controller.signOut();
+        await controller.signIn('sam');
+      }
+      await settle();
+      expect(f.row(october)).toBeNull();
+      // After a lost Group this Month is read again at once; nothing from before stays.
+      if (event === 'a lost Group')
+        expect(f.row(november)).toMatchObject({ refreshedAt: start + 31_000 });
+      else expect(f.row(november)).toBeNull();
+    },
+  );
 });
