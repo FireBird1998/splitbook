@@ -19,6 +19,7 @@ import {
   settlementsPath,
   userActivityPath,
   userSpendingPath,
+  spendingByDayPath,
 } from './api-paths';
 import {
   activityPageKey,
@@ -45,6 +46,7 @@ import {
   settlementsKey,
   userActivityKey,
   userSpendingKey,
+  spendingByDayKey,
   type QueryAccount,
   type QueryKey,
 } from './query-keys';
@@ -73,6 +75,16 @@ describe('key factories', () => {
       "Home's spending chart",
       userSpendingKey(alex, spending),
       ['home', environment, alex.accountId, userSpendingPath(spending)],
+    ],
+    [
+      'Spending by day',
+      spendingByDayKey(alex, { month: '2026-11', timeZone: 'Asia/Kolkata' }),
+      [
+        'home',
+        environment,
+        alex.accountId,
+        spendingByDayPath({ month: '2026-11', timeZone: 'Asia/Kolkata' }),
+      ],
     ],
     [
       'invitations',
