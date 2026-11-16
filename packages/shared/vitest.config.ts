@@ -26,6 +26,8 @@ export default defineConfig({
         'src/expense-split.ts',
         'src/settlement-preview.ts',
         'src/dashboard.ts',
+        'src/spending-by-day.ts',
+        'src/compact-amount.ts',
       ],
       reporter: ['text-summary'],
       thresholds: { branches: 98 },
