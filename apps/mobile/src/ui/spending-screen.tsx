@@ -3,7 +3,15 @@ import { Pressable, View, useWindowDimensions } from 'react-native';
 import { amountToFit, dayCellAmount, fullAmount } from '@splitbook/shared/compact-amount';
 import { localeFirstWeekday, monthGrid } from '@splitbook/shared/date';
 import { SEPARATOR, counted } from '@splitbook/shared/separator';
-import { dayShareReadAloud, dayTint, type DayTint } from '@splitbook/shared/spending-by-day';
+import {
+  dayShareReadAloud,
+  dayTint,
+  spendingDayHeading,
+  spendingDayReadAloud,
+  spendingMonthName,
+  spendingMonthTitle,
+  type DayTint,
+} from '@splitbook/shared/spending-by-day';
 import type {
   SpendingByDayExpenseRead,
   SpendingByDayRead,
@@ -26,7 +34,7 @@ import {
   useLargeText,
 } from './compact';
 import { readPhoneCalendar } from './day-format';
-import { monthName, spendingDays } from './spending-words';
+import { spendingDays } from './spending-words';
 import { readTime, RetainedNotice } from './financial-views';
 import { fonts, useTheme } from './theme';
 
@@ -37,7 +45,6 @@ type SpendingGroup = { id: string; category: GroupCategory };
 /** Where Spending's figures sit: the page's side padding on each side. */
 const pageInset = 2 * 16;
 const weekdayLetters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const shortDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 /** The whole units a day's cell counts in, as its note names them. */
 const units: Record<string, string> = {
   INR: 'rupees',
@@ -46,18 +53,6 @@ const units: Record<string, string> = {
   GBP: 'pounds',
   JPY: 'yen',
 };
-
-const dateOf = (day: string) => new Date(`${day}T12:00:00`);
-/** "November 2026": a Month key in English, as a Group's Expenses spell their Month. */
-const monthTitle = (month: string) =>
-  dateOf(`${month}-01`).toLocaleDateString('en', { month: 'long', year: 'numeric' });
-/** "Mon 16 Nov": the chosen day's heading. */
-const dayHeading = (day: string) => {
-  const date = dateOf(day);
-  return `${shortDays[date.getDay()]} ${date.getDate()} ${date.toLocaleDateString('en', { month: 'short' })}`;
-};
-/** "3 November": a day as TalkBack hears it, as dayShareReadAloud says its date. */
-const readAloudDay = (day: string) => `${dateOf(day).getDate()} ${monthName(day.slice(0, 7))}`;
 
 /** Who paid an Expense, as its row says it: "You paid", "Priya paid", "Priya and Sam paid". */
 export function payers(paidBy: SpendingByDayExpenseRead['paidBy'], me: string) {
@@ -242,7 +237,7 @@ function MonthGrid({
                   accessibilityLabel={`${
                     share && currency
                       ? dayShareReadAloud(day.date, share, currency.currency)
-                      : `${readAloudDay(day.date)}, nothing`
+                      : `${spendingDayReadAloud(day.date)}, nothing`
                   }${day.today ? ', today' : ''}`}
                   accessibilityState={{ selected }}
                   // Over the 4 dp gaps beside it, never onto the next day: 43 dp at 360 dp.
@@ -341,7 +336,7 @@ function DayExpenses({
         }}
       >
         <CompactText variant="overline" accessibilityRole="header" spare>
-          {`${dayHeading(day)}${day === today ? `${SEPARATOR}Today` : ''}`}
+          {`${spendingDayHeading(day)}${day === today ? `${SEPARATOR}Today` : ''}`}
         </CompactText>
         {currency ? (
           <Money size="list" style={{ fontWeight: '600' }}>
@@ -449,7 +444,7 @@ export const SpendingScreen = memo(function SpendingScreen({
   ];
   const shown = tabs.find((currency) => currency.currency === screen.currency) ?? tabs[0] ?? null;
   const code = shown?.currency ?? zeroCurrency;
-  const name = monthName(month);
+  const name = spendingMonthName(month);
 
   const pager = (
     <View
@@ -472,7 +467,7 @@ export const SpendingScreen = memo(function SpendingScreen({
         accessibilityRole="header"
         style={{ fontSize: 17, flexShrink: 1, textAlign: 'center' }}
       >
-        {monthTitle(month)}
+        {spendingMonthTitle(month)}
       </CompactText>
       <IconButton
         icon="chevron-forward"
@@ -490,7 +485,11 @@ export const SpendingScreen = memo(function SpendingScreen({
       <View style={{ gap: 12 }}>
         {pager}
         {read.status === 'loading' || !read.message ? (
-          <View accessibilityLabel="Loading your spending" accessibilityState={{ busy: true }}>
+          <View
+            accessible
+            accessibilityLabel={`${spendingMonthTitle(month)}. Loading your spending`}
+            accessibilityState={{ busy: true }}
+          >
             <Skeleton width={180} line="total" />
             <Skeleton width={220} line="caption" />
           </View>

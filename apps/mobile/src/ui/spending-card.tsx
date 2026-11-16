@@ -3,7 +3,7 @@ import { Pressable, View, useWindowDimensions, type ViewStyle } from 'react-nati
 import { amountToFit, fullAmount } from '@splitbook/shared/compact-amount';
 import { localeFirstWeekday, monthGrid } from '@splitbook/shared/date';
 import { SEPARATOR, counted } from '@splitbook/shared/separator';
-import { dayTint } from '@splitbook/shared/spending-by-day';
+import { dayTint, spendingMonthName } from '@splitbook/shared/spending-by-day';
 import type { SpendingByDayRead } from '@splitbook/shared/spending-by-day-read';
 import type { SpendingMonthState } from '../data/types';
 import {
@@ -20,7 +20,7 @@ import {
   type MoneySize,
 } from './compact';
 import { readPhoneCalendar } from './day-format';
-import { monthName, spendingDays } from './spending-words';
+import { spendingDays } from './spending-words';
 import { readTime, RetainedNotice } from './financial-views';
 import { Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
@@ -136,7 +136,7 @@ function Heading({ state, offline }: { state: SpendingMonthState; offline: boole
   return (
     <View style={{ ...headingLine, minHeight: height, gap: 8 }}>
       <CompactText variant="overline" accessibilityRole="header" spare style={headingBeside}>
-        {`Spending${SEPARATOR}${monthName(state.month)}`}
+        {`Spending${SEPARATOR}${spendingMonthName(state.month)}`}
       </CompactText>
       {state.data !== null
         ? readTime({
@@ -202,7 +202,7 @@ export const SpendingCard = memo(function SpendingCard({
   const theme = useTheme();
   const large = useLargeText();
   const { width, fontScale } = useWindowDimensions();
-  const name = monthName(state.month),
+  const name = spendingMonthName(state.month),
     data = state.data;
   // With nothing to open, the card has no last line: it is as tall while it loads.
   const frame = { paddingTop: 12, paddingHorizontal: cardPadding, paddingBottom: onOpen ? 4 : 8 };
@@ -213,7 +213,13 @@ export const SpendingCard = memo(function SpendingCard({
       // The card's whole height while it loads: Groups under it never jump.
       return (
         <Card loading="Loading your spending">
-          <View style={frame}>
+          {/* One element TalkBack hears, saying what is loading (#1283). */}
+          <View
+            accessible
+            accessibilityLabel={`Spending, ${name}. Loading your spending`}
+            accessibilityState={{ busy: true }}
+            style={frame}
+          >
             {heading}
             <View testID="spending-figures" style={figuresRow(large)}>
               <View style={{ gap: 2 }}>

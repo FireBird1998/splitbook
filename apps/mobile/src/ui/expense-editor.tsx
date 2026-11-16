@@ -597,7 +597,8 @@ function ExpenseTask({
             onClose
               ? form
                 ? { kind: 'close', label: closeLabel(state), onPress: onClose }
-                : { kind: 'back', label: 'Back to Group', onPress: onClose }
+                : // Where Back goes: Spending, Activity or the Group it opened from (#1283).
+                  { kind: 'back', label: recordBackLabel(state), onPress: onClose }
               : undefined
           }
           status={

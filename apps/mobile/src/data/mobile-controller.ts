@@ -3476,6 +3476,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const returnTo = expenseReturn(groupId, origin.scrollY, origin.anchor);
     // From a day on Spending, Back returns there (#1276).
     const spending = route.screen === 'spending' ? { spending: route } : {};
+    // Its Back names Spending (#1283).
+    const fromSpending = route.screen === 'spending' ? { fromSpending: true } : {};
     // Try again, Retry and Discard reopen the same task, as for its origin: the record × returned
     // to opens as that record again, with the kept edit beside it (QA review of #671).
     const keeps =
@@ -3496,6 +3498,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             status: 'blocked',
             message: financialCleanupMessage,
             ...kept,
+            ...fromSpending,
           },
         },
       );
@@ -3530,6 +3533,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: 'loading',
           returnTo,
           ...kept,
+          ...fromSpending,
         },
       },
     );
@@ -3734,6 +3738,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           blank: record ? record.blank : blank,
           history: emptyExpenseHistory(),
           ...kept,
+          ...fromSpending,
         },
       });
       // The record is shown first; its changes follow when they've been read.
