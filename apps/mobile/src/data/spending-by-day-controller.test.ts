@@ -331,7 +331,11 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
     await settle();
     expect(f.reads(november)).toBe(0);
     expect(f.spendingRows()).toEqual([]);
-    expect(controller.getSnapshot().spending).toEqual({ enabled: false, current: null });
+    expect(controller.getSnapshot().spending).toEqual({
+      enabled: false,
+      today: null,
+      current: null,
+    });
   });
 
   it('reads this Month once the switch is on while Home shows, and shows the member’s share as the server sent it', async () => {
@@ -344,6 +348,8 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
     expect(f.reads(november)).toBe(1);
     expect(controller.getSnapshot().spending).toEqual({
       enabled: true,
+      // The phone's date, on the clock and in the zone that decide its Month (#1275).
+      today: '2026-11-16',
       current: {
         month: '2026-11',
         status: 'ready',
@@ -415,7 +421,11 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
     expect(f.row(november)).toMatchObject({ refreshedAt: start });
     await f.spending.select(false);
     await settle();
-    expect(controller.getSnapshot().spending).toEqual({ enabled: false, current: null });
+    expect(controller.getSnapshot().spending).toEqual({
+      enabled: false,
+      today: null,
+      current: null,
+    });
     expect(f.spendingRows()).toEqual([]);
     const sent = f.sent;
     later(60_000);
