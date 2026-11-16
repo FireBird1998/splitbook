@@ -947,3 +947,21 @@ describe('Spending by day: the review of #1274', () => {
     });
   });
 });
+
+describe('Spending, the screen the Home card opens (#1275)', () => {
+  it('opens from Home only while the switch is on, and Back returns Home', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    // Off: there's no card, and nothing opens.
+    controller.openSpending();
+    expect(controller.getSnapshot().screen).toBe('groups');
+    await f.spending.select(true);
+    await settle();
+    controller.openSpending();
+    expect(controller.getSnapshot().screen).toBe('spending');
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('groups');
+  });
+});

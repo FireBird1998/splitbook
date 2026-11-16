@@ -865,11 +865,32 @@ describe('App Settings: Spending by day', () => {
           .findAll(
             (node) =>
               node.props.accessibilityLabel ===
-              'Spending, September. Your share ₹2,350.00. 1\u00a0day with spending',
+              'Spending, September. Your share ₹2,350.00. 1\u00a0day with spending. See each day',
           ).length,
       ).toBeGreaterThan(0);
       await spendingByDay.select(false);
       await vi.waitFor(() => expect(app.text()).not.toContain(`Spending${SEPARATOR}`));
+    } finally {
+      await spendingByDay.select(false);
+    }
+  });
+});
+
+describe('App Spending (#1275)', () => {
+  it('opens from the Home card as a screen of its own, and Back returns Home', async () => {
+    const app = await renderApp();
+    try {
+      await app.press('Account and settings');
+      await app.press('Spending by day, ');
+      await app.androidBack();
+      await vi.waitFor(() => expect(app.text()).toContain('See each day'));
+      await app.press('Spending, September');
+      expect(app.controller.getSnapshot().screen).toBe('spending');
+      expect(app.text()).toContain('Spending');
+      expect(app.text()).not.toContain('Your balances');
+      expect(await app.androidBack()).toBe(true);
+      expect(app.controller.getSnapshot().screen).toBe('groups');
+      expect(app.text()).toContain('See each day');
     } finally {
       await spendingByDay.select(false);
     }
