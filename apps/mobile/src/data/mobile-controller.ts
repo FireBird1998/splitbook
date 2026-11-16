@@ -49,6 +49,7 @@ import { draftForExpenseEntry } from '@splitbook/shared/expense-entry-draft';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import { focusManager, onlineManager, QueryClient, QueryObserver } from '@tanstack/query-core';
 import { savedCopyBudget } from './saved-copy-budget';
+import { createSpendingQueries } from './spending-queries';
 import { savedCopyRetirement } from './saved-copy-retirement';
 import { inScope, queryOwner, replaceScopedQueries } from './query-owner';
 import { readProvenance } from './read-provenance';
@@ -528,6 +529,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     heldNotificationSource: null,
     sharedDraftCollection: emptySharedDraftCollection(),
     assistants: emptyAssistants(),
+    spending: { enabled: false, current: null },
     tagManager: emptyTagManager(),
     currencyAdd: { groupId: null, status: 'idle', message: null },
     headerSettings: null,
@@ -821,7 +823,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   const publish = (unrouted: Unrouted) => {
     let next = activityQueries.project(
-      expenseQueries.project(groupQueries.project(homeQueries.project(placed(unrouted)))),
+      expenseQueries.project(
+        groupQueries.project(spendingQueries.project(homeQueries.project(placed(unrouted)))),
+      ),
     );
     // Return feedback belongs to the Group view it was made for; leaving that view ends it.
     const showing = (groupId: string) => next.screen === 'group' && next.detail.id === groupId;
@@ -946,6 +950,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     widgets.update(next);
     listeners.forEach((listener) => listener());
     homeQueries.bindLater();
+    spendingQueries.bindLater();
     groupQueries.bindLater();
     expenseQueries.bindLater();
     activityQueries.bindLater();
@@ -1010,6 +1015,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     unconfirmedTags.clear();
     // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
     homeQueries.reset();
+    spendingQueries.reset();
     assistantsData.reset();
     groupQueries.reset();
     expenseQueries.reset();
@@ -1523,6 +1529,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       [listedGroups, unlistedGroups] = [listed, lost];
       for (const id of lost)
         invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
+      // A saved Month may hold a lost Group's Expenses: every one goes, and is read again (#1274).
+      if (lost.size) forgetSpending();
     },
     // Every view now keeps its saved copies in the persister (#223).
     retain: async (accountId, listed) => {
@@ -1534,6 +1542,29 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     distrust: (accountId, scopes) => untrusted.mark(accountId, scopes, now()),
     invalidate: (...scopes) => invalidateReads(...scopes),
   });
+  /** Spending by day's monthly read and its saved copies (#1274), behind the phone's switch. */
+  const spendingQueries = createSpendingQueries({
+    ...session,
+    environment: apiBase,
+    rows: dependencies.savedQueries,
+    freshness,
+    offline: () => offlineSession,
+    enabled: () => dependencies.spendingByDay?.getSnapshot().enabled ?? false,
+    shows: () => route.screen === 'groups' && snapshot.auth.status === 'authenticated',
+    timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  });
+  /** Removes every saved Month of this account, on the account queue; one that stays is never shown. */
+  const forgetSpending = () => {
+    const lease = accountStorage(),
+      owner = generation;
+    if (!lease) return;
+    void lease
+      .write(() => spendingQueries.forget(lease.accountId))
+      .catch((error: unknown) => {
+        if (current(owner) && !(error instanceof Superseded))
+          untrusted.mark(lease.accountId, ['home'], now());
+      });
+  };
   /** Account → Connected assistants (#622), with its Saved copy among the account's others. */
   const assistantsData = createAssistants({
     ...session,
@@ -1725,6 +1756,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     onlineManager.subscribe((online) => {
       if (online) void recoverShown();
     }),
+    spendingQueries.listen(),
+    // The phone's switch: turned on, Home reads this Month; turned off, nothing is read or kept.
+    dependencies.spendingByDay?.subscribe(() => {
+      if (!dependencies.spendingByDay?.getSnapshot().enabled) void spendingQueries.off();
+      publish({ ...snapshot });
+    }) ?? (() => undefined),
   ];
   const disconnect = () => {
     listening.forEach((stop) => stop());
@@ -1852,6 +1889,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const outdate = (scopes: string[], invalidate = false) => {
     replaceScopedQueries(queryClient, account(), scopes, invalidate);
     homeQueries.rebind();
+    spendingQueries.rebind();
     groupQueries.rebind();
     expenseQueries.rebind();
     activityQueries.rebind();
@@ -2079,7 +2117,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /** Refresh and Retry always read again. */
-  const refreshHome = () => Promise.all([homeQueries.refresh(), toReviewQueries.refresh()]);
+  const refreshHome = () =>
+    Promise.all([homeQueries.refresh(), toReviewQueries.refresh(), spendingQueries.refresh()]);
 
   /**
    * `quiet`: a return to the foreground after Continue. It retries a pending revoke but stays on
@@ -8115,7 +8154,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // them (#433); a return to the foreground has already reached them through TanStack's focus
     // event (M1-6), and waits for what it started.
     if (reuse) return homeQueries.settle(generation, { fresh: false });
-    await Promise.all([homeQueries.settle(generation, { fresh: true }), toReviewQueries.refresh()]);
+    await Promise.all([
+      homeQueries.settle(generation, { fresh: true }),
+      toReviewQueries.refresh(),
+      spendingQueries.refresh(),
+    ]);
   };
   /** A screen showing none of a Group: its saved copies no longer keep the offline banner. */
   const unshowGroup = () => {

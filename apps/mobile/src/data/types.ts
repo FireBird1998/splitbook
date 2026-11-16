@@ -501,6 +501,31 @@ export interface GroupCurrenciesState {
   restored?: boolean;
 }
 
+/**
+ * One Month of Spending by day as this phone has it (#1274): the server's reply, or this
+ * phone's saved copy of it with its own time, never fresh.
+ */
+export interface SpendingMonthState {
+  /** `YYYY-MM`. */
+  month: string;
+  status: 'loading' | 'ready' | 'error';
+  data: import('./spending-by-day-read').SpendingByDay | null;
+  /** When the figures shown were verified: the server's answer, or the saved copy's time. */
+  refreshedAt: number | null;
+  /** The figures are this phone's saved copy: "Saved", not "Updated". */
+  restored: boolean;
+  /** Splitbook can't be reached and this phone keeps no copy of the Month. */
+  unsaved: boolean;
+  message: string | null;
+}
+
+/** Spending by day (#1271): the phone's switch, and the Month Home reads while it is on. */
+export interface SpendingState {
+  enabled: boolean;
+  /** This Month on the phone's clock and in its zone, while the switch is on and signed in. */
+  current: SpendingMonthState | null;
+}
+
 export interface HeldNotificationOwner {
   generation: number;
   accountId: string;
@@ -520,6 +545,8 @@ export interface MobileSnapshot {
   notificationOpening: import('./notification-alerts').NotificationOpening;
   /** Account → Connected assistants (#622): its list, Saved copy and Disconnect. */
   assistants: AssistantsState;
+  /** Spending by day (#1274): the switch, and this Month's saved read. */
+  spending: SpendingState;
   tagManager: TagManagerState;
   currencyAdd: CurrencyAddState;
   /** The Group whose Currencies show over its view (#722); they close with it. */
@@ -753,6 +780,14 @@ export interface NetworkState {
 }
 
 export interface MobileDependencies {
+  /**
+   * Spending by day's switch (#1274), kept on this phone outside the account's stores. While it
+   * is off, or absent, nothing is read for the feature.
+   */
+  spendingByDay?: {
+    getSnapshot(): { enabled: boolean };
+    subscribe(listener: () => void): () => void;
+  };
   widgets?: import('./widget-copy').WidgetsNative;
   notifications?: import('./notification-controls').NotificationNative;
   /** Native identity acquisition only. The controller owns the app session. */

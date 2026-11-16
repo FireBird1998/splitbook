@@ -156,6 +156,12 @@ Disconnect asks first in a sheet, then sends the web's revoke (`POST /api/auth/m
 
 The list is kept as a Saved copy beside Home's, scoped to the backend and account, written on the saved-copy queue and cleared at sign-out with the account's other saved copies. Offline, the screen shows it read only with when it was saved, or says this phone keeps no copy. Back returns to Settings, closing the sheet first.
 
+## Spending by day (#1271)
+
+Settings › Home has one switch, **Spending by day**, kept on this phone beside Appearance, Motion and Tilt (SecureStore `splitbook.spending-by-day`, outside the account's stores), so it survives sign-out and a change of account. It is off on a fresh install and after an update. While it is off, nothing is read for the feature.
+
+While it is on and Home shows, the app reads this Month (on the phone's clock, in its zone) from `GET /api/user/spending/days?month=YYYY-MM&tz=…` and keeps the reply as a saved copy (ADR 0006): one persister row per Month in the wire JSON, written on the saved-copy queue, counted in the saved-copy budget, and restored with its own time, never as fresh. Offline with no copy, the Month says it isn't on this phone yet. Its key is in Home's scope, so whatever makes Home's figures out of date (an Expense saved, edited or deleted, a To review item saved, a Group joined or left, a Group's Expenses read) makes the Month read again too. Its rows go at sign-out and a change of account with the account's other saved copies, stay after a 401 as those do, and go when a Groups list leaves out a Group or the switch is turned off.
+
 ## Expense creation and drafts (#53–54)
 
 Open a Group and choose **Add expense**. Equal splits use shared exact-money allocation; the form collects a payer, participants, date, stable Tag identity, and optional category/notes. A past Household Month starts on that Month’s last day. Currency is the Group currency; an outdated draft requires an explicit currency choice and amount review.
