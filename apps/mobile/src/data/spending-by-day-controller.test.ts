@@ -884,4 +884,54 @@ describe('Spending by day: the review of #1274', () => {
     expect(f.spendingRows()).toEqual([]);
     expect(controller.getSnapshot().spending.current).toBeNull();
   });
+
+  it('takes a Month that may hold a lost Group’s Expenses off the screen at once, saved copy too, until it is read again', async () => {
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    first.dispose();
+    // The next start shows the saved Month while it reads the list and the Month again.
+    later(60_000);
+    f.server.listed = [maple];
+    f.server.share = 50_000;
+    const list = f.hold(listPath),
+      before = f.hold(november);
+    const restarted = f.create();
+    const restoring = restarted.restore();
+    await list.reached;
+    await before.reached;
+    await settle();
+    expect(restarted.getSnapshot().spending.current).toMatchObject({
+      restored: true,
+      data: { currencies: [{ totalMinor: 120_000 }] },
+    });
+    // The list leaves Cabin Weekend out: no Month from before stays on screen or on this phone.
+    const shown: (number | null)[] = [];
+    const stop = restarted.subscribe(() =>
+      shown.push(restarted.getSnapshot().spending.current?.data?.currencies[0]?.totalMinor ?? null),
+    );
+    const after = f.hold(november);
+    list.release();
+    await settle();
+    expect(restarted.getSnapshot().spending.current).toMatchObject({
+      status: 'loading',
+      data: null,
+      restored: false,
+    });
+    expect(f.row(november)).toBeNull();
+    before.release();
+    await after.reached;
+    after.release();
+    await restoring;
+    await settle();
+    stop();
+    expect(shown).not.toContain(120_000);
+    expect(restarted.getSnapshot().spending.current).toMatchObject({
+      status: 'ready',
+      restored: false,
+      data: { currencies: [{ totalMinor: 50_000 }] },
+    });
+  });
 });
