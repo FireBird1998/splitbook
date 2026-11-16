@@ -1025,6 +1025,46 @@ describe('Spending: its Months, days and currencies (#1276)', () => {
     expect(controller.getSnapshot().screen).toBe('groups');
     expect(shown(controller)).toBeNull();
   });
+  it('drops the Month it shows when a Group is lost meanwhile, and reads it again (#1274 review)', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    // A pull on Home reads the Groups list; Alex opens Spending before it answers.
+    f.server.listed = [maple];
+    later(1_000);
+    const list = f.hold(listPath);
+    const pull = controller.refresh('pull');
+    await list.reached;
+    await settle();
+    await controller.openSpending();
+    await settle();
+    expect(shown(controller)!.read).toMatchObject({
+      status: 'ready',
+      data: { currencies: [{ totalMinor: 120_000 }] },
+    });
+    // The list leaves Cabin Weekend out: the Month shown may hold its Expenses.
+    f.server.share = 50_000;
+    const again = f.hold(november);
+    list.release();
+    await again.reached;
+    await settle();
+    expect(controller.getSnapshot().screen).toBe('spending');
+    expect(shown(controller)!.read).toMatchObject({
+      status: 'loading',
+      data: null,
+      restored: false,
+    });
+    again.release();
+    await pull;
+    await settle();
+    expect(shown(controller)!.read).toMatchObject({
+      status: 'ready',
+      data: { currencies: [{ totalMinor: 50_000 }] },
+    });
+  });
+
   it('pages back through the twelve Months, reads each, and stops at both ends', async () => {
     const f = fixture();
     const controller = await onSpending(f);
