@@ -19,6 +19,7 @@ import {
   tripSummaryPath,
   userActivityPath,
   userSpendingPath,
+  spendingByDayPath,
 } from './api-paths';
 import { getLocalMonthIsoRange } from './date';
 import type { ExpenseFilters } from './types';
@@ -172,6 +173,17 @@ describe("Home's spending chart (#307)", () => {
   it('keeps a zone with a plus sign intact', () => {
     expect(queryOf(userSpendingPath({ months: 12, timeZone: 'Etc/GMT+5' }))).toEqual([
       ['months', '12'],
+      ['tz', 'Etc/GMT+5'],
+    ]);
+  });
+});
+
+describe('Spending by day (#1273)', () => {
+  it('sends the Month and the time zone, encoded', () => {
+    const path = spendingByDayPath({ month: '2026-11', timeZone: 'Asia/Kolkata' });
+    expect(path).toBe('/api/user/spending/days?month=2026-11&tz=Asia%2FKolkata');
+    expect(queryOf(spendingByDayPath({ month: '2025-12', timeZone: 'Etc/GMT+5' }))).toEqual([
+      ['month', '2025-12'],
       ['tz', 'Etc/GMT+5'],
     ]);
   });

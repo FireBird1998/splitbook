@@ -14,7 +14,7 @@ import { getCurrency, getCurrencyPrecision } from './currency';
 import { expenseDay, expenseLocalDate } from './expense-day';
 import { sumMinorAmounts } from './exact-money';
 import { memberShareMinor, type InsightExpense } from './insights';
-import { isMonthKey, type DayKey, type MonthKey } from './zoned-calendar';
+import { isMonthKey, type DayKey, type Instant, type MonthKey } from './zoned-calendar';
 
 /** An Expense as Spending by day reads it; the caller's other fields are kept as they are. */
 export type DayExpense = Pick<
@@ -161,4 +161,23 @@ export function dayTint(amountMinor: number, currency: string): DayTint {
  */
 export function dayShareReadAloud(day: DayKey, amountMinor: number, currency: string): string {
   return `${format(expenseLocalDate(day), 'd MMMM')}, ${fullAmount(amountMinor, currency)}`;
+}
+
+/** How many Months Spending by day reaches: the current one and the eleven before it. */
+export const SPENDING_BY_DAY_MONTHS = 12;
+
+/** The Months Spending by day can read, oldest first; the last is the current Month in the zone. */
+export function spendingByDayMonths(clock: { now: Instant; timeZone: string }): MonthKey[] {
+  void clock;
+  throw new Error('Not built yet');
+}
+
+/** The Month a client asked for: one of `spendingByDayMonths`, or a RangeError. */
+export function readSpendingByDayMonth(
+  value: unknown,
+  clock: { now: Instant; timeZone: string },
+): MonthKey {
+  void value;
+  void clock;
+  throw new Error('Not built yet');
 }
