@@ -3,6 +3,7 @@ import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, pagesFor } from '../test-utils/fake-splitbook';
 import { createPhoneSwitch } from './phone-switch';
 import type { FetchResponse, MobileSnapshot } from './types';
+import type { WidgetsNative } from './widget-copy';
 
 // #1274: Spending by day's saved monthly read on Android. While the phone's switch is on and Home
 // shows, the app reads this Month of the member's own share from the server and keeps the reply
@@ -109,7 +110,7 @@ const spendingReply = (month: string, shareMinor: number) => ({
 });
 
 /** A fictional backend for Alex and Sam, the phone's switch, and stores that outlive a controller. */
-function fixture() {
+function fixture(options: { widgets?: WidgetsNative } = {}) {
   const server = {
     /** The Groups the list holds. */
     listed: [maple, cabin],
@@ -119,6 +120,8 @@ function fixture() {
     expired: false,
     /** Groups that refuse Alex (403) though the list still holds them. */
     refused: new Set<string>(),
+    /** Groups archived since the list was read: they refuse every read as archived (409). */
+    archived: new Set<string>(),
     /** The size this phone's storage reports for each saved Month, for the saved-copy budget. */
     monthBytes: 100,
     /** The Month the server's reply says it is, when not the one asked for. */
@@ -196,6 +199,8 @@ function fixture() {
       server.listed = server.listed.filter(({ _id }) => _id !== id);
       return json({ data: { message: 'Left group', archived: false }, status: 200 });
     }
+    if (server.archived.has(id))
+      return json({ status: 409, code: 'GROUP_ARCHIVED', error: 'This Group was archived.' }, 409);
     if (!server.listed.some(({ _id }) => _id === id) || server.refused.has(id))
       return json({}, 403);
     if (path === `/api/groups/${id}`) return json({ status: 200, data: group });
@@ -243,6 +248,7 @@ function fixture() {
       pendingInvitation: undefined,
       tagRequests: undefined,
       spendingByDay: spending,
+      ...(options.widgets ? { widgets: options.widgets } : {}),
     },
   });
   phone.connect(true);
@@ -759,5 +765,123 @@ describe('Spending by day: read again after the member’s own writes (#1274)', 
     // Joining shows Home while the list is read: the Month is read again after the join.
     expect(f.reads(november, sent)).toBeGreaterThanOrEqual(1);
     expect(controller.getSnapshot().spending.current).toMatchObject({ status: 'ready' });
+  });
+});
+
+describe('Spending by day: the review of #1274', () => {
+  it('lets only Home’s own figures, not a Month, tell the widgets Home is verified again', async () => {
+    // What the app tells the home-screen widgets: whether each copy it writes has Home verified.
+    const verified: boolean[] = [];
+    const widgets: WidgetsNative = {
+      write: async (_copy, options) => void verified.push(!!options?.homeVerified),
+      clear: async () => undefined,
+      setSession: async () => undefined,
+      redraw: async () => undefined,
+    };
+    const f = fixture({ widgets });
+    const controller = f.create();
+    await controller.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    expect(verified).toContain(true);
+    // Alex saves an Expense in Maple House: Home's figures are no longer verified until read again.
+    await controller.openGroup(mapleId);
+    await controller.openExpense(mapleId);
+    await controller.updateExpenseDraft({ description: 'Groceries', amount: '1', tagId });
+    await settle();
+    // The save's follow-up reads Home's figures again, slowly; the Month, in Home's scope, answers
+    // first, while the figures from before the save are still on screen.
+    const figures = f.hold(homePath),
+      from = verified.length,
+      months = f.reads(november);
+    const saving = controller.saveExpense();
+    await figures.reached;
+    await settle();
+    expect(f.reads(november)).toBeGreaterThan(months);
+    // Home isn't verified by the Month.
+    expect(verified.slice(from)).not.toContain(true);
+    figures.release();
+    await saving;
+    await home(controller);
+    expect(verified.slice(from)).toContain(true);
+  });
+
+  it('reads the Month again in the phone’s new zone, when the zone changes within the same Month', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    expect(f.reads(november)).toBe(1);
+    // The phone moves to a zone where it is still 16 November.
+    const moved = zone === 'Asia/Kolkata' ? 'America/New_York' : 'Asia/Kolkata';
+    const there = `/api/user/spending/days?month=2026-11&tz=${encodeURIComponent(moved)}`;
+    const resolved = Intl.DateTimeFormat.prototype.resolvedOptions;
+    const travel = vi
+      .spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions')
+      .mockImplementation(function (this: Intl.DateTimeFormat) {
+        return { ...resolved.call(this), timeZone: moved };
+      });
+    try {
+      f.server.share = 150_000;
+      // Home still shows; the app returns to the foreground within the read's window.
+      await controller.refresh('foreground');
+      await settle();
+      expect(f.reads(there)).toBe(1);
+      expect(share(controller.getSnapshot())).toEqual([['INR', 150_000]]);
+      expect(controller.getSnapshot().spending.current).toMatchObject({ status: 'ready' });
+    } finally {
+      travel.mockRestore();
+    }
+  });
+
+  it('turned off and quickly on again, reads this Month and shows it', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    expect(f.reads(november)).toBe(1);
+    const off = f.spending.select(false);
+    const on = f.spending.select(true);
+    await Promise.all([off, on]);
+    await settle();
+    expect(f.reads(november)).toBe(2);
+    expect(controller.getSnapshot().spending.current).toMatchObject({
+      month: '2026-11',
+      status: 'ready',
+    });
+    expect(share(controller.getSnapshot())).toEqual([['INR', 120_000]]);
+    expect(f.row(november)).toMatchObject({ refreshedAt: start });
+  });
+
+  it('neither keeps nor shows a reply that lands after the switch is turned off', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    const month = f.hold(november);
+    await f.spending.select(true);
+    await month.reached;
+    await f.spending.select(false);
+    month.release();
+    await settle();
+    expect(f.spendingRows()).toEqual([]);
+    expect(controller.getSnapshot().spending).toMatchObject({ enabled: false, current: null });
+  });
+
+  it('neither keeps nor shows a reply that lands after sign-out', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    const month = f.hold(november);
+    await f.spending.select(true);
+    await month.reached;
+    await controller.signOut();
+    month.release();
+    await settle();
+    expect(f.spendingRows()).toEqual([]);
+    expect(controller.getSnapshot().spending.current).toBeNull();
   });
 });
