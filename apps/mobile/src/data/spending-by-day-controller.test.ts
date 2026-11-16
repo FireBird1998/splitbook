@@ -122,6 +122,8 @@ function fixture() {
     monthBytes: 100,
     /** The Month the server's reply says it is, when not the one asked for. */
     replyMonth: null as string | null,
+    /** This phone can't remove saved copies. */
+    failRemoval: false,
   };
   const backend = fakeSplitbook();
   backend.world.people.alex = alex;
@@ -238,6 +240,11 @@ function fixture() {
   });
   phone.connect(true);
   const rows = phone.stores.savedQueries.records;
+  phone.stores.savedQueries.failPersistently(
+    'remove',
+    new Error('The device storage is full'),
+    () => server.failRemoval,
+  );
   // The native adapter measures rows for the saved-copy budget without reading them.
   Object.assign(phone.stores.savedQueries, {
     usage: async (accountId: string) =>
@@ -501,6 +508,31 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
       data: null,
     });
     expect(f.spendingRows()).toEqual([]);
+  });
+
+  it('never shows a saved Month it couldn’t remove, and the next start removes it before anything reads it', async () => {
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    expect(f.row(november)).toMatchObject({ refreshedAt: start });
+    // Turned off while this phone can't remove it: the Month stays, untrusted.
+    f.server.failRemoval = true;
+    await f.spending.select(false);
+    await settle();
+    expect(f.row(november)).not.toBeNull();
+    first.dispose();
+    // Storage works again at the next start, which is offline.
+    f.server.failRemoval = false;
+    f.connect(false);
+    const restarted = f.create();
+    await restarted.restore();
+    await settle();
+    expect(f.row(november)).toBeNull();
+    await f.spending.select(true);
+    await settle();
+    expect(restarted.getSnapshot().spending.current).toMatchObject({ unsaved: true, data: null });
   });
 
   it('keeps the saved Month after a 401, as the account’s other saved copies', async () => {
