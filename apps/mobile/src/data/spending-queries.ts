@@ -166,7 +166,9 @@ export function createSpendingQueries(session: SpendingSession) {
     stop: () => void = () => undefined,
     /** The key observed: its account, Month and zone. */
     observed: QueryKey | null = null,
-    pending = false;
+    pending = false,
+    /** The Month on screen when a Group was lost: it may hold its Expenses, so it never shows again. */
+    lostShown: SpendingMonthState | null = null;
 
   /** This Month on the phone's clock and in its zone. */
   const currentMonth = () => monthKeyInZone(session.now(), session.timeZone());
@@ -259,7 +261,7 @@ export function createSpendingQueries(session: SpendingSession) {
     else {
       const month = currentMonth(),
         read = client.getQueryCache().get<Envelope, Error>(hashKey(keyOf(user.id, month)))?.state;
-      const shown = next.spending.current;
+      const shown = next.spending.current === lostShown ? null : next.spending.current;
       const current = read
         ? projectMonth(month, read, shown)
         : shown?.month === month
@@ -311,6 +313,19 @@ export function createSpendingQueries(session: SpendingSession) {
     },
     forget,
     forgetSaved,
+    /**
+     * A Group was lost, and a Month may hold its Expenses (#1274 review). None stays on screen or
+     * on this phone: the saved Months go first on the account's queue, so no saved copy read after
+     * shows, and the Month on screen goes at the next publish. It is read again; offline, it isn't
+     * on this phone yet.
+     */
+    lose() {
+      const forgetting = forgetSaved();
+      unbind();
+      client.removeQueries({ predicate: ({ queryKey }) => isMonthKey(queryKey) });
+      lostShown = session.snapshot().spending.current ?? lostShown;
+      return forgetting;
+    },
     /** Answers that land publish what they change, wherever the member is. */
     listen() {
       return client.getQueryCache().subscribe((event) => {
@@ -325,6 +340,7 @@ export function createSpendingQueries(session: SpendingSession) {
     /** The session ended: nothing waiting is written, nothing is observed. */
     reset() {
       unbind();
+      lostShown = null;
       engine.reset();
       saved.clear();
     },

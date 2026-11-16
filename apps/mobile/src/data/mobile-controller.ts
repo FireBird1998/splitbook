@@ -1527,10 +1527,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     shows: () => route.screen === 'groups' && snapshot.auth.status === 'authenticated',
     listed: (listed, lost) => {
       [listedGroups, unlistedGroups] = [listed, lost];
+      // A Month may hold a lost Group's Expenses: on screen and saved, it goes first, and is read
+      // again (#1274).
+      if (lost.size) void spendingQueries.lose();
       for (const id of lost)
         invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
-      // A saved Month may hold a lost Group's Expenses: every one goes, and is read again (#1274).
-      if (lost.size) void spendingQueries.forgetSaved();
     },
     // Every view now keeps its saved copies in the persister (#223).
     retain: async (accountId, listed) => {
@@ -2675,7 +2676,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const widgetEviction = archivedWidget
       ? widgets.archiveGroup(groupId)
       : widgets.forgetGroup(groupId, true);
-    // Its views observe nothing more, so their removed queries are never read back (F5).
+    // Its views observe nothing more, so their removed queries are never read back (F5). A Month
+    // may hold its Expenses: it leaves the screen and this phone, and is read again (#1274).
+    void spendingQueries.lose();
     groupQueries.lose(groupId);
     expenseQueries.lose(groupId);
     activityQueries.lose(groupId);

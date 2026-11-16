@@ -577,12 +577,14 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
     await controller.refresh('pull');
     await month.reached;
     await settle();
-    expect(f.row(november)).toBeNull();
-    month.release();
-    await settle();
-    // The Month read beside the list is read again after it: nothing of the lost Group stays.
+    // The Month read beside the list is read again after it, at once: the saved Month from before
+    // is gone, and nothing of the lost Group stays.
     expect(f.reads(november, sent)).toBe(2);
     expect(f.row(november)).toMatchObject({ refreshedAt: start + 1_000 });
+    month.release();
+    await settle();
+    expect(f.reads(november, sent)).toBe(2);
+    expect(controller.getSnapshot().spending.current).toMatchObject({ status: 'ready' });
   });
 });
 
