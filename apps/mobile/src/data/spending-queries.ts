@@ -6,7 +6,8 @@ import {
 } from '@tanstack/query-core';
 import { spendingByDayPath } from '@splitbook/shared/api-paths';
 import { queryKeyPath, spendingByDayKey, type QueryKey } from '@splitbook/shared/query-keys';
-import { dayKeyInZone, lastMonths, monthKeyInZone } from '@splitbook/shared/zoned-calendar';
+import { spendingByDayMonths } from '@splitbook/shared/spending-by-day';
+import { dayKeyInZone, monthKeyInZone } from '@splitbook/shared/zoned-calendar';
 import type { FindableRecordStore } from './account-record-storage';
 import { queryOwner } from './query-owner';
 import {
@@ -184,7 +185,7 @@ export function createSpendingQueries(session: SpendingSession) {
   /** Today on the phone's clock and in its zone. */
   const today = () => dayKeyInZone(session.now(), session.timeZone());
   /** The twelve Months Spending pages through, oldest first: this Month and the eleven before. */
-  const twelveMonths = () => lastMonths(12, clock());
+  const twelveMonths = () => spendingByDayMonths(clock());
   /** The twelve Months Spending pages through, oldest first; the same list while unchanged. */
   const spendingMonths = (was: SpendingScreenState | null) => {
     const months = twelveMonths();
