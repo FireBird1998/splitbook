@@ -314,6 +314,8 @@ export type Route =
       groupId: string;
       /** Where Back and a confirmed change return; null after direct entry. */
       returnTo: GroupReturnContext | null;
+      /** Opened from a day on Spending (#1276): Back returns there, as it was. */
+      spending?: SpendingRoute;
     }
   | {
       screen: 'members';
@@ -331,9 +333,18 @@ export type Route =
   | { screen: 'assistants' }
   | SpendingRoute;
 
-/** Spending, opened from the Home card while Spending by day is on (#1275; #1276 fills it). */
+/**
+ * Spending, opened from the Home card while Spending by day is on (#1275): a Month of it, the
+ * day chosen in it and the currency shown (#1276).
+ */
 export interface SpendingRoute {
   screen: 'spending';
+  /** `YYYY-MM`: this Month or one of the eleven before it. */
+  month: string;
+  /** `YYYY-MM-DD` in that Month, up to today; null for none. */
+  day: string | null;
+  /** The currency's tab; null for the Month's first. */
+  currency: string | null;
 }
 
 /** Confirms a ledger change on the Group view it returned to. */
@@ -532,6 +543,17 @@ export interface SpendingState {
   today: string | null;
   /** This Month on the phone's clock and in its zone, while the switch is on and signed in. */
   current: SpendingMonthState | null;
+  /** The Spending screen's Month, day and currency, while it shows (#1276). */
+  screen: SpendingScreenState | null;
+}
+
+export interface SpendingScreenState {
+  month: string;
+  day: string | null;
+  currency: string | null;
+  /** The twelve Months it pages through, oldest first: this Month and the eleven before it. */
+  months: readonly string[];
+  read: SpendingMonthState;
 }
 
 export interface HeldNotificationOwner {

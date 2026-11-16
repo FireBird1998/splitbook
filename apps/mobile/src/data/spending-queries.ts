@@ -6,7 +6,7 @@ import {
 } from '@tanstack/query-core';
 import { spendingByDayPath } from '@splitbook/shared/api-paths';
 import { queryKeyPath, spendingByDayKey, type QueryKey } from '@splitbook/shared/query-keys';
-import { dayKeyInZone, monthKeyInZone } from '@splitbook/shared/zoned-calendar';
+import { dayKeyInZone, lastMonths, monthKeyInZone } from '@splitbook/shared/zoned-calendar';
 import type { FindableRecordStore } from './account-record-storage';
 import { queryOwner } from './query-owner';
 import {
@@ -21,7 +21,13 @@ import {
   type SpendingByDayRead,
 } from '@splitbook/shared/spending-by-day-read';
 import { RequestError, Superseded } from './transport';
-import type { MobileSnapshot, SpendingMonthState, SpendingState } from './types';
+import type {
+  MobileSnapshot,
+  SpendingMonthState,
+  SpendingRoute,
+  SpendingScreenState,
+  SpendingState,
+} from './types';
 
 /** Splitbook can't be reached, and this phone keeps no copy of the Month: the board's words. */
 export const spendingNotOnPhone = 'Your spending isn’t on this phone yet. Connect to load it.';
@@ -53,6 +59,8 @@ export interface SpendingSession extends SavedReadPorts {
   enabled(): boolean;
   /** Home shows in a signed-in session. */
   shows(): boolean;
+  /** The Spending screen, while it shows (#1276): its Month is the one observed. */
+  view(): SpendingRoute | null;
   /** The phone's zone as it is now: it decides which Month is current. */
   timeZone(): string;
   snapshot(): MobileSnapshot;
@@ -166,12 +174,17 @@ export function createSpendingQueries(session: SpendingSession) {
     stop: () => void = () => undefined,
     /** The key observed: its account, Month and zone. */
     observed: QueryKey | null = null,
-    pending = false,
-    /** The Month on screen when a Group was lost: it may hold its Expenses, so it never shows again. */
-    lostShown: SpendingMonthState | null = null;
+    pending = false;
+  /** The Months on screen when a Group was lost: they may hold its Expenses, so never show again. */
+  const lostShown = new Set<SpendingMonthState>();
 
   /** This Month on the phone's clock and in its zone. */
   const currentMonth = () => monthKeyInZone(session.now(), session.timeZone());
+  /** The twelve Months Spending pages through, oldest first; the same list while unchanged. */
+  const spendingMonths = (was: SpendingScreenState | null) => {
+    const months = lastMonths(12, { now: session.now(), timeZone: session.timeZone() });
+    return was && was.months.join() === months.join() ? was.months : months;
+  };
   const keyOf = (accountId: string, month: string) =>
     spendingByDayKey(
       { environment: session.environment, accountId },
@@ -207,12 +220,16 @@ export function createSpendingQueries(session: SpendingSession) {
     observer = null;
     observed = null;
   };
-  /** Observed while the switch is on and Home shows; unobserved, a read in flight goes on. */
+  /**
+   * Observed while the switch is on: this Month while Home shows, and the Spending screen's Month
+   * while it shows. Unobserved, a read in flight goes on.
+   */
   const bind = () => {
     pending = false;
-    if (!session.enabled() || !session.shows()) return unbind();
+    const view = session.view();
+    if (!session.enabled() || (!view && !session.shows())) return unbind();
     // The whole key: a new zone within the same Month is another read (#1274 review).
-    const key = keyOf(session.account().accountId, currentMonth());
+    const key = keyOf(session.account().accountId, view?.month ?? currentMonth());
     if (observer && observed && hashKey(observed) === hashKey(key)) return;
     unbind();
     observed = key;
@@ -257,20 +274,39 @@ export function createSpendingQueries(session: SpendingSession) {
     const enabled = session.enabled(),
       user = next.auth.status === 'authenticated' ? next.auth.user : null;
     let spending: SpendingState;
-    if (!enabled || !user) spending = same(next.spending, { enabled, today: null, current: null });
+    if (!enabled || !user)
+      spending = same(next.spending, { enabled, today: null, current: null, screen: null });
     else {
-      const month = currentMonth(),
-        read = client.getQueryCache().get<Envelope, Error>(hashKey(keyOf(user.id, month)))?.state;
-      const shown = next.spending.current === lostShown ? null : next.spending.current;
-      const current = read
-        ? projectMonth(month, read, shown)
-        : shown?.month === month
-          ? shown
-          : loading(month);
+      /** A Month as its query holds it, after what was shown of it. */
+      const monthState = (month: string, shown: SpendingMonthState | null) => {
+        const read = client
+          .getQueryCache()
+          .get<Envelope, Error>(hashKey(keyOf(user.id, month)))?.state;
+        return read
+          ? projectMonth(month, read, shown)
+          : shown?.month === month
+            ? shown
+            : loading(month);
+      };
+      /** What was shown, unless a lost Group took it off the screen (#1274 review). */
+      const kept = (state: SpendingMonthState | null | undefined) =>
+        state && !lostShown.has(state) ? state : null;
+      const view = session.view(),
+        was = next.spending.screen;
+      const screen: SpendingScreenState | null = view
+        ? same(was, {
+            month: view.month,
+            day: view.day,
+            currency: view.currency,
+            months: spendingMonths(was),
+            read: monthState(view.month, kept(was?.read)),
+          })
+        : null;
       spending = same(next.spending, {
         enabled,
         today: dayKeyInZone(session.now(), session.timeZone()),
-        current,
+        current: monthState(currentMonth(), kept(next.spending.current)),
+        screen,
       });
     }
     return spending === next.spending ? next : { ...next, spending };
@@ -292,12 +328,14 @@ export function createSpendingQueries(session: SpendingSession) {
      * Reads this Month again now while the switch is on, with Home's figures: a pull, Retry, or a
      * write's follow-up. A failure shows on the Month; nothing is read while the switch is off.
      */
-    async refresh() {
+    async refresh(month = currentMonth()) {
       if (!session.enabled() || session.snapshot().auth.status !== 'authenticated') return;
-      await client
-        .fetchQuery({ ...options(currentMonth()), staleTime: -Infinity })
-        .catch(() => undefined);
+      await client.fetchQuery({ ...options(month), staleTime: -Infinity }).catch(() => undefined);
     },
+    /** The twelve Months Spending pages through, oldest first. */
+    months: () => lastMonths(12, { now: session.now(), timeZone: session.timeZone() }),
+    currentMonth,
+    today: () => dayKeyInZone(session.now(), session.timeZone()),
     /**
      * The switch was turned off: nothing is observed or kept. Its queries go, and with them what
      * was on screen, and every saved Month goes from this phone.
@@ -327,7 +365,8 @@ export function createSpendingQueries(session: SpendingSession) {
       const forgetting = forgetSaved();
       unbind();
       client.removeQueries({ predicate: ({ queryKey }) => isMonthKey(queryKey) });
-      lostShown = session.snapshot().spending.current ?? lostShown;
+      const { current, screen } = session.snapshot().spending;
+      for (const state of [current, screen?.read]) if (state) lostShown.add(state);
       return forgetting;
     },
     /** Answers that land publish what they change, wherever the member is. */
@@ -344,7 +383,7 @@ export function createSpendingQueries(session: SpendingSession) {
     /** The session ended: nothing waiting is written, nothing is observed. */
     reset() {
       unbind();
-      lostShown = null;
+      lostShown.clear();
       engine.reset();
       saved.clear();
     },

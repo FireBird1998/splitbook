@@ -529,7 +529,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     heldNotificationSource: null,
     sharedDraftCollection: emptySharedDraftCollection(),
     assistants: emptyAssistants(),
-    spending: { enabled: false, today: null, current: null },
+    spending: { enabled: false, today: null, current: null, screen: null },
     tagManager: emptyTagManager(),
     currencyAdd: { groupId: null, status: 'idle', message: null },
     headerSettings: null,
@@ -1553,6 +1553,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     offline: () => offlineSession,
     enabled: () => spendingOn(),
     shows: () => route.screen === 'groups' && snapshot.auth.status === 'authenticated',
+    view: () => (route.screen === 'spending' ? route : null),
     timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   });
   /** Account → Connected assistants (#622), with its Saved copy among the account's others. */
@@ -3473,6 +3474,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const accountId = snapshot.auth.user.id;
     const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
     const returnTo = expenseReturn(groupId, origin.scrollY, origin.anchor);
+    // From a day on Spending, Back returns there (#1276).
+    const spending = route.screen === 'spending' ? { spending: route } : {};
     // Try again, Retry and Discard reopen the same task, as for its origin: the record × returned
     // to opens as that record again, with the kept edit beside it (QA review of #671).
     const keeps =
@@ -3485,7 +3488,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const kept = keeps ? { keptEdit: true } : {};
     if (financialCleanup.blocked(accountId, groupId)) {
       navigate(
-        { screen: 'expense', groupId, returnTo },
+        { screen: 'expense', groupId, returnTo, ...spending },
         {
           expense: {
             ...emptyExpenseEditor(),
@@ -3518,7 +3521,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publishReadFreshness();
     expenseQueries.open(groupId);
     navigate(
-      { screen: 'expense', groupId, returnTo },
+      { screen: 'expense', groupId, returnTo, ...spending },
       {
         expense: {
           ...emptyExpenseEditor(),
@@ -4306,6 +4309,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return opening;
     }
     const to = parent(route);
+    if (to.screen === 'spending') return navigate(to);
     if (to.screen !== 'group') return showHome();
     returnToGroup(to);
     await openGroup(to.groupId);
@@ -7775,6 +7779,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const { detail } = snapshot;
     switch (from.screen) {
       case 'expense': {
+        // Opened from a day on Spending: it returns there, as it was (#1276).
+        if (from.spending) return from.spending;
         // A Group removed after denial has nothing to return to.
         if (
           detail.id === from.groupId &&
@@ -8067,6 +8073,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return reuse ? activityQueries.settle(generation) : refreshActivity();
     if (snapshot.screen === 'expense') return refreshExpense(reuse);
     if (snapshot.screen === 'assistants') return assistantsData.read();
+    if (route.screen === 'spending') return spendingQueries.refresh(route.month);
     if (['create', 'invite', 'settings', 'settlement', 'members'].includes(snapshot.screen)) {
       const owner = generation,
         view = route,
@@ -9198,10 +9205,38 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     if (target === 'review' && persistentDrafts) await toReviewQueries.refresh();
   };
-  /** Spending, from the Home card (#1275), while the switch is on. Back returns Home. */
+  /**
+   * Spending, from the Home card (#1275): this Month on today, while the switch is on. It pages
+   * through the twelve Months, a day at a time chosen in the Month shown (#1276).
+   */
   const openSpending = () => {
     if (snapshot.auth.status !== 'authenticated' || !spendingOn()) return;
-    navigate({ screen: 'spending' });
+    navigate({
+      screen: 'spending',
+      month: spendingQueries.currentMonth(),
+      day: spendingQueries.today(),
+      currency: null,
+    });
+  };
+  /** Another of the twelve Months: this Month opens on today, the others on no day. */
+  const showSpendingMonth = (month: string) => {
+    if (route.screen !== 'spending' || !spendingQueries.months().includes(month)) return;
+    const current = month === spendingQueries.currentMonth();
+    navigate({ ...route, month, day: current ? spendingQueries.today() : null });
+  };
+  /** A day of the Month shown, up to today. */
+  const chooseSpendingDay = (day: string) => {
+    if (
+      route.screen !== 'spending' ||
+      !day.startsWith(`${route.month}-`) ||
+      day > spendingQueries.today()
+    )
+      return;
+    navigate({ ...route, day });
+  };
+  const chooseSpendingCurrency = (currency: string) => {
+    if (route.screen !== 'spending') return;
+    navigate({ ...route, currency });
   };
   const closeWidgetPicker = () => publish({ ...snapshot, widgetPicker: false });
   const chooseWidgetGroup = async (id: string) => {
@@ -9363,6 +9398,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     /** Retry on the Spending card: this Month, read again now (#1275). */
     refreshSpending: () => spendingQueries.refresh(),
     openSpending,
+    showSpendingMonth,
+    chooseSpendingDay,
+    chooseSpendingCurrency,
     refreshExpenses,
     refreshBalances,
     selectMonth,
