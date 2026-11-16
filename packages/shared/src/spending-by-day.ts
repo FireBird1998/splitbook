@@ -155,12 +155,40 @@ export function dayTint(amountMinor: number, currency: string): DayTint {
   return (1 + [base, 2 * base, 5 * base].filter((edge) => amountMinor >= edge).length) as DayTint;
 }
 
+/*
+ * Spending by day's words for a Month or a day, read from its key (#1283). Each key becomes a
+ * local date by `expenseLocalDate` and is written by date-fns, which reads that same local date
+ * back: no Intl and no zone. Once the phone's zone changes while the app runs, Hermes keeps the
+ * zone the app started in for its dates but Intl follows the new one, so a key read by
+ * `toLocaleDateString` can name the Month or day before it.
+ */
+
+/** A Month's name, as a Group's Expenses spell their Month: "November". */
+export function spendingMonthName(month: MonthKey): string {
+  return format(expenseLocalDate(`${month}-01`), 'MMMM');
+}
+
+/** A Month with its year, as Spending titles it: "November 2026". */
+export function spendingMonthTitle(month: MonthKey): string {
+  return format(expenseLocalDate(`${month}-01`), 'MMMM yyyy');
+}
+
+/** A day as Spending heads its Expenses: "Mon 16 Nov". */
+export function spendingDayHeading(day: DayKey): string {
+  return format(expenseLocalDate(day), 'EEE d MMM');
+}
+
+/** A day as a screen reader says it: "16 November". */
+export function spendingDayReadAloud(day: DayKey): string {
+  return format(expenseLocalDate(day), 'd MMMM');
+}
+
 /**
  * A day's share as a screen reader says it: the date and the full amount, never the short form
  * a cell shows. "13 November, ₹1,240,000.00".
  */
 export function dayShareReadAloud(day: DayKey, amountMinor: number, currency: string): string {
-  return `${format(expenseLocalDate(day), 'd MMMM')}, ${fullAmount(amountMinor, currency)}`;
+  return `${spendingDayReadAloud(day)}, ${fullAmount(amountMinor, currency)}`;
 }
 
 /** How many Months Spending by day reaches: the current one and the eleven before it. */

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import type { SpendingMonthState } from '../data/types';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { setWindow } from '../test-utils/native';
 import { SpendingCard } from './spending-card';
 import { ThemeContext } from './theme';
@@ -178,9 +179,12 @@ describe('the Spending card (#1275)', () => {
     expect(texts()).toContain(`Spending${SEPARATOR}November`);
     expect(shown()).not.toContain('₹');
     expect(buttons()).toHaveLength(0);
+    // TalkBack hears one element that says what is loading (#1283).
     expect(
-      screen!.root.findAll((node) => node.props.accessibilityLabel === 'Loading your spending'),
-    ).not.toHaveLength(0);
+      screen!.root
+        .findAll((node) => node.props.accessible === true && node.props.accessibilityState?.busy)
+        .map((node) => node.props.accessibilityLabel),
+    ).toEqual(['Spending, November. Loading your spending']);
     // The grid's frame is drawn, so the card is as tall as it will be.
     expect(grids()).toHaveLength(1);
   });
@@ -342,5 +346,17 @@ describe('the Spending card (#1275)', () => {
         .props.onPress(),
     );
     expect(onRetry).toHaveBeenCalledOnce();
+  });
+});
+
+describe('the Spending card when the phone’s zone moved while the app ran (Hermes, #1283)', () => {
+  let restore = () => undefined as void;
+  afterEach(() => restore());
+
+  it('names this Month from its key, in a zone behind UTC', () => {
+    restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+    render(usual());
+    expect(texts()).toContain(`Spending${SEPARATOR}November`);
+    expect(card()!.props.accessibilityLabel).toMatch(/^Spending, November\. /);
   });
 });

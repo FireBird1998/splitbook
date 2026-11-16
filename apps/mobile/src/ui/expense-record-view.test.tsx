@@ -16,7 +16,7 @@ import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import type { FetchResponse } from '../data/types';
 import { clockTime } from './activity-format';
 import { ExpenseEditor } from './expense-editor';
-import { recordOutline, type RecordOutline } from './expense-record-view';
+import { recordBackLabel, recordOutline, type RecordOutline } from './expense-record-view';
 import { parseExpensePage } from '../data/financial-dto';
 import { fonts } from './theme';
 import {
@@ -1674,4 +1674,11 @@ describe('the Expense form’s bar, with its status (#939)', () => {
       expect(centres(412, 1)).toEqual({ close: 32, title: 24, options: 32, status: 32 });
     },
   );
+});
+
+describe('Back’s words on a saved Expense (#1283)', () => {
+  it('names Spending when the Expense opened from a day on Spending, and the Group otherwise', () => {
+    expect(recordBackLabel({ returnTo: null, fromSpending: true })).toBe('Back to Spending');
+    expect(recordBackLabel({ returnTo: null })).toBe('Back to Group');
+  });
 });

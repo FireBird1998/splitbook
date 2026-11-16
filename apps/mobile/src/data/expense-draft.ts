@@ -145,6 +145,8 @@ export interface ExpenseEditor {
   message: string | null;
   validation: ExpenseValidation;
   returnTo: GroupReturnContext | null;
+  /** Opened from a day on Spending (#1276): Back returns there, and says so (#1283). */
+  fromSpending?: boolean;
   /**
    * The Group's ordinary draft while another, saved Expense is read. That record opens
    * read-only; Edit and Delete wait until the draft is finished or discarded. Also this record's

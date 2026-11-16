@@ -276,9 +276,13 @@ export const RecordTopBar = memo(function RecordTopBar({
   );
 });
 
-/** Back's words: to the Group destination the record opened from. */
-export const recordBackLabel = (state: Pick<Editor, 'returnTo'>) =>
-  state.returnTo?.destination === 'activity' ? 'Back to Activity' : 'Back to Group';
+/** Back's words: to Spending, or the Group destination, the record opened from. */
+export const recordBackLabel = (state: Pick<Editor, 'returnTo' | 'fromSpending'>) =>
+  state.fromSpending
+    ? 'Back to Spending'
+    : state.returnTo?.destination === 'activity'
+      ? 'Back to Activity'
+      : 'Back to Group';
 
 const noop = () => undefined;
 

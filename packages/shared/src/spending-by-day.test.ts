@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { memberSpendingByMonth, type InsightExpense } from './insights';
 import { MoneyValidationError } from './exact-money';
+import { hermesZoneMoved } from './test-support/hermes-zone';
 import {
   SPENDING_BY_DAY_MONTHS,
   dayShareReadAloud,
+  spendingDayHeading,
+  spendingDayReadAloud,
+  spendingMonthName,
+  spendingMonthTitle,
   dayTint,
   memberSpendingByDay,
   readSpendingByDayMonth,
@@ -260,6 +265,42 @@ describe('a day read aloud', () => {
   it('says the date and the full amount, never the short form', () => {
     expect(dayShareReadAloud('2026-11-13', 124_000_000, 'INR')).toBe('13 November, ₹1,240,000.00');
     expect(dayShareReadAloud('2026-11-01', 50, 'EUR')).toBe('1 November, €0.50');
+  });
+});
+
+describe('Spending by day’s words, from their keys (#1283)', () => {
+  const words = () => [
+    spendingMonthName('2026-11'),
+    spendingMonthTitle('2026-10'),
+    spendingDayHeading('2026-11-01'),
+    spendingDayHeading('2026-10-31'),
+    spendingDayReadAloud('2026-11-03'),
+    dayShareReadAloud('2026-12-31', 100, 'INR'),
+  ];
+  const expected = [
+    'November',
+    'October 2026',
+    'Sun 1 Nov',
+    'Sat 31 Oct',
+    '3 November',
+    '31 December, ₹1.00',
+  ];
+
+  it('name the Month and the day the key says', () => {
+    expect(words()).toEqual(expected);
+  });
+
+  it.each([
+    ['Asia/Kolkata', 'Pacific/Pago_Pago'],
+    ['Pacific/Pago_Pago', 'Pacific/Kiritimati'],
+    ['Pacific/Kiritimati', 'Pacific/Pago_Pago'],
+  ])('stay so on Hermes once the zone moves from %s to %s while the app runs', (from, to) => {
+    const restore = hermesZoneMoved(from, to);
+    try {
+      expect(words()).toEqual(expected);
+    } finally {
+      restore();
+    }
   });
 });
 
