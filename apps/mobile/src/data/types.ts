@@ -328,7 +328,13 @@ export type Route =
   | { screen: 'create' }
   | { screen: 'settings' }
   /** Account → Connected assistants, over Settings (#622). */
-  | { screen: 'assistants' };
+  | { screen: 'assistants' }
+  | SpendingRoute;
+
+/** Spending, opened from the Home card while Spending by day is on (#1275; #1276 fills it). */
+export interface SpendingRoute {
+  screen: 'spending';
+}
 
 /** Confirms a ledger change on the Group view it returned to. */
 export interface GroupSnackbar {
@@ -522,6 +528,8 @@ export interface SpendingMonthState {
 /** Spending by day (#1271): the phone's switch, and the Month Home reads while it is on. */
 export interface SpendingState {
   enabled: boolean;
+  /** The phone's date, `YYYY-MM-DD`, on the clock and in the zone that decide its Month. */
+  today: string | null;
   /** This Month on the phone's clock and in its zone, while the switch is on and signed in. */
   current: SpendingMonthState | null;
 }

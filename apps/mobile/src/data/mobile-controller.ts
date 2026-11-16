@@ -529,7 +529,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
     heldNotificationSource: null,
     sharedDraftCollection: emptySharedDraftCollection(),
     assistants: emptyAssistants(),
-    spending: { enabled: false, current: null },
+    spending: { enabled: false, today: null, current: null },
     tagManager: emptyTagManager(),
     currencyAdd: { groupId: null, status: 'idle', message: null },
     headerSettings: null,
@@ -1543,13 +1543,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     distrust: (accountId, scopes) => untrusted.mark(accountId, scopes, now()),
     invalidate: (...scopes) => invalidateReads(...scopes),
   });
+  /** The phone's Spending by day switch is on (#1274). */
+  const spendingOn = () => dependencies.spendingByDay?.getSnapshot().enabled ?? false;
   /** Spending by day's monthly read and its saved copies (#1274), behind the phone's switch. */
   const spendingQueries = createSpendingQueries({
     ...session,
     environment: apiBase,
     freshness,
     offline: () => offlineSession,
-    enabled: () => dependencies.spendingByDay?.getSnapshot().enabled ?? false,
+    enabled: () => spendingOn(),
     shows: () => route.screen === 'groups' && snapshot.auth.status === 'authenticated',
     timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   });
@@ -1747,7 +1749,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     spendingQueries.listen(),
     // The phone's switch: turned on, Home reads this Month; turned off, nothing is read or kept.
     dependencies.spendingByDay?.subscribe(() => {
-      if (!dependencies.spendingByDay?.getSnapshot().enabled) void spendingQueries.off();
+      if (!spendingOn()) void spendingQueries.off();
       publish({ ...snapshot });
     }) ?? (() => undefined),
   ];
@@ -9196,6 +9198,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     if (target === 'review' && persistentDrafts) await toReviewQueries.refresh();
   };
+  /** Spending, from the Home card (#1275), while the switch is on. Back returns Home. */
+  const openSpending = () => {
+    if (snapshot.auth.status !== 'authenticated' || !spendingOn()) return;
+    navigate({ screen: 'spending' });
+  };
   const closeWidgetPicker = () => publish({ ...snapshot, widgetPicker: false });
   const chooseWidgetGroup = async (id: string) => {
     if (
@@ -9353,6 +9360,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     back,
     refresh,
     refreshHome,
+    /** Retry on the Spending card: this Month, read again now (#1275). */
+    refreshSpending: () => spendingQueries.refresh(),
+    openSpending,
     refreshExpenses,
     refreshBalances,
     selectMonth,

@@ -6,7 +6,7 @@ import {
 } from '@tanstack/query-core';
 import { spendingByDayPath } from '@splitbook/shared/api-paths';
 import { queryKeyPath, spendingByDayKey, type QueryKey } from '@splitbook/shared/query-keys';
-import { monthKeyInZone } from '@splitbook/shared/zoned-calendar';
+import { dayKeyInZone, monthKeyInZone } from '@splitbook/shared/zoned-calendar';
 import type { FindableRecordStore } from './account-record-storage';
 import { queryOwner } from './query-owner';
 import {
@@ -257,7 +257,7 @@ export function createSpendingQueries(session: SpendingSession) {
     const enabled = session.enabled(),
       user = next.auth.status === 'authenticated' ? next.auth.user : null;
     let spending: SpendingState;
-    if (!enabled || !user) spending = same(next.spending, { enabled, current: null });
+    if (!enabled || !user) spending = same(next.spending, { enabled, today: null, current: null });
     else {
       const month = currentMonth(),
         read = client.getQueryCache().get<Envelope, Error>(hashKey(keyOf(user.id, month)))?.state;
@@ -267,7 +267,11 @@ export function createSpendingQueries(session: SpendingSession) {
         : shown?.month === month
           ? shown
           : loading(month);
-      spending = same(next.spending, { enabled, current });
+      spending = same(next.spending, {
+        enabled,
+        today: dayKeyInZone(session.now(), session.timeZone()),
+        current,
+      });
     }
     return spending === next.spending ? next : { ...next, spending };
   };

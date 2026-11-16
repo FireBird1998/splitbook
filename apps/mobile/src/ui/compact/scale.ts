@@ -28,9 +28,11 @@ export const textVariants: Record<TextVariant, TextStyle> = {
 };
 
 /** Money is always IBM Plex Mono with tabular figures. */
-export type MoneySize = 'form' | 'balance' | 'list' | 'table';
+export type MoneySize = 'form' | 'total' | 'balance' | 'list' | 'table';
 export const moneySizes: Record<MoneySize, TextStyle> = {
   form: { fontSize: 32, lineHeight: 35, letterSpacing: -1 },
+  /** A Month's share of spending, as a card's one figure (#1271). */
+  total: { fontSize: 24, lineHeight: 30, letterSpacing: -0.3 },
   balance: { fontSize: 19, lineHeight: 24, letterSpacing: -0.4 },
   list: { fontSize: 15, lineHeight: 20, letterSpacing: -0.3 },
   table: { fontSize: 13, lineHeight: 17, letterSpacing: -0.2 },

@@ -60,6 +60,15 @@ export interface SemanticTokens {
    * amount as text, so colour is never the only cue.
    */
   diverging: { positive: string; negative: string };
+  /**
+   * Spending by day's five tint steps (#1271, board SpendAndHome): a day's share from nothing
+   * (the muted surface) up to the brand blue, and the text drawn on each. Fixed steps, the same
+   * every Month: dayTint in @splitbook/shared/spending-by-day picks one.
+   */
+  dayTint: {
+    fill: readonly [string, string, string, string, string];
+    text: readonly [string, string, string, string, string];
+  };
   shadowSm: string;
   shadowMd: string;
 }
@@ -96,6 +105,10 @@ export const lightTokens: SemanticTokens = {
   chart: { series: '#3d4fcf', seriesSoft: '#7b87de', grid: '#e6e9f2' },
   inverse: { bg: '#151828', text: '#f4f5f9' },
   diverging: { positive: '#1a9a6e', negative: '#e04f3d' },
+  dayTint: {
+    fill: ['#eef0f6', '#dfe3ff', '#b9c1f6', '#7f8ce6', '#3d4fcf'],
+    text: ['#151828', '#151828', '#151828', '#151828', '#ffffff'],
+  },
   shadowSm: '0 1px 2px rgba(21, 24, 40, 0.05)',
   shadowMd: '0 4px 16px rgba(21, 24, 40, 0.07)',
 };
@@ -132,6 +145,10 @@ export const darkTokens: SemanticTokens = {
   chart: { series: '#6f80f5', seriesSoft: '#5562b7', grid: '#262a39' },
   inverse: { bg: '#f0f2f8', text: '#151828' },
   diverging: { positive: '#3dca96', negative: '#f07162' },
+  dayTint: {
+    fill: ['#222634', '#262c55', '#353f86', '#5462c8', '#9aa6ff'],
+    text: ['#f0f2f8', '#f0f2f8', '#f0f2f8', '#ffffff', '#0e1016'],
+  },
   shadowSm: '0 1px 2px rgba(0, 0, 0, 0.35)',
   shadowMd: '0 6px 20px rgba(0, 0, 0, 0.4)',
 };

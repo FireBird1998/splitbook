@@ -19,6 +19,8 @@ import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { testPhone } from './test-utils/test-phone';
 import { fakeSplitbook } from './test-utils/fake-splitbook';
 import type { FetchResponse } from './data/types';
+import { spendingByDay } from './data/spending-by-day';
+import { SEPARATOR } from '@splitbook/shared/separator';
 import { refreshedLabel } from './ui/refresh-feedback';
 import {
   backListenerCount,
@@ -197,6 +199,26 @@ function backend() {
     if (init.method && init.method !== 'GET') writes.push(`${init.method} ${path}`);
     const override = handler(path, init);
     if (override) return override;
+    // Spending by day (#1275): Sam's share of this Month, one rupee day.
+    if (path.startsWith('/api/user/spending/days?')) {
+      const month = new URL(path, 'http://local').searchParams.get('month')!;
+      return json({
+        status: 200,
+        data: {
+          month,
+          timeZone: 'UTC',
+          currencies: [
+            {
+              currency: 'INR',
+              totalMinor: 235_000,
+              dayCount: 1,
+              days: [{ day: `${month}-02`, shareMinor: 235_000 }],
+              expenses: [],
+            },
+          ],
+        },
+      });
+    }
     // This fixture computes a Month's page; the fake's world stays unchanged by writes.
     if (path.includes('/expenses?')) {
       const from = new URL(path, 'http://local').searchParams.get('dateFrom');
@@ -213,6 +235,8 @@ function backend() {
       offlineIdentity: undefined,
       pendingInvitation: undefined,
       netInfo: undefined,
+      // The phone's own switch, as Settings changes it (#1274).
+      spendingByDay,
     },
   });
   phone.stores.expenseDrafts.failPersistently(
@@ -818,6 +842,55 @@ describe('App Settings: Spending by day', () => {
       expect(app.text()).toContain(
         'On. It counts your share of each Expense. Payments between members are left out.',
       );
+    } finally {
+      await spendingByDay.select(false);
+    }
+  });
+
+  it('turned on, puts this Month’s card directly under Your balances, and nothing while off (#1275)', async () => {
+    const app = await renderApp();
+    try {
+      expect(app.text()).not.toContain(`Spending${SEPARATOR}`);
+      await app.press('Account and settings');
+      await app.press('Spending by day, ');
+      await app.androidBack();
+      await vi.waitFor(() => expect(app.text()).toContain('₹2,350.00'));
+      const text = app.text(),
+        card = text.indexOf(`Spending${SEPARATOR}September`);
+      expect(text.indexOf('Your balances')).toBeLessThan(card);
+      expect(card).toBeLessThan(text.indexOf('Maple House'));
+      expect(
+        app
+          .root()
+          .findAll(
+            (node) =>
+              node.props.accessibilityLabel ===
+              'Spending, September. Your share ₹2,350.00. 1\u00a0day with spending. See each day',
+          ).length,
+      ).toBeGreaterThan(0);
+      await spendingByDay.select(false);
+      await vi.waitFor(() => expect(app.text()).not.toContain(`Spending${SEPARATOR}`));
+    } finally {
+      await spendingByDay.select(false);
+    }
+  });
+});
+
+describe('App Spending (#1275)', () => {
+  it('opens from the Home card as a screen of its own, and Back returns Home', async () => {
+    const app = await renderApp();
+    try {
+      await app.press('Account and settings');
+      await app.press('Spending by day, ');
+      await app.androidBack();
+      await vi.waitFor(() => expect(app.text()).toContain('See each day'));
+      await app.press('Spending, September');
+      expect(app.controller.getSnapshot().screen).toBe('spending');
+      expect(app.text()).toContain('Spending');
+      expect(app.text()).not.toContain('Your balances');
+      expect(await app.androidBack()).toBe(true);
+      expect(app.controller.getSnapshot().screen).toBe('groups');
+      expect(app.text()).toContain('See each day');
     } finally {
       await spendingByDay.select(false);
     }

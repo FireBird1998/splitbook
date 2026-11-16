@@ -33,6 +33,16 @@ const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const monthPath = (month: string) =>
   `/api/user/spending/days?month=${month}&tz=${encodeURIComponent(zone)}`;
 const november = monthPath('2026-11');
+/**
+ * The phone's date at the start, in its zone: 16 November in most, 15 November at UTC−11. It is
+ * November in every zone from UTC−12 to UTC+14, so the Month is the same.
+ */
+const todayHere = new Intl.DateTimeFormat('en-CA', {
+  timeZone: zone,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+}).format(start);
 const listPath = '/api/groups';
 const homePath = '/api/user/balances';
 const person = (user: typeof alex) => ({ _id: user.id, name: user.name, image: null });
@@ -331,7 +341,11 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
     await settle();
     expect(f.reads(november)).toBe(0);
     expect(f.spendingRows()).toEqual([]);
-    expect(controller.getSnapshot().spending).toEqual({ enabled: false, current: null });
+    expect(controller.getSnapshot().spending).toEqual({
+      enabled: false,
+      today: null,
+      current: null,
+    });
   });
 
   it('reads this Month once the switch is on while Home shows, and shows the member’s share as the server sent it', async () => {
@@ -344,6 +358,8 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
     expect(f.reads(november)).toBe(1);
     expect(controller.getSnapshot().spending).toEqual({
       enabled: true,
+      // The phone's date, on the clock and in the zone that decide its Month (#1275).
+      today: todayHere,
       current: {
         month: '2026-11',
         status: 'ready',
@@ -415,7 +431,11 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
     expect(f.row(november)).toMatchObject({ refreshedAt: start });
     await f.spending.select(false);
     await settle();
-    expect(controller.getSnapshot().spending).toEqual({ enabled: false, current: null });
+    expect(controller.getSnapshot().spending).toEqual({
+      enabled: false,
+      today: null,
+      current: null,
+    });
     expect(f.spendingRows()).toEqual([]);
     const sent = f.sent;
     later(60_000);
@@ -935,5 +955,23 @@ describe('Spending by day: the review of #1274', () => {
       restored: false,
       data: { currencies: [{ totalMinor: 50_000 }] },
     });
+  });
+});
+
+describe('Spending, the screen the Home card opens (#1275)', () => {
+  it('opens from Home only while the switch is on, and Back returns Home', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    // Off: there's no card, and nothing opens.
+    controller.openSpending();
+    expect(controller.getSnapshot().screen).toBe('groups');
+    await f.spending.select(true);
+    await settle();
+    controller.openSpending();
+    expect(controller.getSnapshot().screen).toBe('spending');
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('groups');
   });
 });

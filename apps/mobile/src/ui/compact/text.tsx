@@ -477,6 +477,11 @@ export function moneyWidth(amount: string, size: MoneySize, fontScale: number) {
   return characters * 0.6 * scaledSp(Number(moneySizes[size].fontSize), fontScale);
 }
 
+/** How many characters of an amount fit in `width` at this size: `moneyWidth` turned round. */
+export function moneyCharacters(width: number, size: MoneySize, fontScale: number) {
+  return Math.floor(width / (0.6 * scaledSp(Number(moneySizes[size].fontSize), fontScale)));
+}
+
 /** A formatted amount (the caller formats it) in IBM Plex Mono with tabular figures. */
 export function Money({
   children,
