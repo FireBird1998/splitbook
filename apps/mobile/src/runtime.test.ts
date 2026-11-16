@@ -176,3 +176,8 @@ it('keeps Spending by day in phone SecureStore, outside the account purge contra
   expect(local.stores).not.toContain(spendingByDay);
   expect(spendingByDay).not.toHaveProperty('clear');
 });
+
+it('gives the controller the phone’s Spending by day switch, so turning it on reads the Month (#1274)', async () => {
+  const { spendingByDay } = await import('./data/spending-by-day');
+  expect(wired.dependencies!.spendingByDay).toBe(spendingByDay);
+});

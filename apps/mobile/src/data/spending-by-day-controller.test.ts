@@ -116,6 +116,12 @@ function fixture() {
     share: 120_000,
     /** Every request answers 401: the session has ended on the server. */
     expired: false,
+    /** Groups that refuse Alex (403) though the list still holds them. */
+    refused: new Set<string>(),
+    /** The size this phone's storage reports for each saved Month, for the saved-copy budget. */
+    monthBytes: 100,
+    /** The Month the server's reply says it is, when not the one asked for. */
+    replyMonth: null as string | null,
   };
   const backend = fakeSplitbook();
   backend.world.people.alex = alex;
@@ -159,7 +165,10 @@ function fixture() {
     if (path === '/api/user/to-review')
       return json({ status: 200, data: { total: 0, groups: [] } });
     const month = /^\/api\/user\/spending\/days\?month=(\d{4}-\d{2})&tz=/.exec(path)?.[1];
-    if (month) return json(spendingReply(month, month === '2026-11' ? server.share : 0));
+    if (month)
+      return json(
+        spendingReply(server.replyMonth ?? month, month === '2026-11' ? server.share : 0),
+      );
     // Alex joins Zed Club by Sam's invitation.
     if (path === `/api/join/${code}` && method === 'POST') {
       server.listed = [...server.listed, zed];
@@ -177,7 +186,8 @@ function fixture() {
       server.listed = server.listed.filter(({ _id }) => _id !== id);
       return json({ data: { message: 'Left group', archived: false }, status: 200 });
     }
-    if (!server.listed.some(({ _id }) => _id === id)) return json({}, 403);
+    if (!server.listed.some(({ _id }) => _id === id) || server.refused.has(id))
+      return json({}, 403);
     if (path === `/api/groups/${id}`) return json({ status: 200, data: group });
     if (path.startsWith(`/api/groups/${id}/expenses?`)) return undefined;
     if (path === `/api/groups/${id}/expenses/${expenseId}` && method === 'GET')
@@ -228,6 +238,16 @@ function fixture() {
   });
   phone.connect(true);
   const rows = phone.stores.savedQueries.records;
+  // The native adapter measures rows for the saved-copy budget without reading them.
+  Object.assign(phone.stores.savedQueries, {
+    usage: async (accountId: string) =>
+      [...rows.keys()]
+        .filter((key) => key.startsWith(accountId))
+        .map((key) => {
+          const path = key.slice(accountId.length);
+          return { path, bytes: path === november ? server.monthBytes : 100, lastUsed: 0 };
+        }),
+  });
   return {
     server,
     spending,
@@ -468,6 +488,21 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
     expect(controller.getSnapshot().spending.enabled).toBe(true);
   });
 
+  it('refuses and never saves a reply for another Month than the one asked for', async () => {
+    const f = fixture();
+    f.server.replyMonth = '2026-10';
+    const controller = f.create();
+    await controller.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    expect(controller.getSnapshot().spending.current).toMatchObject({
+      month: '2026-11',
+      status: 'error',
+      data: null,
+    });
+    expect(f.spendingRows()).toEqual([]);
+  });
+
   it('keeps the saved Month after a 401, as the account’s other saved copies', async () => {
     const f = fixture();
     const controller = f.create();
@@ -503,6 +538,68 @@ describe('Spending by day: the saved monthly read (#1274)', () => {
     // The Month read beside the list is read again after it: nothing of the lost Group stays.
     expect(f.reads(november, sent)).toBe(2);
     expect(f.row(november)).toMatchObject({ refreshedAt: start + 1_000 });
+  });
+});
+
+describe('Spending by day: saved Months follow the account’s other saved copies (#1274)', () => {
+  it('counts each saved Month in the saved-copy budget, which removes it past 20 MB', async () => {
+    const f = fixture();
+    f.server.monthBytes = 21_000_000;
+    const controller = f.create();
+    await controller.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    expect(f.reads(november)).toBe(1);
+    await vi.waitFor(() => expect(f.row(november)).toBeNull());
+    // Home's own rows are kept whatever the budget says.
+    expect(f.row(listPath)).not.toBeNull();
+    expect(f.row(homePath)).not.toBeNull();
+  });
+
+  it('takes the saved Month off this phone when a Group refuses Alex', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    expect(f.row(november)).not.toBeNull();
+    await controller.openGroup(mapleId);
+    await settle();
+    // Maple House refuses Alex now, while the list still holds it: the Month may hold its Expenses.
+    f.server.refused.add(mapleId);
+    later(31_000);
+    await controller.refresh();
+    await settle();
+    expect(controller.getSnapshot().detail.status).toBe('denied');
+    expect(f.row(november)).toBeNull();
+  });
+
+  it('takes the saved Month off this phone after a confirmed write, so an offline restart shows nothing older', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await f.spending.select(true);
+    await settle();
+    await controller.openGroup(mapleId);
+    await controller.openExpense(mapleId);
+    await controller.updateExpenseDraft({ description: 'Groceries', amount: '1', tagId });
+    // The save is confirmed, and the phone goes offline before Home shows again.
+    const save = f.hold(`/api/groups/${mapleId}/expenses`);
+    const saving = controller.saveExpense();
+    await save.reached;
+    f.connect(false);
+    save.release();
+    await saving;
+    await settle();
+    expect(f.row(november)).toBeNull();
+    controller.dispose();
+    const restarted = f.create();
+    await restarted.restore();
+    await settle();
+    expect(restarted.getSnapshot().spending.current).toMatchObject({
+      unsaved: true,
+      data: null,
+    });
   });
 });
 
