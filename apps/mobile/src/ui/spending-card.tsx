@@ -321,7 +321,13 @@ export const SpendingCard = memo(function SpendingCard({
                   {spendingDays(line.dayCount)}
                 </CompactText>
               </View>
-              <MonthTint month={state.month} today={today} currency={line} size="small" />
+              {/* Under the figure at large text, the one-currency size (SpendAndHome 6). */}
+              <MonthTint
+                month={state.month}
+                today={today}
+                currency={line}
+                size={large ? 'regular' : 'small'}
+              />
             </View>
           </View>
         );
