@@ -918,7 +918,7 @@ const HomeScreen = memo(function HomeScreen() {
             state={state.spending.current}
             today={state.spending.today}
             // A Month with nothing says its zero in the currency the member sees first.
-            currency={
+            zeroCurrency={
               state.home.data?.[0]?.currency ?? state.groups.data[0]?.defaultCurrency ?? 'INR'
             }
             offline={state.offline.active}

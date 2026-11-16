@@ -1,9 +1,9 @@
 import { memo, useMemo } from 'react';
-import { Pressable, View, useWindowDimensions } from 'react-native';
+import { Pressable, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { amountToFit, fullAmount } from '@splitbook/shared/compact-amount';
 import { localeFirstWeekday, monthGrid } from '@splitbook/shared/date';
-import { SEPARATOR } from '@splitbook/shared/separator';
-import { dayTint, type DayTint } from '@splitbook/shared/spending-by-day';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
+import { dayTint } from '@splitbook/shared/spending-by-day';
 import type { SpendingByDayRead } from '@splitbook/shared/spending-by-day-read';
 import type { SpendingMonthState } from '../data/types';
 import {
@@ -14,60 +14,46 @@ import {
   Skeleton,
   headingBeside,
   headingLine,
-  scaledSp,
+  moneyCharacters,
   useLargeText,
   useLineBox,
+  type MoneySize,
 } from './compact';
 import { readPhoneCalendar } from './day-format';
 import { readTime, RetainedNotice } from './financial-views';
 import { Icon } from './primitives';
+import { refreshedLabel } from './refresh-feedback';
 import { fonts, useTheme } from './theme';
 
-type Theme = ReturnType<typeof useTheme>;
 type Currency = SpendingByDayRead['currencies'][number];
 
-/** Board SpendAndHome's tint steps between the surface and the brand blue, in each mode. */
-const steps = {
-  light: ['#dfe3ff', '#b9c1f6', '#7f8ce6'],
-  dark: ['#262c55', '#353f86', '#5462c8'],
-} as const;
-/** A day's colour for each tint step: nothing, then four steps up to the bright brand blue. */
-export function tintColours(theme: Theme): Readonly<Record<DayTint, string>> {
-  const [one, two, three] = steps[theme.mode];
-  return [
-    theme.surfaceMuted,
-    one,
-    two,
-    three,
-    theme.mode === 'light' ? theme.brand.main : theme.focus,
-  ];
-}
-
-/** The page's and the card's side padding and border: what the card's content has to fit in. */
-const cardInset = 16 * 2 + 1 * 2 + 14 * 2;
+/** The page's side padding, the card's border and its side padding: what its content fits in. */
+const pagePadding = 16,
+  cardBorder = 1,
+  cardPadding = 14;
+const cardInset = 2 * (pagePadding + cardBorder + cardPadding);
+/** The currency's badge, as Your balances draws it, and the gap after each part of a line. */
+const badgeWidth = 52,
+  gap = 12;
 const grids = {
   regular: { cell: 13, gap: 3, round: 3.5 },
   small: { cell: 9, gap: 2, round: 2.5 },
 } as const;
 const gridWidth = (size: keyof typeof grids) => 7 * grids[size].cell + 6 * grids[size].gap;
 
-const months = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-/** A Month key's name, as the day's read-aloud spells it: English, whatever the locale. */
-const monthName = (month: string) => months[Number(month.slice(5, 7)) - 1]!;
-const days = (count: number) => `${count} ${count === 1 ? 'day' : 'days'} with spending`;
+/** A Month key's name in English, as a Group's Expenses spell their Month. */
+const monthName = (month: string) =>
+  new Date(`${month}-01T12:00:00`).toLocaleDateString('en', { month: 'long' });
+const spendingDays = (count: number) => `${counted(count, 'day')} with spending`;
+/** The figure and the Month's grid: side by side, or the grid under the figure at large text. */
+const figuresRow = (large: boolean): ViewStyle => ({
+  flexDirection: large ? 'column' : 'row',
+  alignItems: large ? 'flex-start' : 'center',
+  justifyContent: 'space-between',
+  gap,
+  paddingTop: 10,
+  paddingBottom: 6,
+});
 
 /**
  * A Month as a small grid, a week a row, starting on the phone's first weekday: each day so far
@@ -88,14 +74,13 @@ function MonthTint({
   placeholder?: boolean;
 }) {
   const theme = useTheme();
-  const tints = tintColours(theme);
-  const { cell, gap, round } = grids[size];
+  const { cell, gap: between, round } = grids[size];
   const firstWeekday = useMemo(() => localeFirstWeekday(readPhoneCalendar().locale), []);
   const grid = useMemo(
     () => monthGrid(month, { firstWeekday, today }),
     [month, today, firstWeekday],
   );
-  const steps = new Map(
+  const tintOf = new Map(
     currency?.days.map(({ day, shareMinor }) => [day, dayTint(shareMinor, currency.currency)]),
   );
   return (
@@ -103,10 +88,10 @@ function MonthTint({
       testID="spending-month"
       accessible={false}
       importantForAccessibility="no-hide-descendants"
-      style={{ gap, flexShrink: 0 }}
+      style={{ gap: between, flexShrink: 0 }}
     >
       {grid.weeks.map((week, row) => (
-        <View key={row} style={{ flexDirection: 'row', gap }}>
+        <View key={row} style={{ flexDirection: 'row', gap: between }}>
           {week.map((day, column) => {
             if (!day) return <View key={column} style={{ width: cell, height: cell }} />;
             const future = !placeholder && day.date > today;
@@ -120,9 +105,7 @@ function MonthTint({
                   borderRadius: round,
                   backgroundColor: future
                     ? 'transparent'
-                    : placeholder
-                      ? theme.surfaceMuted
-                      : tints[steps.get(day.date) ?? 0],
+                    : theme.dayTint.fill[placeholder ? 0 : (tintOf.get(day.date) ?? 0)],
                   ...(future ? { borderWidth: 1, borderColor: theme.border } : {}),
                 }}
               >
@@ -151,20 +134,12 @@ function MonthTint({
 }
 
 /** "Spending · November", and when its figures were read, as Your balances says it. */
-function Heading({
-  month,
-  state,
-  offline,
-}: {
-  month: string;
-  state: SpendingMonthState;
-  offline: boolean;
-}) {
+function Heading({ state, offline }: { state: SpendingMonthState; offline: boolean }) {
   const height = useLineBox('caption').height;
   return (
     <View style={{ ...headingLine, minHeight: height, gap: 8 }}>
       <CompactText variant="overline" accessibilityRole="header" spare style={headingBeside}>
-        {`Spending${SEPARATOR}${monthName(month)}`}
+        {`Spending${SEPARATOR}${monthName(state.month)}`}
       </CompactText>
       {state.data !== null
         ? readTime({
@@ -212,7 +187,7 @@ function SeeEachDay() {
 export const SpendingCard = memo(function SpendingCard({
   state,
   today,
-  currency: fallback,
+  zeroCurrency,
   offline = false,
   onOpen,
   onRetry,
@@ -221,7 +196,7 @@ export const SpendingCard = memo(function SpendingCard({
   /** The phone's date, `YYYY-MM-DD`. */
   today: string;
   /** The currency a Month with nothing says its zero in. */
-  currency: string;
+  zeroCurrency: string;
   offline?: boolean;
   /** Opens Spending; without it the card is one block to read, with no button. */
   onOpen?: () => void;
@@ -230,11 +205,11 @@ export const SpendingCard = memo(function SpendingCard({
   const theme = useTheme();
   const large = useLargeText();
   const { width, fontScale } = useWindowDimensions();
-  const month = state.month,
-    name = monthName(month),
+  const name = monthName(state.month),
     data = state.data;
-  const frame = { paddingTop: 12, paddingHorizontal: 14, paddingBottom: 4 };
-  const heading = <Heading month={month} state={state} offline={offline} />;
+  // With nothing to open, the card has no last line: it is as tall while it loads.
+  const frame = { paddingTop: 12, paddingHorizontal: cardPadding, paddingBottom: onOpen ? 4 : 8 };
+  const heading = <Heading state={state} offline={offline} />;
 
   if (data === null) {
     if (state.status === 'loading' || !state.message)
@@ -243,26 +218,18 @@ export const SpendingCard = memo(function SpendingCard({
         <Card loading="Loading your spending">
           <View style={frame}>
             {heading}
-            <View
-              testID="spending-figures"
-              style={{
-                flexDirection: large ? 'column' : 'row',
-                alignItems: large ? 'flex-start' : 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                paddingTop: 10,
-                paddingBottom: 6,
-              }}
-            >
-              <View style={{ gap: 4 }}>
+            <View testID="spending-figures" style={figuresRow(large)}>
+              <View style={{ gap: 2 }}>
                 <Skeleton width={150} line="total" />
-                <Skeleton width={120} line="small" />
+                <Skeleton width={120} line="caption" />
               </View>
-              <MonthTint month={month} today={today} size="regular" placeholder />
+              <MonthTint month={state.month} today={today} size="regular" placeholder />
             </View>
-            <View style={{ minHeight: 36, justifyContent: 'center' }}>
-              <Skeleton width={96} line="small" />
-            </View>
+            {onOpen ? (
+              <View style={{ minHeight: 36, justifyContent: 'center' }}>
+                <Skeleton width={96} line="small" />
+              </View>
+            ) : null}
           </View>
         </Card>
       );
@@ -271,7 +238,12 @@ export const SpendingCard = memo(function SpendingCard({
       <Card>
         <View style={{ ...frame, paddingBottom: 14, gap: 10 }}>
           {heading}
-          <CompactText variant="small" tone="secondary" accessibilityLiveRegion="polite">
+          <CompactText
+            variant="small"
+            tone="secondary"
+            accessibilityLiveRegion="polite"
+            style={{ fontSize: 14, lineHeight: 20 }}
+          >
             {state.message}
           </CompactText>
           <View style={{ alignItems: 'flex-start' }}>
@@ -287,28 +259,30 @@ export const SpendingCard = memo(function SpendingCard({
   const single: Currency =
     currencies.length === 1
       ? currencies[0]!
-      : { currency: fallback, totalMinor: 0, dayCount: 0, days: [], expenses: [] };
+      : { currency: zeroCurrency, totalMinor: 0, dayCount: 0, days: [], expenses: [] };
   /** The figure in full where its column holds it, else its short form. */
-  const fit = (minor: number, code: string, column: number, size: number) =>
-    amountToFit(minor, code, Math.floor(column / (0.6 * scaledSp(size, fontScale))));
+  const fit = (minor: number, code: string, column: number, size: MoneySize) =>
+    amountToFit(minor, code, moneyCharacters(column, size, fontScale));
 
-  const label =
+  const figures =
     currencies.length > 1
-      ? `Spending, ${name}. Your share ${currencies
+      ? `Your share ${currencies
           .map(
             ({ totalMinor, currency, dayCount }) =>
-              `${fullAmount(totalMinor, currency)} over ${dayCount} ${dayCount === 1 ? 'day' : 'days'}`,
+              `${fullAmount(totalMinor, currency)} over ${counted(dayCount, 'day')}`,
           )
           .join(' and ')}`
-      : `Spending, ${name}. Your share ${fullAmount(single.totalMinor, single.currency)}. ${
-          single.dayCount ? days(single.dayCount) : `Nothing yet in ${name}`
+      : `Your share ${fullAmount(single.totalMinor, single.currency)}. ${
+          single.dayCount ? spendingDays(single.dayCount) : `Nothing yet in ${name}`
         }`;
+  // A saved copy is never read out as current (ADR 0006).
+  const saved = state.restored ? `. Saved ${refreshedLabel(state.refreshedAt)}` : '';
+  const label = `Spending, ${name}. ${figures}${saved}`;
 
   const body =
     currencies.length > 1 ? (
       currencies.map((line, index) => {
-        // The code's badge, the figure's column and the small grid, each 12 apart.
-        const column = large ? inner : inner - 52 - 12 - 12 - gridWidth('small');
+        const column = large ? inner : inner - badgeWidth - gap - gap - gridWidth('small');
         return (
           <View key={line.currency}>
             {index > 0 ? <View style={{ height: 1, backgroundColor: theme.border }} /> : null}
@@ -316,13 +290,13 @@ export const SpendingCard = memo(function SpendingCard({
               style={{
                 flexDirection: large ? 'column' : 'row',
                 alignItems: large ? 'flex-start' : 'center',
-                gap: large ? 6 : 12,
+                gap: large ? 6 : gap,
                 paddingVertical: 10,
               }}
             >
               <View
                 style={{
-                  minWidth: 52,
+                  minWidth: badgeWidth,
                   alignItems: 'center',
                   borderRadius: 8,
                   paddingHorizontal: 8,
@@ -335,42 +309,36 @@ export const SpendingCard = memo(function SpendingCard({
                 </CompactText>
               </View>
               <View style={{ flex: large ? undefined : 1, minWidth: 0, gap: 2 }}>
-                <Money size="balance">{fit(line.totalMinor, line.currency, column, 19)}</Money>
-                <CompactText variant="small" tone="secondary">
-                  {days(line.dayCount)}
+                <Money size="balance">
+                  {fit(line.totalMinor, line.currency, column, 'balance')}
+                </Money>
+                <CompactText variant="caption" tone="secondary">
+                  {spendingDays(line.dayCount)}
                 </CompactText>
               </View>
-              <MonthTint month={month} today={today} currency={line} size="small" />
+              <MonthTint month={state.month} today={today} currency={line} size="small" />
             </View>
           </View>
         );
       })
     ) : (
-      <View
-        testID="spending-figures"
-        style={{
-          flexDirection: large ? 'column' : 'row',
-          alignItems: large ? 'flex-start' : 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          paddingTop: 10,
-          paddingBottom: 6,
-        }}
-      >
+      <View testID="spending-figures" style={figuresRow(large)}>
         <View style={{ flex: large ? undefined : 1, minWidth: 0, gap: 2 }}>
           <Money size="total">
             {fit(
               single.totalMinor,
               single.currency,
-              large ? inner : inner - gridWidth('regular') - 12,
-              24,
+              large ? inner : inner - gridWidth('regular') - gap,
+              'total',
             )}
           </Money>
-          <CompactText variant="small" tone="secondary">
-            {`Your share${SEPARATOR}${single.dayCount ? days(single.dayCount) : `nothing yet in ${name}`}`}
+          <CompactText variant="caption" tone="secondary">
+            {`Your share${SEPARATOR}${
+              single.dayCount ? spendingDays(single.dayCount) : `nothing yet in ${name}`
+            }`}
           </CompactText>
         </View>
-        <MonthTint month={month} today={today} currency={single} size="regular" />
+        <MonthTint month={state.month} today={today} currency={single} size="regular" />
       </View>
     );
 
@@ -402,7 +370,7 @@ export const SpendingCard = memo(function SpendingCard({
         </Pressable>
       ) : (
         <Card>
-          <View accessible accessibilityLabel={label} style={{ ...frame, paddingBottom: 8 }}>
+          <View accessible accessibilityLabel={label} style={frame}>
             {heading}
             {body}
           </View>

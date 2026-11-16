@@ -69,7 +69,7 @@ function render(
         <SpendingCard
           state={state}
           today={today}
-          currency="INR"
+          zeroCurrency="INR"
           offline={offline}
           onOpen={onOpen}
           onRetry={onRetry}
@@ -110,11 +110,11 @@ describe('the Spending card (#1275)', () => {
     expect(texts()).toContain(`Spending${SEPARATOR}November`);
     expect(texts().some((text) => text.startsWith('Updated '))).toBe(true);
     expect(texts()).toContain('₹23,500.00');
-    expect(texts()).toContain(`Your share${SEPARATOR}12 days with spending`);
+    expect(texts()).toContain(`Your share${SEPARATOR}12\u00a0days with spending`);
     expect(texts()).toContain('See each day');
     expect(buttons()).toHaveLength(1);
     expect(card()!.props.accessibilityLabel).toBe(
-      'Spending, November. Your share ₹23,500.00. 12 days with spending. See each day',
+      'Spending, November. Your share ₹23,500.00. 12\u00a0days with spending. See each day',
     );
     act(() => card()!.props.onPress());
     expect(onOpen).toHaveBeenCalledOnce();
@@ -160,16 +160,16 @@ describe('the Spending card (#1275)', () => {
       expect.arrayContaining([
         'INR',
         '₹23,500.00',
-        '12 days with spending',
+        '12\u00a0days with spending',
         'EUR',
         '€86.00',
-        '3 days with spending',
+        '3\u00a0days with spending',
       ]),
     );
     expect(shown()).not.toContain(`Your share${SEPARATOR}`);
     expect(grids()).toHaveLength(2);
     expect(card()!.props.accessibilityLabel).toBe(
-      'Spending, November. Your share ₹23,500.00 over 12 days and €86.00 over 3 days. See each day',
+      'Spending, November. Your share ₹23,500.00 over 12\u00a0days and €86.00 over 3\u00a0days. See each day',
     );
   });
 
@@ -188,6 +188,10 @@ describe('the Spending card (#1275)', () => {
   it('says Saved and its time offline, from the copy on this phone, and still opens Spending', () => {
     const { onOpen } = render({ ...usual(), restored: true }, { offline: true });
     expect(texts().some((text) => text.startsWith('Saved '))).toBe(true);
+    // TalkBack hears it is the saved copy, never as current.
+    expect(card()!.props.accessibilityLabel).toMatch(
+      /^Spending, November\. Your share ₹23,500\.00\. 12\u00a0days with spending\. Saved .+\. See each day$/,
+    );
     expect(texts()).toContain('₹23,500.00');
     act(() => card()!.props.onPress());
     expect(onOpen).toHaveBeenCalledOnce();
@@ -252,7 +256,7 @@ describe('the Spending card (#1275)', () => {
     expect(texts()).toContain('₹14.2L');
     expect(shown()).not.toContain('₹1,421,780.00');
     expect(card()!.props.accessibilityLabel).toBe(
-      'Spending, November. Your share ₹1,421,780.00. 1 day with spending. See each day',
+      'Spending, November. Your share ₹1,421,780.00. 1\u00a0day with spending. See each day',
     );
     act(() => screen!.unmount());
     // Where it fits, it is written in full.
@@ -264,7 +268,7 @@ describe('the Spending card (#1275)', () => {
   it('without Spending to open, reads as one block with no button and no See each day', () => {
     act(() => {
       screen = create(
-        <SpendingCard state={usual()} today={today} currency="INR" onRetry={vi.fn()} />,
+        <SpendingCard state={usual()} today={today} zeroCurrency="INR" onRetry={vi.fn()} />,
       );
     });
     expect(buttons()).toHaveLength(0);
@@ -276,7 +280,7 @@ describe('the Spending card (#1275)', () => {
         String(node.props.accessibilityLabel).startsWith('Spending, '),
     );
     expect(block.props.accessibilityLabel).toBe(
-      'Spending, November. Your share ₹23,500.00. 12 days with spending',
+      'Spending, November. Your share ₹23,500.00. 12\u00a0days with spending',
     );
   });
 

@@ -865,7 +865,7 @@ describe('App Settings: Spending by day', () => {
           .findAll(
             (node) =>
               node.props.accessibilityLabel ===
-              'Spending, September. Your share ₹2,350.00. 1 day with spending',
+              'Spending, September. Your share ₹2,350.00. 1\u00a0day with spending',
           ).length,
       ).toBeGreaterThan(0);
       await spendingByDay.select(false);
