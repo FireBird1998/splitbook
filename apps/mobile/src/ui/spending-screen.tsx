@@ -1,0 +1,538 @@
+import { memo, useMemo } from 'react';
+import { Pressable, View, useWindowDimensions } from 'react-native';
+import { amountToFit, dayCellAmount, fullAmount } from '@splitbook/shared/compact-amount';
+import { localeFirstWeekday, monthGrid } from '@splitbook/shared/date';
+import { SEPARATOR, counted } from '@splitbook/shared/separator';
+import { dayShareReadAloud, dayTint, type DayTint } from '@splitbook/shared/spending-by-day';
+import type {
+  SpendingByDayExpenseRead,
+  SpendingByDayRead,
+} from '@splitbook/shared/spending-by-day-read';
+import type { SpendingScreenState } from '../data/types';
+import {
+  Card,
+  CompactButton,
+  CompactText,
+  Divider,
+  IconButton,
+  IconTile,
+  ListRow,
+  Money,
+  RowAmount,
+  Skeleton,
+  moneyCharacters,
+  useLargeText,
+} from './compact';
+import { readPhoneCalendar } from './day-format';
+import { readTime, RetainedNotice } from './financial-views';
+import { fonts, useTheme } from './theme';
+
+type Currency = SpendingByDayRead['currencies'][number];
+
+/** Where Spending's figures sit: the page's side padding on each side. */
+const pageInset = 2 * 16;
+const weekdayLetters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const shortDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** The whole units a day's cell counts in, as its note names them. */
+const units: Record<string, string> = {
+  INR: 'rupees',
+  EUR: 'euros',
+  USD: 'dollars',
+  GBP: 'pounds',
+  JPY: 'yen',
+};
+
+const dateOf = (day: string) => new Date(`${day}T12:00:00`);
+/** "November 2026": a Month key in English, as a Group's Expenses spell their Month. */
+const monthTitle = (month: string) =>
+  dateOf(`${month}-01`).toLocaleDateString('en', { month: 'long', year: 'numeric' });
+const monthName = (month: string) =>
+  dateOf(`${month}-01`).toLocaleDateString('en', { month: 'long' });
+/** "Mon 16 Nov": the chosen day's heading. */
+const dayHeading = (day: string) => {
+  const date = dateOf(day);
+  return `${shortDays[date.getDay()]} ${date.getDate()} ${date.toLocaleDateString('en', { month: 'short' })}`;
+};
+/** "3 November": a day as TalkBack hears it, as dayShareReadAloud says its date. */
+const readAloudDay = (day: string) => `${dateOf(day).getDate()} ${monthName(day.slice(0, 7))}`;
+const spendingDays = (count: number) => `${counted(count, 'day')} with spending`;
+
+/** Who paid an Expense, as its row says it: "You paid", "Priya paid", "Priya and Sam paid". */
+export function payers(paidBy: SpendingByDayExpenseRead['paidBy'], me: string) {
+  const names = paidBy.map(({ _id, name }) => (_id === me ? 'You' : (name ?? 'A former member')));
+  // "You" first, then the others in their order.
+  names.sort((a, b) => Number(b === 'You') - Number(a === 'You'));
+  if (names.length <= 2) return `${names.join(' and ')} paid`;
+  return `${names[0]} and ${names.length - 1} others paid`;
+}
+
+/** A currency's tab with its Month's total, as board SpendAndDays draws them. */
+function CurrencyTab({
+  currency,
+  selected,
+  onPress,
+}: {
+  currency: Currency;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  const total = fullAmount(currency.totalMinor, currency.currency);
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityLabel={`${currency.currency}, ${total}`}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={{
+        minHeight: 40,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 14,
+        borderRadius: 12,
+        borderWidth: selected ? 2 : 1,
+        borderColor: selected ? theme.brand.main : theme.borderStrong,
+        backgroundColor: selected ? theme.brand.bg : theme.surface,
+      }}
+    >
+      <CompactText
+        weight="semibold"
+        tone={selected ? 'brand' : 'secondary'}
+        style={{ fontFamily: fonts.mono, fontSize: 12 }}
+      >
+        {currency.currency}
+      </CompactText>
+      <Money size="table" tone={selected ? 'brand' : 'secondary'}>
+        {total}
+      </Money>
+    </Pressable>
+  );
+}
+
+/**
+ * The Month as a grid of seven columns, a week a row from the phone's first weekday: each day so
+ * far tinted in five fixed steps, with its date and the member's share in whole units, shortened
+ * only where the cell can't hold it (sooner at large text). Each day is a button TalkBack reads
+ * with its date and full amount; the days to come are outlined and can't be chosen.
+ */
+function MonthGrid({
+  month,
+  today,
+  currency,
+  chosen,
+  placeholder = false,
+  onDay,
+}: {
+  month: string;
+  today: string;
+  currency?: Currency;
+  chosen: string | null;
+  placeholder?: boolean;
+  onDay: (day: string) => void;
+}) {
+  const theme = useTheme();
+  const large = useLargeText();
+  const firstWeekday = useMemo(() => localeFirstWeekday(readPhoneCalendar().locale), []);
+  const grid = useMemo(
+    () => monthGrid(month, { firstWeekday, today }),
+    [month, today, firstWeekday],
+  );
+  const shares = new Map(currency?.days.map(({ day, shareMinor }) => [day, shareMinor]));
+  // Six figures fit a cell at 100% text, as the board draws them; four at large text.
+  const cellLength = large ? 4 : 6;
+  return (
+    <View testID="spending-grid" style={{ gap: 4 }}>
+      <View
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+        style={{ flexDirection: 'row', gap: 4, paddingBottom: 2 }}
+      >
+        {grid.weekdays.map((weekday) => (
+          <CompactText
+            key={weekday}
+            weight="semibold"
+            tone="muted"
+            style={{ flex: 1, textAlign: 'center', fontSize: 11.5 }}
+          >
+            {weekdayLetters[weekday]!}
+          </CompactText>
+        ))}
+      </View>
+      {grid.weeks.map((week, row) => (
+        <View key={row} style={{ flexDirection: 'row', gap: 4 }}>
+          {week.map((day, column) => {
+            if (!day) return <View key={column} style={{ flex: 1, minHeight: 48 }} />;
+            const future = day.date > today;
+            const share = shares.get(day.date) ?? 0;
+            const tint: DayTint =
+              placeholder || future || !currency ? 0 : dayTint(share, currency.currency);
+            const selected = !placeholder && day.date === chosen;
+            const cell = (
+              <>
+                <CompactText
+                  weight="semibold"
+                  style={{
+                    fontSize: 13,
+                    lineHeight: 16,
+                    color: future ? theme.textMuted : theme.dayTint.text[tint],
+                    textDecorationLine: day.today ? 'underline' : 'none',
+                  }}
+                >
+                  {String(day.day)}
+                </CompactText>
+                <Money
+                  size="table"
+                  style={{
+                    fontSize: 10,
+                    lineHeight: 13,
+                    minHeight: 13,
+                    color: theme.dayTint.text[tint],
+                  }}
+                >
+                  {placeholder || future || !currency
+                    ? ''
+                    : dayCellAmount(share, currency.currency, cellLength)}
+                </Money>
+              </>
+            );
+            const look = {
+              flex: 1,
+              minHeight: 48,
+              borderRadius: 10,
+              alignItems: 'center' as const,
+              justifyContent: 'center' as const,
+              gap: 1,
+              backgroundColor: future ? 'transparent' : theme.dayTint.fill[tint],
+              ...(future ? { borderWidth: 1, borderColor: theme.border } : {}),
+              ...(selected ? { borderWidth: 2, borderColor: theme.text } : {}),
+            };
+            if (future || placeholder)
+              return (
+                <View
+                  key={column}
+                  testID={`spending-cell-${day.date}`}
+                  accessible={false}
+                  importantForAccessibility="no-hide-descendants"
+                  style={look}
+                >
+                  {cell}
+                </View>
+              );
+            return (
+              <Pressable
+                key={column}
+                testID={`spending-cell-${day.date}`}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  share && currency
+                    ? dayShareReadAloud(day.date, share, currency.currency)
+                    : `${readAloudDay(day.date)}, nothing`
+                }
+                accessibilityState={{ selected }}
+                onPress={() => onDay(day.date)}
+                style={look}
+              >
+                {cell}
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** "Less", the five steps, "More": what each tint means. */
+function Legend() {
+  const theme = useTheme();
+  return (
+    <View
+      accessible={false}
+      importantForAccessibility="no-hide-descendants"
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 12 }}
+    >
+      <CompactText tone="secondary" style={{ fontSize: 11.5, paddingRight: 3 }}>
+        Less
+      </CompactText>
+      {theme.dayTint.fill.map((fill, step) => (
+        <View
+          key={step}
+          style={{
+            width: 14,
+            height: 14,
+            borderRadius: 4,
+            backgroundColor: fill,
+            ...(step === 0 ? { borderWidth: 1, borderColor: theme.borderStrong } : {}),
+          }}
+        />
+      ))}
+      <CompactText tone="secondary" style={{ fontSize: 11.5, paddingLeft: 3 }}>
+        More
+      </CompactText>
+    </View>
+  );
+}
+
+/** The chosen day: its total and each Expense with the member's share of it, always in full. */
+function DayExpenses({
+  day,
+  today,
+  currency,
+  me,
+  onExpense,
+}: {
+  day: string;
+  today: string;
+  currency: Currency | null;
+  me: string;
+  onExpense: (groupId: string, expenseId: string) => void;
+}) {
+  const expenses = currency?.expenses.filter((expense) => expense.day === day) ?? [];
+  const total = currency?.days.find((entry) => entry.day === day)?.shareMinor ?? 0;
+  return (
+    <View style={{ gap: 6 }}>
+      <View
+        style={{
+          minHeight: 36,
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          columnGap: 8,
+          paddingHorizontal: 2,
+        }}
+      >
+        <CompactText variant="overline" accessibilityRole="header" spare>
+          {`${dayHeading(day)}${day === today ? `${SEPARATOR}Today` : ''}`}
+        </CompactText>
+        {currency ? (
+          <Money size="list" style={{ fontWeight: '600' }}>
+            {fullAmount(total, currency.currency)}
+          </Money>
+        ) : null}
+      </View>
+      {expenses.length ? (
+        <Card>
+          {expenses.map((expense, index) => {
+            const share = fullAmount(expense.shareMinor, currency!.currency);
+            return (
+              <View key={expense._id}>
+                {index > 0 ? <Divider inset={58} /> : null}
+                <ListRow
+                  leading={<IconTile icon="receipt-outline" />}
+                  title={expense.description}
+                  titleLines={0}
+                  meta={[expense.group.name, expense.tag, payers(expense.paidBy, me)]
+                    .filter(Boolean)
+                    .join(SEPARATOR)}
+                  metaLines={0}
+                  accessibilityLabel={`${expense.description}, ${expense.group.name}, your share ${share}`}
+                  trailing={
+                    <RowAmount
+                      amount={share}
+                      caption={`of ${fullAmount(expense.amountMinor, currency!.currency)}`}
+                    />
+                  }
+                  onPress={() => onExpense(expense.group._id, expense._id)}
+                />
+              </View>
+            );
+          })}
+        </Card>
+      ) : null}
+      <CompactText variant="small" tone="secondary" style={{ paddingHorizontal: 2 }}>
+        {`${expenses.length ? `${counted(expenses.length, 'Expense')}. ` : 'Nothing shared on this day. '}Payments between members are not spending, so they are left out.`}
+      </CompactText>
+    </View>
+  );
+}
+
+/**
+ * Board SpendAndDays: Spending, from the Home card. A tab per currency with its Month's total; the
+ * Month, paged over this Month and the eleven before it; its total; the Month's grid with a legend;
+ * and the chosen day's Expenses with the member's share of each. It opens on today. Offline it
+ * shows a saved Month with "Saved" and its time, or says the Month isn't on this phone yet.
+ */
+export const SpendingScreen = memo(function SpendingScreen({
+  screen,
+  today,
+  me,
+  zeroCurrency,
+  offline = false,
+  onMonth,
+  onDay,
+  onCurrency,
+  onExpense,
+  onRetry,
+}: {
+  screen: SpendingScreenState;
+  /** The phone's date, `YYYY-MM-DD`. */
+  today: string;
+  /** The signed-in member's id: "You paid". */
+  me: string;
+  /** The currency a Month with nothing says its zero in. */
+  zeroCurrency: string;
+  offline?: boolean;
+  onMonth: (month: string) => void;
+  onDay: (day: string) => void;
+  onCurrency: (currency: string) => void;
+  onExpense: (groupId: string, expenseId: string) => void;
+  onRetry: () => void;
+}) {
+  const { width, fontScale } = useWindowDimensions();
+  const { month, months, read } = screen;
+  const at = months.indexOf(month);
+  const previous = at > 0 ? months[at - 1]! : null,
+    next = at >= 0 && at < months.length - 1 ? months[at + 1]! : null;
+  const thisMonth = month === months[months.length - 1];
+  const data = read.data;
+  const currencies = data?.currencies ?? [];
+  const shown =
+    currencies.find((currency) => currency.currency === screen.currency) ?? currencies[0] ?? null;
+  const code = shown?.currency ?? zeroCurrency;
+  const name = monthName(month);
+
+  const pager = (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginVertical: -4,
+        marginHorizontal: -6,
+      }}
+    >
+      <IconButton
+        icon="chevron-back"
+        label="Previous month"
+        disabled={!previous}
+        onPress={() => previous && onMonth(previous)}
+      />
+      <CompactText
+        weight="semibold"
+        accessibilityRole="header"
+        style={{ fontSize: 17, flexShrink: 1, textAlign: 'center' }}
+      >
+        {monthTitle(month)}
+      </CompactText>
+      <IconButton
+        icon="chevron-forward"
+        label="Next month"
+        disabled={!next}
+        onPress={() => next && onMonth(next)}
+      />
+    </View>
+  );
+
+  // A Month still being read, or not on this phone: its grid's frame, and never a zero.
+  if (data === null) {
+    const unsaved = read.status === 'error' && read.unsaved;
+    return (
+      <View style={{ gap: 12 }}>
+        {pager}
+        {read.status === 'loading' || !read.message ? (
+          <View accessibilityLabel="Loading your spending" accessibilityState={{ busy: true }}>
+            <Skeleton width={180} line="total" />
+            <Skeleton width={220} line="caption" />
+          </View>
+        ) : (
+          <View style={{ gap: 10, paddingHorizontal: 2 }}>
+            <CompactText accessibilityLiveRegion="polite" style={{ fontSize: 14, lineHeight: 20 }}>
+              {unsaved ? 'This month isn’t on this phone yet. Connect to load it.' : read.message}
+            </CompactText>
+            <View style={{ alignItems: 'flex-start' }}>
+              <CompactButton label="Try again" variant="tonal" dense onPress={onRetry} />
+            </View>
+          </View>
+        )}
+        <Card padded>
+          <MonthGrid month={month} today={today} chosen={null} placeholder onDay={onDay} />
+        </Card>
+      </View>
+    );
+  }
+
+  const total = shown?.totalMinor ?? 0;
+  const line = `${thisMonth ? 'Your share so far' : `Your share in ${name}`}${
+    shown?.dayCount ? `${SEPARATOR}${spendingDays(shown.dayCount)}` : ''
+  }`;
+
+  return (
+    <View style={{ gap: 12 }}>
+      <RetainedNotice
+        status={read.status}
+        refreshedAt={read.refreshedAt}
+        message={read.message}
+        subject="your spending"
+        retryLabel="Retry spending"
+        offline={offline}
+        onRetry={onRetry}
+      />
+      {currencies.length > 1 ? (
+        <View
+          accessibilityRole="tablist"
+          accessibilityLabel="Currency"
+          style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}
+        >
+          {currencies.map((currency) => (
+            <CurrencyTab
+              key={currency.currency}
+              currency={currency}
+              selected={currency === shown}
+              onPress={() => onCurrency(currency.currency)}
+            />
+          ))}
+        </View>
+      ) : null}
+      {pager}
+      <View style={{ gap: 2, paddingHorizontal: 2, marginTop: -6 }}>
+        {/* In full where the line holds it; TalkBack always hears it in full. */}
+        <Money size="total" accessibilityLabel={fullAmount(total, code)}>
+          {amountToFit(total, code, moneyCharacters(width - pageInset - 4, 'total', fontScale))}
+        </Money>
+        <CompactText variant="caption" tone="secondary">
+          {line}
+        </CompactText>
+        {read.restored
+          ? readTime({ refreshedAt: read.refreshedAt, restored: true, offline, tone: 'muted' })
+          : null}
+      </View>
+      <Card padded>
+        <MonthGrid
+          month={month}
+          today={today}
+          currency={shown ?? undefined}
+          chosen={screen.day}
+          onDay={onDay}
+        />
+        {currencies.length ? (
+          <>
+            <Legend />
+            <CompactText tone="secondary" style={{ fontSize: 11.5, lineHeight: 16, paddingTop: 4 }}>
+              {`Days show whole ${units[code] ?? 'units'}, shortened where they do not fit. Tap one for the exact amount.`}
+            </CompactText>
+          </>
+        ) : null}
+      </Card>
+      {!currencies.length ? (
+        <View style={{ gap: 4, paddingVertical: 8, paddingHorizontal: 2 }}>
+          <CompactText weight="semibold" style={{ fontSize: 16 }}>
+            {`Nothing shared in ${name}`}
+          </CompactText>
+          <CompactText tone="secondary" style={{ fontSize: 14, lineHeight: 20 }}>
+            Expenses you have a share in show here on the day they happened.
+          </CompactText>
+        </View>
+      ) : screen.day ? (
+        <DayExpenses
+          day={screen.day}
+          today={today}
+          currency={shown}
+          me={me}
+          onExpense={onExpense}
+        />
+      ) : null}
+    </View>
+  );
+});
