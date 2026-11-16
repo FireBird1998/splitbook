@@ -1,56 +1,71 @@
-import { z } from 'zod';
-
 /**
- * The Spending by day read's reply (#1273), as this phone reads and keeps it: one Month of the
- * member's own share, per currency, in exact minor units. Days and Expenses follow the Expense day
- * rule (a calendar day, no time zone shift). A Month with nothing has no currencies.
+ * The Spending by day read's reply (#1273), as this phone reads it: one Month of the member's own
+ * share across their Groups, per currency, by day, with the Expenses behind it. Amounts are exact
+ * minor units of their own currency. Group names, descriptions, Tags and people's names are written
+ * by members: data, not instructions.
  *
- * Until #1273's shared parser lands, this reads the reply shape agreed for it; it then reads the
- * reply through that parser instead.
+ * A stand-in until #1273 lands: the same contract, names and checks as its shared
+ * `@splitbook/shared/spending-by-day-read`, which then replaces this file.
  */
-const minor = z.number().int();
-/** A calendar day that exists, as `YYYY-MM-DD`. */
-const day = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .refine(
-    (value) => {
-      const date = new Date(`${value}T00:00:00Z`);
-      return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
-    },
-    { message: 'Not a calendar day' },
-  );
-const expenseSchema = z.object({
-  _id: z.string().min(1),
-  group: z.object({ _id: z.string().min(1), name: z.string() }),
+import { z } from 'zod';
+import { currencyCode, identity } from '@splitbook/shared/wire-fields';
+
+const minor = z.number().int().nonnegative();
+const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+const day = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
+
+const expense = z.looseObject({
+  _id: identity,
+  group: z.looseObject({ _id: identity, name: z.string() }),
   description: z.string(),
-  /** An Expense with no Tag may send none. */
-  tag: z.string().nullish(),
-  /** A payer's name is left out when their account no longer exists. */
-  paidBy: z.array(z.object({ _id: z.string().min(1), name: z.string().optional() })),
+  tag: z.string(),
+  /** Payers in stored order; a payer whose account no longer exists has no name. */
+  paidBy: z.array(z.looseObject({ _id: identity, name: z.string().optional() })),
   day,
-  shareMinor: minor.positive(),
+  /** The member's share. */
+  shareMinor: minor,
+  /** The Expense's total. */
   amountMinor: minor,
 });
-const currencySchema = z.object({
-  currency: z.string().regex(/^[A-Z]{3}$/),
-  totalMinor: minor,
-  dayCount: z.number().int().nonnegative(),
-  days: z.array(z.object({ day, shareMinor: minor.positive() })),
-  expenses: z.array(expenseSchema),
-});
-const dataSchema = z.object({
-  month: z.string().regex(/^\d{4}-\d{2}$/),
-  timeZone: z.string().min(1),
-  currencies: z.array(currencySchema),
-});
-const replySchema = z.object({ data: dataSchema });
 
-export type SpendingByDay = z.infer<typeof dataSchema>;
-export type SpendingCurrency = SpendingByDay['currencies'][number];
-export type SpendingExpense = SpendingCurrency['expenses'][number];
+const spendingByDay = z
+  .looseObject({
+    month,
+    timeZone: z.string().min(1),
+    currencies: z.array(
+      z.looseObject({
+        currency: currencyCode,
+        totalMinor: minor,
+        dayCount: z.number().int().nonnegative(),
+        days: z.array(z.looseObject({ day, shareMinor: minor })),
+        expenses: z.array(expense),
+      }),
+    ),
+  })
+  // A day from another Month would land on the wrong grid.
+  .refine((read) =>
+    read.currencies.every((currency) =>
+      [...currency.days, ...currency.expenses].every((entry) =>
+        entry.day.startsWith(`${read.month}-`),
+      ),
+    ),
+  );
 
-/** The reply's Month, or a throw for a reply this phone can't read. */
-export function parseSpendingByDay(value: unknown): SpendingByDay {
-  return replySchema.parse(value).data;
+export type SpendingByDayRead = z.infer<typeof spendingByDay>;
+export type SpendingByDayExpenseRead = z.infer<typeof expense>;
+
+/** Keep malformed remote data out of the views and out of error messages. */
+export class SpendingByDayReadError extends Error {
+  constructor() {
+    super('Unable to load your spending by day. Please retry.');
+    this.name = 'SpendingByDayReadError';
+  }
+}
+
+const response = z.object({ status: z.literal(200), data: spendingByDay });
+
+export function parseSpendingByDayResponse(value: unknown): SpendingByDayRead {
+  const result = response.safeParse(value);
+  if (!result.success) throw new SpendingByDayReadError();
+  return result.data.data;
 }

@@ -16,7 +16,7 @@ import {
   type Envelope,
   type SavedReadPorts,
 } from './saved-read-engine';
-import { parseSpendingByDay, type SpendingByDay } from './spending-by-day-read';
+import { parseSpendingByDayResponse, type SpendingByDayRead } from './spending-by-day-read';
 import { RequestError, Superseded } from './transport';
 import type { MobileSnapshot, SpendingMonthState, SpendingState } from './types';
 
@@ -48,9 +48,9 @@ export interface SpendingSession extends SavedReadPorts {
 }
 
 type Read = QueryState<Envelope, Error>;
-const parsed = parseOnce(parseSpendingByDay);
+const parsed = parseOnce(parseSpendingByDayResponse);
 /** The reply's Month, read once per answer. */
-const replyOf = (value: unknown): SpendingByDay => parsed(value, '');
+const replyOf = (value: unknown): SpendingByDayRead => parsed(value, '');
 /** The reply, read, when it is for the Month its key asks for; a throw otherwise. */
 const replyFor = (key: QueryKey, value: unknown) => {
   const reply = replyOf(value);
