@@ -308,6 +308,13 @@ describe('the Spending card (#1275)', () => {
       }),
     );
     expect(texts()).toContain('Couldn’t load your spending. Please try again.');
+    // The usual error notice: read out at once, in the error colour.
+    const notice = screen!.root.find(
+      (node) =>
+        (node.type as unknown) === 'Text' &&
+        node.props.children === 'Couldn’t load your spending. Please try again.',
+    );
+    expect(notice.props.accessibilityRole).toBe('alert');
     expect(shown()).not.toContain('₹');
     act(() =>
       buttons()

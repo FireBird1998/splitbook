@@ -238,14 +238,22 @@ export const SpendingCard = memo(function SpendingCard({
       <Card>
         <View style={{ ...frame, paddingBottom: 14, gap: 10 }}>
           {heading}
-          <CompactText
-            variant="small"
-            tone="secondary"
-            accessibilityLiveRegion="polite"
-            style={{ fontSize: 14, lineHeight: 20 }}
-          >
-            {state.message}
-          </CompactText>
+          {state.unsaved ? (
+            // Not on this phone yet: no error, only what it needs.
+            <CompactText
+              variant="small"
+              tone="secondary"
+              accessibilityLiveRegion="polite"
+              style={{ fontSize: 14, lineHeight: 20 }}
+            >
+              {state.message}
+            </CompactText>
+          ) : (
+            // A failed read: the usual error notice, read out at once.
+            <CompactText accessibilityRole="alert" variant="small" tone="negative">
+              {state.message}
+            </CompactText>
+          )}
           <View style={{ alignItems: 'flex-start' }}>
             <CompactButton label="Try again" variant="tonal" dense onPress={onRetry} />
           </View>
