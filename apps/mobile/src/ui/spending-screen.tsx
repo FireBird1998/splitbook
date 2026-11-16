@@ -87,7 +87,8 @@ function CurrencyTab({
       accessibilityState={{ selected }}
       onPress={onPress}
       style={{
-        minHeight: 40,
+        // The touch target's 44 dp (QA round).
+        minHeight: 44,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
@@ -170,6 +171,9 @@ function MonthGrid({
             const tint: DayTint =
               placeholder || future || !currency ? 0 : dayTint(share, currency.currency);
             const selected = !placeholder && day.date === chosen;
+            // Today, while another day is chosen: the accent number and outline (SpendAndDays 3).
+            const accent = day.today && !placeholder && !selected;
+            const text = accent && tint < 3 ? theme.brand.main : theme.dayTint.text[tint];
             const cell = (
               <>
                 <CompactText
@@ -177,23 +181,25 @@ function MonthGrid({
                   style={{
                     fontSize: 13,
                     lineHeight: 16,
-                    color: future ? theme.textMuted : theme.dayTint.text[tint],
+                    color: future ? theme.textMuted : text,
                     textDecorationLine: day.today ? 'underline' : 'none',
                   }}
                 >
                   {String(day.day)}
                 </CompactText>
-                {/* A share still too wide for the cell at the largest text shrinks to it. */}
+                {/* Grows with text to 130%, keeping a few dp beside four figures in a 39 dp cell at
+                    200% (QA round); a share still too wide shrinks to it. */}
                 <Money
                   size="table"
                   adjustsFontSizeToFit
                   minimumFontScale={0.5}
+                  maxFontSizeMultiplier={1.3}
                   numberOfLines={1}
                   style={{
                     fontSize: 10,
                     lineHeight: 13,
                     minHeight: 13,
-                    color: theme.dayTint.text[tint],
+                    color: text,
                   }}
                 >
                   {placeholder || future || !currency
@@ -209,8 +215,11 @@ function MonthGrid({
               alignItems: 'center' as const,
               justifyContent: 'center' as const,
               gap: 1,
+              // At large text, a few dp beside four figures; at 100% the board's cell, edge to edge.
+              paddingHorizontal: large ? 3 : 0,
               backgroundColor: future ? 'transparent' : theme.dayTint.fill[tint],
               ...(future ? { borderWidth: 1, borderColor: theme.border } : {}),
+              ...(accent ? { borderWidth: 1, borderColor: theme.brand.main } : {}),
             };
             if (future || placeholder)
               return (
@@ -229,12 +238,14 @@ function MonthGrid({
                 key={column}
                 testID={`spending-cell-${day.date}`}
                 accessibilityRole="button"
-                accessibilityLabel={
+                accessibilityLabel={`${
                   share && currency
                     ? dayShareReadAloud(day.date, share, currency.currency)
                     : `${readAloudDay(day.date)}, nothing`
-                }
+                }${day.today ? ', today' : ''}`}
                 accessibilityState={{ selected }}
+                // Over the 4 dp gaps beside it, never onto the next day: 43 dp at 360 dp.
+                hitSlop={{ top: 2, bottom: 2, left: 2, right: 2 }}
                 onPress={() => onDay(day.date)}
                 style={look}
               >
@@ -339,7 +350,9 @@ function DayExpenses({
       {expenses.length ? (
         <Card>
           {expenses.map((expense, index) => {
-            const share = fullAmount(expense.shareMinor, currency!.currency);
+            const share = fullAmount(expense.shareMinor, currency!.currency),
+              of = fullAmount(expense.amountMinor, currency!.currency),
+              paid = payers(expense.paidBy, me);
             return (
               <View key={expense._id}>
                 {index > 0 ? <Divider inset={58} /> : null}
@@ -353,17 +366,18 @@ function DayExpenses({
                   }
                   title={expense.description}
                   titleLines={0}
-                  meta={[expense.group.name, expense.tag, payers(expense.paidBy, me)]
-                    .filter(Boolean)
-                    .join(SEPARATOR)}
+                  meta={[expense.group.name, expense.tag, paid].filter(Boolean).join(SEPARATOR)}
                   metaLines={0}
-                  accessibilityLabel={`${expense.description}, ${expense.group.name}, your share ${share}`}
-                  trailing={
-                    <RowAmount
-                      amount={share}
-                      caption={`of ${fullAmount(expense.amountMinor, currency!.currency)}`}
-                    />
-                  }
+                  accessibilityLabel={[
+                    expense.description,
+                    expense.group.name,
+                    expense.tag,
+                    paid,
+                    `your share ${share} of ${of}`,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')}
+                  trailing={<RowAmount amount={share} caption={`of ${of}`} />}
                   onPress={() => onExpense(expense.group._id, expense._id)}
                 />
               </View>
