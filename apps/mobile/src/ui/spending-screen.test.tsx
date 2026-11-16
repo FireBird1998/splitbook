@@ -248,7 +248,11 @@ describe('Spending (#1276)', () => {
     expect(shown()).toContain(
       '2\u00a0Expenses. Payments between members are not spending, so they are left out.',
     );
-    act(() => labelled('Milk and bread, Maple House, your share ₹180.00').props.onPress());
+    act(() =>
+      labelled(
+        'Milk and bread, Maple House, Groceries, You paid, your share ₹180.00 of ₹900.00',
+      ).props.onPress(),
+    );
     expect(calls.onExpense).toHaveBeenCalledWith(maple._id, 'd00000000000000000000001');
     act(() => tabs[1]!.props.onPress());
     expect(calls.onCurrency).toHaveBeenCalledWith('EUR');
@@ -405,6 +409,70 @@ describe('Spending (#1276)', () => {
         .props.onPress(),
     );
     expect(calls.onRetry).toHaveBeenCalledOnce();
+  });
+});
+
+describe('Spending, QA and Designer round (#1276)', () => {
+  it('at 200% text keeps a few dp beside four figures in a 39 dp cell, as at 360 dp', () => {
+    setWindow({ fontScale: 2 });
+    render(november());
+    expect(cellText('2026-11-07')).toEqual(['7', '1.2K']);
+    const amount = cell('2026-11-07').find(
+      (node) => (node.type as unknown) === 'Text' && node.props.adjustsFontSizeToFit === true,
+    );
+    const pad = look(cell('2026-11-07')).paddingHorizontal as number;
+    // IBM Plex Mono figures are 0.6 em wide: four at 10 dp, scaled at most this much, plus padding.
+    expect(pad).toBeGreaterThanOrEqual(2);
+    expect(4 * 0.6 * 10 * amount.props.maxFontSizeMultiplier + 2 * pad).toBeLessThanOrEqual(39);
+  });
+
+  it('marks today with the accent number and outline when another day is chosen (SpendAndDays 3)', () => {
+    const theme = getSemanticTokens('light');
+    render(november({ day: '2026-11-01' }));
+    expect(look(cell('2026-11-16'))).toMatchObject({
+      borderWidth: 1,
+      borderColor: theme.brand.main,
+    });
+    const [number, amount] = cell('2026-11-16').findAll(
+      (node) =>
+        (node.type as unknown) === 'Text' &&
+        node.children.some((child) => typeof child === 'string'),
+    );
+    expect(look(number!)).toMatchObject({
+      color: theme.brand.main,
+      textDecorationLine: 'underline',
+    });
+    expect(look(amount!).color).toBe(theme.brand.main);
+    // Another day keeps its tint's text, and today chosen keeps the board's ring.
+    expect(look(cell('2026-11-05')).borderWidth).toBeUndefined();
+    act(() => screen!.unmount());
+    render(november());
+    expect(
+      cell('2026-11-16').findAll((node) => node.props.testID === 'spending-chosen'),
+    ).toHaveLength(1);
+  });
+
+  it('gives each currency tab a 44 dp touch target', () => {
+    render(november());
+    for (const tab of byRole('tab')) expect(look(tab).minHeight).toBeGreaterThanOrEqual(44);
+  });
+
+  it('widens each day’s touch target over the gaps beside it, never over the next day', () => {
+    render(november());
+    // 4 dp between cells: two on each side is the most that reaches no other cell.
+    expect(cell('2026-11-05').props.hitSlop).toEqual({ top: 2, bottom: 2, left: 2, right: 2 });
+  });
+
+  it('tells TalkBack which day is today, and each Expense with its total, Tag and who paid', () => {
+    render(november({ day: '2026-11-01' }));
+    expect(cell('2026-11-16').props.accessibilityLabel).toBe('16 November, ₹420.00, today');
+    expect(cell('2026-11-05').props.accessibilityLabel).toBe('5 November, ₹420.00');
+    act(() => screen!.unmount());
+    render(november());
+    labelled('Milk and bread, Maple House, Groceries, You paid, your share ₹180.00 of ₹900.00');
+    labelled(
+      'Cab to the station, Goa Friends Trip, Transport, Priya paid, your share ₹240.00 of ₹960.00',
+    );
   });
 });
 
