@@ -4309,7 +4309,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return opening;
     }
     const to = parent(route);
-    if (to.screen === 'spending') return navigate(to);
+    // Spending as it was, while the switch is still on; Home once it is off (QA round of #1276).
+    if (to.screen === 'spending') return spendingOn() ? navigate(to) : showHome();
     if (to.screen !== 'group') return showHome();
     returnToGroup(to);
     await openGroup(to.groupId);
@@ -8073,7 +8074,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return reuse ? activityQueries.settle(generation) : refreshActivity();
     if (snapshot.screen === 'expense') return refreshExpense(reuse);
     if (snapshot.screen === 'assistants') return assistantsData.read();
-    if (route.screen === 'spending') return spendingQueries.refresh(route.month);
+    if (route.screen === 'spending') {
+      // The clock moved on and the Month shown left the twelve: the nearest one it can read
+      // (QA round of #1276).
+      const months = spendingQueries.months();
+      if (!months.includes(route.month)) {
+        const newest = months[months.length - 1]!;
+        navigate(
+          route.month > newest
+            ? { ...route, month: newest, day: spendingQueries.today() }
+            : { ...route, month: months[0]!, day: null },
+        );
+      }
+      return spendingQueries.refresh(route.month);
+    }
     if (['create', 'invite', 'settings', 'settlement', 'members'].includes(snapshot.screen)) {
       const owner = generation,
         view = route,
