@@ -265,9 +265,8 @@ export default function HeaderScene({
   const rise9 = useSceneRise(sceneMotion, 9);
   const rise11 = useSceneRise(sceneMotion, 11);
   const [rises] = useState<Rises>(() => ({ 7: rise7, 9: rise9, 11: rise11 }));
-  // One clock per period that something on screen uses: the glow layer and night-only movement
-  // start no clock while the scene does not show them.
-  // The pictures on screen: the glow layer only when its time shows it.
+  // The pictures on screen: the glow layer only when its time shows it, and in the preview only
+  // the main island and what floats with it.
   const shown = useMemo(() => {
     const sprites = art?.sprites ?? [];
     const island = sprites
@@ -282,6 +281,8 @@ export default function HeaderScene({
       ),
     );
   }, [art, time, layers, preview]);
+  // One clock per period that something on screen uses: the glow layer and night-only movement
+  // start no clock while the scene does not show them.
   const periods = useMemo(
     () =>
       [
