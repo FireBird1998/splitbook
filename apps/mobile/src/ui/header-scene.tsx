@@ -188,7 +188,9 @@ const tint = {
 const glow = { morning: 0, day: 0, sunset: 0.55, night: 0.92 } as const;
 const GROUP_LAYERS = ['far', 'clouds', 'main', 'front'] as const;
 // The settings preview draws the main island alone, as its board does (#1267): the neighbouring
-// islands, the clouds and the front rocks would be cut at the card's edges.
+// islands, the clouds and the front rocks would be cut at the card's edges. Beach's small neighbour
+// is in the main layer, but it floats on its own period, so the preview keeps only what floats with
+// the island.
 const PREVIEW_LAYERS = ['main'] as const;
 /** Scene units across the settings preview: the board's viewBox, x 70 to 530. */
 const PREVIEW_SPAN = 460;
@@ -265,24 +267,33 @@ export default function HeaderScene({
   const [rises] = useState<Rises>(() => ({ 7: rise7, 9: rise9, 11: rise11 }));
   // One clock per period that something on screen uses: the glow layer and night-only movement
   // start no clock while the scene does not show them.
+  // The pictures on screen: the glow layer only when its time shows it.
+  const shown = useMemo(() => {
+    const sprites = art?.sprites ?? [];
+    const island = sprites
+      .filter((sprite) => sprite.layer === 'main' && sprite.kind === 'body')
+      .sort((a, b) => b.w * b.h - a.w * a.h)[0];
+    return new Set(
+      sprites.filter((sprite) =>
+        sprite.layer === 'glow'
+          ? glow[time] > 0
+          : (layers as readonly string[]).includes(sprite.layer) &&
+            (!preview || sprite.seconds === island?.seconds),
+      ),
+    );
+  }, [art, time, layers, preview]);
   const periods = useMemo(
     () =>
       [
         ...new Set(
-          (art?.sprites ?? [])
-            .filter((sprite) =>
-              sprite.layer === 'glow'
-                ? glow[time] > 0
-                : (layers as readonly string[]).includes(sprite.layer),
-            )
-            .flatMap((sprite) =>
-              (sprite.tracks ?? [])
-                .filter((track) => track.time !== 'night' || time === 'night')
-                .map((track) => track.seconds),
-            ),
+          [...shown].flatMap((sprite) =>
+            (sprite.tracks ?? [])
+              .filter((track) => track.time !== 'night' || time === 'night')
+              .map((track) => track.seconds),
+          ),
         ),
       ].sort((a, b) => a - b),
-    [art, time, layers],
+    [shown, time],
   );
   const clocks = useSceneClocks(moving, periods);
   // One set of animated nodes for the life of the scene, not one per render.
@@ -384,7 +395,7 @@ export default function HeaderScene({
             layers.map((layer) => (
               <Animated.View key={layer} style={[styles.world, shifts[layer]]}>
                 {art.sprites.map((sprite, index) =>
-                  sprite.layer === layer ? (
+                  sprite.layer === layer && shown.has(sprite) ? (
                     <Piece
                       key={index}
                       sprite={sprite}

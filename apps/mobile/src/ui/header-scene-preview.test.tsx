@@ -70,6 +70,16 @@ it('the settings preview is the board’s 150 dp picture of the island alone, sc
   expect(shown.size).toBeGreaterThan(0);
   for (const image of shown) expect(imagesOf(['main', 'glow']).has(image)).toBe(true);
   for (const image of imagesOf(['far', 'clouds', 'front'])) expect(shown.has(image)).toBe(false);
+  // Beach's small neighbour shares the main layer but floats on its own period: it is left out
+  // too, while the island's body, shadow and moving parts (which float with it) stay.
+  const neighbour = beach.sprites.filter((s) => s.layer === 'main' && s.seconds !== 7);
+  expect(neighbour.length).toBeGreaterThan(0);
+  for (const sprite of neighbour) expect(shown.has(sprite.image)).toBe(false);
+  for (const kind of ['body', 'shadow'] as const)
+    expect(
+      beach.sprites.some((s) => s.layer === 'main' && s.kind === kind && shown.has(s.image)),
+      kind,
+    ).toBe(true);
   // The board's 460 units across the card's width, centred on the island: x 70 to 530.
   act(() => frame.props.onLayout({ nativeEvent: { layout: { width: 378, height: 150 } } }));
   const scaled = frame.findAll(
