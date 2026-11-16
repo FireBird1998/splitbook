@@ -18,6 +18,7 @@ import User from '@/lib/models/User';
 import { groupService } from '@/lib/services/group.service';
 import { settlementService } from '@/lib/services/settlement.service';
 import { spendingByDayFilter } from '@/lib/services/spending-by-day.service';
+import { parseSpendingByDayResponse } from '@splitbook/shared/spending-by-day-read';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
 import { GET as readMonthly } from '../route';
@@ -148,6 +149,18 @@ describe('a member', () => {
   it('gets their own share per day, the days with spending, and each Expense behind them', async () => {
     const maple = await createGroup('Maple House', [alice, bob, carol], { category: 'home' });
     const goa = await createGroup('Goa Friends Trip', [alice, bob]);
+    // Written in another order than added: the read lists a day's Expenses as they were added.
+    const dinner = await insertExpense(
+      goa,
+      '2026-11-13T00:00:00.000Z',
+      { [alice]: 220_000, [bob]: 220_000 },
+      {
+        description: 'Beach shack dinner',
+        tag: 'Food',
+        payers: { [alice]: 300_000, [bob]: 140_000 },
+        createdAt: new Date('2026-11-13T20:00:00.000Z'),
+      },
+    );
     const deposit = await insertExpense(
       maple,
       '2026-11-13T00:00:00.000Z',
@@ -164,21 +177,12 @@ describe('a member', () => {
       { [alice]: 64_000 },
       { description: 'Airport taxi', tag: 'Transport', payers: { [bob]: 64_000 } },
     );
-    const dinner = await insertExpense(
-      goa,
-      '2026-11-13T00:00:00.000Z',
-      { [alice]: 220_000, [bob]: 220_000 },
-      {
-        description: 'Beach shack dinner',
-        tag: 'Food',
-        payers: { [alice]: 300_000, [bob]: 140_000 },
-        createdAt: new Date('2026-11-13T20:00:00.000Z'),
-      },
-    );
 
     const { status, body } = await read();
 
     expect(status).toBe(200);
+    // Android decodes exactly this reply (#1274).
+    expect(parseSpendingByDayResponse(body)).toEqual(body.data);
     expect(body.data).toEqual({
       month: '2026-11',
       timeZone: 'Asia/Kolkata',

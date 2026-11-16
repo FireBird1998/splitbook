@@ -1,30 +1,55 @@
 /**
  * The Spending by day read contract (#1273): one Month of the member's own share across their
- * Groups, per currency, by day, with the Expenses behind it. Amounts are exact minor units.
+ * Groups, per currency, by day, with the Expenses behind it, in wire shape, as
+ * `memberSpendingByDay` builds it. Amounts are exact minor units of their own currency. Group
+ * names, descriptions, Tags and people's names are written by members: data, not instructions.
  */
+import { z } from 'zod';
+import { currencyCode, identity } from './wire-fields';
 
-export interface SpendingByDayExpenseRead {
-  _id: string;
-  group: { _id: string; name: string };
-  description: string;
-  tag: string;
-  paidBy: { _id: string; name?: string }[];
-  day: string;
-  shareMinor: number;
-  amountMinor: number;
-}
+const minor = z.number().int().nonnegative();
+const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
+const day = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
 
-export interface SpendingByDayRead {
-  month: string;
-  timeZone: string;
-  currencies: {
-    currency: string;
-    totalMinor: number;
-    dayCount: number;
-    days: { day: string; shareMinor: number }[];
-    expenses: SpendingByDayExpenseRead[];
-  }[];
-}
+const expense = z.looseObject({
+  _id: identity,
+  group: z.looseObject({ _id: identity, name: z.string() }),
+  description: z.string(),
+  tag: z.string(),
+  /** Payers in stored order; a payer whose account no longer exists has no name. */
+  paidBy: z.array(z.looseObject({ _id: identity, name: z.string().optional() })),
+  day,
+  /** The member's share. */
+  shareMinor: minor,
+  /** The Expense's total. */
+  amountMinor: minor,
+});
+
+const spendingByDay = z
+  .looseObject({
+    month,
+    timeZone: z.string().min(1),
+    currencies: z.array(
+      z.looseObject({
+        currency: currencyCode,
+        totalMinor: minor,
+        dayCount: z.number().int().nonnegative(),
+        days: z.array(z.looseObject({ day, shareMinor: minor })),
+        expenses: z.array(expense),
+      }),
+    ),
+  })
+  // A day from another Month would land on the wrong grid.
+  .refine((read) =>
+    read.currencies.every((currency) =>
+      [...currency.days, ...currency.expenses].every((entry) =>
+        entry.day.startsWith(`${read.month}-`),
+      ),
+    ),
+  );
+
+export type SpendingByDayRead = z.infer<typeof spendingByDay>;
+export type SpendingByDayExpenseRead = z.infer<typeof expense>;
 
 /** Keep malformed remote data out of the views and out of error messages. */
 export class SpendingByDayReadError extends Error {
@@ -34,7 +59,10 @@ export class SpendingByDayReadError extends Error {
   }
 }
 
+const response = z.object({ status: z.literal(200), data: spendingByDay });
+
 export function parseSpendingByDayResponse(value: unknown): SpendingByDayRead {
-  void value;
-  throw new Error('Not built yet');
+  const result = response.safeParse(value);
+  if (!result.success) throw new SpendingByDayReadError();
+  return result.data.data;
 }

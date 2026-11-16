@@ -14,7 +14,7 @@ import { getCurrency, getCurrencyPrecision } from './currency';
 import { expenseDay, expenseLocalDate } from './expense-day';
 import { sumMinorAmounts } from './exact-money';
 import { memberShareMinor, type InsightExpense } from './insights';
-import { isMonthKey, type DayKey, type Instant, type MonthKey } from './zoned-calendar';
+import { isMonthKey, lastMonths, type DayKey, type Instant, type MonthKey } from './zoned-calendar';
 
 /** An Expense as Spending by day reads it; the caller's other fields are kept as they are. */
 export type DayExpense = Pick<
@@ -166,10 +166,13 @@ export function dayShareReadAloud(day: DayKey, amountMinor: number, currency: st
 /** How many Months Spending by day reaches: the current one and the eleven before it. */
 export const SPENDING_BY_DAY_MONTHS = 12;
 
-/** The Months Spending by day can read, oldest first; the last is the current Month in the zone. */
-export function spendingByDayMonths(clock: { now: Instant; timeZone: string }): MonthKey[] {
-  void clock;
-  throw new Error('Not built yet');
+/**
+ * The Months Spending by day can read, oldest first; the last is the current Month in the
+ * viewer's zone, as the phone's clock gives it. Days themselves follow the Expense day rule, so
+ * the zone only decides which Month is current.
+ */
+export function spendingByDayMonths({ now, timeZone }: { now: Instant; timeZone: string }) {
+  return lastMonths(SPENDING_BY_DAY_MONTHS, { now, timeZone });
 }
 
 /** The Month a client asked for: one of `spendingByDayMonths`, or a RangeError. */
@@ -177,7 +180,10 @@ export function readSpendingByDayMonth(
   value: unknown,
   clock: { now: Instant; timeZone: string },
 ): MonthKey {
-  void value;
-  void clock;
-  throw new Error('Not built yet');
+  const months: unknown[] = spendingByDayMonths(clock);
+  if (!months.includes(value))
+    throw new RangeError(
+      `Ask for this Month or one of the ${SPENDING_BY_DAY_MONTHS - 1} before it, written YYYY-MM.`,
+    );
+  return value as MonthKey;
 }

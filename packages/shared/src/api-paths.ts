@@ -153,11 +153,11 @@ export interface SpendingByDayQuery {
 }
 
 /** One Month of the member's Spending by day across their Groups (#1273). */
-export const spendingByDayPath = ({ month, timeZone }: SpendingByDayQuery): string => {
-  void month;
-  void timeZone;
-  throw new Error('Not built yet');
-};
+export const spendingByDayPath = ({ month, timeZone }: SpendingByDayQuery) =>
+  `/api/user/spending/days${query([
+    ['month', month],
+    ['tz', timeZone],
+  ])}`;
 
 export interface GroupInsightsQuery {
   /** The Month, `YYYY-MM`; the server's default is the current Month in the time zone. */
