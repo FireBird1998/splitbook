@@ -424,6 +424,12 @@ describe('Spending, QA and Designer round (#1276)', () => {
     // IBM Plex Mono figures are 0.6 em wide: four at 10 dp, scaled at most this much, plus padding.
     expect(pad).toBeGreaterThanOrEqual(2);
     expect(4 * 0.6 * 10 * amount.props.maxFontSizeMultiplier + 2 * pad).toBeLessThanOrEqual(39);
+    // Every column is the same plain share of the row, so a cell's padding and border, and the
+    // empty places before the 1st and after the last day, never make one column wider.
+    const grid = screen!.root.find((node) => node.props.testID === 'spending-grid');
+    for (const week of grid.children.slice(1) as ReactTestInstance[])
+      for (const column of week.children as ReactTestInstance[])
+        expect(look(column)).toEqual({ flex: 1 });
   });
 
   it('marks today with the accent number and outline when another day is chosen (SpendAndDays 3)', () => {
