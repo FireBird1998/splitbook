@@ -298,6 +298,12 @@ function SplitBook() {
         <TaskScreen />
       </SafeAreaView>
     );
+  if (configurationReady && authenticated && state.screen === 'spending')
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+        <SpendingRouteScreen />
+      </SafeAreaView>
+    );
   if (configurationReady && (authenticated || checking) && state.screen === 'groups')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -305,6 +311,17 @@ function SplitBook() {
       </SafeAreaView>
     );
   return <AuthenticationScreen />;
+}
+
+/** Spending (#1275), opened from the Home card: its top bar and Back, until #1276 fills it. */
+function SpendingRouteScreen() {
+  return (
+    <TopBar
+      title="Spending"
+      subtitle={`Your share${SEPARATOR}all Groups`}
+      leading={{ kind: 'back', label: 'Back to Home', onPress: () => void controller.back() }}
+    />
+  );
 }
 
 function AuthenticationScreen() {
@@ -859,6 +876,7 @@ const HomeScreen = memo(function HomeScreen() {
   const refresh = useCallback(() => void controller.refresh(), []);
   const refreshFigures = useCallback(() => void controller.refreshHome(), []);
   const refreshSpending = useCallback(() => void controller.refreshSpending(), []);
+  const openSpending = useCallback(() => controller.openSpending(), []);
   const openDraft = useCallback(
     (draft: MobileSnapshot['drafts'][number]) =>
       void controller.openExpense(draft.groupId, draft.expenseId ?? undefined),
@@ -922,6 +940,7 @@ const HomeScreen = memo(function HomeScreen() {
               state.home.data?.[0]?.currency ?? state.groups.data[0]?.defaultCurrency ?? 'INR'
             }
             offline={state.offline.active}
+            onOpen={openSpending}
             onRetry={refreshSpending}
           />
         ) : null}

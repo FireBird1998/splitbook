@@ -328,7 +328,13 @@ export type Route =
   | { screen: 'create' }
   | { screen: 'settings' }
   /** Account → Connected assistants, over Settings (#622). */
-  | { screen: 'assistants' };
+  | { screen: 'assistants' }
+  | SpendingRoute;
+
+/** Spending, opened from the Home card while Spending by day is on (#1275; #1276 fills it). */
+export interface SpendingRoute {
+  screen: 'spending';
+}
 
 /** Confirms a ledger change on the Group view it returned to. */
 export interface GroupSnackbar {
