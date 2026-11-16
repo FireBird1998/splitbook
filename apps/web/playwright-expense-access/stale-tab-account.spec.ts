@@ -96,7 +96,7 @@ async function giveSamDistinctFigures(ledger: Ledger): Promise<Marker[]> {
     201,
   );
 
-  // The isolated app keeps earlier tests' Groups (in any currency), so totals are read, not assumed.
+  // Tests running beside this one have Groups too (in any currency), so totals are read, not assumed.
   type Bucket = { currency: string; youOwe: number; youAreOwed: number };
   const buckets = async (actor: Ledger['alex']): Promise<Bucket[]> =>
     (await dataOf(await actor.get('/api/user/balances'))).buckets;
