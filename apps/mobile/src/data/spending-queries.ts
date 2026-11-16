@@ -16,7 +16,10 @@ import {
   type Envelope,
   type SavedReadPorts,
 } from './saved-read-engine';
-import { parseSpendingByDayResponse, type SpendingByDayRead } from './spending-by-day-read';
+import {
+  parseSpendingByDayResponse,
+  type SpendingByDayRead,
+} from '@splitbook/shared/spending-by-day-read';
 import { RequestError, Superseded } from './transport';
 import type { MobileSnapshot, SpendingMonthState, SpendingState } from './types';
 

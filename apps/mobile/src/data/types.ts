@@ -509,7 +509,7 @@ export interface SpendingMonthState {
   /** `YYYY-MM`. */
   month: string;
   status: 'loading' | 'ready' | 'error';
-  data: import('./spending-by-day-read').SpendingByDayRead | null;
+  data: import('@splitbook/shared/spending-by-day-read').SpendingByDayRead | null;
   /** When the figures shown were verified: the server's answer, or the saved copy's time. */
   refreshedAt: number | null;
   /** The figures are this phone's saved copy: "Saved", not "Updated". */
