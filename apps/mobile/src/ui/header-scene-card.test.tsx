@@ -2,11 +2,7 @@ import { act, create } from 'react-test-renderer';
 import { expect, it, vi } from 'vitest';
 import { headerCard } from '@splitbook/shared/group-header';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
-import {
-  HeaderSceneCard,
-  HeaderScenePlaceholder,
-  HeaderScenePreviewCaption,
-} from './header-scene-card';
+import { HeaderSceneCard, HeaderScenePlaceholder, PREVIEW_HEIGHT } from './header-scene-card';
 import { ThemeContext } from './theme';
 import { flatten } from '../test-utils/layout';
 import type { MobileGroup } from '../data/types';
@@ -89,38 +85,33 @@ it.each([
   }
 });
 
+// #1267: the settings page draws the preview's caption on its card, in the app's own theme at
+// every time of day (the board's white strip); the loading preview is the picture's place alone.
 it.each(['light', 'dark'] as const)(
-  'the loaded and loading preview caption use shared tone in %s appearance',
+  'the loading settings preview is the picture alone, as tall as the loaded one, in %s',
   (mode) => {
     for (const time of ['morning', 'day', 'sunset', 'night'] as const) {
-      const expected = getSemanticTokens(
-        headerCard(group, '2026-11-04', time).tone === 'dark' ? 'dark' : mode,
-      );
-      for (const loading of [false, true]) {
-        let view!: ReturnType<typeof create>;
-        act(() => {
-          view = create(
-            <ThemeContext.Provider value={getSemanticTokens(mode)}>
-              {loading ? (
-                <HeaderScenePlaceholder
-                  group={group}
-                  preview={{ style: 'scene', scene: 'sakura', time }}
-                />
-              ) : (
-                <HeaderScenePreviewCaption scene="sakura" time={time} />
-              )}
-            </ThemeContext.Provider>,
-          );
-        });
-        const caption = view.root.findAll(
-          (node) => (node.type as unknown) === 'View' && flatten(node.props.style).padding === 12,
+      let view!: ReturnType<typeof create>;
+      act(() => {
+        view = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <HeaderScenePlaceholder
+              group={group}
+              preview={{ style: 'scene', scene: 'sakura', time }}
+            />
+          </ThemeContext.Provider>,
         );
-        expect(caption).toHaveLength(1);
-        expect(flatten(caption[0].props.style).backgroundColor).toBe(expected.surface);
-        const texts = caption[0].findAll((node) => (node.type as unknown) === 'Text');
-        for (const text of texts) expect(flatten(text.props.style).color).toBe(expected.text);
-        act(() => view.unmount());
-      }
+      });
+      const tree = view.toJSON() as unknown as {
+        props: { style: unknown; accessibilityLabel: string };
+      };
+      expect(tree.props.accessibilityLabel).toBe('Loading Header scene');
+      expect(flatten(tree.props.style)).toMatchObject({
+        height: PREVIEW_HEIGHT,
+        backgroundColor: getSemanticTokens(mode).surfaceMuted,
+      });
+      expect(view.root.findAll((node) => (node.type as unknown) === 'Text')).toHaveLength(0);
+      act(() => view.unmount());
     }
   },
 );
