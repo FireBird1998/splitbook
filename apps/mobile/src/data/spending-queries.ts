@@ -178,11 +178,16 @@ export function createSpendingQueries(session: SpendingSession) {
   /** The Months on screen when a Group was lost: they may hold its Expenses, so never show again. */
   const lostShown = new Set<SpendingMonthState>();
 
+  const clock = () => ({ now: session.now(), timeZone: session.timeZone() });
   /** This Month on the phone's clock and in its zone. */
   const currentMonth = () => monthKeyInZone(session.now(), session.timeZone());
+  /** Today on the phone's clock and in its zone. */
+  const today = () => dayKeyInZone(session.now(), session.timeZone());
+  /** The twelve Months Spending pages through, oldest first: this Month and the eleven before. */
+  const twelveMonths = () => lastMonths(12, clock());
   /** The twelve Months Spending pages through, oldest first; the same list while unchanged. */
   const spendingMonths = (was: SpendingScreenState | null) => {
-    const months = lastMonths(12, { now: session.now(), timeZone: session.timeZone() });
+    const months = twelveMonths();
     return was && was.months.join() === months.join() ? was.months : months;
   };
   const keyOf = (accountId: string, month: string) =>
@@ -304,7 +309,7 @@ export function createSpendingQueries(session: SpendingSession) {
         : null;
       spending = same(next.spending, {
         enabled,
-        today: dayKeyInZone(session.now(), session.timeZone()),
+        today: today(),
         current: monthState(currentMonth(), kept(next.spending.current)),
         screen,
       });
@@ -325,17 +330,17 @@ export function createSpendingQueries(session: SpendingSession) {
     },
     rebind,
     /**
-     * Reads this Month again now while the switch is on, with Home's figures: a pull, Retry, or a
-     * write's follow-up. A failure shows on the Month; nothing is read while the switch is off.
+     * Reads a Month again now while the switch is on (this Month, unless named): with Home's
+     * figures on a pull, Retry or a write's follow-up, or Spending's Month on a pull there. A
+     * failure shows on the Month; nothing is read while the switch is off.
      */
     async refresh(month = currentMonth()) {
       if (!session.enabled() || session.snapshot().auth.status !== 'authenticated') return;
       await client.fetchQuery({ ...options(month), staleTime: -Infinity }).catch(() => undefined);
     },
-    /** The twelve Months Spending pages through, oldest first. */
-    months: () => lastMonths(12, { now: session.now(), timeZone: session.timeZone() }),
+    months: twelveMonths,
     currentMonth,
-    today: () => dayKeyInZone(session.now(), session.timeZone()),
+    today,
     /**
      * The switch was turned off: nothing is observed or kept. Its queries go, and with them what
      * was on screen, and every saved Month goes from this phone.

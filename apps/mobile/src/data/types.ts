@@ -547,10 +547,7 @@ export interface SpendingState {
   screen: SpendingScreenState | null;
 }
 
-export interface SpendingScreenState {
-  month: string;
-  day: string | null;
-  currency: string | null;
+export interface SpendingScreenState extends Omit<SpendingRoute, 'screen'> {
   /** The twelve Months it pages through, oldest first: this Month and the eleven before it. */
   months: readonly string[];
   read: SpendingMonthState;

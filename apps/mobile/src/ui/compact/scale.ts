@@ -28,9 +28,11 @@ export const textVariants: Record<TextVariant, TextStyle> = {
 };
 
 /** Money is always IBM Plex Mono with tabular figures. */
-export type MoneySize = 'form' | 'total' | 'balance' | 'list' | 'table';
+export type MoneySize = 'form' | 'headline' | 'total' | 'balance' | 'list' | 'table';
 export const moneySizes: Record<MoneySize, TextStyle> = {
   form: { fontSize: 32, lineHeight: 35, letterSpacing: -1 },
+  /** A Month's total on its own screen, as Spending heads its Month (#1276). */
+  headline: { fontSize: 26, lineHeight: 31, letterSpacing: -0.3 },
   /** A Month's share of spending, as a card's one figure (#1271). */
   total: { fontSize: 24, lineHeight: 30, letterSpacing: -0.3 },
   balance: { fontSize: 19, lineHeight: 24, letterSpacing: -0.4 },

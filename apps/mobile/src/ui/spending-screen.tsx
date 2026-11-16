@@ -8,7 +8,9 @@ import type {
   SpendingByDayExpenseRead,
   SpendingByDayRead,
 } from '@splitbook/shared/spending-by-day-read';
+import type { GroupCategory } from '@splitbook/shared/types';
 import type { SpendingScreenState } from '../data/types';
+import { groupIcon } from './group-icon';
 import {
   Card,
   CompactButton,
@@ -24,10 +26,13 @@ import {
   useLargeText,
 } from './compact';
 import { readPhoneCalendar } from './day-format';
+import { monthName, spendingDays } from './spending-words';
 import { readTime, RetainedNotice } from './financial-views';
 import { fonts, useTheme } from './theme';
 
 type Currency = SpendingByDayRead['currencies'][number];
+/** A Group as its rows need it: its Theme gives its icon. */
+type SpendingGroup = { id: string; category: GroupCategory };
 
 /** Where Spending's figures sit: the page's side padding on each side. */
 const pageInset = 2 * 16;
@@ -46,8 +51,6 @@ const dateOf = (day: string) => new Date(`${day}T12:00:00`);
 /** "November 2026": a Month key in English, as a Group's Expenses spell their Month. */
 const monthTitle = (month: string) =>
   dateOf(`${month}-01`).toLocaleDateString('en', { month: 'long', year: 'numeric' });
-const monthName = (month: string) =>
-  dateOf(`${month}-01`).toLocaleDateString('en', { month: 'long' });
 /** "Mon 16 Nov": the chosen day's heading. */
 const dayHeading = (day: string) => {
   const date = dateOf(day);
@@ -55,7 +58,6 @@ const dayHeading = (day: string) => {
 };
 /** "3 November": a day as TalkBack hears it, as dayShareReadAloud says its date. */
 const readAloudDay = (day: string) => `${dateOf(day).getDate()} ${monthName(day.slice(0, 7))}`;
-const spendingDays = (count: number) => `${counted(count, 'day')} with spending`;
 
 /** Who paid an Expense, as its row says it: "You paid", "Priya paid", "Priya and Sam paid". */
 export function payers(paidBy: SpendingByDayExpenseRead['paidBy'], me: string) {
@@ -181,8 +183,12 @@ function MonthGrid({
                 >
                   {String(day.day)}
                 </CompactText>
+                {/* A share still too wide for the cell at the largest text shrinks to it. */}
                 <Money
                   size="table"
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.5}
+                  numberOfLines={1}
                   style={{
                     fontSize: 10,
                     lineHeight: 13,
@@ -205,7 +211,6 @@ function MonthGrid({
               gap: 1,
               backgroundColor: future ? 'transparent' : theme.dayTint.fill[tint],
               ...(future ? { borderWidth: 1, borderColor: theme.border } : {}),
-              ...(selected ? { borderWidth: 2, borderColor: theme.text } : {}),
             };
             if (future || placeholder)
               return (
@@ -234,6 +239,23 @@ function MonthGrid({
                 style={look}
               >
                 {cell}
+                {selected ? (
+                  // Outlined just outside the cell, as the board draws the day chosen.
+                  <View
+                    testID="spending-chosen"
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      top: -3,
+                      left: -3,
+                      right: -3,
+                      bottom: -3,
+                      borderRadius: 13,
+                      borderWidth: 2,
+                      borderColor: theme.text,
+                    }}
+                  />
+                ) : null}
               </Pressable>
             );
           })}
@@ -280,12 +302,14 @@ function DayExpenses({
   today,
   currency,
   me,
+  groups,
   onExpense,
 }: {
   day: string;
   today: string;
   currency: Currency | null;
   me: string;
+  groups: readonly SpendingGroup[];
   onExpense: (groupId: string, expenseId: string) => void;
 }) {
   const expenses = currency?.expenses.filter((expense) => expense.day === day) ?? [];
@@ -320,7 +344,13 @@ function DayExpenses({
               <View key={expense._id}>
                 {index > 0 ? <Divider inset={58} /> : null}
                 <ListRow
-                  leading={<IconTile icon="receipt-outline" />}
+                  leading={
+                    <IconTile
+                      icon={groupIcon(
+                        groups.find((group) => group.id === expense.group._id)?.category,
+                      )}
+                    />
+                  }
                   title={expense.description}
                   titleLines={0}
                   meta={[expense.group.name, expense.tag, payers(expense.paidBy, me)]
@@ -359,6 +389,8 @@ export const SpendingScreen = memo(function SpendingScreen({
   today,
   me,
   zeroCurrency,
+  knownCurrencies,
+  groups,
   offline = false,
   onMonth,
   onDay,
@@ -373,6 +405,10 @@ export const SpendingScreen = memo(function SpendingScreen({
   me: string;
   /** The currency a Month with nothing says its zero in. */
   zeroCurrency: string;
+  /** This Month's currencies: their tabs stay on every Month, at zero, so nothing jumps. */
+  knownCurrencies: readonly string[];
+  /** The member's Groups, for each row's icon. */
+  groups: readonly SpendingGroup[];
   offline?: boolean;
   onMonth: (month: string) => void;
   onDay: (day: string) => void;
@@ -388,8 +424,14 @@ export const SpendingScreen = memo(function SpendingScreen({
   const thisMonth = month === months[months.length - 1];
   const data = read.data;
   const currencies = data?.currencies ?? [];
-  const shown =
-    currencies.find((currency) => currency.currency === screen.currency) ?? currencies[0] ?? null;
+  // Every currency of this Month keeps its tab on the others, at zero.
+  const tabs: Currency[] = [
+    ...currencies,
+    ...knownCurrencies
+      .filter((code) => !currencies.some((currency) => currency.currency === code))
+      .map((code) => ({ currency: code, totalMinor: 0, dayCount: 0, days: [], expenses: [] })),
+  ];
+  const shown = tabs.find((currency) => currency.currency === screen.currency) ?? tabs[0] ?? null;
   const code = shown?.currency ?? zeroCurrency;
   const name = monthName(month);
 
@@ -438,9 +480,19 @@ export const SpendingScreen = memo(function SpendingScreen({
           </View>
         ) : (
           <View style={{ gap: 10, paddingHorizontal: 2 }}>
-            <CompactText accessibilityLiveRegion="polite" style={{ fontSize: 14, lineHeight: 20 }}>
-              {unsaved ? 'This month isn’t on this phone yet. Connect to load it.' : read.message}
-            </CompactText>
+            {unsaved ? (
+              <CompactText
+                accessibilityLiveRegion="polite"
+                style={{ fontSize: 14, lineHeight: 20 }}
+              >
+                This month isn’t on this phone yet. Connect to load it.
+              </CompactText>
+            ) : (
+              // A failed read: the usual error notice, read out at once.
+              <CompactText accessibilityRole="alert" variant="small" tone="negative">
+                {read.message}
+              </CompactText>
+            )}
             <View style={{ alignItems: 'flex-start' }}>
               <CompactButton label="Try again" variant="tonal" dense onPress={onRetry} />
             </View>
@@ -469,13 +521,13 @@ export const SpendingScreen = memo(function SpendingScreen({
         offline={offline}
         onRetry={onRetry}
       />
-      {currencies.length > 1 ? (
+      {tabs.length > 1 ? (
         <View
           accessibilityRole="tablist"
           accessibilityLabel="Currency"
           style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}
         >
-          {currencies.map((currency) => (
+          {tabs.map((currency) => (
             <CurrencyTab
               key={currency.currency}
               currency={currency}
@@ -488,8 +540,8 @@ export const SpendingScreen = memo(function SpendingScreen({
       {pager}
       <View style={{ gap: 2, paddingHorizontal: 2, marginTop: -6 }}>
         {/* In full where the line holds it; TalkBack always hears it in full. */}
-        <Money size="total" accessibilityLabel={fullAmount(total, code)}>
-          {amountToFit(total, code, moneyCharacters(width - pageInset - 4, 'total', fontScale))}
+        <Money size="headline" accessibilityLabel={fullAmount(total, code)}>
+          {amountToFit(total, code, moneyCharacters(width - pageInset - 4, 'headline', fontScale))}
         </Money>
         <CompactText variant="caption" tone="secondary">
           {line}
@@ -530,6 +582,7 @@ export const SpendingScreen = memo(function SpendingScreen({
           today={today}
           currency={shown}
           me={me}
+          groups={groups}
           onExpense={onExpense}
         />
       ) : null}

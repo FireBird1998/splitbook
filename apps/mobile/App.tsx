@@ -335,6 +335,20 @@ function SpendingRouteScreen() {
     sameSelection,
   );
   const screen = state.spending.screen;
+  // This Month's currencies keep their tabs on the others; each row shows its Group's icon.
+  const known = useMemo(
+    () => state.spending.current?.data?.currencies.map(({ currency }) => currency) ?? [],
+    [state.spending.current],
+  );
+  const groups = useMemo(
+    () => state.groups.data.map(({ id, category }) => ({ id, category })),
+    [state.groups.data],
+  );
+  const openExpense = useCallback(
+    (groupId: string, expenseId: string) => void controller.openExpense(groupId, expenseId),
+    [],
+  );
+  const retry = useCallback(() => void controller.refresh(), []);
   return (
     <>
       <TopBar
@@ -360,12 +374,14 @@ function SpendingRouteScreen() {
             today={state.spending.today}
             me={state.user.id}
             zeroCurrency={spendingZeroCurrency(state)}
+            knownCurrencies={known}
+            groups={groups}
             offline={state.offline.active}
             onMonth={controller.showSpendingMonth}
             onDay={controller.chooseSpendingDay}
             onCurrency={controller.chooseSpendingCurrency}
-            onExpense={(groupId, expenseId) => void controller.openExpense(groupId, expenseId)}
-            onRetry={() => void controller.refresh()}
+            onExpense={openExpense}
+            onRetry={retry}
           />
         ) : null}
       </ScrollView>
