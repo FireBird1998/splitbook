@@ -1151,4 +1151,66 @@ describe('Spending: its Months, days and currencies (#1276)', () => {
       data: null,
     });
   });
+
+  it('returns Home from an Expense, not to a bare Spending, once the switch is off (QA round)', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    await controller.openExpense(mapleId, expenseId);
+    await settle();
+    await f.spending.select(false);
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('groups');
+  });
+
+  it('moves to the oldest Month it can read when the one shown drops out of the twelve (QA round)', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    await controller.showSpendingMonth('2025-12');
+    await settle();
+    expect(shown(controller)!.month).toBe('2025-12');
+    // December comes: the twelve are January to December, and December 2025 is gone.
+    vi.setSystemTime(Date.parse('2026-12-01T12:00:00.000Z'));
+    await controller.refresh('foreground');
+    await settle();
+    expect(shown(controller)).toMatchObject({ month: '2026-01', day: null });
+    expect(shown(controller)!.months[0]).toBe('2026-01');
+  });
+
+  it('draws the new day as today after midnight, once the app returns to the foreground (QA round)', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    expect(controller.getSnapshot().spending.today).toBe('2026-11-16');
+    vi.setSystemTime(Date.parse('2026-11-17T06:30:00.000Z'));
+    await controller.refresh('foreground');
+    await settle();
+    expect(controller.getSnapshot().spending.today).toBe('2026-11-17');
+  });
+
+  it.each(['a lost Group', 'the switch turned off', 'a change of account'] as const)(
+    'removes an older Month’s saved copy too, on %s (QA round)',
+    async (event) => {
+      const f = fixture();
+      const controller = await onSpending(f);
+      await controller.showSpendingMonth('2026-10');
+      await settle();
+      expect(f.row(october)).not.toBeNull();
+      if (event === 'a lost Group') {
+        await controller.back();
+        f.server.listed = [maple];
+        later(31_000);
+        await controller.refresh('pull');
+      }
+      if (event === 'the switch turned off') await f.spending.select(false);
+      if (event === 'a change of account') {
+        await controller.signOut();
+        await controller.signIn('sam');
+      }
+      await settle();
+      expect(f.row(october)).toBeNull();
+      // After a lost Group this Month is read again at once; nothing from before stays.
+      if (event === 'a lost Group')
+        expect(f.row(november)).toMatchObject({ refreshedAt: start + 31_000 });
+      else expect(f.row(november)).toBeNull();
+    },
+  );
 });
