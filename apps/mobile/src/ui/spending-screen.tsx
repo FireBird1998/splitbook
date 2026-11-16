@@ -165,7 +165,8 @@ function MonthGrid({
       {grid.weeks.map((week, row) => (
         <View key={row} style={{ flexDirection: 'row', gap: 4 }}>
           {week.map((day, column) => {
-            if (!day) return <View key={column} style={{ flex: 1, minHeight: 48 }} />;
+            // Each column is the same share of the row; a cell's padding and border sit inside it.
+            if (!day) return <View key={column} style={{ flex: 1 }} />;
             const future = day.date > today;
             const share = shares.get(day.date) ?? 0;
             const tint: DayTint =
@@ -209,7 +210,6 @@ function MonthGrid({
               </>
             );
             const look = {
-              flex: 1,
               minHeight: 48,
               borderRadius: 10,
               alignItems: 'center' as const,
@@ -223,51 +223,53 @@ function MonthGrid({
             };
             if (future || placeholder)
               return (
-                <View
-                  key={column}
-                  testID={`spending-cell-${day.date}`}
-                  accessible={false}
-                  importantForAccessibility="no-hide-descendants"
-                  style={look}
-                >
-                  {cell}
+                <View key={column} style={{ flex: 1 }}>
+                  <View
+                    testID={`spending-cell-${day.date}`}
+                    accessible={false}
+                    importantForAccessibility="no-hide-descendants"
+                    style={look}
+                  >
+                    {cell}
+                  </View>
                 </View>
               );
             return (
-              <Pressable
-                key={column}
-                testID={`spending-cell-${day.date}`}
-                accessibilityRole="button"
-                accessibilityLabel={`${
-                  share && currency
-                    ? dayShareReadAloud(day.date, share, currency.currency)
-                    : `${readAloudDay(day.date)}, nothing`
-                }${day.today ? ', today' : ''}`}
-                accessibilityState={{ selected }}
-                // Over the 4 dp gaps beside it, never onto the next day: 43 dp at 360 dp.
-                hitSlop={{ top: 2, bottom: 2, left: 2, right: 2 }}
-                onPress={() => onDay(day.date)}
-                style={look}
-              >
-                {cell}
-                {selected ? (
-                  // Outlined just outside the cell, as the board draws the day chosen.
-                  <View
-                    testID="spending-chosen"
-                    pointerEvents="none"
-                    style={{
-                      position: 'absolute',
-                      top: -3,
-                      left: -3,
-                      right: -3,
-                      bottom: -3,
-                      borderRadius: 13,
-                      borderWidth: 2,
-                      borderColor: theme.text,
-                    }}
-                  />
-                ) : null}
-              </Pressable>
+              <View key={column} style={{ flex: 1 }}>
+                <Pressable
+                  testID={`spending-cell-${day.date}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${
+                    share && currency
+                      ? dayShareReadAloud(day.date, share, currency.currency)
+                      : `${readAloudDay(day.date)}, nothing`
+                  }${day.today ? ', today' : ''}`}
+                  accessibilityState={{ selected }}
+                  // Over the 4 dp gaps beside it, never onto the next day: 43 dp at 360 dp.
+                  hitSlop={{ top: 2, bottom: 2, left: 2, right: 2 }}
+                  onPress={() => onDay(day.date)}
+                  style={look}
+                >
+                  {cell}
+                  {selected ? (
+                    // Outlined just outside the cell, as the board draws the day chosen.
+                    <View
+                      testID="spending-chosen"
+                      pointerEvents="none"
+                      style={{
+                        position: 'absolute',
+                        top: -3,
+                        left: -3,
+                        right: -3,
+                        bottom: -3,
+                        borderRadius: 13,
+                        borderWidth: 2,
+                        borderColor: theme.text,
+                      }}
+                    />
+                  ) : null}
+                </Pressable>
+              </View>
             );
           })}
         </View>
