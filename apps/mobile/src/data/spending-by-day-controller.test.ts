@@ -1103,6 +1103,20 @@ describe('Spending: its Months, days and currencies (#1276)', () => {
     expect(shown(controller)!.currency).toBe('EUR');
   });
 
+  it('marks an Expense opened from a day as opened from Spending, so its Back can say so (#1283)', async () => {
+    const f = fixture();
+    const controller = await onSpending(f);
+    await controller.openExpense(mapleId, expenseId);
+    await settle();
+    expect(controller.getSnapshot().expense.fromSpending).toBe(true);
+    await controller.back();
+    await controller.back();
+    await controller.openGroup(mapleId);
+    await controller.openExpense(mapleId, expenseId);
+    await settle();
+    expect(controller.getSnapshot().expense.fromSpending).toBeFalsy();
+  });
+
   it('opens an Expense in its Group from a day, and Back returns to Spending as it was', async () => {
     const f = fixture();
     const controller = await onSpending(f);

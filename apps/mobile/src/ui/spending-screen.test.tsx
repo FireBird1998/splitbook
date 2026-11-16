@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import type { SpendingMonthState, SpendingScreenState } from '../data/types';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { setWindow } from '../test-utils/native';
 import { payers, SpendingScreen } from './spending-screen';
 import { ThemeContext } from './theme';
@@ -338,6 +339,12 @@ describe('Spending (#1276)', () => {
       0,
     );
     expect(byRole('button').filter((node) => node.props.testID)).toHaveLength(0);
+    // TalkBack hears what is loading (#1283).
+    expect(
+      screen!.root
+        .findAll((node) => node.props.accessible === true && node.props.accessibilityState?.busy)
+        .map((node) => node.props.accessibilityLabel),
+    ).toEqual(['November 2026. Loading your spending']);
   });
 
   it('offline, says a Month not on this phone isn’t, with Try again, and shows a saved one with its time', () => {
@@ -504,5 +511,35 @@ describe('who paid, as a day’s row says it (#1276)', () => {
     ],
   ])('%j → %s', (paidBy, said) => {
     expect(payers(paidBy, me)).toBe(said);
+  });
+});
+
+describe('Spending when the phone’s zone moved while the app ran (Hermes, #1283)', () => {
+  let restore = () => undefined as void;
+  afterEach(() => restore());
+
+  it('names the Month, its empty days and the day chosen from their keys, behind UTC', () => {
+    restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+    render(november({ day: '2026-11-01' }));
+    expect(texts()).toContain('November 2026');
+    expect(cell('2026-11-03').props.accessibilityLabel).toBe('3 November, nothing');
+    expect(texts()).toContain('Sun 1 Nov');
+    act(() => screen!.unmount());
+    // Paged back a Month.
+    render(november({ month: '2026-10', day: null, read: read([], {}, '2026-10') }));
+    expect(texts()).toContain('October 2026');
+  });
+
+  it('names the day chosen at a Month’s end from its key, ahead of UTC', () => {
+    restore = hermesZoneMoved('Pacific/Pago_Pago', 'Pacific/Kiritimati');
+    render(
+      november({
+        month: '2026-10',
+        day: '2026-10-31',
+        read: read([inr([['2026-10-31', 100]])], {}, '2026-10'),
+      }),
+    );
+    expect(texts()).toContain('Sat 31 Oct');
+    expect(texts()).toContain('October 2026');
   });
 });
