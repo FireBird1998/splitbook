@@ -45,6 +45,8 @@ function machine() {
   let server = draft(0, 'Lunch');
   const replaced: string[] = [];
   let holding: { reached: () => void; gate: Promise<void> } | null = null;
+  let writeGate: Promise<void> | null = null;
+  const amounts: (number | undefined)[] = [];
   const client = {
     context: async () => ({}),
     pending: async () => {
@@ -59,6 +61,10 @@ function machine() {
     review: async () => [review(server)],
     replace: async (version: PersistedExpenseDraft, next: ExpenseDraftValues) => {
       replaced.push(String(next.description));
+      amounts.push(next.amount);
+      const gate = writeGate;
+      writeGate = null;
+      if (gate) await gate;
       server = { ...version, revision: version.revision + 1, values: next };
       return server;
     },
@@ -96,7 +102,15 @@ function machine() {
     run,
     published,
     replaced,
+    amounts,
+    server: () => server,
     state: () => state,
+    /** The next write's reply waits until released. */
+    holdWrite() {
+      let release!: () => void;
+      writeGate = new Promise<void>((resolve) => (release = resolve));
+      return release;
+    },
     goOffline: () => {
       online = false;
     },
@@ -160,4 +174,60 @@ describe('a typed change on the review run (#1287)', () => {
     expect(m.state().unkept?.description).toBe('Lunch three');
     expect(m.state()).toMatchObject({ busy: false, editing: false });
   });
+
+  // QA's device check: seven deletes, then "450", with saves and their reads landing in between.
+  it.each([
+    'all at once',
+    'each settled',
+    'during a held write',
+    'at the held end of a save',
+  ] as const)(
+    'keeps every Amount of a burst, and never notes a newer version for its own saves: %s',
+    async (interleaving) => {
+      const m = machine();
+      const typed = [1200, 1200, 1200, 120, 12, 1, undefined, 4, 45, 450];
+      const amount = (value: number | undefined) => ({ ...values('Lunch'), amount: value });
+      const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+      if (interleaving === 'all at once')
+        for (const value of typed) void m.run.change(amount(value));
+      if (interleaving === 'each settled')
+        for (const value of typed) {
+          void m.run.change(amount(value));
+          await tick();
+        }
+      if (interleaving === 'during a held write') {
+        const release = m.holdWrite();
+        for (const value of typed.slice(0, 7)) {
+          void m.run.change(amount(value));
+          await tick();
+        }
+        release();
+        for (const value of typed.slice(7)) {
+          void m.run.change(amount(value));
+          await tick();
+        }
+      }
+      if (interleaving === 'at the held end of a save') {
+        for (const value of typed.slice(0, 7)) {
+          void m.run.change(amount(value));
+          await tick();
+        }
+        const pending = m.holdPending();
+        void m.run.change(amount(4));
+        await pending.arrived;
+        void m.run.change(amount(45));
+        void m.run.change(amount(450));
+        pending.release();
+      }
+      await m.run.finishEditing();
+      await tick();
+      await m.run.finishEditing();
+      expect(m.state().items[0].item.draft.values?.amount).toBe(450);
+      expect(m.server().values?.amount).toBe(450);
+      expect(m.amounts.at(-1)).toBe(450);
+      expect(m.published.some((state) => state.changed !== null)).toBe(false);
+      expect(m.published.filter(locksFields)).toEqual([]);
+      expect(m.state()).toMatchObject({ busy: false, editing: false, unkept: null });
+    },
+  );
 });
