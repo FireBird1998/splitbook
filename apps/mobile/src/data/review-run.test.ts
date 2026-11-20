@@ -41,6 +41,7 @@ const review = (version: PersistedExpenseDraft): DraftReview => ({
 
 /** One Draft on the review run, with its context read, and a pending-action read it can hold. */
 function machine() {
+  let online = true;
   let server = draft(0, 'Lunch');
   const replaced: string[] = [];
   let holding: { reached: () => void; gate: Promise<void> } | null = null;
@@ -87,7 +88,7 @@ function machine() {
       published.push(next);
     },
     current: () => true,
-    online: () => true,
+    online: () => online,
     client: () => client as never,
     refresh: async () => undefined,
   });
@@ -96,6 +97,9 @@ function machine() {
     published,
     replaced,
     state: () => state,
+    goOffline: () => {
+      online = false;
+    },
     /** The next pending-action read waits until released: the end of a save. */
     holdPending() {
       let reached!: () => void, release!: () => void;
@@ -141,5 +145,19 @@ describe('a typed change on the review run (#1287)', () => {
       revision: 2,
       values: { description: 'Lunch three' },
     });
+  });
+
+  it('keeps a change typed as its save ends for Keep my changes, when it can’t be saved after', async () => {
+    const m = machine();
+    const pending = m.holdPending();
+    void m.run.change(values('Lunch two'));
+    await pending.arrived;
+    void m.run.change(values('Lunch three'));
+    m.goOffline();
+    pending.release();
+    await m.run.finishEditing();
+    expect(m.replaced).toEqual(['Lunch two']);
+    expect(m.state().unkept?.description).toBe('Lunch three');
+    expect(m.state()).toMatchObject({ busy: false, editing: false });
   });
 });
