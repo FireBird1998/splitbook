@@ -25,6 +25,11 @@ export interface SharedDraftCollectionState {
   pending: boolean;
   busy: boolean;
   message: string;
+  /**
+   * What the last failed read said, until a read lands or the app goes offline: then it is no
+   * longer said, unless something else has been said since (#1295).
+   */
+  readFailure: string | null;
   confirmation: ReturnType<typeof buildToReview>['ready'] | null;
   resultsVisible: boolean;
   /** The last bulk payer action's result, with Undo while it can still apply (#439). */
@@ -44,6 +49,7 @@ export const emptySharedDraftCollection = (): SharedDraftCollectionState => ({
   pending: false,
   busy: false,
   message: '',
+  readFailure: null,
   confirmation: null,
   resultsVisible: false,
   notice: null,
@@ -100,6 +106,12 @@ export function sharedDraftCollection({
   const update = (patch: Partial<SharedDraftCollectionState>) => {
     if (mounted && current()) publish({ ...read(), ...patch });
   };
+  /** What stops saying an earlier failed read's message, unless something else was said since. */
+  const failedReadGone = (): Partial<SharedDraftCollectionState> => {
+    const { message, readFailure } = read();
+    if (readFailure === null) return {};
+    return message === readFailure ? { message: '', readFailure: null } : { readFailure: null };
+  };
   const observer = new QueryObserver(queryClient, {
     queryKey: expenseDraftsKey({ environment, accountId }, groupId),
     enabled: online(),
@@ -116,8 +128,15 @@ export function sharedDraftCollection({
     refetchOnReconnect: true,
     refetchOnWindowFocus: true,
   });
-  /** The observer on the query its key now names, enabled while online. */
-  const bind = () => observer.setOptions({ ...observer.options, enabled: online() });
+  /**
+   * The observer on the query its key now names, enabled while online. Offline, only the offline
+   * banner shows, so a read that failed is no longer said (the Designer's rule, #1295).
+   */
+  const bind = () => {
+    observer.setOptions({ ...observer.options, enabled: online() });
+    const gone = failedReadGone();
+    if (!online() && Object.keys(gone).length) update(gone);
+  };
   const refresh = async () => {
     if (!online()) return;
     const result = await observer.refetch();
@@ -195,13 +214,18 @@ export function sharedDraftCollection({
         if (!mounted || !current()) return;
         if (result.error) {
           const status = 'status' in result.error ? result.error.status : undefined;
+          const removed = [403, 404].includes(Number(status));
+          // Offline, only the offline banner shows: a read that fails then adds nothing red.
+          if (!removed && !online())
+            return update({ rows: [], context: null, ...failedReadGone() });
           update({
-            ...([403, 404].includes(Number(status))
+            ...(removed
               ? { ...emptySharedDraftCollection(), groupId, pending: read().pending }
               : { rows: [], context: null }),
             message: result.error.message,
+            readFailure: result.error.message,
           });
-        } else if (result.data) update(result.data);
+        } else if (result.data) update({ ...result.data, ...failedReadGone() });
       });
       void client
         .pending()

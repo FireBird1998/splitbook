@@ -1103,9 +1103,9 @@ export function ToReviewList({
                   />
                 </Banner>
               )}
-              {/* Offline with nothing on this phone, only the offline banner shows: a read that
-                  failed as Splitbook went out of reach isn't said in red as well (#1292). */}
-              {!!collection.message && !nothingHere && (
+              {/* Offline, the collection says nothing of a read that failed, so only the offline
+                  banner shows; a read that lands clears what a failed one said (#1292, #1295). */}
+              {!!collection.message && (
                 <Banner tone="error" message={memberMessage(collection.message)} />
               )}
               {collection.pending && (

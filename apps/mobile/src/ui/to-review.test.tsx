@@ -194,6 +194,7 @@ function fixture(
     ];
   if (options.laterReadyGroup)
     items = [review(incomplete), review({ ...first, groupId: otherGroupId })];
+  let listFails = false;
   let extras: string[] = [];
   if (options.francs) {
     extras = options.fullList ? ['EUR', 'JPY', 'GBP', 'USD'] : ['EUR', 'JPY'];
@@ -405,6 +406,8 @@ function fixture(
       item.problems = item.problems.filter((problem) => !present(problem.split(':')[0]));
       return json({ data: item.draft });
     }
+    if (path.endsWith('/drafts') && listFails)
+      return json({ error: 'Service unavailable', status: 503 }, 503);
     if (path.endsWith('/drafts')) return json({ data: items.map((item) => item.draft) });
     if (path.endsWith('/expenses') && init.method === 'POST' && options.lostExpense)
       throw new Error('Lost expense reply');
@@ -464,6 +467,10 @@ function fixture(
     requests,
     deny: () => {
       denied = true;
+    },
+    /** Reading the Group's items fails on the server, or answers again (#1295). */
+    failList: (fails = true) => {
+      listFails = fails;
     },
     goOffline: () => {
       backend.online = false;
@@ -2294,9 +2301,8 @@ describe.each(['light', 'dark'] as const)('To review’s empty state in %s (#129
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
     expect(f.controller.getSnapshot().offline.active).toBe(true);
-    expect(f.controller.getSnapshot().sharedDraftCollection.message).toContain(
-      'Could not reach Splitbook',
-    );
+    // Offline, the failed read is no longer said at all (#1295).
+    expect(f.controller.getSnapshot().sharedDraftCollection.message).toBe('');
     expect(text(list)).toContain('Nothing on this phone');
     expect(text(list)).toContain(offlineBanner('an assistant'));
     expect(text(list)).not.toContain('Could not reach Splitbook');
@@ -2352,5 +2358,86 @@ describe.each(['light', 'dark'] as const)('To review’s empty state in %s (#129
     f.disconnectAssistants();
     await tap(list, 'Refresh items');
     expect(text(list)).toContain(anAssistant);
+  });
+});
+
+// #1295: a read that failed left its red "Could not reach Splitbook" up after a later read
+// succeeded, and offline it showed under the offline banner. The Designer's rule: while the
+// app knows it is offline, only the offline banner shows; the red is for a read that fails
+// online, and a read that lands clears what an earlier failed one said.
+describe.each(['light', 'dark'] as const)('To review’s failed read in %s (#1295)', (mode) => {
+  const unreachable = 'Could not reach Splitbook';
+  const offlineBanner =
+    'You’re offline. What an assistant prepared and what you set aside show up when you’re back online.';
+  const settle = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  async function opened(options: Parameters<typeof fixture>[0] = {}) {
+    const f = fixture(options);
+    await signIn(f);
+    await act(async () => {
+      await f.controller.openToReview(groupId);
+    });
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await settle();
+    return { f, list };
+  }
+  /** Reads the Group's items again with Refresh items. */
+  async function refreshItems(list: ReactTestRenderer) {
+    await tap(list, 'Refresh items');
+    await settle();
+  }
+  afterEach(() => {
+    onlineManager.setOnline(true);
+  });
+
+  it('says a read failed while online, and stops saying it once a later read lands', async () => {
+    const { f, list } = await opened();
+    expect(text(list)).toContain('Duplicate dinner');
+    f.failList();
+    await refreshItems(list);
+    expect(f.controller.getSnapshot().offline.active).toBe(false);
+    expect(text(list)).toContain(unreachable);
+    f.failList(false);
+    await refreshItems(list);
+    expect(text(list)).toContain('Duplicate dinner');
+    expect(text(list)).not.toContain(unreachable);
+  });
+
+  it('stops saying it above All caught up once a later read lands', async () => {
+    const { f, list } = await opened({ empty: true });
+    f.failList();
+    await refreshItems(list);
+    expect(text(list)).toContain(unreachable);
+    f.failList(false);
+    await refreshItems(list);
+    expect(text(list)).toContain('All caught up');
+    expect(text(list)).not.toContain(unreachable);
+  });
+
+  it('offline, shows only the offline banner over the items, and nothing red once back', async () => {
+    const { f, list } = await opened();
+    // The read fails as Splitbook goes out of reach, then the app knows it is offline.
+    f.goOffline();
+    await act(async () => {
+      await f.controller.refreshToReview();
+      await f.controller.refresh();
+    });
+    onlineManager.setOnline(false);
+    await settle();
+    expect(f.controller.getSnapshot().offline.active).toBe(true);
+    expect(text(list)).toContain(offlineBanner);
+    expect(text(list)).not.toContain(unreachable);
+    f.goOnline();
+    onlineManager.setOnline(true);
+    await act(async () => {
+      await f.controller.refresh();
+    });
+    await settle();
+    expect(f.controller.getSnapshot().offline.active).toBe(false);
+    expect(text(list)).not.toContain(offlineBanner);
+    expect(text(list)).not.toContain(unreachable);
+    expect(text(list)).toContain('Duplicate dinner');
   });
 });
