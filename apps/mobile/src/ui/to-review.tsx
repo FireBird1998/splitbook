@@ -902,6 +902,9 @@ export function ToReviewList({
   const assistants = useMobileSnapshot(controller, (snapshot) => snapshot.assistants);
   useEffect(() => void controller.readReviewAssistants(), [controller, state.offline]);
   const assistant = reviewAssistant(assistants, groupId);
+  /** Refresh and pull read To review and, online, the Connected assistants it names (#1292). */
+  const refreshAll = () =>
+    Promise.all([controller.refreshToReview(), controller.readReviewAssistants()]);
   const { width, fontScale } = useWindowDimensions();
   const model = controller.toReviewModel(groupId);
   const own = model.groups[0];
@@ -1005,6 +1008,18 @@ export function ToReviewList({
       ? 'You'
       : (collection.context?.group.members.find((member) => member.user.id === id)?.user.name ??
         'Group member');
+  const done = <CompactButton label="Done" block onPress={close} />;
+  const tryAgain = (
+    <CompactButton
+      label="Try again"
+      variant="tonal"
+      block
+      disabled={collection.busy}
+      // As the app's other Try again: a request that gets through ends offline; then To review
+      // is read again.
+      onPress={() => void controller.refresh().then(() => controller.refreshToReview())}
+    />
+  );
   return (
     <Modal visible animationType="slide" onRequestClose={close}>
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -1025,7 +1040,7 @@ export function ToReviewList({
               icon="refresh-outline"
               label="Refresh items"
               disabled={collection.busy || state.offline}
-              onPress={() => void controller.refreshToReview()}
+              onPress={() => void refreshAll()}
             />
           }
         />
@@ -1037,7 +1052,7 @@ export function ToReviewList({
               onRefresh={() => {
                 if (collection.busy || state.offline) return;
                 setPulled(true);
-                void controller.refreshToReview().finally(() => setPulled(false));
+                void refreshAll().finally(() => setPulled(false));
               }}
               tintColor={theme.brand.main}
               colors={[theme.brand.main]}
@@ -1229,32 +1244,21 @@ export function ToReviewList({
         {empty ? (
           <ActionBar>
             {nothingHere ? (
-              <View
-                style={
-                  buttonsBeside(['Try again', 'Done'], width, fontScale)
-                    ? { flexDirection: 'row', gap: 8 }
-                    : { gap: 8 }
-                }
-              >
-                <View style={{ flex: 1 }}>
-                  <CompactButton
-                    label="Try again"
-                    variant="tonal"
-                    block
-                    disabled={collection.busy}
-                    // As the app's other Try again: a request that gets through ends offline;
-                    // then To review is read again.
-                    onPress={() =>
-                      void controller.refresh().then(() => controller.refreshToReview())
-                    }
-                  />
+              buttonsBeside(['Try again', 'Done'], width, fontScale) ? (
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>{tryAgain}</View>
+                  <View style={{ flex: 1 }}>{done}</View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <CompactButton label="Done" block onPress={close} />
+              ) : (
+                // Stacked, each at its own height: a flex: 1 wrapper here starts at no height,
+                // and both buttons slid under the bottom edge (#1292).
+                <View style={{ gap: 8 }}>
+                  {tryAgain}
+                  {done}
                 </View>
-              </View>
+              )
             ) : (
-              <CompactButton label="Done" block onPress={close} />
+              done
             )}
           </ActionBar>
         ) : null}
