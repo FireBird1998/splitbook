@@ -417,11 +417,11 @@ export function createReviewRun(options: {
         !item() ||
         !state ||
         !options.current() ||
-        !options.online() ||
         state.pending ||
         (state.busy && !state.editing)
       )
         return;
+      const online = options.online();
       update({
         items: state.items.map((row, i) =>
           i === state.index
@@ -429,8 +429,10 @@ export function createReviewRun(options: {
             : row,
         ),
         acknowledged: false,
-        unkept: null,
+        // Typed as the connection drops, before the field locks: kept for Keep my changes.
+        unkept: online ? null : values,
       });
+      if (!online) return void takeTyped();
       typed = values;
       endPause();
       endPause = timer(() => void flush(), TYPING_PAUSE_MS);
