@@ -944,12 +944,15 @@ export const OptionalDetails = memo(function OptionalDetails({
   locked,
   categoryLocked = locked,
   onChange,
+  onNotesBlur,
 }: {
   controller?: MobileController;
   draft: Pick<ExpenseDraft, 'notes' | 'category'>;
   locked: boolean;
   categoryLocked?: boolean;
   onChange: (patch: Partial<ExpenseDraft>) => void;
+  /** Runs when the member leaves Notes. */
+  onNotesBlur?: () => void;
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
@@ -999,7 +1002,12 @@ export const OptionalDetails = memo(function OptionalDetails({
           {controller ? (
             <SelectedNotesField controller={controller} locked={locked} onChange={onChange} />
           ) : (
-            <NotesField notes={draft.notes} locked={locked} onChange={onChange} />
+            <NotesField
+              notes={draft.notes}
+              locked={locked}
+              onChange={onChange}
+              onBlur={onNotesBlur}
+            />
           )}
         </View>
       ) : null}

@@ -1,7 +1,15 @@
 import { HeldUpdateFooter } from './held-update-snackbar';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import {
+  AppState,
+  KeyboardAvoidingView,
+  Modal,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   buildToReview,
@@ -99,20 +107,32 @@ export function ReviewRunOverlay({ controller }: { controller: MobileController 
   );
   const theme = useTheme();
   const [confirm, confirmation] = useConfirm();
+  // The app going to the background saves what is typed (#1289).
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') void controller.reviewRun()?.flush();
+    });
+    return () => subscription.remove();
+  }, [controller]);
   if (
     !snapshot.run ||
     !snapshot.user ||
     process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED !== 'true'
   )
     return null;
-  const close = () => {
-    if (!controller.getSnapshot().toReview.run?.unkept) return void controller.closeReviewRun();
+  const ask = () =>
     confirm({
       title: 'Leave without your latest changes?',
       message: 'These changes have not been kept. The last kept details stay in To review.',
       action: 'Leave without changes',
       cancel: 'Keep editing',
       onConfirm: () => void controller.closeReviewRun(),
+    });
+  const close = () => {
+    if (controller.getSnapshot().toReview.run?.unkept) return ask();
+    // Close saves what is typed first; typing it couldn't keep is asked about (#1289).
+    void controller.closeReviewRun().then(() => {
+      if (controller.getSnapshot().toReview.run?.unkept) ask();
     });
   };
   return (
@@ -317,9 +337,17 @@ function ReviewRunContent({
   const machine = controller.reviewRun()!;
   const selected = state.items[state.index];
   const [invalid, setInvalid] = useState<string | null>(null);
+  // A field being typed in owns its text (#1289): a save or a read never rewrites, trims or
+  // moves it. Amount keeps what was typed; Description and Notes show the kept text once left.
   const [typedAmount, setTypedAmount] = useState<string | null>(null);
+  const [typedDescription, setTypedDescription] = useState<string | null>(null);
+  const [typedNotes, setTypedNotes] = useState<string | null>(null);
   const [sheet, setSheet] = useState<'date' | 'payers' | 'split' | 'tag' | 'currency' | null>(null);
-  const descriptionStart = useStartWhileUnfocused();
+  // Leaving a typed field saves what is typed at once (#1289).
+  const descriptionStart = useStartWhileUnfocused(() => {
+    setTypedDescription(null);
+    void machine.flush();
+  });
   const descriptionPlaceholder = useDescriptionPlaceholder();
   if (!selected) {
     const summary = summarizeReviewRun(state.outcomes);
@@ -415,15 +443,20 @@ function ReviewRunContent({
   const name = (id: string) => members?.find((row) => row.id === id)?.name ?? 'Group member';
   // The signed-in member is "You", as on Add expense (#434).
   const person = (id: string) => (id === userId ? 'You' : name(id));
-  const change = (patch: Partial<ExpenseDraft>) => {
+  /** A choice saves at once; a key typed in a field saves after a pause in typing (#1289). */
+  const edit = (patch: Partial<ExpenseDraft>, typing = false) => {
     if (locked) return;
     try {
-      void machine.change(reviewFormChange(values, patch));
+      const next = reviewFormChange(values, patch);
+      if (typing) machine.type(next);
+      else void machine.change(next);
       setInvalid(null);
     } catch {
       setInvalid('Correct the entered amount or details before saving.');
     }
   };
+  const change = (patch: Partial<ExpenseDraft>) => edit(patch);
+  const type = (patch: Partial<ExpenseDraft>) => edit(patch, true);
   const created = new Date(item.draft.createdAt),
     now = new Date(controller.reviewNow());
   const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
@@ -560,8 +593,9 @@ function ReviewRunContent({
                 selectionColor={theme.brand.main}
                 onChangeText={(amount) => {
                   setTypedAmount(amount);
-                  change({ amount });
+                  type({ amount });
                 }}
+                onBlur={() => void machine.flush()}
                 style={[
                   field,
                   { flex: 1, minHeight: 48, fontFamily: fonts.mono, fontSize: 32, lineHeight: 38 },
@@ -578,12 +612,15 @@ function ReviewRunContent({
               <TextInput
                 key={`description:${state.changed?.after.revision ?? 0}`}
                 accessibilityLabel="Description"
-                value={form.description}
+                value={typedDescription ?? form.description}
                 editable={!locked}
                 placeholder={descriptionPlaceholder}
                 placeholderTextColor={theme.textMuted}
                 selectionColor={theme.brand.main}
-                onChangeText={(description) => change({ description })}
+                onChangeText={(description) => {
+                  setTypedDescription(description);
+                  type({ description });
+                }}
                 selection={descriptionStart.selection}
                 onFocus={descriptionStart.onFocus}
                 onBlur={descriptionStart.onBlur}
@@ -636,7 +673,19 @@ function ReviewRunContent({
             {shares}
           </CompactText>
         ) : null}
-        <OptionalDetails draft={form} locked={locked} onChange={change} />
+        <OptionalDetails
+          draft={{ ...form, notes: typedNotes ?? form.notes }}
+          locked={locked}
+          onChange={(patch) => {
+            if (patch.notes === undefined) return change(patch);
+            setTypedNotes(patch.notes);
+            type(patch);
+          }}
+          onNotesBlur={() => {
+            setTypedNotes(null);
+            void machine.flush();
+          }}
+        />
         {!!model.needs.length && (
           <Banner tone="warning" message={reason ?? ''}>
             {/* Only a payer that is really missing is one the assistant didn't know (#716). */}

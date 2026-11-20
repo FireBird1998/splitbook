@@ -8894,6 +8894,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       online: () => !snapshot.offline.active && onlineManager.isOnline(),
       client: sharedDrafts,
       refresh: refreshToReview,
+      timer: dependencies.timer,
     });
     reviewRun = machine;
     publish({
@@ -8922,10 +8923,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   const closeReviewRun = async () => {
     const closing = reviewRun;
-    if (snapshot.toReview.run?.editing && !snapshot.offline.active && onlineManager.isOnline()) {
-      await reviewRun?.finishEditing();
-    }
+    const unkept = snapshot.toReview.run?.unkept;
+    // What is typed is saved first, and a typed save under way ends. Offline, what is typed is
+    // kept for Keep my changes, and a save under way isn't waited for (#1289).
+    if (!snapshot.offline.active && onlineManager.isOnline()) await reviewRun?.finishEditing();
+    else reviewRun?.keepUnsent();
     if (closing !== reviewRun) return;
+    // Typing this close couldn't keep stays on screen; the screen asks before leaving it.
+    if (!unkept && snapshot.toReview.run?.unkept) return;
     reviewRun = null;
     publish({ ...snapshot, toReview: { ...snapshot.toReview, run: null } });
   };
