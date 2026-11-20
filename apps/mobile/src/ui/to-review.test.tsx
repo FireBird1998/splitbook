@@ -2285,9 +2285,8 @@ describe.each(['light', 'dark'] as const)('To review’s empty state in %s (#129
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
     expect(f.controller.getSnapshot().offline.active).toBe(true);
-    expect(f.controller.getSnapshot().sharedDraftCollection.message).toContain(
-      'Could not reach Splitbook',
-    );
+    // Offline, the failed read is no longer said at all (#1295).
+    expect(f.controller.getSnapshot().sharedDraftCollection.message).toBe('');
     expect(text(list)).toContain('Nothing on this phone');
     expect(text(list)).toContain(offlineBanner('an assistant'));
     expect(text(list)).not.toContain('Could not reach Splitbook');
