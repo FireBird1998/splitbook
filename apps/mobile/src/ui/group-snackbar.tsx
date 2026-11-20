@@ -1,15 +1,16 @@
 import { useEffect } from 'react';
 import { AccessibilityInfo } from 'react-native';
+import { spendingMonthName, spendingMonthTitle } from '@splitbook/shared/spending-by-day';
 import type { HomeSnackbar as HomeNotice, GroupSnackbar as Notice } from '../data/types';
 import { Snackbar } from './compact/feedback';
 
-/** "View in August", with the year when it differs from the Month shown. */
+/**
+ * "View in August", with the year when it differs from the Month shown. Written from the Month's
+ * key, never a local date (#1286).
+ */
 export function viewMonthLabel(month: string, shown: string | null) {
   const sameYear = shown !== null && shown.slice(0, 4) === month.slice(0, 4);
-  return `View in ${new Date(`${month}-01T12:00:00`).toLocaleDateString(
-    'en',
-    sameYear ? { month: 'long' } : { month: 'long', year: 'numeric' },
-  )}`;
+  return `View in ${sameYear ? spendingMonthName(month) : spendingMonthTitle(month)}`;
 }
 
 /** Dismisses a snackbar after Android's accessibility timeout, which can extend `base`. */

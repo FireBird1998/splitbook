@@ -8,18 +8,19 @@ import {
   type CalendarDay,
 } from '@splitbook/shared/date';
 import { BottomSheet, Chip, CompactText, IconButton, touch, useTap } from './compact';
-import { gregorianDateFormat, readPhoneCalendar, spellDay } from './day-format';
+import { expenseDate } from '@splitbook/shared/expense-day';
+import type { DayKey } from '@splitbook/shared/zoned-calendar';
+import { gregorianDateFormat, readPhoneCalendar, spellDayKey } from './day-format';
 import { useTheme } from './theme';
 
 /** "Monday 19 October 2026": how the sheet names a day, day first on every phone (#640). */
-const fullDay = (date: Date) => spellDay(date, { weekday: 'long', month: 'long', year: true });
+const fullDay = (day: DayKey) => spellDayKey(day, { weekday: 'long', month: 'long', year: true });
 
-/** A YYYY-MM-DD string as a local date, or null when that day doesn't exist. */
-function localDay(value: string) {
+/** Whether a YYYY-MM-DD string names a day that exists. */
+function isRealDay(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return null;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return toDateParam(date) === value ? date : null;
+  if (!match) return false;
+  return toDateParam(new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))) === value;
 }
 
 /** The Month to open on: the date's own, or this Month when the date can't be shown. */
@@ -30,6 +31,10 @@ const monthOf = (value: string) =>
  * The Expense date: Today and Yesterday, then a Month calendar whose week starts on the device
  * locale's first day. Any real date can be chosen, future ones included. A choice applies at
  * once, so Done, swiping down, tapping outside and Back all keep it.
+ *
+ * Its Month, weekdays and days are spelled in UTC from dates at midnight UTC: once the phone's
+ * zone changes while the app runs, Hermes keeps the zone the app started in for its dates while
+ * Intl follows the new one, so a local date spelled in the phone's zone is the day before (#1286).
  */
 export function DateSheet({
   visible,
@@ -49,12 +54,12 @@ export function DateSheet({
   // A drag that starts on a day never picks it (#665).
   const dayTap = useTap();
   const locale = useMemo(() => {
-    const narrow = gregorianDateFormat({ weekday: 'narrow' });
+    const narrow = gregorianDateFormat({ weekday: 'narrow', timeZone: 'UTC' });
     return {
       firstWeekday: localeFirstWeekday(readPhoneCalendar().locale),
       // 7 January 2024 was a Sunday.
       weekdays: Array.from({ length: 7 }, (_, weekday) =>
-        narrow.format(new Date(2024, 0, 7 + weekday)),
+        narrow.format(new Date(Date.UTC(2024, 0, 7 + weekday))),
       ),
     };
   }, []);
@@ -70,27 +75,24 @@ export function DateSheet({
   // The editor re-renders on every keystroke; only a new Month or date is spelled out again,
   // and all of it from one reading of the phone's locale and zone.
   const calendar = useMemo(() => {
-    const heading = gregorianDateFormat({ month: 'long', year: 'numeric' });
-    const digits = gregorianDateFormat({ day: 'numeric' });
-    const [year, number] = month.split('-').map(Number);
+    const heading = gregorianDateFormat({ month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const digits = gregorianDateFormat({ day: 'numeric', timeZone: 'UTC' });
     const grid = monthGrid(month, { firstWeekday: locale.firstWeekday, today, selected: value });
-    const chosen = localDay(value);
     return {
       ...grid,
-      title: heading.format(new Date(year, number - 1, 1)),
+      title: heading.format(expenseDate(`${month}-01`)),
       // Always six rows, so the arrows stay put from Month to Month.
       weeks: Array.from({ length: 6 }, (_, row) =>
         (grid.weeks[row] ?? Array<CalendarDay | null>(7).fill(null)).map((cell) => {
           if (!cell) return null;
-          const date = new Date(year, number - 1, cell.day);
           return {
             ...cell,
-            number: digits.format(date),
-            label: `${fullDay(date)}${cell.today ? ', today' : ''}`,
+            number: digits.format(expenseDate(cell.date)),
+            label: `${fullDay(cell.date)}${cell.today ? ', today' : ''}`,
           };
         }),
       ),
-      chosen: chosen ? fullDay(chosen) : 'Choose a date',
+      chosen: isRealDay(value) ? fullDay(value) : 'Choose a date',
     };
   }, [month, today, value, locale]);
   const choose = (date: string) => {

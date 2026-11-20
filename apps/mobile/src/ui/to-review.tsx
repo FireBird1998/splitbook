@@ -61,7 +61,7 @@ import { groupIcon } from './group-icon';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
-import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import { expenseDay } from '@splitbook/shared/expense-day';
 import { recentDay } from './day-format';
 import { ChangeCurrencySheet, UnlistedCurrencySheet, type UnlistedItem } from './review-currency';
 import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
@@ -160,7 +160,7 @@ function unlistedItem(item: ReviewItemModel, currency: string): UnlistedItem {
   const values = item.accountItem?.draft.values;
   const date =
     values?.date && Number.isFinite(new Date(values.date).getTime())
-      ? recentDay(expenseLocalDate(values.date))
+      ? recentDay(expenseDay(values.date))
       : null;
   return {
     description: values?.description || 'Expense to review',
@@ -264,7 +264,7 @@ function ItemRow({
   const needs = !!item.accountItem || retained;
   const date =
     values?.date && Number.isFinite(new Date(values.date).getTime())
-      ? recentDay(expenseLocalDate(values.date))
+      ? recentDay(expenseDay(values.date))
       : needs
         ? null
         : 'Date needed';
@@ -1444,9 +1444,7 @@ export function ToReviewList({
                   (review) => review.draft.id === item.draft.id,
                 )?.allocation;
                 const detail = [
-                  item.draft.values?.date
-                    ? recentDay(expenseLocalDate(item.draft.values.date))
-                    : null,
+                  item.draft.values?.date ? recentDay(expenseDay(item.draft.values.date)) : null,
                   item.draft.preparedBy.kind === 'assistant'
                     ? `Prepared by ${item.draft.preparedBy.name}`
                     : 'Set aside by you',

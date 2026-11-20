@@ -35,7 +35,7 @@ import {
   SelectedDescriptionField,
   SelectedNotesField,
 } from './expense-input-selection';
-import { spellDay } from './day-format';
+import { nearDayKey, spellDayKey } from './day-format';
 import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
 import {
@@ -95,15 +95,16 @@ export function expenseDateLabel(value: string, now = Date.now()) {
     const shown = value || 'Choose a date';
     return { shown, spoken: shown };
   }
-  const today = new Date(now);
-  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-  const thisYear = date.getFullYear() === today.getFullYear();
-  const short = spellDay(date, { year: !thisYear });
-  const full = spellDay(date, { weekday: 'long', month: 'long', year: true });
-  if (value === localDay(today)) return { shown: `Today, ${short}`, spoken: `Today, ${full}` };
+  // Spelled from the key, never the local date, so no zone moves it (#1286).
+  const today = localDay(new Date(now));
+  const thisYear = value.slice(0, 4) === today.slice(0, 4);
+  const short = spellDayKey(value, { year: !thisYear });
+  const full = spellDayKey(value, { weekday: 'long', month: 'long', year: true });
+  const near = nearDayKey(value, today);
+  if (near === 'Today') return { shown: `Today, ${short}`, spoken: `Today, ${full}` };
   return {
-    shown: thisYear ? spellDay(date, { weekday: 'short' }) : short,
-    spoken: value === localDay(yesterday) ? `Yesterday, ${full}` : full,
+    shown: thisYear ? spellDayKey(value, { weekday: 'short' }) : short,
+    spoken: near === 'Yesterday' ? `Yesterday, ${full}` : full,
   };
 }
 

@@ -42,7 +42,7 @@ import {
   type ExpenseRecordPosition,
 } from '@splitbook/shared/expense-position';
 import { clockTime } from './activity-format';
-import { spellDay, spellMoment } from './day-format';
+import { spellDay, spellDayKey, spellMoment } from './day-format';
 import {
   Badge,
   Banner,
@@ -83,7 +83,7 @@ import { savingNeedsConnection } from './offline-notice';
 import { refreshedLabel } from './refresh-feedback';
 import { Copy, Icon, Label, Panel, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
-import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import { expenseDay } from '@splitbook/shared/expense-day';
 import { SEPARATOR, counted } from '@splitbook/shared/separator';
 
 const categoryIcons: Record<string, IconName> = {
@@ -98,9 +98,12 @@ const categoryIcons: Record<string, IconName> = {
   education: 'school-outline',
 };
 
-/** "Tue 29 Sep 2026", as the record's second line starts: the day it is dated (#437, #640). */
+/**
+ * "Tue 29 Sep 2026", as the record's second line starts: the day it is dated (#437, #640), spelled
+ * from its key so no zone moves it (#1286).
+ */
 const recordDay = (date: string | Date) =>
-  spellDay(expenseLocalDate(date), { weekday: 'short', year: true });
+  spellDayKey(expenseDay(date), { weekday: 'short', year: true });
 /** "29 Sep 2026, 8:02 PM": when something happened to the saved record. */
 const recordMoment = (iso: string | Date) => spellMoment(new Date(iso), { year: true });
 

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { parseActivityPage, type ActivityEvent } from '../data/activity';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import {
@@ -12,7 +13,8 @@ import {
   type ActivityLine,
 } from './activity-format';
 
-const now = new Date(2026, 8, 30, 12).getTime();
+/** Wednesday 30 September 2026 on this device. */
+const today = '2026-09-30';
 const at = (day: number, hour = 10) => new Date(2026, 8, day, hour).toISOString();
 const event = (overrides: Partial<ActivityEvent>): ActivityEvent => ({
   _id: 'd00000000000000000000001',
@@ -27,10 +29,10 @@ const event = (overrides: Partial<ActivityEvent>): ActivityEvent => ({
 describe('Activity days', () => {
   it('labels today and yesterday, and dates older days day-first on a US phone (#640)', () => {
     mockDeviceLocale('en-US');
-    expect(dayLabel(new Date(at(30, 1)), now)).toBe('Today');
-    expect(dayLabel(new Date(at(29, 23)), now)).toBe('Yesterday');
-    expect(dayLabel(new Date(at(27)), now)).toBe('Sun 27 Sep');
-    expect(dayLabel(new Date(2025, 11, 31, 10), now)).toBe('Wed 31 Dec 2025');
+    expect(dayLabel(new Date(at(30, 1)), today)).toBe('Today');
+    expect(dayLabel(new Date(at(29, 23)), today)).toBe('Yesterday');
+    expect(dayLabel(new Date(at(27)), today)).toBe('Sun 27 Sep');
+    expect(dayLabel(new Date(2025, 11, 31, 10), today)).toBe('Wed 31 Dec 2025');
   });
 
   it('keeps newest-first order and starts a new group at each local day', () => {
@@ -41,11 +43,31 @@ describe('Activity days', () => {
       event({ _id: '4', createdAt: at(27) }),
     ];
     expect(
-      activityDays(events, now).map((day) => [day.label, day.events.map((e) => e._id)]),
+      activityDays(events, today).map((day) => [day.label, day.events.map((e) => e._id)]),
     ).toEqual([
       ['Today', ['1', '2']],
       ['Yesterday', ['3']],
-      [dayLabel(new Date(at(27)), now), ['4']],
+      [dayLabel(new Date(at(27)), today), ['4']],
+    ]);
+  });
+
+  // #1286: the app started in India and the phone then moved to Pago Pago. Hermes keeps the zone
+  // it started in for its dates, so the groups are its days, while Intl follows the new zone
+  // (#1283). Each heading names its group's day, so one day never gets two headings.
+  it('heads each day with the day it groups, after the phone’s zone moves while the app runs (#1286)', () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    mockDeviceLocale('en-US');
+    const events = [
+      // 21 Nov at 01:30 in India; 20 Nov in Pago Pago.
+      event({ _id: '1', createdAt: '2026-11-20T20:00:00.000Z' }),
+      // 20 Nov at 22:30 in India.
+      event({ _id: '2', createdAt: '2026-11-20T17:00:00.000Z' }),
+    ];
+    expect(
+      activityDays(events, '2026-11-25').map((day) => [day.key, day.label, day.events.length]),
+    ).toEqual([
+      ['2026-11-21', 'Sat 21 Nov', 1],
+      ['2026-11-20', 'Fri 20 Nov', 1],
     ]);
   });
 });

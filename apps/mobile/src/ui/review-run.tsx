@@ -76,7 +76,7 @@ import { TagSheet } from './tag-sheet';
 import { useStartWhileUnfocused } from './start-while-unfocused';
 import { fonts, useTheme } from './theme';
 import { reviewedItemsLine } from './review-run-copy';
-import { expenseLocalDate } from '@splitbook/shared/expense-day';
+import { expenseDay } from '@splitbook/shared/expense-day';
 import { NO_BREAK_SPACE, SEPARATOR } from '@splitbook/shared/separator';
 
 /**
@@ -729,7 +729,7 @@ function ReviewRunContent({
                     .map((expense) => (
                       <View key={expense._id} style={{ gap: 1 }}>
                         <CompactText variant="caption" tone="secondary">
-                          {recentDay(expenseLocalDate(expense.date))}
+                          {recentDay(expenseDay(expense.date))}
                           {SEPARATOR}
                           {money(expense.amount, expense.currency)}
                         </CompactText>
