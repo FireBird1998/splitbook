@@ -127,6 +127,9 @@ function machine() {
     goOffline: () => {
       online = false;
     },
+    goOnline: () => {
+      online = true;
+    },
     /** A pause in typing long enough to save the Draft (#1289). */
     pause: () => timers.elapse(1000),
     /** The assistant replaces the Draft: a newer version on the server. */
@@ -402,5 +405,50 @@ describe('typing on the review run (#1289)', () => {
     m.pause();
     await tick();
     expect(m.replaced).toEqual(['Lunch at']);
+  });
+});
+
+// #1291: what Close marked as not kept, offline, is kept after all when the save under way comes
+// back with it, once the connection returns.
+describe('a save that lands what was marked not kept (#1291)', () => {
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+  async function markedThenBack(m: ReturnType<typeof machine>) {
+    const release = m.holdWrite();
+    m.run.type(values('Lunch at'));
+    m.pause();
+    await tick();
+    // More typing, handed to the save under way, then the connection drops and Close marks it.
+    m.run.type(values('Lunch at Mezze'));
+    m.pause();
+    m.goOffline();
+    m.run.keepUnsent();
+    expect(m.state().unkept?.description).toBe('Lunch at Mezze');
+    return release;
+  }
+
+  it('clears not kept when the save comes back with everything marked', async () => {
+    const m = machine();
+    const release = await markedThenBack(m);
+    m.goOnline();
+    release();
+    await m.run.finishEditing();
+    expect(m.replaced).toEqual(['Lunch at', 'Lunch at Mezze']);
+    expect(m.state().unkept).toBeNull();
+    expect(m.state()).toMatchObject({ busy: false, editing: false });
+    // Nothing for Keep my changes to send a second time.
+    expect(m.run.retryChange()).toBeUndefined();
+    expect(m.replaced).toHaveLength(2);
+  });
+
+  it('keeps newer typing marked not kept when the save comes back with less', async () => {
+    const m = machine();
+    const release = await markedThenBack(m);
+    // Typed as the connection drops, after what the save holds.
+    m.run.type(values('Lunch at Mezze, Kochi'));
+    m.goOnline();
+    release();
+    await m.run.finishEditing();
+    expect(m.replaced).toEqual(['Lunch at', 'Lunch at Mezze']);
+    expect(m.state().unkept?.description).toBe('Lunch at Mezze, Kochi');
   });
 });
