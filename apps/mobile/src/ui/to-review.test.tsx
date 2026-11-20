@@ -136,6 +136,11 @@ function fixture(
     teaAndBagels?: string[];
     /** A second item missing its amount and date, so two need details (#877). */
     twoIncomplete?: boolean;
+    /**
+     * The member's Connected assistants (#1292). Without it the server has assistants switched
+     * off, as before: their reads answer 404.
+     */
+    assistants?: { name: string; access?: string; excludedGroupIds?: readonly string[] }[];
   } = {},
 ) {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(options.flag ?? true));
@@ -274,6 +279,21 @@ function fixture(
     backend.world.balances[id] = { byCurrency: [] };
   }
   if (options.notificationsEnabled !== false) backend.world.notifications = notificationPreferences;
+  if (options.assistants) {
+    backend.world.connections = {
+      resource: 'http://localhost:4138/api/mcp',
+      connections: options.assistants.map((assistant, index) => ({
+        id: `connection-${index + 1}`,
+        clientId: `https://assistant-${index + 1}.example.test/client.json`,
+        name: assistant.name,
+        access: assistant.access ?? 'Ledger + To review',
+        lastUsedAt: null,
+        excludedGroupIds: [...(assistant.excludedGroupIds ?? [])],
+      })),
+      nextOffset: null,
+    };
+    backend.world.assistantGroups = { groups: [{ id: groupId }, { id: otherGroupId }] };
+  }
   backend.reply('*', '*', async ({ url, init }) => {
     const path = url.pathname;
     if (
@@ -282,6 +302,7 @@ function fixture(
         '/api/auth/get-session',
         '/api/auth/sign-out',
         '/api/notifications/device',
+        ...(options.assistants ? ['/api/auth/mcp/connections', '/api/user/assistant-groups'] : []),
       ].includes(path)
     )
       return undefined;
@@ -445,6 +466,9 @@ function fixture(
     goOffline: () => {
       backend.online = false;
     },
+    goOnline: () => {
+      backend.online = true;
+    },
     addReady: () => {
       items.push(review(row(5, 'Museum', 5)));
     },
@@ -482,6 +506,14 @@ const button = (tree: ReactTestRenderer, label: string) =>
   tree.root.findAll(
     (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === label,
   )[0];
+/** A button on the screen itself, not in one of its sheets, which stay mounted while closed. */
+const screenButton = (tree: ReactTestRenderer, label: string) =>
+  tree.root.findAll((node) => {
+    if (String(node.type) !== 'Pressable' || node.props.accessibilityLabel !== label) return false;
+    for (let up = node.parent; up; up = up.parent)
+      if ((up.type as { name?: string }).name === 'BottomSheet') return false;
+    return true;
+  })[0];
 async function tap(tree: ReactTestRenderer, label: string) {
   await act(async () => {
     expect(button(tree, label), label).toBeDefined();
@@ -738,7 +770,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     // The board's empty state: a check, what appears here, and the way back; nothing to save.
     expect(text(list)).toContain('All caught up');
     expect(button(list, 'Save 0 ready')).toBeUndefined();
-    expect(button(list, 'Back to Expenses')).toBeDefined();
+    expect(screenButton(list, 'Done')).toBeDefined();
   });
   it('opens a tapped item in the guided review, never a raw editor (#435)', async () => {
     const f = fixture();
@@ -1982,3 +2014,224 @@ it.each(['list', 'run'])(
     expect(f.controller.getSnapshot().heldNotificationNotice).toBeNull();
   },
 );
+
+// #1292: the empty state to the approved board (ReviewAndEmpty): one centre line, Done in the
+// Save bar at the bottom edge, and the Connected assistant named only when this phone knows it.
+describe.each(['light', 'dark'] as const)('To review’s empty state in %s (#1292)', (mode) => {
+  const anAssistant =
+    'Nothing is waiting in Maple House. Expenses an assistant prepares, and ones you choose to Finish later, show up here.';
+  const offlineBanner = (who: string) =>
+    `You’re offline. What ${who} prepared and what you set aside show up when you’re back online.`;
+  /** The screen's own scrolling list, not a closed sheet's. */
+  const scroller = (tree: ReactTestRenderer) =>
+    tree.root.findAll((node) => {
+      if (String(node.type) !== 'ScrollView') return false;
+      for (let up = node.parent; up; up = up.parent)
+        if ((up.type as { name?: string }).name === 'BottomSheet') return false;
+      return true;
+    })[0]!;
+  async function emptyList(options: Parameters<typeof fixture>[0] = {}) {
+    const f = fixture({ empty: true, ...options });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.openToReview(groupId);
+    });
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    return { f, list };
+  }
+  async function offline(f: ReturnType<typeof fixture>) {
+    f.goOffline();
+    await act(async () => {
+      await f.controller.refresh();
+    });
+    onlineManager.setOnline(false);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
+  afterEach(() => {
+    onlineManager.setOnline(true);
+  });
+
+  it('names the one Connected assistant that prepares Expenses here, with Done at the bottom edge', async () => {
+    const { f, list } = await emptyList({ assistants: [{ name: 'Claude Desktop' }] });
+    expect(text(list)).toContain(
+      'Nothing is waiting in Maple House. Expenses Claude Desktop prepares, and ones you choose to Finish later, show up here.',
+    );
+    const heading = list.root.find(
+      (node) => String(node.type) === 'Text' && node.props.children === 'All caught up',
+    );
+    expect(heading.props.accessibilityRole).toBe('header');
+    // The sentence: one text, at most 280 dp wide, its lines balanced.
+    const sentence = list.root.find(
+      (node) =>
+        String(node.type) === 'Text' &&
+        String(node.props.children).startsWith('Nothing is waiting in Maple House.'),
+    );
+    expect(sentence.props.textBreakStrategy).toBe('balanced');
+    expect(flatten(sentence.props.style)).toMatchObject({ maxWidth: 280, textAlign: 'center' });
+    // The tile is decorative.
+    expect(
+      list.root.findAll(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.props.importantForAccessibility === 'no-hide-descendants' &&
+          node.props.accessibilityElementsHidden === true,
+      ).length,
+    ).toBeGreaterThan(0);
+    // Done, full width in the bar under what scrolls; the old button has gone.
+    expect(button(list, 'Back to Expenses')).toBeUndefined();
+    expect(screenButton(list, 'Done').props.accessibilityRole).toBe('button');
+    expect(
+      scroller(list).findAll(
+        (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Done',
+      ),
+    ).toEqual([]);
+    expect(text(list)).not.toContain('Only you see these');
+    // Done closes To review, as Back to Expenses did.
+    expect(f.controller.getSnapshot().toReview.groupId).toBe(groupId);
+    await act(async () => {
+      screenButton(list, 'Done').props.onPress();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(f.controller.getSnapshot().toReview.groupId).toBeNull();
+  });
+
+  it.each([
+    ['none connected', []],
+    ['several connected', [{ name: 'Claude Desktop' }, { name: 'Claude Code' }]],
+    ['one that may only read the ledger', [{ name: 'Claude Desktop', access: 'Ledger' }]],
+    ['one left out of this Group', [{ name: 'Claude Desktop', excludedGroupIds: [groupId] }]],
+    ['assistants switched off on the server', undefined],
+  ] as const)('says “an assistant” with %s', async (_, assistants) => {
+    const { list } = await emptyList({ assistants: assistants?.map((a) => ({ ...a })) });
+    expect(text(list)).toContain(anAssistant);
+    expect(text(list)).not.toContain('Claude');
+  });
+
+  it.each([
+    ['one', [{ name: 'Claude Desktop' }], 'Claude Desktop'],
+    ['none', [], 'an assistant'],
+    ['several', [{ name: 'Claude Desktop' }, { name: 'Claude Code' }], 'an assistant'],
+  ] as const)(
+    'shows the offline state with nothing on this phone, its banner naming %s Connected assistant as this phone last read them',
+    async (_, assistants, who) => {
+      const { f, list } = await emptyList({ assistants: assistants.map((a) => ({ ...a })) });
+      await offline(f);
+      expect(text(list)).toContain(offlineBanner(who));
+      expect(text(list)).toContain('Nothing on this phone');
+      expect(text(list)).toContain(
+        'Expenses you set aside on this phone while offline show up here.',
+      );
+      expect(text(list)).not.toContain('All caught up');
+      // No zero counts and no disabled buttons in place of the empty state.
+      expect(text(list)).not.toContain('ready to save');
+      expect(button(list, 'Review one at a time')).toBeUndefined();
+      expect(screenButton(list, 'Try again')).toBeDefined();
+      expect(screenButton(list, 'Done')).toBeDefined();
+      for (const label of ['Try again', 'Done'])
+        expect(
+          scroller(list).findAll(
+            (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === label,
+          ),
+        ).toEqual([]);
+    },
+  );
+
+  it('offline, names the assistant from this phone’s saved copy after a restart, without a request', async () => {
+    const { f } = await emptyList({ assistants: [{ name: 'Claude Desktop' }] });
+    await offline(f);
+    const restarted = f.restart();
+    await act(async () => {
+      await restarted.restore();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const calls = f.calls.length;
+    const list = await render(<ToReviewList controller={restarted} groupId={groupId} />, mode);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(text(list)).toContain(offlineBanner('Claude Desktop'));
+    expect(f.calls.slice(calls).filter((call) => call.includes('/mcp/'))).toEqual([]);
+  });
+
+  it('offline, never names an assistant this phone has no copy of', async () => {
+    const f = fixture({ empty: true, assistants: [{ name: 'Claude Desktop' }] });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.openGroup(groupId);
+    });
+    await offline(f);
+    const calls = f.calls.length;
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(text(list)).toContain(offlineBanner('an assistant'));
+    expect(text(list)).not.toContain('Claude');
+    expect(f.calls).toHaveLength(calls);
+  });
+
+  it('Try again reads To review again once Splitbook can be reached', async () => {
+    const { f, list } = await emptyList({ assistants: [{ name: 'Claude Desktop' }] });
+    // Splitbook couldn't be reached, though the phone has a connection.
+    f.goOffline();
+    await act(async () => {
+      await f.controller.refresh();
+    });
+    expect(text(list)).toContain('Nothing on this phone');
+    f.goOnline();
+    await act(async () => {
+      screenButton(list, 'Try again').props.onPress();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(f.controller.getSnapshot().offline.active).toBe(false);
+    expect(text(list)).toContain('All caught up');
+    expect(text(list)).toContain('Expenses Claude Desktop prepares');
+  });
+
+  it.each([
+    [1.3, 'row'],
+    [2, 'column'],
+  ] as const)(
+    'puts Try again beside Done while both fit, and stacks them, Done lowest: 360 dp at %s',
+    async (fontScale, direction) => {
+      const { f } = await emptyList();
+      await offline(f);
+      let list!: ReactTestRenderer;
+      await act(async () => {
+        setWindow({ width: 360, height: 780, fontScale });
+        list = create(
+          <ThemeContext.Provider value={getSemanticTokens(mode)}>
+            <ToReviewList controller={f.controller} groupId={groupId} />
+          </ThemeContext.Provider>,
+        );
+      });
+      trees.push(list);
+      const pair = list.root.find(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.findAll(
+            (child) =>
+              String(child.type) === 'Pressable' && child.props.accessibilityLabel === 'Try again',
+          ).length === 1 &&
+          node.findAll(
+            (child) =>
+              String(child.type) === 'Pressable' && child.props.accessibilityLabel === 'Done',
+          ).length === 1 &&
+          node.children.length === 2,
+      );
+      expect(flatten(pair.props.style).flexDirection ?? 'column').toBe(direction);
+      const labels = pair
+        .findAll((node) => String(node.type) === 'Pressable')
+        .map((node) => node.props.accessibilityLabel);
+      expect(labels).toEqual(['Try again', 'Done']);
+    },
+  );
+});
