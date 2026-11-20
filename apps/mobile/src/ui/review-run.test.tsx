@@ -1709,6 +1709,7 @@ describe.each(['light', 'dark'] as const)('Typing on the review run in %s (#1289
     field(tree, name).props.onChangeText(`${field(tree, name).props.value}${typed}`);
   const puts = (f: ReturnType<typeof fixture>) =>
     f.calls.filter((call) => call.startsWith('PUT')).length;
+  const screenSave = (tree: ReactTestRenderer) => button(tree, 'Save expense');
   /** Long enough for a save's round trip against the fake server. */
   const roundTrip = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
 
@@ -2130,6 +2131,46 @@ describe.each(['light', 'dark'] as const)('Typing on the review run in %s (#1289
       await roundTrip();
     });
     expect(puts(f)).toBe(1);
+  });
+
+  // #1291: Close marked the typing not kept, offline; the save under way then landed it.
+  it('clears not kept when a save lands what Close marked, once the connection is back (#1291)', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at') await act(async () => key(tree, 'Description', typed));
+    let release!: () => void;
+    f.holdPut(new Promise<void>((resolve) => (release = resolve)));
+    try {
+      await act(async () => {
+        f.pause();
+        await roundTrip();
+      });
+      for (const typed of ' Mezze') await act(async () => key(tree, 'Description', typed));
+      await act(async () => {
+        f.pause();
+        onlineManager.setOnline(false);
+        await roundTrip();
+      });
+      await tap(tree, 'Close review');
+      expect(confirmSheetIn(tree.root).title).toBe('Leave without your latest changes?');
+      await act(async () => confirmSheetIn(tree.root).pressCancel());
+      await act(async () => {
+        onlineManager.setOnline(true);
+        release();
+        await roundTrip();
+        await f.controller.reviewRun()!.finishEditing();
+      });
+      expect(f.items()[0].draft.values!.description).toBe('Lunch at Mezze');
+      expect(puts(f)).toBe(2);
+      expect(f.controller.getSnapshot().toReview.run!.unkept).toBeNull();
+      expect(text(tree)).not.toContain('Your latest changes have not been kept.');
+      expect(screenSave(tree).props.disabled).toBe(false);
+      await tap(tree, 'Close review');
+      expect(f.controller.getSnapshot().toReview.run).toBeNull();
+      expect(puts(f)).toBe(2);
+    } finally {
+      release();
+      onlineManager.setOnline(true);
+    }
   });
 
   it('asks before Close leaves typing it could not keep, offline', async () => {
