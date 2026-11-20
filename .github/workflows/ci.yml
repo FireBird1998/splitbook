@@ -394,8 +394,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The Group header drawing tool has no date logic and its image tests are slow, so it
+      # stays out of this matrix (#1296). PR checks still run it.
       - name: Unit tests in ${{ matrix.tz }} (workspace)
-        run: pnpm test:unit
+        run: pnpm -r --filter '!@splitbook/header-scenes' test:unit
         env:
           TZ: ${{ matrix.tz }}
 

@@ -429,7 +429,8 @@ skipped when `main`'s commit already passed it.
   component lab and the pilot's behaviour, accessibility and visual comparisons (both in a Linux
   Playwright browser container, so screenshots match their baselines), and the production lab
   exclusion. It uploads the report and the review screenshots.
-- **unit-time-zones** (about 2 minutes each): `pnpm test:unit` with `TZ` set, as **Unit tests
+- **unit-time-zones** (about 2 minutes each): `pnpm test:unit` with `TZ` set, without the Group
+  header drawing tool (`tools/header-scenes`: no date logic, slow image tests), as **Unit tests
   (Pacific/Tongatapu)** (UTC+13), **Unit tests (Pacific/Kiritimati)** (UTC+14) and **Unit tests
   (Pacific/Pago_Pago)** (UTC−11), zones without daylight saving time. A failing job names its
   zone.
