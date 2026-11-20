@@ -972,6 +972,8 @@ export function ToReviewList({
   const moreFix = more ? quickFor(more.item)?.fixes.find((fix) => fix.fact === more.fact) : null;
   // An item's ⋮ options, then its delete confirmation: sheets, as the rest of the app has.
   const [pulled, setPulled] = useState(false);
+  /** Try again is checking (#1292): it shows busy, then returns. */
+  const [trying, setTrying] = useState(false);
   const [menu, setMenu] = useState<{ item: ReviewItemModel; confirm: boolean } | null>(null);
   const menuTitle = menu?.item.accountItem?.draft.values?.description || 'Expense to review';
   const payers = quickContext ? bulkPayerItems(model.items) : [];
@@ -1015,9 +1017,16 @@ export function ToReviewList({
       variant="tonal"
       block
       disabled={collection.busy}
+      busy={trying ? 'Trying again…' : undefined}
       // As the app's other Try again: a request that gets through ends offline; then To review
-      // is read again.
-      onPress={() => void controller.refresh().then(() => controller.refreshToReview())}
+      // is read again. Still offline, it returns with nothing more said.
+      onPress={() => {
+        setTrying(true);
+        void controller
+          .refresh()
+          .then(() => controller.refreshToReview())
+          .finally(() => setTrying(false));
+      }}
     />
   );
   return (
@@ -1094,7 +1103,9 @@ export function ToReviewList({
                   />
                 </Banner>
               )}
-              {!!collection.message && (
+              {/* Offline with nothing on this phone, only the offline banner shows: a read that
+                  failed as Splitbook went out of reach isn't said in red as well (#1292). */}
+              {!!collection.message && !nothingHere && (
                 <Banner tone="error" message={memberMessage(collection.message)} />
               )}
               {collection.pending && (
