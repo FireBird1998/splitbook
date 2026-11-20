@@ -16,7 +16,7 @@ import type { MobileTimer } from './types';
  * A pause in typing this long saves the Draft (#1289). Thumbs leave longer gaps than a desktop
  * keyboard, and every flush point saves at once, so nothing waits on this but the quiet save.
  */
-export const TYPING_PAUSE_MS = 1000;
+const TYPING_PAUSE_MS = 1000;
 
 export interface ReviewRunState {
   /** Each item with its Group, and the Group's currency (#512) and kind (#596) the read names. */
