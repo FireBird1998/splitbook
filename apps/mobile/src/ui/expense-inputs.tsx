@@ -29,10 +29,13 @@ export function NotesField({
   notes,
   locked,
   onChange,
+  onBlur,
 }: {
   notes: string;
   locked: boolean;
   onChange: (patch: Partial<ExpenseDraft>) => void;
+  /** Runs when the member leaves Notes. */
+  onBlur?: () => void;
 }) {
   return (
     <Field
@@ -42,6 +45,7 @@ export function NotesField({
       multiline
       editable={!locked}
       onChangeText={(notes) => onChange({ notes })}
+      onBlur={onBlur}
     />
   );
 }

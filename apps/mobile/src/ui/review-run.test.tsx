@@ -1952,6 +1952,23 @@ describe.each(['light', 'dark'] as const)('Typing on the review run in %s (#1289
     expect(field(tree, 'Description').props.value).toBe('Fare');
   });
 
+  // ADR 0006 and 0008: typing not yet saved is held in memory only, never on the phone, and a
+  // sign-out drops it unsent.
+  it('holds unsent typing in memory only, and sign-out drops it unsent', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at Mezze') await act(async () => key(tree, 'Description', typed));
+    const stored = () => JSON.stringify([...f.requests.values.entries()]);
+    expect(stored()).not.toContain('Mezze');
+    await act(async () => {
+      await f.controller.signOut();
+      f.pause();
+      await roundTrip();
+    });
+    expect(f.controller.getSnapshot().toReview.run).toBeNull();
+    expect(puts(f)).toBe(0);
+    expect(stored()).not.toContain('Mezze');
+  });
+
   it('asks before Close leaves typing it could not keep, offline', async () => {
     const { f, tree } = await open();
     for (const typed of ' at Mezze') await act(async () => key(tree, 'Description', typed));

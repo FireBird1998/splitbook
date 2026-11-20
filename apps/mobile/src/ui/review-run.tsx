@@ -1,7 +1,15 @@
 import { HeldUpdateFooter } from './held-update-snackbar';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import {
+  AppState,
+  KeyboardAvoidingView,
+  Modal,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   buildToReview,
@@ -99,20 +107,32 @@ export function ReviewRunOverlay({ controller }: { controller: MobileController 
   );
   const theme = useTheme();
   const [confirm, confirmation] = useConfirm();
+  // The app going to the background saves what is typed (#1289).
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') void controller.reviewRun()?.flush();
+    });
+    return () => subscription.remove();
+  }, [controller]);
   if (
     !snapshot.run ||
     !snapshot.user ||
     process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED !== 'true'
   )
     return null;
-  const close = () => {
-    if (!controller.getSnapshot().toReview.run?.unkept) return void controller.closeReviewRun();
+  const ask = () =>
     confirm({
       title: 'Leave without your latest changes?',
       message: 'These changes have not been kept. The last kept details stay in To review.',
       action: 'Leave without changes',
       cancel: 'Keep editing',
       onConfirm: () => void controller.closeReviewRun(),
+    });
+  const close = () => {
+    if (controller.getSnapshot().toReview.run?.unkept) return ask();
+    // Close saves what is typed first; typing it couldn't keep is asked about (#1289).
+    void controller.closeReviewRun().then(() => {
+      if (controller.getSnapshot().toReview.run?.unkept) ask();
     });
   };
   return (
@@ -323,7 +343,11 @@ function ReviewRunContent({
   const [typedDescription, setTypedDescription] = useState<string | null>(null);
   const [typedNotes, setTypedNotes] = useState<string | null>(null);
   const [sheet, setSheet] = useState<'date' | 'payers' | 'split' | 'tag' | 'currency' | null>(null);
-  const descriptionStart = useStartWhileUnfocused();
+  // Leaving a typed field saves what is typed at once (#1289).
+  const descriptionStart = useStartWhileUnfocused(() => {
+    setTypedDescription(null);
+    void machine.flush();
+  });
   const descriptionPlaceholder = useDescriptionPlaceholder();
   if (!selected) {
     const summary = summarizeReviewRun(state.outcomes);
@@ -571,6 +595,7 @@ function ReviewRunContent({
                   setTypedAmount(amount);
                   type({ amount });
                 }}
+                onBlur={() => void machine.flush()}
                 style={[
                   field,
                   { flex: 1, minHeight: 48, fontFamily: fonts.mono, fontSize: 32, lineHeight: 38 },
@@ -655,6 +680,10 @@ function ReviewRunContent({
             if (patch.notes === undefined) return change(patch);
             setTypedNotes(patch.notes);
             type(patch);
+          }}
+          onNotesBlur={() => {
+            setTypedNotes(null);
+            void machine.flush();
           }}
         />
         {!!model.needs.length && (

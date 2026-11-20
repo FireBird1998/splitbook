@@ -166,11 +166,15 @@ export function createReviewRun(options: {
     await matchingExpenses(latest);
   };
   /**
-   * One action at a time. A typed change's save (`editing`) sets busy and editing in one update
+   * One action at a time, after what is typed is saved. A typed change's save (`editing`) sets
+   * busy and editing in one update
    * and clears both in one update, after the pending-action read: no render shows busy without
    * editing, which locks the Draft's fields and closes Android's keyboard (#1287).
    */
   const run = async (work: () => Promise<void>, editing = false) => {
+    // Every action is a flush point (#1289): Save as Expense, Skip, Delete and the next item
+    // start from what is on screen, kept, never from a version without the member's typing.
+    if (!editing) await settle();
     if (!options.current() || !options.read() || options.read()!.busy || !options.online()) return;
     update({ busy: true, message: null, ...(editing ? { editing: true } : {}) });
     try {
