@@ -1234,6 +1234,54 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       release();
     }
   });
+  it('keeps Description and Amount editable to the end of a typed change’s save (#1287)', async () => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    const field = (name: string) =>
+      tree.root.find(
+        (node) =>
+          String(node.type) === 'TextInput' &&
+          String(node.props.accessibilityLabel).split(',')[0] === name,
+      );
+    // The end of the save: its read of whether an earlier action is pending, held open.
+    const load = f.requests.load;
+    let reached!: () => void, release!: () => void;
+    const arrived = new Promise<void>((resolve) => (reached = resolve));
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let hold = true;
+    f.requests.load = async (...args: Parameters<typeof load>) => {
+      if (hold) {
+        hold = false;
+        reached();
+        await gate;
+      }
+      return load(...args);
+    };
+    try {
+      await act(async () => {
+        field('Description').props.onChangeText('Lunch correction');
+        await arrived;
+      });
+      // Android drops focus and hides the keyboard from a field that stops being editable.
+      expect(field('Description').props.editable).toBe(true);
+      expect(field('Amount').props.editable).toBe(true);
+      await act(async () => {
+        release();
+        await f.controller.reviewRun()!.finishEditing();
+      });
+      expect(field('Description').props.editable).toBe(true);
+      expect(field('Amount').props.editable).toBe(true);
+      expect(f.items()[0].draft.values!.description).toBe('Lunch correction');
+    } finally {
+      release();
+      f.requests.load = load;
+    }
+  });
+
   it('keeps newer typing on screen when the reply to an earlier correction arrives', async () => {
     const f = fixture({ one: true });
     await signIn(f);
