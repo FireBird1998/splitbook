@@ -1,6 +1,7 @@
 import { CancelledError } from '@tanstack/query-core';
 import { z } from 'zod';
 import { assistantGroupsPath, connectedAssistantsPath } from '@splitbook/shared/api-paths';
+import { assistantReachesGroup } from '@splitbook/shared/assistant-reach';
 import { ASSISTANT_RULES } from '@splitbook/shared/assistant-rule';
 import { assistantGroupCount } from '@splitbook/shared/connected-assistant';
 import { connectedAssistantsKey, type QueryKey } from '@splitbook/shared/query-keys';
@@ -47,6 +48,11 @@ export interface ListedAssistant {
   lastUsedAt: string | null;
   /** How many of the member's Groups it reaches; null when they couldn't be read. */
   groups: { reached: number; of: number } | null;
+  /**
+   * The Groups it can't reach (#1292): left out of its reach, or, when the member's Groups were
+   * read, whose admins don't allow assistants.
+   */
+  unreachedGroupIds?: string[];
 }
 
 export interface AssistantsState {
@@ -102,14 +108,46 @@ function host(clientId: string): string | null {
 }
 
 function listed({ connections, groups }: Saved): ListedAssistant[] {
-  return connections.connections.map((connection) => ({
-    id: connection.id,
-    name: connection.name,
-    host: host(connection.clientId),
-    access: connection.access,
-    lastUsedAt: connection.lastUsedAt,
-    groups: groups ? assistantGroupCount(groups.data.groups, connection.excludedGroupIds) : null,
-  }));
+  return connections.connections.map((connection) => {
+    const excluded = connection.excludedGroupIds ?? [];
+    const notAllowed = (groups?.data.groups ?? [])
+      .filter((group) => !assistantReachesGroup({ id: group.id, assistantRule: group.rule }, []))
+      .map((group) => group.id);
+    return {
+      id: connection.id,
+      name: connection.name,
+      host: host(connection.clientId),
+      access: connection.access,
+      lastUsedAt: connection.lastUsedAt,
+      groups: groups ? assistantGroupCount(groups.data.groups, excluded) : null,
+      unreachedGroupIds: [...new Set([...excluded, ...notAllowed])],
+    };
+  });
+}
+
+/**
+ * Who prepares Expenses for the member's To review in a Group, as its words name them (#1292):
+ * the one Connected assistant with To review access that reaches the Group, none, or several.
+ * Unknown before a first read, or offline with no Saved copy: no screen names an assistant this
+ * phone can't know.
+ */
+export type ReviewAssistant =
+  | { kind: 'one'; name: string }
+  | { kind: 'none' }
+  | { kind: 'several' }
+  | { kind: 'unknown' };
+
+export function reviewAssistant(state: AssistantsState, groupId: string): ReviewAssistant {
+  if (state.available === false) return { kind: 'none' };
+  if (!state.assistants) return { kind: 'unknown' };
+  const preparing = state.assistants.filter(
+    (assistant) =>
+      // The server's words: `Ledger + To review` may prepare Expenses for To review.
+      assistant.access.includes('To review') &&
+      !(assistant.unreachedGroupIds ?? []).some((id) => id.toLowerCase() === groupId.toLowerCase()),
+  );
+  if (preparing.length === 1) return { kind: 'one', name: preparing[0]!.name };
+  return preparing.length ? { kind: 'several' } : { kind: 'none' };
 }
 
 /** What the screen needs from the controller that owns it. */
@@ -253,6 +291,25 @@ export function createAssistants(session: AssistantsSession) {
     }
   };
 
+  /**
+   * Offline (#1292): this phone's Saved copy, without a request, when nothing is shown yet. With
+   * none, nothing changes.
+   */
+  const restore = async () => {
+    const owner = session.generation();
+    let key: QueryKey;
+    try {
+      key = connectedAssistantsKey(session.account());
+    } catch {
+      return;
+    }
+    if (session.state().assistants) return;
+    const saved = await engine.saved(key).catch(() => null);
+    const value = saved ? savedSchema.safeParse(saved.value) : null;
+    if (!saved || !value?.success || !session.current(owner) || session.state().assistants) return;
+    show({ source: 'saved', refreshedAt: saved.refreshedAt, value: value.data });
+  };
+
   /** Opens the Disconnect sheet for one of the assistants listed. */
   const ask = (id: string) => {
     const state = session.state();
@@ -312,6 +369,7 @@ export function createAssistants(session: AssistantsSession) {
 
   return {
     read,
+    restore,
     ask,
     cancel,
     disconnect,

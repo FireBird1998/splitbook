@@ -1090,6 +1090,20 @@ export function saveBeside({
 }
 
 /**
+ * Whether two buttons of the bar fit side by side, each half its width, at this text size, by the
+ * widths of their words as `saveBeside` works them out: To review's Try again and Done (#1292).
+ */
+export function buttonsBeside(labels: readonly string[], width: number, fontScale: number) {
+  const size = scaledSp(15, fontScale);
+  // The bar's padding and the row's gap, then half each.
+  const half = (width - 2 * 16 - 8) / 2;
+  return labels.every((label) => {
+    const words = outfitWidth(label);
+    return words !== null && words * SEMIBOLD * size + 2 * 18 <= half;
+  });
+}
+
+/**
  * Pinned under the form, above the keyboard; it names the amount once that is valid. On a short
  * window (`useShortWindow`), what's under Save, such as Finish later, goes beside it in one row,
  * so the bar takes about 76 dp and the form keeps "Who owes what" in view at 360×640 (#646).
