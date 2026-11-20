@@ -4,6 +4,7 @@ import type {
   ExpenseDraftValues,
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
+import { manualTimer } from '../test-utils/transport-faults';
 import { createReviewRun, type ReviewRunState } from './review-run';
 
 // The review run's own machine (#1287): a typed change saves through it, and every state it
@@ -46,6 +47,8 @@ function machine() {
   const replaced: string[] = [];
   let holding: { reached: () => void; gate: Promise<void> } | null = null;
   let writeGate: Promise<void> | null = null;
+  let refreshGate: { reached: () => void; gate: Promise<void> } | null = null;
+  const timers = manualTimer();
   const amounts: (number | undefined)[] = [];
   const client = {
     context: async () => ({}),
@@ -60,6 +63,8 @@ function machine() {
     },
     review: async () => [review(server)],
     replace: async (version: PersistedExpenseDraft, next: ExpenseDraftValues) => {
+      // A write based on an older version is refused, as the server refuses it (#1289).
+      if (version.revision !== server.revision) throw new Error('STALE_REVISION');
       replaced.push(String(next.description));
       amounts.push(next.amount);
       const gate = writeGate;
@@ -96,7 +101,15 @@ function machine() {
     current: () => true,
     online: () => online,
     client: () => client as never,
-    refresh: async () => undefined,
+    refresh: async () => {
+      const held = refreshGate;
+      refreshGate = null;
+      if (held) {
+        held.reached();
+        await held.gate;
+      }
+    },
+    timer: timers.timer,
   });
   return {
     run,
@@ -113,6 +126,28 @@ function machine() {
     },
     goOffline: () => {
       online = false;
+    },
+    /** A pause in typing long enough to save the Draft (#1289). */
+    pause: () => timers.elapse(1000),
+    /** The assistant replaces the Draft: a newer version on the server. */
+    moveServer: () => {
+      server = {
+        ...server,
+        revision: server.revision + 1,
+        changedBy: { kind: 'assistant', name: 'Claude' },
+        values: {
+          ...server.values,
+          amount: 24,
+          paidBy: [{ user: 'a00000000000000000000001', amount: 24 }],
+        },
+      };
+    },
+    /** The next To review read waits until released. */
+    holdRefresh() {
+      let reached!: () => void, release!: () => void;
+      const arrived = new Promise<void>((resolve) => (reached = resolve));
+      refreshGate = { reached, gate: new Promise<void>((resolve) => (release = resolve)) };
+      return { arrived, release };
     },
     /** The next pending-action read waits until released: the end of a save. */
     holdPending() {
@@ -230,4 +265,127 @@ describe('a typed change on the review run (#1287)', () => {
       expect(m.state()).toMatchObject({ busy: false, editing: false, unkept: null });
     },
   );
+});
+
+// #1289: a key typed is shown at once and saved after a pause in typing, or at once at a flush
+// point; nothing typed is lost when a save is refused, offline or under way.
+describe('typing on the review run (#1289)', () => {
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('type shows a burst at once and sends it in one write after the pause', async () => {
+    const m = machine();
+    for (const description of ['Lunch a', 'Lunch at', 'Lunch at Mezze'])
+      m.run.type(values(description));
+    expect(m.state().items[0].item.draft.values?.description).toBe('Lunch at Mezze');
+    await tick();
+    expect(m.replaced).toEqual([]);
+    m.pause();
+    await tick();
+    await m.run.finishEditing();
+    expect(m.replaced).toEqual(['Lunch at Mezze']);
+    expect(m.state().items[0].item.draft).toMatchObject({ revision: 1 });
+    expect(m.published.filter(locksFields)).toEqual([]);
+  });
+
+  it('flush sends what is typed at once and returns its save; the pause then sends nothing', async () => {
+    const m = machine();
+    m.run.type(values('Lunch at'));
+    await m.run.flush();
+    expect(m.replaced).toEqual(['Lunch at']);
+    m.pause();
+    await m.run.finishEditing();
+    expect(m.replaced).toEqual(['Lunch at']);
+    expect(m.run.flush()).toBeUndefined();
+  });
+
+  it('flush offline keeps what is typed for Keep my changes and sends nothing', async () => {
+    const m = machine();
+    m.run.type(values('Lunch at'));
+    m.goOffline();
+    expect(m.run.flush()).toBeUndefined();
+    expect(m.state().unkept?.description).toBe('Lunch at');
+    m.pause();
+    await tick();
+    expect(m.replaced).toEqual([]);
+  });
+
+  it('flush during a save sending its writes adds the typing to that save', async () => {
+    const m = machine();
+    const release = m.holdWrite();
+    m.run.type(values('Lunch at'));
+    const first = m.run.flush();
+    // Its write is under way, held.
+    await tick();
+    m.run.type(values('Lunch at Mezze'));
+    expect(m.run.flush()).toBe(first);
+    release();
+    await m.run.finishEditing();
+    expect(m.replaced).toEqual(['Lunch at', 'Lunch at Mezze']);
+    expect(m.server().values?.description).toBe('Lunch at Mezze');
+  });
+
+  it('finishEditing sends what is typed and waits for its save, with what is typed meanwhile', async () => {
+    const m = machine();
+    const release = m.holdWrite();
+    m.run.type(values('Lunch at'));
+    const done = m.run.finishEditing();
+    await tick();
+    m.run.type(values('Lunch at Mezze'));
+    release();
+    await done;
+    expect(m.replaced).toEqual(['Lunch at', 'Lunch at Mezze']);
+    expect(m.state()).toMatchObject({ busy: false, editing: false, unkept: null });
+  });
+
+  // QA's probe: typing while a refused save reads the newer version joins what wasn't kept.
+  it.each(['leaving the field', 'the pause'] as const)(
+    'keeps typing entered while a refused save recovers for Keep my changes: %s',
+    async (how) => {
+      const m = machine();
+      m.run.type(values('Lunch at'));
+      m.moveServer();
+      const read = m.holdRefresh();
+      m.pause();
+      await read.arrived;
+      m.run.type(values('Lunch at Mezze'));
+      if (how === 'leaving the field') void m.run.flush();
+      else m.pause();
+      read.release();
+      await m.run.finishEditing();
+      expect(m.replaced).toEqual([]);
+      expect(m.state().unkept?.description).toBe('Lunch at Mezze');
+      expect(m.state().changed).toMatchObject({ before: { revision: 0 }, after: { revision: 1 } });
+      expect(m.server().values).toMatchObject({ description: 'Lunch', amount: 24 });
+      await m.run.retryChange();
+      await m.run.finishEditing();
+      expect(m.replaced).toEqual(['Lunch at Mezze']);
+      expect(m.server().revision).toBe(2);
+    },
+  );
+
+  it('keepUnsent keeps what is typed, and what a save under way still holds, for Keep my changes', async () => {
+    const m = machine();
+    const release = m.holdWrite();
+    m.run.type(values('Lunch at'));
+    m.pause();
+    await tick();
+    // Handed to the save under way, then the connection drops.
+    m.run.type(values('Lunch at Mez'));
+    m.pause();
+    m.goOffline();
+    m.run.keepUnsent();
+    expect(m.state().unkept?.description).toBe('Lunch at Mez');
+    // Typed and not yet handed to a save.
+    m.run.type(values('Lunch at Mezze'));
+    m.run.keepUnsent();
+    expect(m.state().unkept?.description).toBe('Lunch at Mezze');
+    release();
+    await m.run.finishEditing();
+    // The save under way comes back unable to send the rest: the newest typing stays kept.
+    expect(m.replaced).toEqual(['Lunch at']);
+    expect(m.state().unkept?.description).toBe('Lunch at Mezze');
+    m.pause();
+    await tick();
+    expect(m.replaced).toEqual(['Lunch at']);
+  });
 });

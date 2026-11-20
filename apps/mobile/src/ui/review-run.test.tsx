@@ -1996,6 +1996,142 @@ describe.each(['light', 'dark'] as const)('Typing on the review run in %s (#1289
     }
   });
 
+  /** The assistant replaces the Draft while the member types: a newer version on the server. */
+  const moveServer = (f: ReturnType<typeof fixture>) => {
+    const original = f.items()[0].draft;
+    f.items()[0].draft = {
+      ...original,
+      revision: original.revision + 1,
+      changedBy: { kind: 'assistant', name: 'Claude' },
+      values: { ...original.values, amount: 24, paidBy: [{ user: user.id, amount: 24 }] },
+    };
+  };
+
+  // QA's probe: typing while a refused save reads the newer version joins what wasn't kept.
+  it('keeps typing entered while a refused save recovers, for Keep my changes', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at') await act(async () => key(tree, 'Description', typed));
+    moveServer(f);
+    let release!: () => void;
+    f.holdRead(new Promise<void>((resolve) => (release = resolve)));
+    try {
+      await act(async () => {
+        f.pause();
+        await roundTrip();
+      });
+      for (const typed of ' Mezze') await act(async () => key(tree, 'Description', typed));
+      await act(async () => {
+        field(tree, 'Description').props.onBlur();
+        release();
+        await roundTrip();
+        await f.controller.reviewRun()!.finishEditing();
+      });
+      expect(puts(f)).toBe(1);
+      expect(f.items()[0].draft.values).toMatchObject({ description: 'Lunch', amount: 24 });
+      expect(f.controller.getSnapshot().toReview.run!.unkept?.description).toBe('Lunch at Mezze');
+      expect(text(tree)).toContain('Claude changed the amount a moment ago: ₹12.34 → ₹24.00');
+      await tap(tree, 'Keep my changes');
+      expect(f.items()[0].draft.values!.description).toBe('Lunch at Mezze');
+    } finally {
+      release();
+    }
+  });
+
+  it.each(['typed, not yet sent', 'handed to the save under way'] as const)(
+    'asks before Close offline leaves typing a save under way holds: %s',
+    async (where) => {
+      const { f, tree } = await open();
+      for (const typed of ' at') await act(async () => key(tree, 'Description', typed));
+      let release!: () => void;
+      f.holdPut(new Promise<void>((resolve) => (release = resolve)));
+      try {
+        await act(async () => {
+          f.pause();
+          await roundTrip();
+        });
+        expect(puts(f)).toBe(1);
+        for (const typed of ' Mezze') await act(async () => key(tree, 'Description', typed));
+        if (where === 'handed to the save under way') await act(async () => f.pause());
+        await act(async () => {
+          onlineManager.setOnline(false);
+          await roundTrip();
+        });
+        await tap(tree, 'Close review');
+        expect(f.controller.getSnapshot().toReview.run).not.toBeNull();
+        expect(f.controller.getSnapshot().toReview.run!.unkept?.description).toBe('Lunch at Mezze');
+        expect(confirmSheetIn(tree.root).title).toBe('Leave without your latest changes?');
+        await act(async () => {
+          confirmSheetIn(tree.root).pressAction();
+          release();
+          await roundTrip();
+        });
+        expect(f.controller.getSnapshot().toReview.run).toBeNull();
+        await act(async () => {
+          onlineManager.setOnline(true);
+          f.pause();
+          await roundTrip();
+        });
+        expect(puts(f)).toBe(1);
+        expect(f.items()[0].draft.values!.description).toBe('Lunch at');
+      } finally {
+        release();
+        onlineManager.setOnline(true);
+      }
+    },
+  );
+
+  // A flush point never goes on from a version without the member's typing: a refused or
+  // offline save keeps the typing for Keep my changes, and the action stops.
+  it.each(
+    (['Save expense', 'Skip for now', 'Delete item', 'Close review'] as const).flatMap((action) =>
+      (['refused', 'offline'] as const).map((failure) => [action, failure] as const),
+    ),
+  )('stops %s when the typed save is %s, keeping the typing', async (action, failure) => {
+    const { f, tree } = await open({});
+    for (const typed of ' at Mezze') await act(async () => key(tree, 'Description', typed));
+    if (action === 'Delete item') await tap(tree, 'Delete');
+    try {
+      if (failure === 'refused') moveServer(f);
+      else
+        await act(async () => {
+          onlineManager.setOnline(false);
+          await roundTrip();
+        });
+      await tap(tree, action);
+      await act(roundTrip);
+      const run = f.controller.getSnapshot().toReview.run!;
+      expect(run).not.toBeNull();
+      expect(run.index).toBe(0);
+      expect(run.unkept?.description).toBe('Lunch at Mezze');
+      expect(f.saves).toHaveLength(0);
+      expect(f.calls.some((call) => call.startsWith('DELETE'))).toBe(false);
+      expect(f.items()[0].draft.values!.description).toBe('Lunch');
+      if (failure === 'refused') {
+        expect(puts(f)).toBe(1);
+        expect(text(tree)).toContain('Claude changed the amount a moment ago: ₹12.34 → ₹24.00');
+      } else expect(puts(f)).toBe(0);
+      if (action === 'Close review')
+        expect(confirmSheetIn(tree.root).title).toBe('Leave without your latest changes?');
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it('saves what is typed when the Close button is pressed, and the pause then does nothing', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at Mezze') await act(async () => key(tree, 'Description', typed));
+    await tap(tree, 'Close review');
+    await act(roundTrip);
+    expect(f.controller.getSnapshot().toReview.run).toBeNull();
+    expect(puts(f)).toBe(1);
+    expect(f.items()[0].draft.values!.description).toBe('Lunch at Mezze');
+    await act(async () => {
+      f.pause();
+      await roundTrip();
+    });
+    expect(puts(f)).toBe(1);
+  });
+
   it('asks before Close leaves typing it could not keep, offline', async () => {
     const { f, tree } = await open();
     for (const typed of ' at Mezze') await act(async () => key(tree, 'Description', typed));
@@ -2015,6 +2151,13 @@ describe.each(['light', 'dark'] as const)('Typing on the review run in %s (#1289
       expect(f.controller.getSnapshot().toReview.run).toBeNull();
       expect(puts(f)).toBe(0);
       expect(f.items()[0].draft.values!.description).toBe('Lunch');
+      // Back online, the pause sends nothing for a run that has closed.
+      await act(async () => {
+        onlineManager.setOnline(true);
+        f.pause();
+        await roundTrip();
+      });
+      expect(puts(f)).toBe(0);
     } finally {
       onlineManager.setOnline(true);
     }
