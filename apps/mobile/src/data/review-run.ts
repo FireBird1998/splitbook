@@ -72,6 +72,8 @@ export function createReviewRun(options: {
    */
   let typed: ExpenseDraftValues | null = null;
   let endPause = () => {};
+  /** A refused save reads the latest version: what is typed meanwhile joins what it couldn't keep. */
+  let recovering = false;
   const takeTyped = () => {
     endPause();
     const values = typed;
@@ -224,14 +226,15 @@ export function createReviewRun(options: {
     });
     await load();
   };
-  const refresh = async () => {
+  /** `overTyping`: a refused save shows the newer version even while typing waits (#1289). */
+  const refresh = async (overTyping = false) => {
     await options.refresh();
     const selected = item();
     if (!selected || !options.current() || !options.online()) return;
     const reviews = await options.client(selected.groupId).review([selected.item.draft.id]);
     if (!options.current()) return;
     const latest = reviews[0];
-    if (latest && !edits?.pending && !typed) {
+    if (latest && !edits?.pending && (overTyping || !typed)) {
       const state = options.read()!;
       update({
         items: state.items.map((row, i) => (i === state.index ? { ...row, item: latest } : row)),
@@ -315,8 +318,8 @@ export function createReviewRun(options: {
         }
         if (!options.current()) return;
         if (result.kind === 'interrupted') {
-          // Typed since is newer than what this save held (#1289).
-          const input = takeTyped() ?? result.input;
+          // Typed since, or kept offline while it was under way, is newer than what it held (#1289).
+          const input = takeTyped() ?? options.read()?.unkept ?? result.input;
           const state = options.read()!;
           update({
             unkept: input,
@@ -329,16 +332,21 @@ export function createReviewRun(options: {
               'Your latest changes have not been kept. Connect and choose Keep my changes to try again.',
           });
         } else if (result.kind === 'failed') {
-          const latestEntries =
+          const entries =
             takeTyped() ??
             options.read()?.items[options.read()!.index]?.item.draft.values ??
             result.input;
           queue.clear();
+          // Typing while the latest version is read waits, and joins what wasn't kept (#1289).
+          recovering = true;
           try {
-            await refresh();
+            await refresh(true);
           } catch {
             /* Keep the unsent correction visible when reads also fail. */
+          } finally {
+            recovering = false;
           }
+          const latestEntries = takeTyped() ?? options.read()?.unkept ?? entries;
           update({
             unkept: latestEntries,
             message:
@@ -365,6 +373,11 @@ export function createReviewRun(options: {
    * (#1289). It returns the typed save under way, if there is one.
    */
   const flush = (): Promise<void> | undefined => {
+    // A refused save is reading the latest version: what is typed waits for it, kept after.
+    if (recovering) {
+      endPause();
+      return writing;
+    }
     const values = takeTyped();
     if (!values) return options.read()?.editing ? writing : undefined;
     // A save sending its writes takes it, offline too: what it can't send it keeps for Keep my
@@ -439,11 +452,25 @@ export function createReviewRun(options: {
     },
     /** A choice, or Keep my changes: saved at once, with what is typed, which these values hold. */
     change(values: ExpenseDraftValues): Promise<void> | undefined {
+      // A refused save is reading the latest version: the choice waits with what is typed.
+      if (recovering) {
+        this.type(values);
+        return writing;
+      }
       const saving = send(values);
       if (saving) takeTyped();
       return saving;
     },
     flush,
+    /**
+     * Closing offline (#1289): what is typed, and what the save under way still holds to send,
+     * is kept for Keep my changes now, so the screen asks before leaving it.
+     */
+    keepUnsent() {
+      const state = options.read();
+      const unsent = takeTyped() !== null || (flushing && !!edits?.pending) || next !== null;
+      if (unsent && state) update({ unkept: state.items[state.index]?.item.draft.values ?? null });
+    },
     retryChange() {
       const unkept = options.read()?.unkept;
       if (unkept) return this.change(unkept);

@@ -8927,7 +8927,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // What is typed is saved first, and a typed save under way ends. Offline, what is typed is
     // kept for Keep my changes, and a save under way isn't waited for (#1289).
     if (!snapshot.offline.active && onlineManager.isOnline()) await reviewRun?.finishEditing();
-    else void reviewRun?.flush();
+    else reviewRun?.keepUnsent();
     if (closing !== reviewRun) return;
     // Typing this close couldn't keep stays on screen; the screen asks before leaving it.
     if (!unkept && snapshot.toReview.run?.unkept) return;

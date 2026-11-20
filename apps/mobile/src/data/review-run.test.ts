@@ -363,6 +363,21 @@ describe('typing on the review run (#1289)', () => {
     },
   );
 
+  it('keeps a choice made while a refused save recovers for Keep my changes, with the typing', async () => {
+    const m = machine();
+    m.run.type(values('Lunch at'));
+    m.moveServer();
+    const read = m.holdRefresh();
+    m.pause();
+    await read.arrived;
+    // A sheet's choice, on top of what is typed.
+    void m.run.change({ ...values('Lunch at'), category: 'food' });
+    read.release();
+    await m.run.finishEditing();
+    expect(m.replaced).toEqual([]);
+    expect(m.state().unkept).toMatchObject({ description: 'Lunch at', category: 'food' });
+  });
+
   it('keepUnsent keeps what is typed, and what a save under way still holds, for Keep my changes', async () => {
     const m = machine();
     const release = m.holdWrite();
