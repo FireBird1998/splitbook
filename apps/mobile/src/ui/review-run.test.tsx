@@ -1969,6 +1969,33 @@ describe.each(['light', 'dark'] as const)('Typing on the review run in %s (#1289
     expect(stored()).not.toContain('Mezze');
   });
 
+  it('keeps a key typed as the connection drops for Keep my changes, and never sends it unasked', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at Mez') await act(async () => key(tree, 'Description', typed));
+    try {
+      await act(async () => {
+        // The field hasn't locked yet when the next key lands.
+        onlineManager.setOnline(false);
+        key(tree, 'Description', 'z');
+        f.pause();
+        await roundTrip();
+      });
+      expect(f.controller.getSnapshot().toReview.run!.unkept?.description).toBe(
+        'Lunch at Mez' + 'z',
+      );
+      expect(text(tree)).toContain('Your latest changes have not been kept.');
+      await act(async () => {
+        onlineManager.setOnline(true);
+        await roundTrip();
+      });
+      expect(puts(f)).toBe(0);
+      await tap(tree, 'Keep my changes');
+      expect(f.items()[0].draft.values!.description).toBe('Lunch at Mezz');
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it('asks before Close leaves typing it could not keep, offline', async () => {
     const { f, tree } = await open();
     for (const typed of ' at Mezze') await act(async () => key(tree, 'Description', typed));
