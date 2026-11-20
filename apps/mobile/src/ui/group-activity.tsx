@@ -1,4 +1,4 @@
-import { ListDayHeader } from './list-day-header';
+import { ListDayHeader, currentDayKey } from './list-day-header';
 import type { RowPlaces } from './return-scroll';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
@@ -299,7 +299,8 @@ function ActivityList({
   onRowsLayout,
   onSelect,
 }: GroupActivityProps) {
-  const now = dayKey ? new Date(`${dayKey}T12:00:00`).getTime() : (legacyNow ?? Date.now());
+  // This device's day, as App reads it each render, or from the clock a test gives.
+  const today = dayKey ?? currentDayKey(new Date(legacyNow ?? Date.now()));
   const theme = useTheme();
   const loading = state.status === 'loading';
   // Events listed with their pages: they stay shown while they're read again (M1-3), and after
@@ -525,7 +526,7 @@ function ActivityList({
           </Card>
         ) : state.events.length ? (
           <Card onBodyOffset={(body) => place({ body })}>
-            {activityDays(rows, now).map((day, index) => (
+            {activityDays(rows, today).map((day, index) => (
               <View
                 key={day.key}
                 onLayout={({ nativeEvent }) => place({ day: day.key, y: nativeEvent.layout.y })}

@@ -18,7 +18,8 @@ import {
   memberNamer,
   type ExpenseHistoryChange,
 } from '../data/expense-history';
-import { nearDay, spellDay, spellTime } from './day-format';
+import type { DayKey } from '@splitbook/shared/zoned-calendar';
+import { nearDayKey, spellDay, spellTime } from './day-format';
 
 /** One Activity row in plain language: "{actor} {verb} {subject} {complement}" and its details. */
 export interface ActivityLine {
@@ -61,26 +62,27 @@ export interface ActivityDay {
 const localDayKey = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-/** "Today", "Yesterday", or a short weekday and date such as "Sun 27 Sep", day first (#640). */
-export function dayLabel(date: Date, now: number) {
+/**
+ * "Today", "Yesterday", or a short weekday and date such as "Sun 27 Sep", day first (#640).
+ * `today` is this device's day as a key, compared as one, never read into a date (#1286).
+ */
+export function dayLabel(date: Date, today: DayKey) {
+  const day = localDayKey(date);
   return (
-    nearDay(date, now) ??
-    spellDay(date, {
-      weekday: 'short',
-      year: date.getFullYear() !== new Date(now).getFullYear(),
-    })
+    nearDayKey(day, today) ??
+    spellDay(date, { weekday: 'short', year: day.slice(0, 4) !== today.slice(0, 4) })
   );
 }
 
 /** Events keep the server's newest-first order, grouped under their local day. */
-export function activityDays(events: ActivityEvent[], now: number): ActivityDay[] {
+export function activityDays(events: ActivityEvent[], today: DayKey): ActivityDay[] {
   const days: ActivityDay[] = [];
   for (const event of events) {
     const date = new Date(event.createdAt);
     const key = localDayKey(date);
     const last = days[days.length - 1];
     if (last?.key === key) last.events.push(event);
-    else days.push({ key, label: dayLabel(date, now), events: [event] });
+    else days.push({ key, label: dayLabel(date, today), events: [event] });
   }
   return days;
 }

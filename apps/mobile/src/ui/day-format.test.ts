@@ -112,8 +112,8 @@ describe('Android’s one day order (#640)', () => {
     expect(nearDay(new Date(2026, 9, 19, 0, 5), now)).toBe('Today');
     expect(nearDay(new Date(2026, 9, 18, 23, 55), now)).toBe('Yesterday');
     expect(nearDay(new Date(2026, 9, 17), now)).toBeNull();
-    expect(recentDay(new Date(2026, 9, 18), now)).toBe('Yesterday');
-    expect(recentDay(new Date(2026, 9, 17), now)).toBe('17 Oct 2026');
+    expect(recentDay('2026-10-18', now)).toBe('Yesterday');
+    expect(recentDay('2026-10-17', now)).toBe('17 Oct 2026');
   });
 });
 

@@ -1,5 +1,7 @@
 import { gregorianLocale, toDateParam } from '@splitbook/shared/date';
+import { expenseDate, expenseDay } from '@splitbook/shared/expense-day';
 import { NO_BREAK_SPACE } from '@splitbook/shared/separator';
+import type { DayKey } from '@splitbook/shared/zoned-calendar';
 
 /** The phone's locale, e.g. "en-IN" or "fa-IR", and its time zone. */
 export interface PhoneCalendar {
@@ -129,14 +131,26 @@ export const spellTime = (date: Date) =>
 export const spellMoment = (date: Date, spelling: DaySpelling = {}) =>
   `${spellDay(date, { ...spelling, together: true })}, ${spellTime(date)}`;
 
-/** "Today" or "Yesterday" when the day is one of them on this device, otherwise null. */
-export function nearDay(date: Date, now: number) {
-  const today = new Date(now);
-  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-  const day = toDateParam(date);
-  return day === toDateParam(today) ? 'Today' : day === toDateParam(yesterday) ? 'Yesterday' : null;
+/**
+ * A calendar day's key (`YYYY-MM-DD`), such as an Expense's date or a Month's day, spelled as
+ * `spellDay` spells a day (#1286). It is read at midnight UTC and spelled in UTC, so no zone can
+ * move it. Once the phone's zone changes while the app runs, Hermes keeps the zone the app started
+ * in for its dates while Intl follows the new one (#1283): a key read into a local date and
+ * spelled in the phone's zone names the day before.
+ */
+export const spellDayKey = (day: DayKey, spelling: Omit<DaySpelling, 'timeZone'> = {}) =>
+  spellDay(expenseDate(day), { ...spelling, timeZone: 'UTC' });
+
+/** "Today" or "Yesterday" when the day `day` names is one of them, by `today`'s key; otherwise null. */
+export function nearDayKey(day: DayKey, today: DayKey) {
+  const yesterday = expenseDay(expenseDate(today).getTime() - 24 * 60 * 60 * 1000);
+  return day === today ? 'Today' : day === yesterday ? 'Yesterday' : null;
 }
 
-/** "Today", "Yesterday", or the day with its year: "19 Oct 2026". */
-export const recentDay = (date: Date, now = Date.now()) =>
-  nearDay(date, now) ?? spellDay(date, { year: true });
+/** "Today" or "Yesterday" when the moment's day is one of them on this device, otherwise null. */
+export const nearDay = (date: Date, now: number) =>
+  nearDayKey(toDateParam(date), toDateParam(new Date(now)));
+
+/** "Today", "Yesterday", or the day a key names with its year: "19 Oct 2026". */
+export const recentDay = (day: DayKey, now = Date.now()) =>
+  nearDayKey(day, toDateParam(new Date(now))) ?? spellDayKey(day, { year: true });

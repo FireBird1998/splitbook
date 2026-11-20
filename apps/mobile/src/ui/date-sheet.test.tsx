@@ -326,6 +326,8 @@ describe('Date sheet after the phone’s zone moves while the app runs (#1286)',
 
   it('heads the Month, letters its weeks, and numbers and names its days from their keys', () => {
     restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+    // Midday on 30 September in UTC: the 30th in India too, whatever zone the run is in.
+    vi.setSystemTime(Date.parse('2026-09-30T12:00:00.000Z'));
     const sheet = render('2026-09-15');
     expect(sheet.month()).toBe('September 2026');
     expect(text(sheet.weekdays())).toBe('SMTWTFS');

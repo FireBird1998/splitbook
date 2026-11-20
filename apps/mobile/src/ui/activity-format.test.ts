@@ -12,7 +12,8 @@ import {
   type ActivityLine,
 } from './activity-format';
 
-const now = new Date(2026, 8, 30, 12).getTime();
+/** Wednesday 30 September 2026 on this device. */
+const today = '2026-09-30';
 const at = (day: number, hour = 10) => new Date(2026, 8, day, hour).toISOString();
 const event = (overrides: Partial<ActivityEvent>): ActivityEvent => ({
   _id: 'd00000000000000000000001',
@@ -27,10 +28,10 @@ const event = (overrides: Partial<ActivityEvent>): ActivityEvent => ({
 describe('Activity days', () => {
   it('labels today and yesterday, and dates older days day-first on a US phone (#640)', () => {
     mockDeviceLocale('en-US');
-    expect(dayLabel(new Date(at(30, 1)), now)).toBe('Today');
-    expect(dayLabel(new Date(at(29, 23)), now)).toBe('Yesterday');
-    expect(dayLabel(new Date(at(27)), now)).toBe('Sun 27 Sep');
-    expect(dayLabel(new Date(2025, 11, 31, 10), now)).toBe('Wed 31 Dec 2025');
+    expect(dayLabel(new Date(at(30, 1)), today)).toBe('Today');
+    expect(dayLabel(new Date(at(29, 23)), today)).toBe('Yesterday');
+    expect(dayLabel(new Date(at(27)), today)).toBe('Sun 27 Sep');
+    expect(dayLabel(new Date(2025, 11, 31, 10), today)).toBe('Wed 31 Dec 2025');
   });
 
   it('keeps newest-first order and starts a new group at each local day', () => {
@@ -41,11 +42,11 @@ describe('Activity days', () => {
       event({ _id: '4', createdAt: at(27) }),
     ];
     expect(
-      activityDays(events, now).map((day) => [day.label, day.events.map((e) => e._id)]),
+      activityDays(events, today).map((day) => [day.label, day.events.map((e) => e._id)]),
     ).toEqual([
       ['Today', ['1', '2']],
       ['Yesterday', ['3']],
-      [dayLabel(new Date(at(27)), now), ['4']],
+      [dayLabel(new Date(at(27)), today), ['4']],
     ]);
   });
 });

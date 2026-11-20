@@ -1,11 +1,11 @@
 import { sameSelection } from './use-mobile-snapshot';
-import { ListDayHeader } from './list-day-header';
+import { ListDayHeader, currentDayKey } from './list-day-header';
 import type { RowPlaces } from './return-scroll';
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
-import { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
+import { shiftMonthKey } from '@splitbook/shared/date';
 import { mobileExpensePosition } from '../data/expense-position';
 import type {
   ExpenseWindowSummary,
@@ -39,8 +39,10 @@ import { ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
 import { useTheme } from './theme';
-import { expenseLocalDate } from '@splitbook/shared/expense-day';
-import { nearDay, spellDay } from './day-format';
+import { expenseDay } from '@splitbook/shared/expense-day';
+import { spendingMonthName, spendingMonthTitle } from '@splitbook/shared/spending-by-day';
+import type { DayKey } from '@splitbook/shared/zoned-calendar';
+import { nearDayKey, spellDayKey } from './day-format';
 import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator';
 
 const categoryIcons: Record<string, IconName> = {
@@ -55,38 +57,29 @@ const categoryIcons: Record<string, IconName> = {
   education: 'school-outline',
 };
 
-/** "September 2026", or "All time". */
+/** "September 2026", or "All time": written from the Month's key, never a local date (#1286). */
 export function monthLabel(month: string | null) {
-  return month
-    ? new Date(`${month}-01T12:00:00`).toLocaleDateString('en', { month: 'long', year: 'numeric' })
-    : 'All time';
+  return month ? spendingMonthTitle(month) : 'All time';
 }
-
-const localDayKey = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 /**
  * "Today · Wed 30 Sep", "Yesterday · Tue 29 Sep" or "Sun 27 Sep", day first on every phone,
- * with the year when it isn't this year (#640).
+ * with the year when it isn't this year (#640). Both days are keys, so no zone moves them (#1286).
  */
-export function expenseDayLabel(date: Date, now: number) {
-  const label = spellDay(date, {
-    weekday: 'short',
-    year: date.getFullYear() !== new Date(now).getFullYear(),
-  });
-  const near = nearDay(date, now);
+export function expenseDayLabel(day: DayKey, today: DayKey) {
+  const label = spellDayKey(day, { weekday: 'short', year: day.slice(0, 4) !== today.slice(0, 4) });
+  const near = nearDayKey(day, today);
   return near ? `${near}${SEPARATOR}${label}` : label;
 }
 
 /** Expenses keep the server's newest-first order, grouped under the day they are dated (#437). */
-export function expenseDays(expenses: MobileExpense[], now: number) {
+export function expenseDays(expenses: MobileExpense[], today: DayKey) {
   const days: { key: string; label: string; expenses: MobileExpense[] }[] = [];
   for (const expense of expenses) {
-    const date = expenseLocalDate(expense.date);
-    const key = localDayKey(date);
+    const key = expenseDay(expense.date);
     const last = days[days.length - 1];
     if (last?.key === key) last.expenses.push(expense);
-    else days.push({ key, label: expenseDayLabel(date, now), expenses: [expense] });
+    else days.push({ key, label: expenseDayLabel(key, today), expenses: [expense] });
   }
   return days;
 }
@@ -360,7 +353,7 @@ const ExpenseSummary = memo(function ExpenseSummary({
     ? ''
     : month === current
       ? ' this month'
-      : ` in ${new Date(`${month}-01T12:00:00`).toLocaleDateString('en', { month: 'long' })}`;
+      : ` in ${spendingMonthName(month)}`;
   return (
     <Card>
       {household ? (
@@ -608,7 +601,8 @@ export const GroupExpensesView = memo(
     /** The All time card's currency switch on a Trip in more than one currency (#730). */
     onChooseTripCurrency?: (currency: string) => void;
   }) {
-    const now = dayKey ? new Date(`${dayKey}T12:00:00`).getTime() : (legacyNow ?? Date.now());
+    // This device's day, as App reads it each render, or from the clock a test gives.
+    const today = dayKey ?? currentDayKey(new Date(legacyNow ?? Date.now()));
     const theme = useTheme();
     const { expenses } = state;
     // The latest handler, behind one that never changes, so no row renders again for it.
@@ -740,7 +734,7 @@ export const GroupExpensesView = memo(
           offline={offline}
           loading={!listed && expenses.status !== 'error'}
           opening={firstRead}
-          current={currentMonthKey(new Date(now))}
+          current={today.slice(0, 7)}
           onSelectMonth={choose}
         />
         {listed ? (
@@ -802,7 +796,7 @@ export const GroupExpensesView = memo(
             )
           ) : expenses.data.length ? (
             <Card onBodyOffset={(body) => place({ body })}>
-              {expenseDays(expenses.data, now).map((day) => (
+              {expenseDays(expenses.data, today).map((day) => (
                 <View
                   key={day.key}
                   onLayout={({ nativeEvent }) => place({ day: day.key, y: nativeEvent.layout.y })}

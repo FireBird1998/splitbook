@@ -683,7 +683,7 @@ describe('Expense rows', () => {
       mockDeviceLocale('en-US');
       const stored = { ...groceries, date: new Date('2026-09-28T00:00:00.000Z') };
       // Midday on the 30th there, so the 28th is neither today nor yesterday.
-      const [day] = expenseDays([stored], new Date(2026, 8, 30, 12).getTime());
+      const [day] = expenseDays([stored], '2026-09-30');
       expect(day.key).toBe('2026-09-28');
       expect(day.label).toBe('Mon 28 Sep');
     }));
@@ -1647,11 +1647,13 @@ describe.each(['light', 'dark'] as const)('the Month bar at 200% in %s (#867)', 
 describe('after the phone’s zone moves while the app runs (#1286)', () => {
   let restore = () => {};
   afterEach(() => restore());
+  // Midday on 30 September in UTC: the 30th in India too, whatever zone the run is in.
+  const midday = Date.parse('2026-09-30T12:00:00.000Z');
 
   it('names the Month on its bar, its summary and its day headings from their keys', () => {
     restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
     mockDeviceLocale('en-US');
-    const { root } = view();
+    const { root } = view({ now: midday });
     expect(headings(root)).toEqual(
       expect.arrayContaining([
         'September 2026',
@@ -1661,19 +1663,27 @@ describe('after the phone’s zone moves while the app runs (#1286)', () => {
       ]),
     );
     remount();
-    const august = view({ state: financial({}, '2026-08') });
+    const august = view({ state: financial({}, '2026-08'), now: midday });
     expect(headings(august.root)).toContain('August 2026');
     expect(text(august.root)).toContain('14 expenses in August');
   });
 
   it('names the Month in an empty Month and one not saved on this phone', () => {
     restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
-    const empty = view({ state: financial({ data: [] }) });
+    const empty = view({ state: financial({ data: [] }), now: midday });
     expect(text(empty.root)).toContain('No expenses in September 2026');
     remount();
     const unsaved = view({
-      state: financial({ data: [], status: 'error', pagination: null, message: 'Offline' }),
+      state: financial({
+        data: [],
+        status: 'error',
+        summary: null,
+        pagination: null,
+        message: 'Offline',
+        refreshedAt: null,
+      }),
       offline: true,
+      now: midday,
     });
     expect(text(unsaved.root)).toContain(
       'Expenses in September 2026 aren’t saved on this phone. Connect to load them.',
