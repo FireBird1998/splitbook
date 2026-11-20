@@ -10,7 +10,14 @@ import type {
 import type { MobileController } from '../data/mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
-import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
+import {
+  activateWithScreenReader,
+  emitAppState,
+  setWindow,
+  touchAlong,
+} from '../test-utils/native';
+import { manualTimer } from '../test-utils/transport-faults';
+import type { MobileTimer } from '../data/types';
 import { confirmSheetIn, confirmSheetOpen } from '../test-utils/confirm-sheet';
 import { Alert } from 'react-native';
 import { ThemeContext } from './theme';
@@ -209,6 +216,21 @@ function fixture(
     )
       return undefined;
     const editing = items.find((item) => path.endsWith(`/drafts/${item.draft.id}`));
+    // A write based on an older version is refused, as the server refuses it (#1289).
+    if (
+      editing &&
+      init.method === 'PUT' &&
+      new Headers(init.headers).get('X-Splitbook-Revision') !== String(editing.draft.revision)
+    )
+      return json(
+        {
+          error:
+            'This record changed while you were editing. Reload the latest version before saving.',
+          status: 409,
+          code: 'STALE_REVISION',
+        },
+        409,
+      );
     if (editing && init.method === 'PUT') {
       editing.draft = {
         ...editing.draft,
@@ -279,6 +301,14 @@ function fixture(
     if (path.endsWith('/expenses') || path.endsWith('/balances')) return undefined;
     return json({ error: 'Unavailable', status: 404 }, 404);
   });
+  // The pause in typing that saves a Draft (#1289) ends only when a test says so; every other
+  // wait runs on the platform's own clock.
+  const pauses = manualTimer();
+  const timer: MobileTimer = (run, ms) => {
+    if (ms === 1000) return pauses.timer(run, ms);
+    const handle = setTimeout(run, ms);
+    return () => clearTimeout(handle);
+  };
   const phone = testPhone(
     {
       get online() {
@@ -302,6 +332,7 @@ function fixture(
         tagRequests: undefined,
         groupCreations: undefined,
         netInfo: undefined,
+        timer,
       },
     },
   );
@@ -327,6 +358,8 @@ function fixture(
     holdPut: (held: Promise<void>) => {
       putReply = held;
     },
+    /** A pause in typing long enough for the Draft to save (#1289). */
+    pause: () => pauses.elapse(1000),
     holdRead: (held: Promise<void>) => {
       nextRead = held;
     },
@@ -1221,6 +1254,8 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     try {
       await act(async () => {
         input().props.onChangeText('First correction');
+        // A pause in typing: the correction saves (#1289).
+        f.pause();
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
       await act(async () => {
@@ -1264,6 +1299,8 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     try {
       await act(async () => {
         field('Description').props.onChangeText('Lunch correction');
+        // A pause in typing: the correction saves (#1289).
+        f.pause();
         await arrived;
       });
       // Android drops focus and hides the keyboard from a field that stops being editable.
@@ -1321,9 +1358,11 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
         return act(async () => {
           for (const text of texts) amount().props.onChangeText(text);
         });
+      // Each key, then a pause in typing, so the Draft saves between keys (#1289).
       for (const text of texts)
         await act(async () => {
           amount().props.onChangeText(text);
+          f.pause();
           await settle();
         });
     };
@@ -1377,7 +1416,7 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
         };
         await type(deletes.slice(0, -1));
         hold = true;
-        await type(deletes.slice(-1), false);
+        await type(deletes.slice(-1));
         await act(async () => {
           await arrived;
           amount().props.onChangeText(digits[0]);
@@ -1424,10 +1463,13 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     try {
       await act(async () => {
         input().props.onChangeText('First correction');
+        // A pause in typing: the correction saves (#1289).
+        f.pause();
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
       await act(async () => {
         input().props.onChangeText('Later correction');
+        f.pause();
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
       expect(puts()).toBe(1);
@@ -1490,6 +1532,8 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     try {
       await act(async () => {
         input().props.onChangeText('First correction');
+        // A pause in typing: the correction saves (#1289).
+        f.pause();
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
       await act(async () => {
@@ -1536,6 +1580,8 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     try {
       await act(async () => {
         input().props.onChangeText('First correction');
+        // A pause in typing: the correction saves (#1289).
+        f.pause();
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
       await act(async () => {
@@ -1639,3 +1685,181 @@ it.each(Array.from({ length: 6 }, (_, index) => index))(
     }
   },
 );
+
+// #1289: the owner's "type locally, save quietly". A field being typed in owns its text; the
+// Draft saves after a pause in typing, trimmed only as it is sent. Fictional people only.
+describe.each(['light', 'dark'] as const)('Typing on the review run in %s (#1289)', (mode) => {
+  async function open(options: Parameters<typeof fixture>[0] = { one: true }) {
+    const f = fixture(options);
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    return { f, tree };
+  }
+  const field = (tree: ReactTestRenderer, name: string) =>
+    tree.root.find(
+      (node) =>
+        String(node.type) === 'TextInput' &&
+        String(node.props.accessibilityLabel).split(',')[0] === name,
+    );
+  /** A key as Android types it: on the end of what the field shows. */
+  const key = (tree: ReactTestRenderer, name: string, typed: string) =>
+    field(tree, name).props.onChangeText(`${field(tree, name).props.value}${typed}`);
+  const puts = (f: ReturnType<typeof fixture>) =>
+    f.calls.filter((call) => call.startsWith('PUT')).length;
+  /** Long enough for a save's round trip against the fake server. */
+  const roundTrip = () => new Promise((resolve) => setTimeout(resolve, 10));
+
+  it('keeps a trailing space typed while a save lands between every key: "Dinner at Mezze"', async () => {
+    const { f, tree } = await open();
+    await act(async () => {
+      field(tree, 'Description').props.onChangeText('');
+      f.pause();
+      await f.controller.reviewRun()!.finishEditing();
+    });
+    for (const typed of 'Dinner at Mezze') {
+      await act(async () => {
+        key(tree, 'Description', typed);
+        f.pause();
+        await f.controller.reviewRun()!.finishEditing();
+      });
+      const shown = String(field(tree, 'Description').props.value);
+      // Trimmed only as it is sent: the field keeps the space under the cursor.
+      if (typed === ' ') expect(shown.endsWith(' ')).toBe(true);
+      expect(f.items()[0].draft.values!.description).toBe(shown.trim());
+    }
+    expect(field(tree, 'Description').props.value).toBe('Dinner at Mezze');
+    expect(f.items()[0].draft.values!.description).toBe('Dinner at Mezze');
+  });
+
+  it('keeps leading spaces and spaces alone while typing, trimmed when sent; spaces alone still need a Description', async () => {
+    const { f, tree } = await open();
+    await act(async () => {
+      field(tree, 'Description').props.onChangeText('');
+      f.pause();
+      await f.controller.reviewRun()!.finishEditing();
+    });
+    for (const typed of '  Dinner')
+      await act(async () => {
+        key(tree, 'Description', typed);
+        f.pause();
+        await f.controller.reviewRun()!.finishEditing();
+      });
+    expect(field(tree, 'Description').props.value).toBe('  Dinner');
+    expect(f.items()[0].draft.values!.description).toBe('Dinner');
+    await act(async () => {
+      field(tree, 'Description').props.onChangeText('   ');
+      f.pause();
+      await f.controller.reviewRun()!.finishEditing();
+    });
+    expect(field(tree, 'Description').props.value).toBe('   ');
+    expect(f.items()[0].draft.values!.description).toBeUndefined();
+    expect(text(tree)).toContain('One thing left before you can save: what it was for');
+    expect(button(tree, 'Save expense').props.disabled).toBe(true);
+  });
+
+  it('sends one save for a burst of typing, after the pause, and none per key', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at Mezze')
+      await act(async () => {
+        key(tree, 'Description', typed);
+        await roundTrip();
+      });
+    for (const typed of ['', '4', '45', '450'])
+      await act(async () => {
+        field(tree, 'Amount').props.onChangeText(typed);
+        await roundTrip();
+      });
+    expect(puts(f)).toBe(0);
+    expect(field(tree, 'Description').props.value).toBe('Lunch at Mezze');
+    expect(field(tree, 'Amount').props.value).toBe('450');
+    await act(async () => {
+      f.pause();
+      await roundTrip();
+    });
+    expect(puts(f)).toBe(1);
+    expect(f.items()[0].draft.values).toMatchObject({ description: 'Lunch at Mezze', amount: 450 });
+    // What came back from the save rewrote neither field.
+    expect(field(tree, 'Description').props.value).toBe('Lunch at Mezze');
+    expect(field(tree, 'Amount').props.value).toBe('450');
+  });
+
+  it('keeps what is typed during the quiet save on screen, and saves it after the next pause', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at') await act(async () => key(tree, 'Description', typed));
+    let release!: () => void;
+    f.holdPut(new Promise<void>((resolve) => (release = resolve)));
+    try {
+      await act(async () => {
+        f.pause();
+        await roundTrip();
+      });
+      expect(puts(f)).toBe(1);
+      for (const typed of ' Mezze ') await act(async () => key(tree, 'Description', typed));
+      // Still editable: the member's own save never locks the field (#1287).
+      expect(field(tree, 'Description').props.editable).toBe(true);
+      await act(async () => {
+        release();
+        await roundTrip();
+      });
+      expect(field(tree, 'Description').props.value).toBe('Lunch at Mezze ');
+      expect(f.items()[0].draft.values!.description).toBe('Lunch at');
+      expect(puts(f)).toBe(1);
+      await act(async () => {
+        f.pause();
+        await roundTrip();
+      });
+      expect(puts(f)).toBe(2);
+      expect(f.items()[0].draft.values!.description).toBe('Lunch at Mezze');
+      expect(field(tree, 'Description').props.value).toBe('Lunch at Mezze ');
+    } finally {
+      release();
+    }
+  });
+
+  it('keeps a trailing space in Notes, and saves Notes after the pause', async () => {
+    const { f, tree } = await open();
+    await tap(tree, 'Category and notes, optional');
+    for (const typed of 'Paid in cash ')
+      await act(async () => {
+        key(tree, 'Notes', typed);
+        f.pause();
+        await f.controller.reviewRun()!.finishEditing();
+      });
+    expect(field(tree, 'Notes').props.value).toBe('Paid in cash ');
+    expect(f.items()[0].draft.values!.notes).toBe('Paid in cash');
+  });
+
+  it('never rewrites what is being typed with a newer version from elsewhere: its save is refused and kept for Keep my changes', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at Mezze') await act(async () => key(tree, 'Description', typed));
+    // The assistant replaces the Draft while the member types.
+    const original = f.items()[0].draft;
+    f.items()[0].draft = {
+      ...original,
+      revision: 1,
+      changedBy: { kind: 'assistant', name: 'Claude' },
+      values: { ...original.values, amount: 24, paidBy: [{ user: user.id, amount: 24 }] },
+    };
+    await act(async () => {
+      await f.controller.refreshToReview();
+    });
+    expect(field(tree, 'Description').props.value).toBe('Lunch at Mezze');
+    expect(text(tree)).not.toContain('Claude changed the amount');
+    // The pause's save is based on the version the member saw, so the server refuses it: the
+    // screen shows the newer version and what changed, and keeps the typing for Keep my changes.
+    await act(async () => {
+      f.pause();
+      await f.controller.reviewRun()!.finishEditing();
+      await roundTrip();
+    });
+    expect(f.items()[0].draft.values).toMatchObject({ description: 'Lunch', amount: 24 });
+    expect(text(tree)).toContain('Claude changed the amount a moment ago: ₹12.34 → ₹24.00');
+    expect(text(tree)).toContain('Your latest changes have not been kept.');
+    expect(f.controller.getSnapshot().toReview.run!.unkept?.description).toBe('Lunch at Mezze');
+    await tap(tree, 'Keep my changes');
+    expect(f.items()[0].draft.values!.description).toBe('Lunch at Mezze');
+  });
+});
