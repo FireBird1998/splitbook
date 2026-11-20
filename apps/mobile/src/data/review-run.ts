@@ -74,6 +74,8 @@ export function createReviewRun(options: {
   let endPause = () => {};
   /** A refused save reads the latest version: what is typed meanwhile joins what it couldn't keep. */
   let recovering = false;
+  /** What the save under way last wrote, so what it kept is known when it comes back (#1291). */
+  let sent: ExpenseDraftValues | null = null;
   const takeTyped = () => {
     endPause();
     const values = typed;
@@ -284,7 +286,10 @@ export function createReviewRun(options: {
       edits = draftEditQueue<ExpenseDraftValues>({
         current: options.current,
         canWrite: options.online,
-        replace: (version, next) => options.client(selected.groupId).replace(version, next),
+        replace: (version, next) => {
+          sent = next;
+          return options.client(selected.groupId).replace(version, next);
+        },
         kept: (version, pending) => {
           if (pending) return;
           const state = options.read()!;
@@ -317,7 +322,13 @@ export function createReviewRun(options: {
           result = await queue.flush(result.draft);
         }
         if (!options.current()) return;
-        if (result.kind === 'interrupted') {
+        if (result.kind === 'kept') {
+          // Marked not kept as the connection dropped, then written after all once it came back
+          // (#1291): nothing waits for Keep my changes. Anything typed after it stays marked.
+          const marked = options.read()?.unkept;
+          if (marked && sent && JSON.stringify(marked) === JSON.stringify(sent))
+            update({ unkept: null });
+        } else if (result.kind === 'interrupted') {
           // Typed since, or kept offline while it was under way, is newer than what it held (#1289).
           const input = takeTyped() ?? options.read()?.unkept ?? result.input;
           const state = options.read()!;
