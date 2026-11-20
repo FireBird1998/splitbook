@@ -19,7 +19,7 @@ import {
   type ExpenseHistoryChange,
 } from '../data/expense-history';
 import type { DayKey } from '@splitbook/shared/zoned-calendar';
-import { nearDayKey, spellDay, spellTime } from './day-format';
+import { nearDayKey, spellDay, spellDayKey, spellTime } from './day-format';
 
 /** One Activity row in plain language: "{actor} {verb} {subject} {complement}" and its details. */
 export interface ActivityLine {
@@ -64,13 +64,14 @@ const localDayKey = (date: Date) =>
 
 /**
  * "Today", "Yesterday", or a short weekday and date such as "Sun 27 Sep", day first (#640).
- * `today` is this device's day as a key, compared as one, never read into a date (#1286).
+ * Spelled from the day it groups under, and `today` is this device's day as a key, so a heading
+ * always names its group's day, even once the phone's zone changes while the app runs (#1286).
  */
 export function dayLabel(date: Date, today: DayKey) {
   const day = localDayKey(date);
   return (
     nearDayKey(day, today) ??
-    spellDay(date, { weekday: 'short', year: day.slice(0, 4) !== today.slice(0, 4) })
+    spellDayKey(day, { weekday: 'short', year: day.slice(0, 4) !== today.slice(0, 4) })
   );
 }
 
