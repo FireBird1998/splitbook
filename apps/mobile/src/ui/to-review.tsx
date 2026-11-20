@@ -1,7 +1,14 @@
 import { HeldUpdateFooter } from './held-update-snackbar';
 import { ReviewRunOverlay } from './review-run';
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import {
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatCurrency, formatCurrencyAsEntered } from '@splitbook/shared/currency';
 import {
@@ -23,6 +30,8 @@ import type {
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
+import { reviewAssistant, type ReviewAssistant } from '../data/assistants';
+import { ActionBar, buttonsBeside } from './expense-form';
 import {
   Badge,
   Banner,
@@ -59,6 +68,73 @@ import { NO_BREAK_SPACE, SEPARATOR, counted } from '@splitbook/shared/separator'
 
 const offlineMessage =
   'You’re offline. What Claude prepared and what you set aside show up when you’re back online';
+/** Who a Group's To review names (#1292): its one Connected assistant, else "an assistant". */
+const preparer = (assistant: ReviewAssistant) =>
+  assistant.kind === 'one' ? assistant.name : 'an assistant';
+const groupOfflineMessage = (assistant: ReviewAssistant) =>
+  `You’re offline. What ${preparer(assistant)} prepared and what you set aside show up when you’re back online.`;
+const nothingWaitingMessage = (groupName: string, assistant: ReviewAssistant) =>
+  `Nothing is waiting in ${groupName}. Expenses ${preparer(assistant)} prepares, and ones you choose to Finish later, show up here.`;
+
+/**
+ * A Group's To review with nothing in it (#1292, board ReviewAndEmpty): the tile, heading and
+ * sentence on one centre line, centred between the last banner and the bar at the foot. Offline,
+ * nothing on this phone is neutral, with the offline mark.
+ */
+function NothingWaiting({
+  offline,
+  title,
+  sentence,
+}: {
+  offline: boolean;
+  title: string;
+  sentence: string;
+}) {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        paddingHorizontal: 12,
+        paddingBottom: 12,
+      }}
+    >
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={{
+          width: 64,
+          height: 64,
+          borderRadius: 20,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: offline ? theme.surfaceMuted : theme.positive.bg,
+        }}
+      >
+        <Icon
+          name={offline ? 'cloud-offline-outline' : 'checkmark'}
+          size={30}
+          color={offline ? theme.textSecondary : theme.status.positive}
+        />
+      </View>
+      <CompactText variant="title" accessibilityRole="header" style={{ textAlign: 'center' }}>
+        {title}
+      </CompactText>
+      {/* Balanced lines, so no word is left alone on the last one. */}
+      <CompactText
+        variant="small"
+        tone="secondary"
+        textBreakStrategy="balanced"
+        style={{ maxWidth: 280, textAlign: 'center' }}
+      >
+        {sentence}
+      </CompactText>
+    </View>
+  );
+}
 const unconfirmedMessage = 'We didn’t hear back, so it may already be saved';
 /** A list row's leading tile and its gap, so dividers and follow-on lines start under the text. */
 const rowInset = 66;
@@ -822,6 +898,11 @@ export function ToReviewList({
   );
   useEffect(() => client.open(), [client]);
   useEffect(() => client.connectivityChanged(), [client, state.offline]);
+  // Who its words name: the Connected assistants as read, or as this phone saved them (#1292).
+  const assistants = useMobileSnapshot(controller, (snapshot) => snapshot.assistants);
+  useEffect(() => void controller.readReviewAssistants(), [controller, state.offline]);
+  const assistant = reviewAssistant(assistants, groupId);
+  const { width, fontScale } = useWindowDimensions();
   const model = controller.toReviewModel(groupId);
   const own = model.groups[0];
   const unavailable = state.detail.id === groupId && state.detail.status === 'denied';
@@ -895,6 +976,9 @@ export function ToReviewList({
     if (!collection.busy) controller.closeToReview();
   };
   const loaded = model.counts.total === 0 && state.toReview.status === 'ready' && !state.offline;
+  // Offline with nothing on this phone: never zero counts and buttons that can't be used (#1292).
+  const nothingHere = model.counts.total === 0 && state.offline && !unavailable;
+  const empty = loaded || nothingHere;
   // The item being fixed, as the latest read has it: fixed, or gone once read online, it closes.
   const fixingNow = fixing ? model.items.find((item) => item.id === fixing.id) : undefined;
   const settled =
@@ -963,8 +1047,10 @@ export function ToReviewList({
             paddingHorizontal: 16,
             paddingTop: 4,
             gap: 12,
-            // Room for the payer notice, so it never covers the last item.
-            paddingBottom: collection.notice ? 112 : 32,
+            // Room for the payer notice, so it never covers the last item. Empty, the message
+            // takes the room left, so it is centred above the bar (#1292).
+            paddingBottom: empty ? 0 : collection.notice ? 112 : 32,
+            ...(empty ? { flexGrow: 1 } : {}),
           }}
         >
           {unavailable ? (
@@ -976,12 +1062,12 @@ export function ToReviewList({
             <>
               {/* What went wrong or waits stays said above the list, or above its empty state:
                   an item changed elsewhere can empty the list as it explains why. */}
-              {!loaded && (
+              {!empty && (
                 <CompactText variant="small" tone="secondary" style={{ paddingHorizontal: 2 }}>
                   Only you see these. Balances stay the same until you save.
                 </CompactText>
               )}
-              {state.offline && <Banner tone="offline" message={`${offlineMessage}.`} />}
+              {state.offline && <Banner tone="offline" message={groupOfflineMessage(assistant)} />}
               {state.toReview.recoveryMessage && (
                 <Banner tone="warning" message={memberMessage(state.toReview.recoveryMessage)}>
                   <CompactButton
@@ -1025,31 +1111,16 @@ export function ToReviewList({
                   )}
                 />
               )}
-              {loaded ? (
-                <View
-                  style={{ alignItems: 'center', gap: 10, paddingTop: 72, paddingHorizontal: 12 }}
-                >
-                  <View
-                    style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: 20,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: theme.positive.bg,
-                    }}
-                  >
-                    <Icon name="checkmark" size={30} color={theme.status.positive} />
-                  </View>
-                  <CompactText variant="title" accessibilityRole="header">
-                    All caught up
-                  </CompactText>
-                  <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
-                    Nothing is waiting in {groupName}. When Claude prepares expenses, or you choose
-                    Finish later, they appear here.
-                  </CompactText>
-                  <CompactButton label="Back to Expenses" variant="tonal" onPress={close} />
-                </View>
+              {empty ? (
+                <NothingWaiting
+                  offline={nothingHere}
+                  title={nothingHere ? 'Nothing on this phone' : 'All caught up'}
+                  sentence={
+                    nothingHere
+                      ? 'Expenses you set aside on this phone while offline show up here.'
+                      : nothingWaitingMessage(groupName, assistant)
+                  }
+                />
               ) : (
                 <>
                   <Card>
@@ -1153,6 +1224,40 @@ export function ToReviewList({
             </>
           )}
         </ScrollView>
+        {/* The Expense form's Save bar, at the bottom edge, in the thumb's reach; it never
+            scrolls (#1292). Offline, Try again goes beside Done while both fit, else above it. */}
+        {empty ? (
+          <ActionBar>
+            {nothingHere ? (
+              <View
+                style={
+                  buttonsBeside(['Try again', 'Done'], width, fontScale)
+                    ? { flexDirection: 'row', gap: 8 }
+                    : { gap: 8 }
+                }
+              >
+                <View style={{ flex: 1 }}>
+                  <CompactButton
+                    label="Try again"
+                    variant="tonal"
+                    block
+                    disabled={collection.busy}
+                    // As the app's other Try again: a request that gets through ends offline;
+                    // then To review is read again.
+                    onPress={() =>
+                      void controller.refresh().then(() => controller.refreshToReview())
+                    }
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <CompactButton label="Done" block onPress={close} />
+                </View>
+              </View>
+            ) : (
+              <CompactButton label="Done" block onPress={close} />
+            )}
+          </ActionBar>
+        ) : null}
         {fixing && !settled && fixingDraft && fixingItem ? (
           fixing.changing ? (
             <ChangeCurrencySheet

@@ -9363,6 +9363,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     retryNotifications: notifications.retry,
     openNotificationSettings: notifications.openSettings,
     openAssistants,
+    /**
+     * Who To review's words name (#1292): the Connected assistants read online, or this phone's
+     * Saved copy of them offline, with no request.
+     */
+    readReviewAssistants: () =>
+      snapshot.offline.active || !onlineManager.isOnline()
+        ? assistantsData.restore()
+        : assistantsData.read(),
     askDisconnectAssistant: (id: string) => assistantsData.ask(id),
     cancelDisconnectAssistant: () => assistantsData.cancel(),
     disconnectAssistant: () => assistantsData.disconnect(),
