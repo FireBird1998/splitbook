@@ -1234,6 +1234,177 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
       release();
     }
   });
+  it('keeps Description and Amount editable to the end of a typed change’s save (#1287)', async () => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    const field = (name: string) =>
+      tree.root.find(
+        (node) =>
+          String(node.type) === 'TextInput' &&
+          String(node.props.accessibilityLabel).split(',')[0] === name,
+      );
+    // The end of the save: its read of whether an earlier action is pending, held open.
+    const load = f.requests.load;
+    let reached!: () => void, release!: () => void;
+    const arrived = new Promise<void>((resolve) => (reached = resolve));
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let hold = true;
+    f.requests.load = async (...args: Parameters<typeof load>) => {
+      if (hold) {
+        hold = false;
+        reached();
+        await gate;
+      }
+      return load(...args);
+    };
+    try {
+      await act(async () => {
+        field('Description').props.onChangeText('Lunch correction');
+        await arrived;
+      });
+      // Android drops focus and hides the keyboard from a field that stops being editable.
+      expect(field('Description').props.editable).toBe(true);
+      expect(field('Amount').props.editable).toBe(true);
+      await act(async () => {
+        release();
+        await f.controller.reviewRun()!.finishEditing();
+      });
+      expect(field('Description').props.editable).toBe(true);
+      expect(field('Amount').props.editable).toBe(true);
+      expect(f.items()[0].draft.values!.description).toBe('Lunch correction');
+    } finally {
+      release();
+      f.requests.load = load;
+    }
+  });
+
+  // QA's device check of #1287: a burst on Amount, seven deletes then "450", with the Draft's
+  // saves and their reads landing in between. Nothing typed is lost, the field is never mounted
+  // again, and the member's own saves never set a newer version's note.
+  it.each([
+    'all at once',
+    'each keystroke settled',
+    'the deletes during a held write',
+    'the digits during a held write',
+    'a digit during the held read after a write',
+    'a digit at the held end of a save',
+  ] as const)('keeps every Amount keystroke of a burst: %s (#1287)', async (interleaving) => {
+    const f = fixture({ one: true });
+    f.items()[0].draft.values!.amount = 1200;
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    const amount = () =>
+      tree.root.find(
+        (node) =>
+          String(node.type) === 'TextInput' &&
+          node.props.accessibilityLabel === 'Amount, Indian Rupee',
+      );
+    expect(amount().props.value).toBe('1200.00');
+    const field = amount();
+    const keys = new Set<string>();
+    const stop = f.controller.subscribe(() => {
+      const run = f.controller.getSnapshot().toReview.run;
+      if (run) keys.add(`${run.index}:${run.changed?.after.revision ?? 0}`);
+    });
+    const deletes = ['1200.0', '1200.', '1200', '120', '12', '1', ''];
+    const digits = ['4', '45', '450'];
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
+    const type = async (texts: string[], each = true) => {
+      if (!each)
+        return act(async () => {
+          for (const text of texts) amount().props.onChangeText(text);
+        });
+      for (const text of texts)
+        await act(async () => {
+          amount().props.onChangeText(text);
+          await settle();
+        });
+    };
+    const releases: (() => void)[] = [];
+    const held = () => new Promise<void>((resolve) => releases.push(resolve));
+    const load = f.requests.load;
+    try {
+      if (interleaving === 'all at once') await type([...deletes, ...digits], false);
+      if (interleaving === 'each keystroke settled') await type([...deletes, ...digits]);
+      if (interleaving === 'the deletes during a held write') {
+        f.holdPut(held());
+        await type(deletes);
+        await act(async () => {
+          releases[0]();
+          await settle();
+        });
+        await type(digits);
+      }
+      if (interleaving === 'the digits during a held write') {
+        await type(deletes);
+        f.holdPut(held());
+        await type(digits.slice(0, 2));
+        await act(async () => {
+          releases[0]();
+          await settle();
+        });
+        await type(digits.slice(2));
+      }
+      if (interleaving === 'a digit during the held read after a write') {
+        await type(deletes);
+        f.holdRead(held());
+        await type(digits.slice(0, 1));
+        await act(async () => {
+          releases[0]();
+          await settle();
+        });
+        await type(digits.slice(1));
+      }
+      if (interleaving === 'a digit at the held end of a save') {
+        let reached!: () => void;
+        const arrived = new Promise<void>((resolve) => (reached = resolve));
+        const gate = held();
+        let hold = false;
+        f.requests.load = async (...args: Parameters<typeof load>) => {
+          if (hold) {
+            hold = false;
+            reached();
+            await gate;
+          }
+          return load(...args);
+        };
+        await type(deletes.slice(0, -1));
+        hold = true;
+        await type(deletes.slice(-1), false);
+        await act(async () => {
+          await arrived;
+          amount().props.onChangeText(digits[0]);
+          releases[0]();
+          await settle();
+        });
+        await type(digits.slice(1));
+      }
+      await act(async () => {
+        await f.controller.reviewRun()!.finishEditing();
+        await settle();
+      });
+      expect(amount().props.value).toBe('450');
+      expect(f.items()[0].draft.values!.amount).toBe(450);
+      // Saves really ran between the keystrokes.
+      if (interleaving !== 'all at once')
+        expect(f.calls.filter((call) => call.startsWith('PUT')).length).toBeGreaterThan(2);
+      // The same field throughout, and no newer-version note from the member's own saves.
+      expect(amount()).toBe(field);
+      expect([...keys]).toEqual(['0:0']);
+    } finally {
+      stop();
+      for (const release of releases) release();
+      f.requests.load = load;
+    }
+  });
+
   it('keeps newer typing on screen when the reply to an earlier correction arrives', async () => {
     const f = fixture({ one: true });
     await signIn(f);

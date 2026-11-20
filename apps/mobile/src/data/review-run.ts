@@ -47,6 +47,10 @@ export function createReviewRun(options: {
 }) {
   let edits: ReturnType<typeof draftEditQueue<ExpenseDraftValues>> | null = null;
   let writing: Promise<void> | undefined;
+  /** A typed change's save is sending its writes; a change typed now joins them. */
+  let flushing = false;
+  /** Typed as a save ended, while it read the pending action: the next save's entries (#1287). */
+  let next: ExpenseDraftValues | null = null;
   let presentIds: ReadonlySet<string> | null = null;
   const update = (patch: Partial<ReviewRunState>) => {
     const state = options.read();
@@ -133,9 +137,14 @@ export function createReviewRun(options: {
     });
     await matchingExpenses(latest);
   };
-  const run = async (work: () => Promise<void>) => {
+  /**
+   * One action at a time. A typed change's save (`editing`) sets busy and editing in one update
+   * and clears both in one update, after the pending-action read: no render shows busy without
+   * editing, which locks the Draft's fields and closes Android's keyboard (#1287).
+   */
+  const run = async (work: () => Promise<void>, editing = false) => {
     if (!options.current() || !options.read() || options.read()!.busy || !options.online()) return;
-    update({ busy: true, message: null });
+    update({ busy: true, message: null, ...(editing ? { editing: true } : {}) });
     try {
       await work();
     } catch {
@@ -153,7 +162,7 @@ export function createReviewRun(options: {
             });
           }
         }
-        update({ busy: false });
+        update({ busy: false, ...(editing ? { editing: false } : {}) });
       }
     }
   };
@@ -224,7 +233,7 @@ export function createReviewRun(options: {
       run(async () => {
         if (!options.read()?.pending && !options.read()?.unkept) await advance('skipped');
       }),
-    change(values: ExpenseDraftValues) {
+    change(values: ExpenseDraftValues): Promise<void> | undefined {
       const selected = item(),
         state = options.read();
       if (
@@ -236,6 +245,23 @@ export function createReviewRun(options: {
         (state.busy && !state.editing)
       )
         return;
+      update({
+        items: state.items.map((row, i) =>
+          i === state.index
+            ? { ...row, item: { ...row.item, draft: { ...row.item.draft, values } } }
+            : row,
+        ),
+        acknowledged: false,
+        unkept: null,
+      });
+      if (state.editing && !flushing) {
+        // The save's writes are done and it is reading the pending action: the next save keeps
+        // this change as soon as it ends (#1287).
+        next = values;
+        return writing;
+      }
+      // Newer than any change held for the next save.
+      next = null;
       if (!state.editing) {
         edits = draftEditQueue<ExpenseDraftValues>({
           current: options.current,
@@ -256,19 +282,10 @@ export function createReviewRun(options: {
       }
       const queue = edits!;
       queue.change(values);
-      update({
-        items: state.items.map((row, i) =>
-          i === state.index
-            ? { ...row, item: { ...row.item, draft: { ...row.item.draft, values } } }
-            : row,
-        ),
-        acknowledged: false,
-        unkept: null,
-      });
       if (state.editing) return writing;
       const confirmed = selected.item.draft;
       writing = run(async () => {
-        update({ editing: true });
+        flushing = true;
         try {
           let result = await queue.flush(confirmed);
           // A member can type after queue settlement but before this adapter resumes.
@@ -307,9 +324,17 @@ export function createReviewRun(options: {
             });
           }
         } finally {
+          flushing = false;
           queue.clear();
-          update({ editing: false });
         }
+      }, true).then((): Promise<void> | undefined => {
+        const later = next;
+        next = null;
+        if (!later) return;
+        const saving = this.change(later);
+        // Not saved now (offline, say): kept on screen for Keep my changes, never dropped.
+        if (!saving) update({ unkept: later });
+        return saving;
       });
       return writing;
     },
