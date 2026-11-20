@@ -8894,6 +8894,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       online: () => !snapshot.offline.active && onlineManager.isOnline(),
       client: sharedDrafts,
       refresh: refreshToReview,
+      timer: dependencies.timer,
     });
     reviewRun = machine;
     publish({
@@ -8922,9 +8923,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   const closeReviewRun = async () => {
     const closing = reviewRun;
-    if (snapshot.toReview.run?.editing && !snapshot.offline.active && onlineManager.isOnline()) {
-      await reviewRun?.finishEditing();
-    }
+    // What is typed is saved first, and a typed save under way ends (#1289).
+    if (!snapshot.offline.active && onlineManager.isOnline()) await reviewRun?.finishEditing();
     if (closing !== reviewRun) return;
     reviewRun = null;
     publish({ ...snapshot, toReview: { ...snapshot.toReview, run: null } });
