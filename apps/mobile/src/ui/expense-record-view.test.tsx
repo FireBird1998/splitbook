@@ -6,7 +6,8 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { inTimeZone } from '../test-utils/time-zone';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { emptyExpenseEditor } from '../data/expense-draft';
@@ -592,6 +593,14 @@ describe('compact Expense record', () => {
       const ui = await render(open(ids.bill));
       expect(text(ui.root())).toContain('Tue 29 Sep 2026');
     }));
+
+  // #1286: the app started in India and the phone then moved to Pago Pago, a day behind. Hermes
+  // keeps the zone it started in for its dates while Intl follows the new one (#1283).
+  it('shows the day it is dated after the phone’s zone moves while the app runs (#1286)', async () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    const ui = await render(open(ids.bill));
+    expect(text(ui.root())).toContain('Tue 29 Sep 2026');
+  });
 
   it('shows when it was added and last changed while its changes load', async () => {
     let release: () => void = () => undefined;

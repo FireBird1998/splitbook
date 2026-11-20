@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -313,5 +314,30 @@ describe('Date sheet calendar', () => {
       disabled: true,
     });
     expect(sheet.footer()).toBe('Tuesday 15 September 2026');
+  });
+});
+
+// #1286: once the phone's zone changes while the app runs, Hermes keeps the zone the app started
+// in for its dates while Intl follows the new one (#1283). The app started in India; the phone
+// is now in Pago Pago, a day behind.
+describe('Date sheet after the phone’s zone moves while the app runs (#1286)', () => {
+  let restore = () => {};
+  afterEach(() => restore());
+
+  it('heads the Month, letters its weeks, and numbers and names its days from their keys', () => {
+    restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+    const sheet = render('2026-09-15');
+    expect(sheet.month()).toBe('September 2026');
+    expect(text(sheet.weekdays())).toBe('SMTWTFS');
+    const days = sheet.days();
+    expect(days.map((day) => text(day))).toEqual(
+      Array.from({ length: 30 }, (_, day) => String(day + 1)),
+    );
+    expect(days[0].props.accessibilityLabel).toBe('Tuesday 1 September 2026');
+    expect(sheet.selected()).toEqual(['Tuesday 15 September 2026']);
+    expect(sheet.footer()).toBe('Tuesday 15 September 2026');
+    sheet.press('Next month');
+    expect(sheet.month()).toBe('October 2026');
+    expect(sheet.days()[0].props.accessibilityLabel).toBe('Thursday 1 October 2026');
   });
 });

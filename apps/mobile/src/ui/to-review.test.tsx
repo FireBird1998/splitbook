@@ -12,7 +12,8 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { inTimeZone } from '../test-utils/time-zone';
 import { findHosts, flatten, layoutHeight, unreadText, wordsOf } from '../test-utils/layout';
 import { mockDeviceLocale } from '../test-utils/device-locale';
@@ -727,6 +728,21 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
     expect(text(list)).toContain('Prepared by Claude\u00a0· 10 Oct 2026');
     expect(text(list)).not.toContain('Oct 10');
+  });
+  // #1286: the app started in India and the phone then moved to Pago Pago, a day behind. Hermes
+  // keeps the zone it started in for its dates while Intl follows the new one (#1283).
+  it('dates an item from its key after the phone’s zone moves while the app runs (#1286)', async () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    mockDeviceLocale('en-US');
+    const f = fixture();
+    f.items()[0].draft.values!.date = '2026-10-10';
+    await signIn(f);
+    const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+    expect(text(list)).toContain('Prepared by Claude\u00a0· 10 Oct 2026');
+    await tap(list, 'Save 2 ready');
+    expect(text(list)).toContain('Save 2\u00a0expenses?');
+    // The row, and the item in the sheet that asks.
+    expect(text(list).split('10 Oct 2026')).toHaveLength(3);
   });
   it('saves ready items without a currency in the Group’s (#512)', async () => {
     const f = fixture();

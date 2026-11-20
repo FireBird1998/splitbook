@@ -2,7 +2,16 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { missingFromAppFont } from '../test-utils/app-font';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { inTimeZone } from '../test-utils/time-zone';
-import { nearDay, recentDay, spellDay, spellMoment, spellTime } from './day-format';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
+import {
+  nearDay,
+  nearDayKey,
+  recentDay,
+  spellDay,
+  spellDayKey,
+  spellMoment,
+  spellTime,
+} from './day-format';
 
 // Monday 19 October 2026, mid-afternoon on this device.
 const monday = new Date(2026, 9, 19, 13, 44);
@@ -111,6 +120,27 @@ describe('Android’s one day order (#640)', () => {
 // #766: "Last used 11:02 AM" drew without its time at 130% on a 360dp phone. The device's clock
 // put U+202F (narrow no-break space) before "AM", which the app's font lacks: Android measured
 // the line in the app font and drew that space from a wider fallback, so it wrapped unseen.
+// #1286: once the phone's zone changes while the app runs, Hermes keeps the zone the app started
+// in for its dates while Intl follows the new one (#1283), so a day key read into a local date and
+// spelled by Intl names the day before. The app started in India; the phone is now in Pago Pago.
+describe('a day key after the phone’s zone moves while the app runs (#1286)', () => {
+  it('is spelled as the day it names, and is Today or Yesterday by its key', () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    mockDeviceLocale('en-US');
+    expect(spellDayKey('2026-10-19', { weekday: 'short' })).toBe('Mon 19 Oct');
+    expect(spellDayKey('2026-01-01', { weekday: 'long', month: 'long', year: true })).toBe(
+      'Thursday 1 January 2026',
+    );
+    expect(nearDayKey('2026-10-19', '2026-10-19')).toBe('Today');
+    expect(nearDayKey('2026-10-18', '2026-10-19')).toBe('Yesterday');
+    expect(nearDayKey('2026-02-28', '2026-03-01')).toBe('Yesterday');
+    expect(nearDayKey('2026-10-17', '2026-10-19')).toBeNull();
+    const now = Date.parse('2026-10-19T12:00:00.000Z');
+    expect(recentDay('2026-10-18', now)).toBe('Yesterday');
+    expect(recentDay('2026-10-17', now)).toBe('17 Oct 2026');
+  });
+});
+
 describe('times and days in characters the app’s font draws (#766)', () => {
   /**
    * The phone's clock as Android's ICU spells it, with U+202F before AM and PM, as on the

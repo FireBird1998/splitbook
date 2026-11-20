@@ -22,6 +22,7 @@ import {
   wordsOf,
 } from '../test-utils/layout';
 import { mockDeviceLocale } from '../test-utils/device-locale';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { formatCurrency } from '@splitbook/shared/currency';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -707,6 +708,36 @@ describe('Expense date label', () => {
       expect(spoken).toMatch(/\d{4}$/);
     },
   );
+});
+
+// #1286: once the phone's zone changes while the app runs, Hermes keeps the zone the app started
+// in for its dates while Intl follows the new one (#1283). The app started in India; the phone
+// is now in Pago Pago, a day behind.
+describe('Expense date label after the phone’s zone moves while the app runs (#1286)', () => {
+  const now = Date.parse('2026-09-30T12:00:00.000Z');
+  let restore = () => {};
+  afterEach(() => restore());
+
+  it('names the day the Expense is dated, read from its key', () => {
+    restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+    mockDeviceLocale('en-US');
+    expect(expenseDateLabel('2026-09-30', now)).toEqual({
+      shown: 'Today, 30 Sep',
+      spoken: 'Today, Wednesday 30 September 2026',
+    });
+    expect(expenseDateLabel('2026-09-29', now)).toEqual({
+      shown: 'Tue 29 Sep',
+      spoken: 'Yesterday, Tuesday 29 September 2026',
+    });
+    expect(expenseDateLabel('2026-01-01', now)).toEqual({
+      shown: 'Thu 1 Jan',
+      spoken: 'Thursday 1 January 2026',
+    });
+    expect(expenseDateLabel('2026-02-30', now)).toEqual({
+      shown: '2026-02-30',
+      spoken: '2026-02-30',
+    });
+  });
 });
 
 describe('Amount focus ring', () => {
