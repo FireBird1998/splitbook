@@ -1710,7 +1710,7 @@ describe.each(['light', 'dark'] as const)('Typing on the review run in %s (#1289
   const puts = (f: ReturnType<typeof fixture>) =>
     f.calls.filter((call) => call.startsWith('PUT')).length;
   /** Long enough for a save's round trip against the fake server. */
-  const roundTrip = () => new Promise((resolve) => setTimeout(resolve, 10));
+  const roundTrip = () => new Promise<void>((resolve) => setTimeout(resolve, 10));
 
   it('keeps a trailing space typed while a save lands between every key: "Dinner at Mezze"', async () => {
     const { f, tree } = await open();
@@ -1861,5 +1861,118 @@ describe.each(['light', 'dark'] as const)('Typing on the review run in %s (#1289
     expect(f.controller.getSnapshot().toReview.run!.unkept?.description).toBe('Lunch at Mezze');
     await tap(tree, 'Keep my changes');
     expect(f.items()[0].draft.values!.description).toBe('Lunch at Mezze');
+  });
+
+  // Every flush point saves what is typed at once, before the pause ends; nothing typed is lost.
+  it('saves at once when a field is left, and shows the kept text there after', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at ') await act(async () => key(tree, 'Description', typed));
+    expect(puts(f)).toBe(0);
+    await act(async () => {
+      field(tree, 'Description').props.onBlur();
+      await roundTrip();
+    });
+    expect(puts(f)).toBe(1);
+    expect(f.items()[0].draft.values!.description).toBe('Lunch at');
+    expect(field(tree, 'Description').props.value).toBe('Lunch at');
+    await act(async () => {
+      field(tree, 'Amount').props.onChangeText('45');
+      field(tree, 'Amount').props.onBlur();
+      await roundTrip();
+    });
+    expect(puts(f)).toBe(2);
+    expect(f.items()[0].draft.values!.amount).toBe(45);
+    await tap(tree, 'Category and notes, optional');
+    for (const typed of 'Paid in cash ') await act(async () => key(tree, 'Notes', typed));
+    await act(async () => {
+      field(tree, 'Notes').props.onBlur();
+      await roundTrip();
+    });
+    expect(puts(f)).toBe(3);
+    expect(f.items()[0].draft.values!.notes).toBe('Paid in cash');
+    expect(field(tree, 'Notes').props.value).toBe('Paid in cash');
+  });
+
+  it('saves at once when the app goes to the background', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at Mez') await act(async () => key(tree, 'Description', typed));
+    await act(async () => {
+      emitAppState('background');
+      await roundTrip();
+    });
+    expect(puts(f)).toBe(1);
+    expect(f.items()[0].draft.values!.description).toBe('Lunch at Mez');
+    // Back again, the field still has what was typed, and the member carries on.
+    await act(async () => {
+      emitAppState('active');
+      await roundTrip();
+    });
+    expect(field(tree, 'Description').props.value).toBe('Lunch at Mez');
+  });
+
+  it('saves what is typed before Skip moves to the next item, to the item it was typed in', async () => {
+    const { f, tree } = await open({});
+    for (const typed of ' at Mezze') await act(async () => key(tree, 'Description', typed));
+    await tap(tree, 'Skip for now');
+    await act(async () => {
+      f.pause();
+      await roundTrip();
+    });
+    expect(f.items()[0].draft.values!.description).toBe('Lunch at Mezze');
+    expect(f.items()[1].draft.values!.description).toBe('Fare');
+    expect(f.items()[1].draft.revision).toBe(0);
+    expect(field(tree, 'Description').props.value).toBe('Fare');
+    expect(puts(f)).toBe(1);
+  });
+
+  it('saves what is typed before Delete', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at Mezze') await act(async () => key(tree, 'Description', typed));
+    await tap(tree, 'Delete');
+    await tap(tree, 'Delete item');
+    expect(
+      f.calls.filter((call) => /^(PUT|DELETE) /.test(call)).map((call) => call.split(' ')[0]),
+    ).toEqual(['PUT', 'DELETE']);
+    expect(f.items()).toEqual([]);
+    expect(text(tree)).toContain('Done for now');
+  });
+
+  it('saves what is on screen as the Expense: Save as Expense saves the typing first', async () => {
+    const { f, tree } = await open({});
+    const entry = f.items()[0];
+    for (const typed of ' at Mezze ') await act(async () => key(tree, 'Description', typed));
+    await tap(tree, 'Save expense');
+    await act(roundTrip);
+    expect(puts(f)).toBe(1);
+    expect(f.saves).toHaveLength(1);
+    // The Expense is saved from the version that holds the typing, trimmed as it was sent.
+    expect(JSON.parse(f.saves[0]).drafts[0]).toMatchObject({ id: entry.draft.id, revision: 1 });
+    expect(entry.draft.values!.description).toBe('Lunch at Mezze');
+    // Then the next item.
+    expect(field(tree, 'Description').props.value).toBe('Fare');
+  });
+
+  it('asks before Close leaves typing it could not keep, offline', async () => {
+    const { f, tree } = await open();
+    for (const typed of ' at Mezze') await act(async () => key(tree, 'Description', typed));
+    try {
+      await act(async () => {
+        onlineManager.setOnline(false);
+        await roundTrip();
+      });
+      await tap(tree, 'Close review');
+      expect(f.controller.getSnapshot().toReview.run).not.toBeNull();
+      expect(f.controller.getSnapshot().toReview.run!.unkept?.description).toBe('Lunch at Mezze');
+      expect(confirmSheetIn(tree.root).title).toBe('Leave without your latest changes?');
+      await act(async () => {
+        confirmSheetIn(tree.root).pressAction();
+        await roundTrip();
+      });
+      expect(f.controller.getSnapshot().toReview.run).toBeNull();
+      expect(puts(f)).toBe(0);
+      expect(f.items()[0].draft.values!.description).toBe('Lunch');
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 });
