@@ -2266,6 +2266,51 @@ describe.each(['light', 'dark'] as const)('To review’s empty state in %s (#129
     },
   );
 
+  // The Designer's rule: while the app knows it is offline, only the offline banner shows; the
+  // red "Could not reach Splitbook" is for a read that fails online.
+  it('offline with nothing on this phone, shows only the offline banner, never a read’s red failure', async () => {
+    const { f, list } = await emptyList();
+    // The collection's read fails as Splitbook goes out of reach, then the app knows it's offline.
+    f.goOffline();
+    await act(async () => {
+      await f.controller.refreshToReview();
+      await f.controller.refresh();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(f.controller.getSnapshot().offline.active).toBe(true);
+    expect(f.controller.getSnapshot().sharedDraftCollection.message).toContain(
+      'Could not reach Splitbook',
+    );
+    expect(text(list)).toContain('Nothing on this phone');
+    expect(text(list)).toContain(offlineBanner('an assistant'));
+    expect(text(list)).not.toContain('Could not reach Splitbook');
+  });
+
+  it('Try again shows busy while it checks, then returns, adding nothing red while still offline', async () => {
+    const { f, list } = await emptyList();
+    await offline(f);
+    let release!: () => void;
+    const refresh = f.controller.refresh;
+    vi.spyOn(f.controller, 'refresh').mockImplementationOnce(async (...args) => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return refresh(...args);
+    });
+    await act(async () => {
+      screenButton(list, 'Try again').props.onPress();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(screenButton(list, 'Trying again…')).toBeDefined();
+    expect(screenButton(list, 'Trying again…').props.accessibilityState.busy).toBe(true);
+    await act(async () => {
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(screenButton(list, 'Try again')).toBeDefined();
+    expect(screenButton(list, 'Trying again…')).toBeUndefined();
+    expect(text(list)).toContain('Nothing on this phone');
+    expect(text(list)).not.toContain('Could not reach Splitbook');
+  });
+
   it('re-reads the Connected assistants on pull to refresh, online only', async () => {
     const { f, list } = await emptyList({ assistants: [{ name: 'Claude Desktop' }] });
     expect(text(list)).toContain('Expenses Claude Desktop prepares');
