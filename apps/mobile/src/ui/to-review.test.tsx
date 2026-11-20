@@ -8,6 +8,7 @@ import type { ReactElement } from 'react';
 import {
   act,
   create,
+  type ReactTestInstance,
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
@@ -468,6 +469,14 @@ function fixture(
     },
     goOnline: () => {
       backend.online = true;
+    },
+    /** The member disconnects their assistants elsewhere, on the web (#1292). */
+    disconnectAssistants: () => {
+      backend.world.connections = {
+        resource: 'http://localhost:4138/api/mcp',
+        connections: [],
+        nextOffset: null,
+      };
     },
     addReady: () => {
       items.push(review(row(5, 'Museum', 5)));
@@ -2228,10 +2237,59 @@ describe.each(['light', 'dark'] as const)('To review’s empty state in %s (#129
           node.children.length === 2,
       );
       expect(flatten(pair.props.style).flexDirection ?? 'column').toBe(direction);
-      const labels = pair
-        .findAll((node) => String(node.type) === 'Pressable')
-        .map((node) => node.props.accessibilityLabel);
-      expect(labels).toEqual(['Try again', 'Done']);
+      const buttons = pair.findAll((node) => String(node.type) === 'Pressable');
+      expect(buttons.map((node) => node.props.accessibilityLabel)).toEqual(['Try again', 'Done']);
+      // What the test renderer can't measure, it can pin: the style that let the stacked buttons
+      // collapse on a device (#1293's device pass, 360 dp at 200%). Stacked, nothing between
+      // the stack and a button may flex: `flex: 1` there starts each at no height, so both slid
+      // under the bottom edge. Side by side, each takes half the bar.
+      const between = (button: ReactTestInstance) => {
+        const path: ReactTestInstance[] = [];
+        for (let up = button.parent; up && up !== pair; up = up.parent)
+          if (typeof up.type === 'string') path.push(up);
+        return path;
+      };
+      for (const button of buttons) {
+        const flexes = between(button).map((node) => flatten(node.props.style).flex);
+        if (direction === 'column') expect(flexes.filter((flex) => flex !== undefined)).toEqual([]);
+        else expect(flexes).toContain(1);
+      }
+      // The bar grows upward with what it holds: no height, no flex, and it isn't in the list.
+      let bar: ReactTestInstance | null = pair.parent;
+      while (bar && !(typeof bar.type === 'string' && flatten(bar.props.style).borderTopWidth))
+        bar = bar.parent;
+      expect(bar).not.toBeNull();
+      const barStyle = flatten(bar!.props.style);
+      for (const key of ['height', 'maxHeight', 'flex', 'flexGrow'])
+        expect(barStyle[key as keyof typeof barStyle], key).toBeUndefined();
+      expect(scroller(list).findAll((node) => node === bar)).toEqual([]);
     },
   );
+
+  it('re-reads the Connected assistants on pull to refresh, online only', async () => {
+    const { f, list } = await emptyList({ assistants: [{ name: 'Claude Desktop' }] });
+    expect(text(list)).toContain('Expenses Claude Desktop prepares');
+    // Disconnected on the web: a pull reads them again.
+    f.disconnectAssistants();
+    await act(async () => {
+      scroller(list).props.refreshControl.props.onRefresh();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(text(list)).toContain(anAssistant);
+    // Offline, a pull sends nothing.
+    await offline(f);
+    const calls = f.calls.length;
+    await act(async () => {
+      scroller(list).props.refreshControl.props.onRefresh();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(f.calls).toHaveLength(calls);
+  });
+
+  it('re-reads the Connected assistants with Refresh items', async () => {
+    const { f, list } = await emptyList({ assistants: [{ name: 'Claude Desktop' }] });
+    f.disconnectAssistants();
+    await tap(list, 'Refresh items');
+    expect(text(list)).toContain(anAssistant);
+  });
 });
