@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { parseActivityPage, type ActivityEvent } from '../data/activity';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import {
@@ -47,6 +48,26 @@ describe('Activity days', () => {
       ['Today', ['1', '2']],
       ['Yesterday', ['3']],
       [dayLabel(new Date(at(27)), today), ['4']],
+    ]);
+  });
+
+  // #1286: the app started in India and the phone then moved to Pago Pago. Hermes keeps the zone
+  // it started in for its dates, so the groups are its days, while Intl follows the new zone
+  // (#1283). Each heading names its group's day, so one day never gets two headings.
+  it('heads each day with the day it groups, after the phone’s zone moves while the app runs (#1286)', () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    mockDeviceLocale('en-US');
+    const events = [
+      // 21 Nov at 01:30 in India; 20 Nov in Pago Pago.
+      event({ _id: '1', createdAt: '2026-11-20T20:00:00.000Z' }),
+      // 20 Nov at 22:30 in India.
+      event({ _id: '2', createdAt: '2026-11-20T17:00:00.000Z' }),
+    ];
+    expect(
+      activityDays(events, '2026-11-25').map((day) => [day.key, day.label, day.events.length]),
+    ).toEqual([
+      ['2026-11-21', 'Sat 21 Nov', 1],
+      ['2026-11-20', 'Fri 20 Nov', 1],
     ]);
   });
 });
