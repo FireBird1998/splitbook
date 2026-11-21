@@ -524,6 +524,78 @@ describe('App refresh rendering', () => {
     }
   });
 
+  // #1302: a Group screen left open, with nothing read or changed, takes the new day when
+  // midnight passes. The Expenses are dated 27 Sep.
+  it('heads Expenses by the new day when midnight passes on an open, idle Group screen (#1302)', async () => {
+    const midnight = new Date(2026, 8, 28).getTime();
+    vi.useFakeTimers({ toFake: ['Date'], now: midnight - 300 });
+    try {
+      const app = await renderApp();
+      await app.press('Open Maple House');
+      expect(app.text()).toContain(`Today${SEPARATOR}Sun 27 Sep`);
+      vi.setSystemTime(midnight + 1000);
+      await vi.waitFor(() => expect(app.text()).toContain(`Yesterday${SEPARATOR}Sun 27 Sep`), {
+        timeout: 2500,
+        interval: 50,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #1302: the same open screen when the phone's zone changes while it shows (#1298 fixed what a
+  // screen reads when it draws again). The app started in India, at 00:30 on 28 Sep there; the
+  // phone then moves to Pago Pago, where it is 8:00 AM on 27 Sep.
+  it('heads Expenses by the phone’s new day when its zone changes on an open, idle Group screen (#1302)', async () => {
+    let restore = hermesZoneMoved('Asia/Kolkata', 'Asia/Kolkata');
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-09-27T19:00:00.000Z') - 300 });
+    try {
+      const app = await renderApp();
+      await app.press('Open Maple House');
+      expect(app.text()).toContain(`Yesterday${SEPARATOR}Sun 27 Sep`);
+      restore();
+      restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+      vi.setSystemTime(Date.parse('2026-09-27T19:00:01.000Z'));
+      await vi.waitFor(() => expect(app.text()).toContain(`Today${SEPARATOR}Sun 27 Sep`), {
+        timeout: 2500,
+        interval: 50,
+      });
+    } finally {
+      vi.useRealTimers();
+      restore();
+    }
+  });
+
+  // #1302: Activity left open takes the new day at midnight too. Midnight is the one that ends
+  // the event's own day, wherever the run is.
+  it('heads Activity by the new day when midnight passes on an open, idle Group screen (#1302)', async () => {
+    const at = new Date(iso);
+    const midnight = new Date(at.getFullYear(), at.getMonth(), at.getDate() + 1).getTime();
+    vi.useFakeTimers({ toFake: ['Date'], now: midnight - 300 });
+    try {
+      const app = await renderApp();
+      await app.press('Open Maple House');
+      await app.press('Activity');
+      const dayHeadings = () =>
+        app
+          .root()
+          .findAll(
+            (node) =>
+              (node.type as unknown) === 'Text' && node.props.accessibilityRole === 'header',
+          )
+          .map((node) => node.children.join(''))
+          .filter((heading) => heading === 'Today' || heading === 'Yesterday');
+      expect(dayHeadings()).toEqual(['Today']);
+      vi.setSystemTime(midnight + 1000);
+      await vi.waitFor(() => expect(dayHeadings()).toEqual(['Yesterday']), {
+        timeout: 2500,
+        interval: 50,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the newest Month and never lists its Expenses under an older Month label', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');

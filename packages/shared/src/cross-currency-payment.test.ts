@@ -342,6 +342,25 @@ describe('what the sheet says about the rate (#727)', () => {
     );
   });
 
+  // #1302: Android names the phone's zone, which Intl follows when the phone's zone changes while
+  // the app runs, while Hermes keeps the zone the app started in for its dates (#1283).
+  it('says when the rates were fetched in the zone given, day and time together', () => {
+    // 12:00 UTC on 20 Nov: 1:00 AM on 20 Nov in Pago Pago, 5:30 PM in India. At 08:00 UTC on
+    // 21 Nov it is 9:00 PM on 20 Nov in Pago Pago and 1:30 PM on 21 Nov in India.
+    const fetched = { ...frankfurter, fetchedAt: '2026-11-20T12:00:00.000Z' };
+    const later = new Date('2026-11-21T08:00:00.000Z');
+    expect(rateNote('suggested', fetched, 'INR', later, 'Pacific/Pago_Pago').text).toBe(
+      'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a0today\u00a001:00',
+    );
+    expect(rateNote('suggested', fetched, 'INR', later, 'Asia/Kolkata').text).toBe(
+      'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a0yesterday\u00a017:30',
+    );
+    const older = { ...frankfurter, fetchedAt: '2026-11-18T23:00:00.000Z' };
+    expect(rateNote('suggested', older, 'INR', later, 'Pacific/Pago_Pago').text).toBe(
+      'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a018\u00a0Nov\u00a012:00',
+    );
+  });
+
   it('keeps the suggestion one click away from the member’s own rate', () => {
     expect(rateNote('custom', frankfurter, 'INR', now)).toEqual({
       text: 'Your rate. Suggested ₹92.10 from Frankfurter, rates of\u00a020\u00a0Oct.',
@@ -483,6 +502,16 @@ describe('a payment’s record, as its card shows it (#727)', () => {
       suggested: { rate: '₹20.826267 per\u00a0PLN' },
     });
     expect(JSON.stringify(zloty)).not.toContain('zł');
+  });
+  // #1302: the fetched moment in the zone given, as Android names the phone's.
+  it('says when the suggestion was fetched in the zone given', () => {
+    const fetched = { ...record, rateFetchedAt: '2026-11-20T12:00:00.000Z' };
+    expect(paymentRecord(fetched, alex, 'Pacific/Pago_Pago').suggested?.source).toBe(
+      'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a020\u00a0Nov\u00a001:00',
+    );
+    expect(paymentRecord(fetched, alex, 'Asia/Kolkata').suggested?.source).toBe(
+      'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a020\u00a0Nov\u00a017:30',
+    );
   });
   it('shows both amounts, the rate used and the suggestion, and what moved', () => {
     expect(paymentRecord(record, alex)).toEqual({

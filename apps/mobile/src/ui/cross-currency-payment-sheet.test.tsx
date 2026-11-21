@@ -5,7 +5,8 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import {
   editCrossCurrencyEntry,
@@ -448,5 +449,31 @@ describe.each(['light', 'dark'] as const)('paying in rupees at large text in %s 
     expect(unreadText(top!, size.fontScale, size.width)).toEqual([]);
     expect(unreadText(body!, size.fontScale, size.width)).toEqual([]);
     expect(unreadText(footer!, size.fontScale, size.width)).toEqual([]);
+  });
+});
+
+// #1302: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+// India for its dates (#1283); the rate note is spelled in the phone's zone, day and time together,
+// as the Date tile beside it is. At 08:00 UTC on 21 Nov it is 9:00 PM on 20 Nov there; the rates
+// were fetched at 12:00 UTC on 20 Nov, 1:00 AM that day there (5:30 PM in India).
+describe('the rate note after the phone’s zone moves while the app runs (#1302)', () => {
+  it('says when the rates were fetched in the phone’s zone', () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    const fetched = { ...frankfurter, fetchedAt: '2026-11-20T12:00:00.000Z' };
+    act(() => {
+      screen = create(
+        <RecordPaymentSheet
+          visible
+          state={state(inRupees({ status: 'ready', suggestion: fetched }))}
+          currentUserId={you}
+          today="Today, 20 Nov"
+          now={new Date('2026-11-21T08:00:00.000Z')}
+          {...handlers()}
+        />,
+      );
+    });
+    expect(text(screen!.root)).toContain(
+      'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a0today\u00a001:00',
+    );
   });
 });
