@@ -68,6 +68,7 @@ import {
 } from './expense-inputs';
 import { CurrencySheet } from './currency-sheet';
 import { clockTime } from './activity-format';
+import { phoneDay } from '../data/phone-clock';
 import { nearDay, recentDay, spellDay } from './day-format';
 import { PayerSheet, paidBySummary } from './payer-sheet';
 import { SplitSheet } from './split-sheet';
@@ -555,6 +556,8 @@ function ReviewRunContent({
                 ...(state.context?.tags ?? []).map((tag) => [tag.id, tag.name]),
               ]),
               groupCurrency,
+              // The phone's today, which follows its zone while the app runs (#1298).
+              phoneDay(controller.reviewNow()),
             )}
           />
         )}
