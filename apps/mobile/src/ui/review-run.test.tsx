@@ -1707,6 +1707,28 @@ describe.each(['light', 'dark'] as const)(
       const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
       expect(text(tree)).toContain('Finish later\u00a0· today');
     });
+
+    it('says a changed date is today or yesterday by the phone’s day', async () => {
+      onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+      const f = fixture({ one: true, now: Date.parse('2026-10-15T08:00:00.000Z') });
+      await signIn(f);
+      await act(async () => {
+        await f.controller.startReviewRun();
+      });
+      const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+      const original = f.items()[0].draft;
+      f.items()[0].draft = {
+        ...original,
+        revision: 1,
+        changedBy: { kind: 'assistant', name: 'Claude' },
+        values: { ...original.values, date: '2026-10-13' },
+      };
+      await act(async () => {
+        await f.controller.refreshToReview();
+      });
+      // Dated 14 Oct, the phone's today; now 13 Oct, its yesterday.
+      expect(text(tree)).toContain('Claude changed the date a moment ago: Today → Yesterday');
+    });
   },
 );
 

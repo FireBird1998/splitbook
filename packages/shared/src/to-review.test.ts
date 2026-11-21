@@ -386,6 +386,18 @@ describe('changes while an item is open', () => {
     );
     expect(reviewDate('2000-01-01')).toBe('1 Jan 2000');
   });
+  // #1298: Android names the phone's today, which follows its zone while the app runs, while
+  // Hermes keeps the zone the app started in for its dates (#1283).
+  it('says Today and Yesterday by the day given, whatever the host’s', () => {
+    const { before, after } = changed();
+    before.values!.date = '2026-10-14';
+    after.values!.date = '2026-10-15';
+    expect(describeDraftChange(before, after, {}, undefined, '2026-10-15')).toBe(
+      'Claude changed the date a moment ago: Yesterday → Today. You’re seeing the latest version.',
+    );
+    expect(reviewDate('2026-10-13', '2026-10-15')).toBe('13 Oct 2026');
+    expect(reviewDate(undefined, '2026-10-15')).toBe('Date missing');
+  });
   it('names changed payers and amounts without exposing identities', () => {
     const { before, after } = changed();
     after.values!.paidBy = [{ user: 'c00000000000000000000001', amount: 2350 }];
