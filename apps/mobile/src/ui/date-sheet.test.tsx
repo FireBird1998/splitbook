@@ -343,3 +343,31 @@ describe('Date sheet after the phone’s zone moves while the app runs (#1286)',
     expect(sheet.days()[0].props.accessibilityLabel).toBe('Thursday 1 October 2026');
   });
 });
+
+// #1298: Today and Yesterday are the phone's days. The app started in India; the phone is now in
+// Pago Pago. At 08:00 UTC on 21 Nov it is 1:30 PM on Saturday 21 Nov in India and 9:00 PM on
+// Friday 20 Nov in Pago Pago.
+describe('Date sheet’s today after the phone’s zone moves while the app runs (#1298)', () => {
+  let restore = () => {};
+  afterEach(() => restore());
+
+  it('chooses the phone’s today and yesterday, and marks the phone’s today', () => {
+    restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+    vi.setSystemTime(Date.parse('2026-11-21T08:00:00.000Z'));
+    const sheet = render('2026-11-10');
+    expect(sheet.days().filter((day) => /today$/.test(day.props.accessibilityLabel))).toHaveLength(
+      1,
+    );
+    expect(sheet.pressable('Friday 20 November 2026, today')).toBeTruthy();
+    sheet.press('Today');
+    sheet.press('Yesterday');
+    expect(changes).toEqual(['2026-11-20', '2026-11-19']);
+  });
+
+  it('opens on the phone’s Month when the date can’t be shown', () => {
+    restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+    // 1:30 PM on 1 Dec in India, 9:00 PM on 30 Nov in Pago Pago.
+    vi.setSystemTime(Date.parse('2026-12-01T08:00:00.000Z'));
+    expect(render('').month()).toBe('November 2026');
+  });
+});

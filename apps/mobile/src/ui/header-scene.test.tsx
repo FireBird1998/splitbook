@@ -1,5 +1,6 @@
 import { act, create } from 'react-test-renderer';
-import { expect, it, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { HeaderSceneCard } from './header-scene';
 import type { MobileGroup } from '../data/types';
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
@@ -67,7 +68,7 @@ it('speaks the generated scene description', async () => {
 
 it('re-reads Auto when returning to the header across a local-hour boundary', async () => {
   const { default: HeaderScene } = await import('./header-scene');
-  const hour = vi.spyOn(Date.prototype, 'getHours').mockReturnValue(9);
+  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 8, 18, 9, 30) });
   let renderer!: ReturnType<typeof create>;
   try {
     await act(async () => {
@@ -83,7 +84,7 @@ it('re-reads Auto when returning to the header across a local-hour boundary', as
       await act(async () => {});
       expect(JSON.stringify(renderer.toJSON())).toContain('#c8d9ed');
     });
-    hour.mockReturnValue(10);
+    vi.setSystemTime(new Date(2026, 8, 18, 10, 30));
     act(() =>
       renderer.update(
         <HeaderScene
@@ -96,7 +97,43 @@ it('re-reads Auto when returning to the header across a local-hour boundary', as
     expect(JSON.stringify(renderer.toJSON())).toContain('#a9d3ec');
   } finally {
     act(() => renderer?.unmount());
-    hour.mockRestore();
+    vi.useRealTimers();
+  }
+});
+
+// #1298: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+// India for its dates (#1283); Auto's hour and the card's Trip day are the phone's. At 08:00 UTC
+// on 21 Nov it is 1:30 PM on 21 Nov in India and 9:00 PM on 20 Nov in Pago Pago.
+it('follows the phone’s hour and day after its zone moves while the app runs (#1298)', async () => {
+  const { default: HeaderScene } = await import('./header-scene');
+  onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+  vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-21T08:00:00.000Z') });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  const trip = {
+    ...group,
+    startDate: new Date('2026-11-19'),
+    endDate: new Date('2026-11-22'),
+  } as MobileGroup;
+  let renderer!: ReturnType<typeof create>;
+  await act(async () => {
+    renderer = create(
+      <HeaderScene
+        group={trip}
+        header={{ style: 'scene', scene: 'beach', time: 'auto' }}
+        motion={false}
+      />,
+    );
+  });
+  try {
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(JSON.stringify(renderer.toJSON())).toContain('#101a35');
+    });
+    expect(JSON.stringify(renderer.toJSON())).toContain('Day 2 of 4');
+  } finally {
+    act(() => renderer.unmount());
   }
 });
 

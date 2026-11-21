@@ -740,6 +740,31 @@ describe('Expense date label after the phone’s zone moves while the app runs (
   });
 });
 
+// #1298: "Today" is the phone's day. At 08:00 UTC on 21 Nov it is 1:30 PM on 21 Nov in India,
+// where the app started, and 9:00 PM on 20 Nov in Pago Pago, where the phone is now.
+describe('Expense date label’s today after the phone’s zone moves while the app runs (#1298)', () => {
+  const now = Date.parse('2026-11-21T08:00:00.000Z');
+  let restore = () => {};
+  afterEach(() => restore());
+
+  it('says Today and Yesterday by the phone’s day', () => {
+    restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+    mockDeviceLocale('en-US');
+    expect(expenseDateLabel('2026-11-20', now)).toEqual({
+      shown: 'Today, 20 Nov',
+      spoken: 'Today, Friday 20 November 2026',
+    });
+    expect(expenseDateLabel('2026-11-19', now)).toEqual({
+      shown: 'Thu 19 Nov',
+      spoken: 'Yesterday, Thursday 19 November 2026',
+    });
+    expect(expenseDateLabel('2026-11-21', now)).toEqual({
+      shown: 'Sat 21 Nov',
+      spoken: 'Saturday 21 November 2026',
+    });
+  });
+});
+
 describe('Amount focus ring', () => {
   function card(mode: 'light' | 'dark', locked = false) {
     const onLeave = vi.fn();

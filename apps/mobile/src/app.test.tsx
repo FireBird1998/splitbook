@@ -16,6 +16,7 @@ import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { testPhone } from './test-utils/test-phone';
 import { fakeSplitbook } from './test-utils/fake-splitbook';
 import type { FetchResponse } from './data/types';
@@ -507,6 +508,22 @@ describe('App refresh rendering', () => {
     expect(app.text()).toContain('Add expense');
     expect(app.controller.getSnapshot().expense.draft?.currency).toBe('INR');
   });
+  // #1298: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+  // India for its dates (#1283); the app's today is the phone's. At 08:00 UTC on 28 Sep it is
+  // 1:30 PM on 28 Sep in India and 9:00 PM on 27 Sep in Pago Pago, the day the Expenses are dated.
+  it('heads Expenses dated the phone’s today Today after the phone’s zone moves while the app runs (#1298)', async () => {
+    const restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-09-28T08:00:00.000Z') });
+    try {
+      const app = await renderApp();
+      await app.press('Open Maple House');
+      expect(app.text()).toContain(`Today${SEPARATOR}Sun 27 Sep`);
+    } finally {
+      vi.useRealTimers();
+      restore();
+    }
+  });
+
   it('keeps the newest Month and never lists its Expenses under an older Month label', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');

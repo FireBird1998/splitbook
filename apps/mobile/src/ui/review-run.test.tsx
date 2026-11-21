@@ -1,8 +1,9 @@
 import { useSyncExternalStore, type ReactElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { onlineManager } from '@tanstack/query-core';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import type {
   DraftReview,
   PersistedExpenseDraft,
@@ -112,6 +113,8 @@ function fixture(
     category?: 'trip' | 'home';
     /** Maple House's extra currencies (#874). */
     extras?: string[];
+    /** The controller's clock, when it isn't the moment the items were made. */
+    now?: number;
   } = {},
 ) {
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', String(options.flag ?? true));
@@ -324,7 +327,7 @@ function fixture(
     },
     {
       origin: 'http://localhost:4408',
-      now: Date.parse(iso),
+      now: options.now ?? Date.parse(iso),
       newSubmissionKey: () => 'fictional-review-request',
       parts: {
         pendingInvitation: undefined,
@@ -1688,6 +1691,25 @@ it.each(Array.from({ length: 6 }, (_, index) => index))(
 
 // #1289: the owner's "type locally, save quietly". A field being typed in owns its text; the
 // Draft saves after a pause in typing, trimmed only as it is sent. Fictional people only.
+// #1298: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+// India for its dates (#1283); "today" is the phone's. The item was set aside at 12:00 UTC on
+// 14 Oct, 1:00 AM there; at 08:00 UTC on 15 Oct it is 9:00 PM on 14 Oct there (and 15 Oct in India).
+describe.each(['light', 'dark'] as const)(
+  'Finish later’s day after the phone’s zone moves while the app runs in %s (#1298)',
+  (mode) => {
+    it('says today for an item set aside on the phone’s today', async () => {
+      onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+      const f = fixture({ member: true, now: Date.parse('2026-10-15T08:00:00.000Z') });
+      await signIn(f);
+      await act(async () => {
+        await f.controller.startReviewRun();
+      });
+      const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+      expect(text(tree)).toContain('Finish later\u00a0· today');
+    });
+  },
+);
+
 describe.each(['light', 'dark'] as const)('Typing on the review run in %s (#1289)', (mode) => {
   async function open(options: Parameters<typeof fixture>[0] = { one: true }) {
     const f = fixture(options);

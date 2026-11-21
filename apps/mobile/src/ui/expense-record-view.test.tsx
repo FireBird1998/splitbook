@@ -602,6 +602,19 @@ describe('compact Expense record', () => {
     expect(text(ui.root())).toContain('Tue 29 Sep 2026');
   });
 
+  // #1298: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+  // India for its dates (#1283); a change gets its year only outside the phone's year. At 08:00
+  // UTC on 1 Jan 2027 it is 9:00 PM on 31 Dec 2026 there (and 1 Jan 2027 in India).
+  it('gives no year for a change in the phone’s year after its zone moves while the app runs (#1298)', async () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    vi.useFakeTimers({ now: Date.parse('2027-01-01T08:00:00.000Z'), toFake: ['Date'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const ui = await render(open(ids.bill));
+    expect(ui.labels()).toContain(`Sam Chen added this Expense, 29 Sep, ${clockTime(iso)}`);
+  });
+
   it('shows when it was added and last changed while its changes load', async () => {
     let release: () => void = () => undefined;
     const ui = await render(shownBeforeHistory(ids.bill), (harness) => {

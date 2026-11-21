@@ -1699,3 +1699,33 @@ describe('after the phone’s zone moves while the app runs (#1286)', () => {
     expect(day.label).toBe('Mon 28 Sep');
   });
 });
+
+// #1298: Today and this Month are the phone's. The app started in India; the phone is now in
+// Pago Pago. At 08:00 UTC on 21 Nov it is 1:30 PM on Saturday 21 Nov in India and 9:00 PM on
+// Friday 20 Nov in Pago Pago: an Expense dated the 20th is today's, not yesterday's (the device
+// check of #1286 saw "Yesterday · Fri 20 Nov" here while Activity said "Today").
+describe('Expenses’ today after the phone’s zone moves while the app runs (#1298)', () => {
+  let restore = () => {};
+  afterEach(() => restore());
+
+  it('heads an Expense dated the phone’s today Today', () => {
+    restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+    mockDeviceLocale('en-US');
+    const today = { ...groceries, date: new Date('2026-11-20T00:00:00.000Z') };
+    const { root } = view({
+      state: financial({ data: [today] }, '2026-11'),
+      now: Date.parse('2026-11-21T08:00:00.000Z'),
+    });
+    expect(headings(root)).toContain('Today\u00a0· Fri 20 Nov');
+  });
+
+  it('has no Month after the phone’s this Month', () => {
+    restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+    // 1:30 PM on 1 Dec in India, 9:00 PM on 30 Nov in Pago Pago.
+    const { root } = view({
+      state: financial({ data: [] }, '2026-11'),
+      now: Date.parse('2026-12-01T08:00:00.000Z'),
+    });
+    expect(labelled(root, 'Next month')[0].props.accessibilityState).toEqual({ disabled: true });
+  });
+});

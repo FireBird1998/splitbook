@@ -1,6 +1,7 @@
 import { act, create, type ReactTestInstance } from 'react-test-renderer';
 import { Platform, StyleSheet } from 'react-native';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { SEPARATOR } from '@splitbook/shared/separator';
 import { HeaderSettings } from './header-settings';
@@ -406,5 +407,17 @@ it.each([
   expect(
     scroll.findAll((node) => node.props.accessibilityLabel === 'Header style').length,
   ).toBeGreaterThan(0);
+  act(() => view.unmount());
+});
+
+// #1298: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+// India for its dates (#1283); Auto follows the phone's clock. At 08:00 UTC on 21 Nov it is
+// 1:30 PM in India and 9:00 PM in Pago Pago.
+it('Auto follows the phone’s clock after its zone moves while the app runs (#1298)', async () => {
+  onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+  vi.setSystemTime(Date.parse('2026-11-21T08:00:00.000Z'));
+  const view = await open(page({ draft: { ...scene, time: 'sunset' } }));
+  const [auto] = rows(group(view, 'Time of day'));
+  expect(labels(auto)).toEqual([`Auto, Follows your clock${SEPARATOR}night now`]);
   act(() => view.unmount());
 });

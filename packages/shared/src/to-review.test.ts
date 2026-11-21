@@ -211,6 +211,20 @@ describe('To review model', () => {
     a.draft.createdAt = new Date(2026, 9, 14, 0, 0).toISOString();
     expect(buildToReview(read([a]), [], now).groups[0].bannerSummary).toBe('1 from Claude today');
   });
+  // #1298: Android names the phone's zone, which Intl follows when the phone's zone changes while
+  // the app runs, while Hermes keeps the zone the app started in for its dates (#1283).
+  it('uses the calendar day in the zone given, whatever the host’s', () => {
+    const a = item(1);
+    a.draft.preparedBy = { kind: 'assistant', name: 'Claude' };
+    // 1:00 AM on 14 Oct in Pago Pago, 5:30 PM on 14 Oct in India.
+    a.draft.createdAt = '2026-10-14T12:00:00.000Z';
+    // 9:00 PM on 14 Oct in Pago Pago, 1:30 PM on 15 Oct in India.
+    const later = new Date('2026-10-15T08:00:00.000Z');
+    const summary = (timeZone: string) =>
+      buildToReview(read([a]), [], later, timeZone).groups[0].bannerSummary;
+    expect(summary('Pacific/Pago_Pago')).toBe('1 from Claude today');
+    expect(summary('Asia/Kolkata')).toBe('1 from Claude');
+  });
   it('does not call a mixed-day assistant group today', () => {
     const a = item(1),
       b = item(2);

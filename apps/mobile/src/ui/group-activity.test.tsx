@@ -6,7 +6,7 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import {
   emptyActivity,
   parseActivityPage,
@@ -29,6 +29,7 @@ import {
 import { activateWithScreenReader, setWindow, touchAlong } from '../test-utils/native';
 import { mockDeviceLocale } from '../test-utils/device-locale';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { GroupActivity } from './group-activity';
 import { ThemeContext } from './theme';
 import { refreshedLabel } from './refresh-feedback';
@@ -1471,4 +1472,26 @@ describe('an Activity line by a long hyphenated name (#921)', () => {
       expect(unreadText(details, size.fontScale, size.width - 32)).toEqual([]);
     },
   );
+});
+
+// #1298: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+// India for its dates (#1283); Activity's Today is the phone's. At 08:00 UTC on 21 Nov it is
+// 9:00 PM on 20 Nov in Pago Pago, and an event at 12:00 UTC on 20 Nov was at 1:00 AM there.
+describe('Activity’s today after the phone’s zone moves while the app runs (#1298)', () => {
+  it('heads an event on the phone’s today Today', () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    mockDeviceLocale('en-US');
+    const { root } = render({
+      now: Date.parse('2026-11-21T08:00:00.000Z'),
+      state: activity({
+        events: [{ ...event(1), createdAt: '2026-11-20T12:00:00.000Z' }],
+        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+      }),
+    });
+    const headings = root
+      .findAll((node) => isHost(node, 'Text') && node.props.accessibilityRole === 'header')
+      .map((node) => text(node));
+    expect(headings).toContain('Today');
+    expect(headings).not.toContain('Yesterday');
+  });
 });

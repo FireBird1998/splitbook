@@ -51,23 +51,25 @@ describe('Activity days', () => {
     ]);
   });
 
-  // #1286: the app started in India and the phone then moved to Pago Pago. Hermes keeps the zone
-  // it started in for its dates, so the groups are its days, while Intl follows the new zone
-  // (#1283). Each heading names its group's day, so one day never gets two headings.
-  it('heads each day with the day it groups, after the phone’s zone moves while the app runs (#1286)', () => {
+  // #1286, #1298: the app started in India and the phone then moved to Pago Pago. Hermes keeps
+  // the zone it started in for its dates, while Intl follows the new zone (#1283). Events group
+  // under the phone's days, and each heading names its group's day.
+  it('groups and heads events by the phone’s days, after the phone’s zone moves while the app runs (#1286, #1298)', () => {
     onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
     mockDeviceLocale('en-US');
     const events = [
-      // 21 Nov at 01:30 in India; 20 Nov in Pago Pago.
+      // 9:00 AM on 20 Nov in Pago Pago; 01:30 on 21 Nov in India.
       event({ _id: '1', createdAt: '2026-11-20T20:00:00.000Z' }),
-      // 20 Nov at 22:30 in India.
+      // 6:00 AM on 20 Nov in Pago Pago; 22:30 on 20 Nov in India.
       event({ _id: '2', createdAt: '2026-11-20T17:00:00.000Z' }),
+      // 11:00 PM on 19 Nov in Pago Pago; 15:30 on 20 Nov in India.
+      event({ _id: '3', createdAt: '2026-11-20T10:00:00.000Z' }),
     ];
     expect(
       activityDays(events, '2026-11-25').map((day) => [day.key, day.label, day.events.length]),
     ).toEqual([
-      ['2026-11-21', 'Sat 21 Nov', 1],
-      ['2026-11-20', 'Fri 20 Nov', 1],
+      ['2026-11-20', 'Fri 20 Nov', 2],
+      ['2026-11-19', 'Thu 19 Nov', 1],
     ]);
   });
 });
