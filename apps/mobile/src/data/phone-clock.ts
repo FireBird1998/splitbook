@@ -139,6 +139,8 @@ function schedule() {
     },
     MINUTE - (Date.now() % MINUTE),
   );
+  // The clock never keeps a process running by itself, such as a verifier run in Node.
+  (timer as { unref?: () => void }).unref?.();
 }
 
 /**
