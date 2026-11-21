@@ -19,7 +19,7 @@ import {
 } from './header-scene-motion';
 import type { HeaderSceneSprites, SceneSprite } from './header-scene-sprite';
 import { headerSceneMotionAvailable } from '../config';
-import { currentDayKey } from './list-day-header';
+import { phoneDay, phoneHour } from '../data/phone-clock';
 import { useReducedMotion } from './compact/motion';
 import {
   HeaderSceneCard,
@@ -223,7 +223,7 @@ export default function HeaderScene({
   preview = false,
   tilt = true,
   visible = true,
-  today = currentDayKey(),
+  today = phoneDay(),
 }: {
   group: MobileGroup;
   header: GroupHeader;
@@ -235,7 +235,7 @@ export default function HeaderScene({
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   const [art, setArt] = useState<HeaderSceneSprites | null>(null);
-  const [, setHour] = useState(() => new Date().getHours());
+  const [, setHour] = useState(() => phoneHour());
   const window = useWindowDimensions();
   // The preview card's width, measured once laid out; until then, the page's estimate.
   const [previewWidth, setPreviewWidth] = useState<number | null>(null);
@@ -255,7 +255,7 @@ export default function HeaderScene({
     // The settings preview is pinned on its own page, outside any Group scroll.
     (preview || visibility.visible) &&
     foreground;
-  const time = headerTimeOfDay(header.time, new Date().getHours());
+  const time = headerTimeOfDay(header.time, phoneHour());
   const position = useHeaderTilt(moving && tilt);
   const frameWidth = window.width;
   // A pause holds the float and the clouds where they are, since the scene can still be seen;
@@ -327,7 +327,7 @@ export default function HeaderScene({
   }, [header.scene]);
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') setHour(new Date().getHours());
+      if (state === 'active') setHour(phoneHour());
     });
     return () => sub.remove();
   }, []);

@@ -8,6 +8,7 @@ import type { PersistedExpenseDraft } from './validators/expense-draft';
 import { formatDate } from './date';
 import { expenseLocalDate } from './expense-day';
 import { toDateParam } from './date';
+import { dayKeyInZone } from './zoned-calendar';
 import { formatCurrency } from './currency';
 import { parseAmountMinor, sumMinorAmounts, toMajorAmount } from './exact-money';
 import {
@@ -209,14 +210,24 @@ function accountModel(
 }
 /** "needs details" after 1, "need details" after any other count (#877); plurals by hand. */
 export const needDetailsWords = (count: number) => (count === 1 ? 'needs details' : 'need details');
-export function toReviewSourceSummary(items: readonly ReviewItemModel[], now?: Date): string {
+/**
+ * "2 from Claude today · 1 needs details". "Today" is the day `now` falls on: in `timeZone` when
+ * given, such as the phone's zone that Android names because Hermes keeps the zone the app started
+ * in for its dates (#1298), otherwise in the runtime's own.
+ */
+export function toReviewSourceSummary(
+  items: readonly ReviewItemModel[],
+  now?: Date,
+  timeZone?: string,
+): string {
+  const day = (date: Date) => (timeZone ? dayKeyInZone(date, timeZone) : toDateParam(date));
   const sources = new Map<string, { total: number; today: number }>();
   for (const item of items) {
     const by = item.accountItem?.draft.preparedBy;
     if (by?.kind !== 'assistant') continue;
     const source = sources.get(by.name) ?? { total: 0, today: 0 };
     source.total++;
-    if (now && toDateParam(new Date(item.createdAt)) === toDateParam(now)) source.today++;
+    if (now && day(new Date(item.createdAt)) === day(now)) source.today++;
     sources.set(by.name, source);
   }
   const parts = [...sources]
@@ -244,10 +255,12 @@ const order: Record<ToReviewState, number> = {
   'needs-details': 2,
   'on-this-phone': 3,
 };
+/** `timeZone` is the zone a banner's "today" is read in (`toReviewSourceSummary`). */
 export function buildToReview(
   read: ToReviewRead,
   deviceItems: readonly DeviceToReviewItem[],
   now: Date,
+  timeZone?: string,
 ) {
   const items: ReviewItemModel[] = read.groups.flatMap((group) =>
     group.items.map((item) => accountModel(item, group.currency, group.category)),
@@ -287,7 +300,7 @@ export function buildToReview(
         items: own,
         counts: counts(own),
         sourceSummary: toReviewSourceSummary(own),
-        bannerSummary: toReviewSourceSummary(own, now),
+        bannerSummary: toReviewSourceSummary(own, now, timeZone),
       };
     })
     .filter((group) => group.counts.total > 0);

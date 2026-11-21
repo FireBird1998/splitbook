@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import {
-  currentMonthKey,
   localeFirstWeekday,
   monthGrid,
   toDateParam,
@@ -10,7 +9,8 @@ import {
 import { BottomSheet, Chip, CompactText, IconButton, touch, useTap } from './compact';
 import { expenseDate } from '@splitbook/shared/expense-day';
 import type { DayKey } from '@splitbook/shared/zoned-calendar';
-import { gregorianDateFormat, readPhoneCalendar, spellDayKey } from './day-format';
+import { phoneDay, phoneMonth, readPhoneCalendar } from '../data/phone-clock';
+import { dayBefore, gregorianDateFormat, spellDayKey } from './day-format';
 import { useTheme } from './theme';
 
 /** "Monday 19 October 2026": how the sheet names a day, day first on every phone (#640). */
@@ -23,9 +23,9 @@ function isRealDay(value: string) {
   return toDateParam(new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))) === value;
 }
 
-/** The Month to open on: the date's own, or this Month when the date can't be shown. */
+/** The Month to open on: the date's own, or the phone's this Month when the date can't be shown. */
 const monthOf = (value: string) =>
-  /^[1-9]\d{3}-(0[1-9]|1[0-2])-\d{2}$/.test(value) ? value.slice(0, 7) : currentMonthKey();
+  /^[1-9]\d{3}-(0[1-9]|1[0-2])-\d{2}$/.test(value) ? value.slice(0, 7) : phoneMonth();
 
 /**
  * The Expense date: Today and Yesterday, then a Month calendar whose week starts on the device
@@ -69,9 +69,9 @@ export function DateSheet({
     if (visible) setMonth(monthOf(value));
   }, [visible]);
 
-  const now = new Date();
-  const today = toDateParam(now);
-  const yesterday = toDateParam(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+  // The phone's days, which follow its zone while the app runs (#1298).
+  const today = phoneDay();
+  const yesterday = dayBefore(today);
   // The editor re-renders on every keystroke; only a new Month or date is spelled out again,
   // and all of it from one reading of the phone's locale and zone.
   const calendar = useMemo(() => {

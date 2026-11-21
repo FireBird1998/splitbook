@@ -1,5 +1,6 @@
 import { shownGroup, shownView } from '../data/mobile-controller';
 import type { LoadStatus, MobileSnapshot } from '../data/types';
+import { phoneDay } from '../data/phone-clock';
 import { spellMoment, spellTime } from './day-format';
 
 export interface RefreshFeedback {
@@ -105,5 +106,6 @@ export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
 export function refreshedLabel(time: number | null, now = Date.now()) {
   if (time === null) return 'an unknown time';
   const date = new Date(time);
-  return date.toDateString() === new Date(now).toDateString() ? spellTime(date) : spellMoment(date);
+  // Today is the phone's day, which follows its zone while the app runs (#1298).
+  return phoneDay(date) === phoneDay(now) ? spellTime(date) : spellMoment(date);
 }

@@ -1,31 +1,8 @@
-import { gregorianLocale, toDateParam } from '@splitbook/shared/date';
+import { gregorianLocale } from '@splitbook/shared/date';
 import { expenseDate, expenseDay } from '@splitbook/shared/expense-day';
 import { NO_BREAK_SPACE } from '@splitbook/shared/separator';
 import type { DayKey } from '@splitbook/shared/zoned-calendar';
-
-/** The phone's locale, e.g. "en-IN" or "fa-IR", and its time zone. */
-export interface PhoneCalendar {
-  locale: string;
-  timeZone?: string;
-}
-
-let reading: PhoneCalendar | null = null;
-/**
- * The phone's locale and time zone. Reading them builds a formatter, which is slow on Hermes, so
- * one reading serves every date spelled in the same turn of the event loop, such as a render or
- * a Date sheet's Month. The next turn reads them again, so a phone that changes its language or
- * zone is followed.
- */
-export function readPhoneCalendar(): PhoneCalendar {
-  if (!reading) {
-    const { locale, timeZone } = Intl.DateTimeFormat().resolvedOptions();
-    reading = { locale, timeZone };
-    void Promise.resolve().then(() => {
-      reading = null;
-    });
-  }
-  return reading;
-}
+import { phoneDay, readPhoneCalendar } from '../data/phone-clock';
 
 const formats = new Map<string, Intl.DateTimeFormat>();
 /**
@@ -141,16 +118,21 @@ export const spellMoment = (date: Date, spelling: DaySpelling = {}) =>
 export const spellDayKey = (day: DayKey, spelling: Omit<DaySpelling, 'timeZone'> = {}) =>
   spellDay(expenseDate(day), { ...spelling, timeZone: 'UTC' });
 
+/** The day before a day key: `dayBefore('2026-03-01')` is `2026-02-28`. */
+export const dayBefore = (day: DayKey): DayKey =>
+  expenseDay(expenseDate(day).getTime() - 24 * 60 * 60 * 1000);
+
 /** "Today" or "Yesterday" when the day `day` names is one of them, by `today`'s key; otherwise null. */
 export function nearDayKey(day: DayKey, today: DayKey) {
-  const yesterday = expenseDay(expenseDate(today).getTime() - 24 * 60 * 60 * 1000);
-  return day === today ? 'Today' : day === yesterday ? 'Yesterday' : null;
+  return day === today ? 'Today' : day === dayBefore(today) ? 'Yesterday' : null;
 }
 
-/** "Today" or "Yesterday" when the moment's day is one of them on this device, otherwise null. */
-export const nearDay = (date: Date, now: number) =>
-  nearDayKey(toDateParam(date), toDateParam(new Date(now)));
+/**
+ * "Today" or "Yesterday" when the moment's day is one of them on the phone, otherwise null. Both
+ * days are the phone's, so they follow its zone while the app runs (#1298).
+ */
+export const nearDay = (date: Date, now: number) => nearDayKey(phoneDay(date), phoneDay(now));
 
-/** "Today", "Yesterday", or the day a key names with its year: "19 Oct 2026". */
+/** "Today", "Yesterday" on the phone (#1298), or the day a key names with its year: "19 Oct 2026". */
 export const recentDay = (day: DayKey, now = Date.now()) =>
-  nearDayKey(day, toDateParam(new Date(now))) ?? spellDayKey(day, { year: true });
+  nearDayKey(day, phoneDay(now)) ?? spellDayKey(day, { year: true });

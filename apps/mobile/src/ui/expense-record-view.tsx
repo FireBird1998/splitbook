@@ -42,6 +42,7 @@ import {
   type ExpenseRecordPosition,
 } from '@splitbook/shared/expense-position';
 import { clockTime } from './activity-format';
+import { phoneDay } from '../data/phone-clock';
 import { spellDay, spellDayKey, spellMoment } from './day-format';
 import {
   Badge,
@@ -165,7 +166,8 @@ const narrowBar = 380;
 /** "29 Sep, 20:02", with the year when it isn't this year. */
 function recordTime(iso: string, now = Date.now()) {
   const date = new Date(iso);
-  const day = spellDay(date, { year: date.getFullYear() !== new Date(now).getFullYear() });
+  // The year when it wasn't the phone's this year (#1298).
+  const day = spellDay(date, { year: phoneDay(date).slice(0, 4) !== phoneDay(now).slice(0, 4) });
   return `${day}, ${clockTime(iso)}`;
 }
 

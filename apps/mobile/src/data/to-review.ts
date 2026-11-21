@@ -15,6 +15,7 @@ import { buildToReview, type DeviceToReviewItem } from '@splitbook/shared/to-rev
 import { parseToReviewResponse, type ToReviewRead } from '@splitbook/shared/to-review-read';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import type { MobileSnapshot } from './types';
+import { phoneTimeZone } from './phone-clock';
 
 export interface ToReviewState {
   run: import('./review-run').ReviewRunState | null;
@@ -76,6 +77,8 @@ export function mobileToReview(snapshot: MobileSnapshot, now: number, groupId?: 
     { total: groups.reduce((total, group) => total + group.count, 0), groups },
     deviceItems.filter((item) => !groupId || item.groupId === groupId),
     new Date(now),
+    // "2 from Claude today" by the phone's day, which follows its zone while the app runs (#1298).
+    phoneTimeZone(),
   );
 }
 

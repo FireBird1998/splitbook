@@ -1922,7 +1922,10 @@ describe('compact Expense form', () => {
     await ui.press(ui.tile('Date').props.accessibilityLabel);
     expect(openSheet(ui.root(), 'September 2026')).toBe(true);
     expect(() => ui.input('Date, required')).toThrow();
-    expect(ui.pressable('Monday 28 September 2026').props.accessibilityState.selected).toBe(true);
+    // The Expense starts on the phone's today, which the calendar marks as the tile says (#1298).
+    expect(ui.pressable('Monday 28 September 2026, today').props.accessibilityState.selected).toBe(
+      true,
+    );
 
     await ui.press('Tuesday 15 September 2026');
     expect(openSheet(ui.root(), 'Tuesday 15 September 2026')).toBe(true);
@@ -1950,7 +1953,9 @@ describe('compact Expense form', () => {
     expect(ui.tile('Date').props.accessibilityLabel).toContain('۲۸ سپتامبر ۲۰۲۶');
     await ui.press(ui.tile('Date').props.accessibilityLabel);
     expect(openSheet(ui.root(), 'سپتامبر ۲۰۲۶')).toBe(true);
-    expect(ui.pressable('دوشنبه ۲۸ سپتامبر ۲۰۲۶').props.accessibilityState.selected).toBe(true);
+    expect(ui.pressable('دوشنبه ۲۸ سپتامبر ۲۰۲۶, today').props.accessibilityState.selected).toBe(
+      true,
+    );
 
     await ui.press('سه‌شنبه ۱۵ سپتامبر ۲۰۲۶');
     expect(openSheet(ui.root(), 'سه‌شنبه ۱۵ سپتامبر ۲۰۲۶')).toBe(true);

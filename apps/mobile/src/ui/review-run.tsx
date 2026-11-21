@@ -30,7 +30,6 @@ import {
 } from '@splitbook/shared/currency';
 import { expenseCurrencyChoices } from '@splitbook/shared/group-currencies';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
-import { toDateParam } from '@splitbook/shared/date';
 import type { MobileController } from '../data/mobile-controller';
 import { reviewForm, reviewFormChange } from '../data/review-form';
 import type { ExpenseDraft } from '../data/expense-draft';
@@ -69,7 +68,7 @@ import {
 } from './expense-inputs';
 import { CurrencySheet } from './currency-sheet';
 import { clockTime } from './activity-format';
-import { recentDay, spellDay } from './day-format';
+import { nearDay, recentDay, spellDay } from './day-format';
 import { PayerSheet, paidBySummary } from './payer-sheet';
 import { SplitSheet } from './split-sheet';
 import { TagSheet } from './tag-sheet';
@@ -457,15 +456,10 @@ function ReviewRunContent({
   };
   const change = (patch: Partial<ExpenseDraft>) => edit(patch);
   const type = (patch: Partial<ExpenseDraft>) => edit(patch, true);
-  const created = new Date(item.draft.createdAt),
-    now = new Date(controller.reviewNow());
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  const day =
-    toDateParam(created) === toDateParam(now)
-      ? 'today'
-      : toDateParam(created) === toDateParam(yesterday)
-        ? 'yesterday'
-        : spellDay(created, { year: true });
+  const created = new Date(item.draft.createdAt);
+  // Today and yesterday are the phone's days, which follow its zone while the app runs (#1298).
+  const near = nearDay(created, controller.reviewNow());
+  const day = near ? near.toLowerCase() : spellDay(created, { year: true });
   const assistant =
     item.draft.preparedBy.kind === 'assistant' ? item.draft.preparedBy.name : undefined;
   const sourceTitle = assistant ? `Prepared by ${assistant}` : 'You set this aside';
