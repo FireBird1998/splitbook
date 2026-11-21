@@ -1,4 +1,5 @@
-import { ListDayHeader, currentDayKey } from './list-day-header';
+import { ListDayHeader } from './list-day-header';
+import { phoneDay } from '../data/phone-clock';
 import type { RowPlaces } from './return-scroll';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
@@ -300,7 +301,7 @@ function ActivityList({
   onSelect,
 }: GroupActivityProps) {
   // This device's day, as App reads it each render, or from the clock a test gives.
-  const today = dayKey ?? currentDayKey(new Date(legacyNow ?? Date.now()));
+  const today = dayKey ?? phoneDay(legacyNow ?? Date.now());
   const theme = useTheme();
   const loading = state.status === 'loading';
   // Events listed with their pages: they stay shown while they're read again (M1-3), and after

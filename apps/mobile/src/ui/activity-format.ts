@@ -19,6 +19,7 @@ import {
   type ExpenseHistoryChange,
 } from '../data/expense-history';
 import type { DayKey } from '@splitbook/shared/zoned-calendar';
+import { phoneDay } from '../data/phone-clock';
 import { nearDayKey, spellDay, spellDayKey, spellTime } from './day-format';
 
 /** One Activity row in plain language: "{actor} {verb} {subject} {complement}" and its details. */
@@ -59,28 +60,25 @@ export interface ActivityDay {
   events: ActivityEvent[];
 }
 
-const localDayKey = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-
 /**
  * "Today", "Yesterday", or a short weekday and date such as "Sun 27 Sep", day first (#640).
- * Spelled from the day it groups under, and `today` is this device's day as a key, so a heading
- * always names its group's day, even once the phone's zone changes while the app runs (#1286).
+ * Spelled from the phone's day it groups under (#1286), and `today` is the phone's day as a key,
+ * so both follow the phone's zone while the app runs (#1298).
  */
 export function dayLabel(date: Date, today: DayKey) {
-  const day = localDayKey(date);
+  const day = phoneDay(date);
   return (
     nearDayKey(day, today) ??
     spellDayKey(day, { weekday: 'short', year: day.slice(0, 4) !== today.slice(0, 4) })
   );
 }
 
-/** Events keep the server's newest-first order, grouped under their local day. */
+/** Events keep the server's newest-first order, grouped under the phone's day they fell on. */
 export function activityDays(events: ActivityEvent[], today: DayKey): ActivityDay[] {
   const days: ActivityDay[] = [];
   for (const event of events) {
     const date = new Date(event.createdAt);
-    const key = localDayKey(date);
+    const key = phoneDay(date);
     const last = days[days.length - 1];
     if (last?.key === key) last.events.push(event);
     else days.push({ key, label: dayLabel(date, today), events: [event] });

@@ -117,6 +117,26 @@ describe('Android’s one day order (#640)', () => {
   });
 });
 
+// #1298: once the phone's zone changes while the app runs, Hermes keeps the zone the app started
+// in for its dates (#1283), so a "today" worked out from a date is the old zone's. The app started
+// in India; the phone is now in Pago Pago. At 08:00 UTC on 21 Nov it is 1:30 PM on Saturday 21 Nov
+// in India and 9:00 PM on Friday 20 Nov in Pago Pago, where the phone is.
+describe('today after the phone’s zone moves while the app runs (#1298)', () => {
+  const now = Date.parse('2026-11-21T08:00:00.000Z');
+
+  it('says Today and Yesterday by the phone’s day, not the day in the zone the app started in', () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    mockDeviceLocale('en-US');
+    // 1:00 AM on 20 Nov in Pago Pago (5:30 PM on 20 Nov in India).
+    expect(nearDay(new Date('2026-11-20T12:00:00.000Z'), now)).toBe('Today');
+    // 1:00 AM on 19 Nov in Pago Pago (5:30 PM on 19 Nov in India).
+    expect(nearDay(new Date('2026-11-19T12:00:00.000Z'), now)).toBe('Yesterday');
+    expect(recentDay('2026-11-20', now)).toBe('Today');
+    expect(recentDay('2026-11-19', now)).toBe('Yesterday');
+    expect(recentDay('2026-11-18', now)).toBe('18 Nov 2026');
+  });
+});
+
 // #766: "Last used 11:02 AM" drew without its time at 130% on a 360dp phone. The device's clock
 // put U+202F (narrow no-break space) before "AM", which the app's font lacks: Android measured
 // the line in the app font and drew that space from a wider fallback, so it wrapped unseen.

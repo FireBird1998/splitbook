@@ -1,5 +1,6 @@
 import { act, create } from 'react-test-renderer';
-import { expect, it, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { headerCard } from '@splitbook/shared/group-header';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { HeaderSceneCard, HeaderScenePlaceholder, PREVIEW_HEIGHT } from './header-scene-card';
@@ -68,7 +69,7 @@ it.each([
   [18, 'dark'],
   [23, 'dark'],
 ] as const)('the loading Auto card follows local hour %s', (hour, mode) => {
-  const clock = vi.spyOn(Date.prototype, 'getHours').mockReturnValue(hour);
+  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 16, hour, 30) });
   let view!: ReturnType<typeof create>;
   try {
     act(() => {
@@ -81,8 +82,36 @@ it.each([
     expect(JSON.stringify(view.toJSON())).toContain(getSemanticTokens(mode).surface);
   } finally {
     act(() => view.unmount());
-    clock.mockRestore();
+    vi.useRealTimers();
   }
+});
+
+// #1298: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+// India for its dates (#1283); the loading card's hour and Trip day are the phone's. At 08:00 UTC
+// on 21 Nov it is 1:30 PM on 21 Nov in India and 9:00 PM on 20 Nov in Pago Pago.
+it('the loading Auto card follows the phone’s hour and day after its zone moves while the app runs (#1298)', () => {
+  onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+  vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-21T08:00:00.000Z') });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  let view!: ReturnType<typeof create>;
+  act(() => {
+    view = create(
+      <HeaderScenePlaceholder
+        group={{
+          ...group,
+          startDate: new Date('2026-11-19'),
+          endDate: new Date('2026-11-22'),
+          header: { style: 'scene', scene: 'beach', time: 'auto' },
+        }}
+      />,
+    );
+  });
+  const markup = JSON.stringify(view.toJSON());
+  act(() => view.unmount());
+  expect(markup).toContain(getSemanticTokens('dark').surface);
+  expect(markup).toContain('Day 2 of 4');
 });
 
 // #1267: the settings page draws the preview's caption on its card, in the app's own theme at

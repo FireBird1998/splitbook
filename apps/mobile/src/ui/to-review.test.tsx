@@ -120,6 +120,8 @@ function fixture(
     failPut?: number;
     /** Item updates for these ids answer 409 STALE_REVISION, as if changed elsewhere. */
     stale?: string[];
+    /** The controller's clock, when it isn't the moment the items were made. */
+    now?: number;
     /**
      * Dinner in Zürich, CHF 86.00, in Maple House, which lists INR with EUR and JPY (#733): the
      * server reviews it as CURRENCY_NOT_LISTED until CHF is added or its currency changed.
@@ -433,7 +435,7 @@ function fixture(
     },
     {
       origin: 'http://localhost:4408',
-      now: Date.parse(iso),
+      now: options.now ?? Date.parse(iso),
       newSubmissionKey: () => 'fictional-review-request',
       parts: {
         notifications: notificationDevice,
@@ -2441,3 +2443,25 @@ describe.each(['light', 'dark'] as const)('To review’s failed read in %s (#129
     expect(text(list)).toContain('Duplicate dinner');
   });
 });
+
+// #1298: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+// India for its dates (#1283); "today" is the phone's. The items were made at 12:00 UTC on 14 Oct,
+// 1:00 AM there; at 08:00 UTC on 15 Oct it is 9:00 PM on 14 Oct there (and 15 Oct in India).
+describe.each(['light', 'dark'] as const)(
+  'To review’s today after the phone’s zone moves while the app runs in %s (#1298)',
+  (mode) => {
+    it('says the items an assistant prepared on the phone’s today came today', async () => {
+      onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+      const f = fixture({ now: Date.parse('2026-10-15T08:00:00.000Z') });
+      await signIn(f);
+      await act(async () => {
+        await f.controller.refreshToReview();
+      });
+      const banner = await render(
+        <ToReviewGroupBanner controller={f.controller} groupId={groupId} />,
+        mode,
+      );
+      expect(text(banner)).toContain('4 from Claude today');
+    });
+  },
+);

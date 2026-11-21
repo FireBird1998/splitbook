@@ -3,7 +3,8 @@ import { createExpenseSchema } from '@splitbook/shared/validators/expense';
 import type { createMobileController } from './mobile-controller';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook } from '../test-utils/fake-splitbook';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import type { ExpenseDraft } from './expense-draft';
 import type { FetchResponse, MobileSnapshot } from './types';
@@ -2181,5 +2182,25 @@ describe('Late completion', () => {
       financial: { groupId: null },
     });
     expect(server.drafts.size).toBe(0);
+  });
+});
+
+// #1298: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+// India for its dates (#1283); this Month is the phone's. At 08:00 UTC on 1 Oct it is 1:30 PM on
+// 1 Oct in India and 9:00 PM on 30 Sep in Pago Pago.
+describe('the Month a direct entry returns to after the phone’s zone moves while the app runs (#1298)', () => {
+  it('offers no other Month for an Expense saved into the phone’s this Month', async () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    const server = ledger();
+    const controller = server.create(Date.parse('2026-10-01T08:00:00.000Z'));
+    await controller.signIn('alex');
+    // Entered from Home rather than from the Group.
+    await controller.openExpense(householdId);
+    await fillNewExpense(controller, { date: '2026-09-30' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().snackbar).toMatchObject({
+      message: 'Expense saved\u00a0· Weekly groceries',
+      viewMonth: null,
+    });
   });
 });

@@ -43,6 +43,7 @@ import {
 import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
 import { useTheme } from './theme';
+import { phoneHour } from '../data/phone-clock';
 const Scene = lazy(() => import('./header-scene'));
 // Screen height, in dp at the member's text size, below which a pinned preview crowds the choices.
 const PIN_MIN_ROOM = 600;
@@ -72,10 +73,10 @@ export function previewCaption(header: Header, hour: number) {
 }
 /** The hour on this phone, read again whenever the app comes back to the front. */
 function useHour() {
-  const [hour, setHour] = useState(() => new Date().getHours());
+  const [hour, setHour] = useState(() => phoneHour());
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') setHour(new Date().getHours());
+      if (state === 'active') setHour(phoneHour());
     });
     return () => sub.remove();
   }, []);

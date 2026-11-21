@@ -35,6 +35,7 @@ import {
   SelectedDescriptionField,
   SelectedNotesField,
 } from './expense-input-selection';
+import { phoneDay } from '../data/phone-clock';
 import { nearDayKey, spellDayKey } from './day-format';
 import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
@@ -95,8 +96,9 @@ export function expenseDateLabel(value: string, now = Date.now()) {
     const shown = value || 'Choose a date';
     return { shown, spoken: shown };
   }
-  // Spelled from the key, never the local date, so no zone moves it (#1286).
-  const today = localDay(new Date(now));
+  // Spelled from the key, never the local date, so no zone moves it (#1286), beside the phone's
+  // today, which follows its zone while the app runs (#1298).
+  const today = phoneDay(now);
   const thisYear = value.slice(0, 4) === today.slice(0, 4);
   const short = spellDayKey(value, { year: !thisYear });
   const full = spellDayKey(value, { weekday: 'long', month: 'long', year: true });

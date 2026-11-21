@@ -166,7 +166,7 @@ import { getCurrency } from '@splitbook/shared/currency';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { monthKeyInZone } from '@splitbook/shared/zoned-calendar';
 import { widgetRecentCopy } from './widget-recent-copy';
-import { currentMonthKey, toDateParam } from '@splitbook/shared/date';
+import { phoneDay, phoneMonth } from './phone-clock';
 import {
   groupCurrencies,
   normaliseExtraCurrencies,
@@ -3140,7 +3140,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await openExpense(activity.groupId, expenseId, origin);
   };
 
-  const today = () => toDateParam(new Date(now()));
+  // The phone's day, which follows its zone while the app runs (#1298).
+  const today = () => phoneDay(now());
   const revalidateExpense = (
     validation: ExpenseValidation,
     draft: ExpenseDraft,
@@ -3300,10 +3301,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // Where the member's latest Expense here was, as on the web (#720).
     currency: startingExpenseCurrency(context.group, context.group.latestExpenseCurrency),
     description: '',
-    date:
-      month && month < currentMonthKey(new Date(now()))
-        ? expenseMonthRange(month).dateTo
-        : toDateParam(new Date(now())),
+    date: month && month < phoneMonth(now()) ? expenseMonthRange(month).dateTo : today(),
     payerId: accountId,
     multiPayer: false,
     payers: [],
@@ -4230,11 +4228,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const origin = expenseOrigin(groupId);
     // A Group not yet read here offers no other Month.
     const shown =
-      context?.group.category !== 'home'
-        ? null
-        : origin
-          ? origin.month
-          : currentMonthKey(new Date(now()));
+      context?.group.category !== 'home' ? null : origin ? origin.month : phoneMonth(now());
     const month = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.slice(0, 7) : null;
     // A saved or updated Expense (dated) is highlighted while this shows; a deleted one has no row.
     const { status, receiptId } = snapshot.expense;

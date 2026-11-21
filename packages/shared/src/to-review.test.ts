@@ -211,6 +211,20 @@ describe('To review model', () => {
     a.draft.createdAt = new Date(2026, 9, 14, 0, 0).toISOString();
     expect(buildToReview(read([a]), [], now).groups[0].bannerSummary).toBe('1 from Claude today');
   });
+  // #1298: Android names the phone's zone, which Intl follows when the phone's zone changes while
+  // the app runs, while Hermes keeps the zone the app started in for its dates (#1283).
+  it('uses the calendar day in the zone given, whatever the host’s', () => {
+    const a = item(1);
+    a.draft.preparedBy = { kind: 'assistant', name: 'Claude' };
+    // 1:00 AM on 14 Oct in Pago Pago, 5:30 PM on 14 Oct in India.
+    a.draft.createdAt = '2026-10-14T12:00:00.000Z';
+    // 9:00 PM on 14 Oct in Pago Pago, 1:30 PM on 15 Oct in India.
+    const later = new Date('2026-10-15T08:00:00.000Z');
+    const summary = (timeZone: string) =>
+      buildToReview(read([a]), [], later, timeZone).groups[0].bannerSummary;
+    expect(summary('Pacific/Pago_Pago')).toBe('1 from Claude today');
+    expect(summary('Asia/Kolkata')).toBe('1 from Claude');
+  });
   it('does not call a mixed-day assistant group today', () => {
     const a = item(1),
       b = item(2);
@@ -371,6 +385,18 @@ describe('changes while an item is open', () => {
       `Claude changed the date a moment ago: ${reviewDate('2026-10-14')} → ${reviewDate('2026-10-15')}. You’re seeing the latest version.`,
     );
     expect(reviewDate('2000-01-01')).toBe('1 Jan 2000');
+  });
+  // #1298: Android names the phone's today, which follows its zone while the app runs, while
+  // Hermes keeps the zone the app started in for its dates (#1283).
+  it('says Today and Yesterday by the day given, whatever the host’s', () => {
+    const { before, after } = changed();
+    before.values!.date = '2026-10-14';
+    after.values!.date = '2026-10-15';
+    expect(describeDraftChange(before, after, {}, undefined, '2026-10-15')).toBe(
+      'Claude changed the date a moment ago: Yesterday → Today. You’re seeing the latest version.',
+    );
+    expect(reviewDate('2026-10-13', '2026-10-15')).toBe('13 Oct 2026');
+    expect(reviewDate(undefined, '2026-10-15')).toBe('Date missing');
   });
   it('names changed payers and amounts without exposing identities', () => {
     const { before, after } = changed();

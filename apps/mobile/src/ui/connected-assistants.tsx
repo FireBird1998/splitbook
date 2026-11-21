@@ -23,6 +23,7 @@ import {
   useLargestText,
   useTextColumn,
 } from './compact';
+import { phoneDay } from '../data/phone-clock';
 import { nearDay, spellDay, spellTime } from './day-format';
 import { ReadTime } from './financial-views';
 import { useDismissAfter } from './group-snackbar';
@@ -35,7 +36,8 @@ export function lastUsedLabel(value: string | null, now = Date.now()) {
   const near = nearDay(date, now);
   if (near === 'Today') return `Last used ${spellTime(date)}`;
   if (near === 'Yesterday') return 'Last used yesterday';
-  return `Last used ${spellDay(date, { year: date.getFullYear() !== new Date(now).getFullYear() })}`;
+  // The year when the call wasn't in the phone's this year (#1298).
+  return `Last used ${spellDay(date, { year: phoneDay(date).slice(0, 4) !== phoneDay(now).slice(0, 4) })}`;
 }
 
 /** "Read only + To review · 1 of 2 Groups": its access, and how many Groups it reaches. */

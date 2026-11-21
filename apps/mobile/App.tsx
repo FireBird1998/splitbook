@@ -92,7 +92,7 @@ import { returnScrollTarget, visibleRowAnchor, type RowPlaces } from './src/ui/r
 import { recordOutline } from './src/ui/expense-record-view';
 import { expenseRecoveryWords } from './src/ui/expense-recovery-copy';
 import { DetailsNotice, RefreshStatus, RetainedNotice } from './src/ui/financial-views';
-import { currentDayKey } from './src/ui/list-day-header';
+import { phoneDay } from './src/data/phone-clock';
 import { GroupExpensesView } from './src/ui/group-expenses';
 import { TripStrip } from './src/ui/trip-strip';
 import { readGroupHeader } from '@splitbook/shared/group-header';
@@ -1145,7 +1145,7 @@ function GroupScreen() {
       groupCurrencies: snapshot.groupCurrencies,
       currencyAdd: snapshot.currencyAdd,
       home: snapshot.home,
-      dayKey: currentDayKey(),
+      dayKey: phoneDay(),
       feedback: refreshFeedback(snapshot),
     }),
     (a, b) =>

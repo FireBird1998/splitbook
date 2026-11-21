@@ -1,11 +1,14 @@
 import { View } from 'react-native';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { emptyAssistants, type AssistantsState } from '../data/assistants';
 import { findHosts, largeTextWindows, unreadText, wordsOf } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
-import { ConnectedAssistants } from './connected-assistants';
+import { mockDeviceLocale } from '../test-utils/device-locale';
+import { spellTime } from './day-format';
+import { ConnectedAssistants, lastUsedLabel } from './connected-assistants';
 import { SettingsScreen } from './settings-screen';
 import { ThemeContext } from './theme';
 
@@ -298,5 +301,24 @@ describe('Settings → Account (#622)', () => {
   it('doesn’t offer them where they’re switched off', () => {
     settings(false);
     expect(screenText()).not.toContain('Connected assistants');
+  });
+});
+
+// #1298: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+// India for its dates (#1283); "Last used" follows the phone's day and year.
+describe('Last used after the phone’s zone moves while the app runs (#1298)', () => {
+  it('says the time for a call on the phone’s today, and no year within the phone’s year', () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    mockDeviceLocale('en-US');
+    // 9:00 PM on 20 Nov in Pago Pago (1:30 PM on 21 Nov in India); the call was at 1:00 AM there.
+    const call = '2026-11-20T12:00:00.000Z';
+    expect(lastUsedLabel(call, Date.parse('2026-11-21T08:00:00.000Z'))).toBe(
+      `Last used ${spellTime(new Date(call))}`,
+    );
+    expect(spellTime(new Date(call))).toMatch(/^1:00\s+AM$/);
+    // 9:00 PM on 31 Dec 2026 in Pago Pago (1:30 PM on 1 Jan 2027 in India).
+    expect(lastUsedLabel('2026-12-28T12:00:00.000Z', Date.parse('2027-01-01T08:00:00.000Z'))).toBe(
+      'Last used 28 Dec',
+    );
   });
 });

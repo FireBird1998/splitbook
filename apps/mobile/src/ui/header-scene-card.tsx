@@ -10,7 +10,7 @@ import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { View } from 'react-native';
 import type { MobileGroup } from '../data/types';
 import { CompactText } from './compact';
-import { currentDayKey } from './list-day-header';
+import { phoneDay, phoneHour } from '../data/phone-clock';
 import { TripStrip } from './trip-strip';
 import { fonts, ThemeContext, useTheme } from './theme';
 
@@ -114,7 +114,7 @@ export function HeaderScenePlaceholder({
   preview?: GroupHeader;
 }) {
   const theme = useTheme();
-  const time = headerTimeOfDay((preview ?? header).time, new Date().getHours());
+  const time = headerTimeOfDay((preview ?? header).time, phoneHour());
   const art = (
     <View
       accessibilityRole="progressbar"
@@ -127,7 +127,7 @@ export function HeaderScenePlaceholder({
   ) : (
     <View style={{ borderRadius: 16, overflow: 'hidden' }}>
       {art}
-      <HeaderSceneCard group={group} today={currentDayKey()} time={time} />
+      <HeaderSceneCard group={group} today={phoneDay()} time={time} />
     </View>
   );
 }

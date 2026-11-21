@@ -2,6 +2,7 @@ import { expenseReceipt } from '../test-utils/expense-receipt';
 import { testPhone } from '../test-utils/test-phone';
 import { fakeSplitbook, expensePage } from '../test-utils/fake-splitbook';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { inTimeZone } from '../test-utils/time-zone';
 import { toDateParam } from '@splitbook/shared/date';
 import { gatewayReply, hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
@@ -5016,5 +5017,24 @@ describe('Add expense through account and membership changes (#373)', () => {
       memberIds.slice(0, 2),
     );
     expect(controller.getSnapshot().expense.status).toBe('saved');
+  });
+});
+
+// #1298: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+// India for its dates (#1283); which day is now is the phone's. At 08:00 UTC on 28 Sep it is
+// 1:30 PM on 28 Sep in India and 9:00 PM on 27 Sep in Pago Pago. No saved date changes.
+describe('a new Expense’s day after the phone’s zone moves while the app runs (#1298)', () => {
+  it('starts on the phone’s today, and gives it as the date to follow', async () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    const { create } = setup();
+    const controller = create(Date.parse('2026-09-28T08:00:00.000Z'));
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.draft?.date).toBe('2026-09-27');
+    await controller.updateExpenseDraft({ amount: '10', description: 'Dinner', tagId, date: '' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({
+      date: 'Enter the date as YYYY-MM-DD, such as 2026-09-27.',
+    });
   });
 });

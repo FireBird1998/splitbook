@@ -33,7 +33,7 @@ import {
   moneyCharacters,
   useLargeText,
 } from './compact';
-import { readPhoneCalendar } from './day-format';
+import { readPhoneCalendar } from '../data/phone-clock';
 import { spendingDays } from './spending-words';
 import { readTime, RetainedNotice } from './financial-views';
 import { fonts, useTheme } from './theme';

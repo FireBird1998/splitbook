@@ -5,9 +5,11 @@ import { GROUP_ARCHIVED_MESSAGE } from './group-archive';
 import { DATABASE_UNAVAILABLE_MESSAGE } from './database-unavailable';
 import { DRAFT_SAVE_UNCONFIRMED_MESSAGE } from './draft-responses';
 import type { PersistedExpenseDraft } from './validators/expense-draft';
+import { format } from 'date-fns';
 import { formatDate } from './date';
-import { expenseLocalDate } from './expense-day';
+import { expenseDate, expenseDay, expenseLocalDate } from './expense-day';
 import { toDateParam } from './date';
+import { dayKeyInZone, type DayKey } from './zoned-calendar';
 import { formatCurrency } from './currency';
 import { parseAmountMinor, sumMinorAmounts, toMajorAmount } from './exact-money';
 import {
@@ -209,14 +211,24 @@ function accountModel(
 }
 /** "needs details" after 1, "need details" after any other count (#877); plurals by hand. */
 export const needDetailsWords = (count: number) => (count === 1 ? 'needs details' : 'need details');
-export function toReviewSourceSummary(items: readonly ReviewItemModel[], now?: Date): string {
+/**
+ * "2 from Claude today · 1 needs details". "Today" is the day `now` falls on: in `timeZone` when
+ * given, such as the phone's zone that Android names because Hermes keeps the zone the app started
+ * in for its dates (#1298), otherwise in the runtime's own.
+ */
+export function toReviewSourceSummary(
+  items: readonly ReviewItemModel[],
+  now?: Date,
+  timeZone?: string,
+): string {
+  const day = (date: Date) => (timeZone ? dayKeyInZone(date, timeZone) : toDateParam(date));
   const sources = new Map<string, { total: number; today: number }>();
   for (const item of items) {
     const by = item.accountItem?.draft.preparedBy;
     if (by?.kind !== 'assistant') continue;
     const source = sources.get(by.name) ?? { total: 0, today: 0 };
     source.total++;
-    if (now && toDateParam(new Date(item.createdAt)) === toDateParam(now)) source.today++;
+    if (now && day(new Date(item.createdAt)) === day(now)) source.today++;
     sources.set(by.name, source);
   }
   const parts = [...sources]
@@ -244,10 +256,12 @@ const order: Record<ToReviewState, number> = {
   'needs-details': 2,
   'on-this-phone': 3,
 };
+/** `timeZone` is the zone a banner's "today" is read in (`toReviewSourceSummary`). */
 export function buildToReview(
   read: ToReviewRead,
   deviceItems: readonly DeviceToReviewItem[],
   now: Date,
+  timeZone?: string,
 ) {
   const items: ReviewItemModel[] = read.groups.flatMap((group) =>
     group.items.map((item) => accountModel(item, group.currency, group.category)),
@@ -287,7 +301,7 @@ export function buildToReview(
         items: own,
         counts: counts(own),
         sourceSummary: toReviewSourceSummary(own),
-        bannerSummary: toReviewSourceSummary(own, now),
+        bannerSummary: toReviewSourceSummary(own, now, timeZone),
       };
     })
     .filter((group) => group.counts.total > 0);
@@ -339,9 +353,18 @@ export function summarizeReviewRun(outcomes: readonly ReviewRunOutcome[]) {
   return { saved, deleted, left, label: parts.join(SEPARATOR) };
 }
 
-/** A date-only Expense fact is a calendar day, not a UTC instant. */
-export function reviewDate(date?: string): string {
-  return date ? formatDate(expenseLocalDate(date)) : 'Date missing';
+/**
+ * A date-only Expense fact is a calendar day, not a UTC instant. "Today" and "Yesterday" are by
+ * `today`'s key when given, such as the phone's that Android names because Hermes keeps the zone
+ * the app started in for its dates (#1298), otherwise by the runtime's own day.
+ */
+export function reviewDate(date?: string, today?: DayKey): string {
+  if (!date) return 'Date missing';
+  if (!today) return formatDate(expenseLocalDate(date));
+  const day = expenseDay(date);
+  if (day === today) return 'Today';
+  if (day === expenseDay(expenseDate(today).getTime() - 24 * 60 * 60 * 1000)) return 'Yesterday';
+  return format(expenseLocalDate(date), 'd MMM yyyy');
 }
 
 /**
@@ -353,6 +376,8 @@ export function describeDraftChange(
   after: PersistedExpenseDraft,
   names: Readonly<Record<string, string>> = {},
   groupCurrency?: string,
+  /** The day a date reads as Today against (`reviewDate`). */
+  today?: DayKey,
 ): string {
   const prior = withGroupCurrency(before.values, groupCurrency);
   const next = withGroupCurrency(after.values, groupCurrency);
@@ -387,7 +412,7 @@ export function describeDraftChange(
       [prior.amount, prior.currency],
       [next.amount, next.currency],
     ],
-    ['date', reviewDate(prior.date), reviewDate(next.date), prior.date, next.date],
+    ['date', reviewDate(prior.date, today), reviewDate(next.date, today), prior.date, next.date],
     [
       'payer',
       people(prior.paidBy, prior.currency),

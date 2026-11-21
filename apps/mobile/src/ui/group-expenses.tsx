@@ -1,5 +1,6 @@
 import { sameSelection } from './use-mobile-snapshot';
-import { ListDayHeader, currentDayKey } from './list-day-header';
+import { ListDayHeader } from './list-day-header';
+import { phoneDay } from '../data/phone-clock';
 import type { RowPlaces } from './return-scroll';
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -602,7 +603,7 @@ export const GroupExpensesView = memo(
     onChooseTripCurrency?: (currency: string) => void;
   }) {
     // This device's day, as App reads it each render, or from the clock a test gives.
-    const today = dayKey ?? currentDayKey(new Date(legacyNow ?? Date.now()));
+    const today = dayKey ?? phoneDay(legacyNow ?? Date.now());
     const theme = useTheme();
     const { expenses } = state;
     // The latest handler, behind one that never changes, so no row renders again for it.
