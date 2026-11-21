@@ -166,7 +166,7 @@ import { getCurrency } from '@splitbook/shared/currency';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { monthKeyInZone } from '@splitbook/shared/zoned-calendar';
 import { widgetRecentCopy } from './widget-recent-copy';
-import { phoneDay, phoneMonth } from './phone-clock';
+import { phoneClock, phoneDay, phoneMonth } from './phone-clock';
 import {
   groupCurrencies,
   normaliseExtraCurrencies,
@@ -1748,6 +1748,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (online) void recoverShown();
     }),
     spendingQueries.listen(),
+    // Today and this Month move at midnight and when the phone's zone changes, with nothing read
+    // or changed: Spending by day draws them again, and observes a new Month (#1302).
+    phoneClock.subscribe(() => publish({ ...snapshot })),
     // The phone's switch: turned on, Home reads this Month; turned off, nothing is read or kept.
     dependencies.spendingByDay?.subscribe(() => {
       if (!spendingOn()) void spendingQueries.off();

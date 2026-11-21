@@ -1,7 +1,7 @@
 import { SceneVisibility } from './scene-visibility';
 import { useHeaderTilt } from './use-header-tilt';
 import { memo, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Animated, AppState, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Animated, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { headerTimeOfDay, type GroupHeader } from '@splitbook/shared/group-header';
 import type { MobileGroup } from '../data/types';
@@ -19,7 +19,7 @@ import {
 } from './header-scene-motion';
 import type { HeaderSceneSprites, SceneSprite } from './header-scene-sprite';
 import { headerSceneMotionAvailable } from '../config';
-import { phoneDay, phoneHour } from '../data/phone-clock';
+import { usePhoneNow } from './phone-now';
 import { useReducedMotion } from './compact/motion';
 import {
   HeaderSceneCard,
@@ -223,7 +223,7 @@ export default function HeaderScene({
   preview = false,
   tilt = true,
   visible = true,
-  today = phoneDay(),
+  today,
 }: {
   group: MobileGroup;
   header: GroupHeader;
@@ -235,7 +235,8 @@ export default function HeaderScene({
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   const [art, setArt] = useState<HeaderSceneSprites | null>(null);
-  const [, setHour] = useState(() => phoneHour());
+  // The phone's day and hour, drawn again as they move while the scene shows (#1302).
+  const clock = usePhoneNow();
   const window = useWindowDimensions();
   // The preview card's width, measured once laid out; until then, the page's estimate.
   const [previewWidth, setPreviewWidth] = useState<number | null>(null);
@@ -255,7 +256,7 @@ export default function HeaderScene({
     // The settings preview is pinned on its own page, outside any Group scroll.
     (preview || visibility.visible) &&
     foreground;
-  const time = headerTimeOfDay(header.time, phoneHour());
+  const time = headerTimeOfDay(header.time, clock.hour);
   const position = useHeaderTilt(moving && tilt);
   const frameWidth = window.width;
   // A pause holds the float and the clouds where they are, since the scene can still be seen;
@@ -325,12 +326,6 @@ export default function HeaderScene({
       active = false;
     };
   }, [header.scene]);
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') setHour(phoneHour());
-    });
-    return () => sub.remove();
-  }, []);
   if (failed === header.scene) return <ClassicGroupHeader group={group} />;
   if (art?.id !== header.scene)
     return (
@@ -437,7 +432,7 @@ export default function HeaderScene({
             : null}
         </View>
       </View>
-      {preview ? null : <HeaderSceneCard group={group} today={today} time={time} />}
+      {preview ? null : <HeaderSceneCard group={group} today={today ?? clock.day} time={time} />}
     </View>
   );
 }

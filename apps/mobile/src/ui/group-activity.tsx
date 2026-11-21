@@ -1,5 +1,5 @@
 import { ListDayHeader } from './list-day-header';
-import { phoneDay } from '../data/phone-clock';
+import { phoneDay, phoneTimeZone } from '../data/phone-clock';
 import type { RowPlaces } from './return-scroll';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
@@ -640,7 +640,8 @@ function PaymentRecord({
   /** Under a settle-up's own "Payment", each record goes without one (#734). */
   titled?: boolean;
 }) {
-  const card = paymentRecord(record, currentUserId);
+  // When its rates were fetched, in the phone's zone (#1302).
+  const card = paymentRecord(record, currentUserId, phoneTimeZone());
   const mono = { fontFamily: fonts.mono, fontVariant: ['tabular-nums' as const] };
   const recorder =
     event.actor?._id === currentUserId ? 'you' : event.actor?.name || 'a former member';

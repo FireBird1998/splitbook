@@ -179,3 +179,70 @@ it.each([
   expect(markup).not.toContain('4 trip days');
   act(() => view.unmount());
 });
+
+// #1302: a Header scene left on screen, with nothing else drawing it again, takes the next hour,
+// the next day and the phone's new zone while it shows.
+const sceneShows = async (
+  header: MobileGroup['header'] = { style: 'scene', scene: 'beach', time: 'auto' },
+) => {
+  const { default: HeaderScene } = await import('./header-scene');
+  let renderer!: ReturnType<typeof create>;
+  await act(async () => {
+    renderer = create(<HeaderScene group={group} header={header as never} motion={false} />);
+  });
+  onTestFinished(() => {
+    act(() => renderer.unmount());
+  });
+  const markup = () => JSON.stringify(renderer.toJSON());
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(markup()).toContain('LinearGradient');
+  });
+  return markup;
+};
+const settles = (expectation: () => void) =>
+  vi.waitFor(
+    async () => {
+      await act(async () => {});
+      expectation();
+    },
+    { timeout: 2500, interval: 50 },
+  );
+
+it('takes the next hour while it shows (#1302)', async () => {
+  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 8, 18, 9, 59, 59, 700) });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  const markup = await sceneShows();
+  expect(markup()).toContain('#c8d9ed');
+  vi.setSystemTime(new Date(2026, 8, 18, 10, 0, 1));
+  await settles(() => expect(markup()).toContain('#a9d3ec'));
+});
+
+it('takes the next Trip day at midnight while it shows (#1302)', async () => {
+  vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 8, 17, 23, 59, 59, 700) });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  const markup = await sceneShows();
+  expect(markup()).toContain('Day 1 of 4');
+  vi.setSystemTime(new Date(2026, 8, 18, 0, 0, 1));
+  await settles(() => expect(markup()).toContain('Day 2 of 4'));
+});
+
+// The app started in India; the phone moves to Pago Pago at 1:59 PM in India, 9:59 PM there.
+it('takes the phone’s new hour when its zone changes while it shows (#1302)', async () => {
+  let restore = hermesZoneMoved('Asia/Kolkata', 'Asia/Kolkata');
+  onTestFinished(() => restore());
+  vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-09-18T08:29:59.700Z') });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  const markup = await sceneShows();
+  expect(markup()).toContain('#a9d3ec');
+  restore();
+  restore = hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago');
+  vi.setSystemTime(Date.parse('2026-09-18T08:30:00.500Z'));
+  await settles(() => expect(markup()).toContain('#101a35'));
+});

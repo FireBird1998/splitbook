@@ -322,3 +322,24 @@ describe('Last used after the phone’s zone moves while the app runs (#1298)', 
     );
   });
 });
+
+// #1302: the list left open takes the new day at midnight: a call at 11:00 PM becomes yesterday's.
+describe('Connected assistants left open at midnight (#1302)', () => {
+  it('says the call was yesterday once midnight passes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 10, 21, 23, 59, 59, 700) });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const lateCall = { ...helper, lastUsedAt: new Date(2026, 10, 21, 23, 0).toISOString() };
+    render(listed({ assistants: [lateCall] }));
+    expect(screenText()).not.toContain('Last used yesterday');
+    vi.setSystemTime(new Date(2026, 10, 22, 0, 0, 1));
+    await vi.waitFor(
+      async () => {
+        await act(async () => {});
+        expect(screenText()).toContain('Last used yesterday');
+      },
+      { timeout: 2500, interval: 50 },
+    );
+  });
+});

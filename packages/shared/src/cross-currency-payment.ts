@@ -26,6 +26,7 @@ import {
   type CrossCurrencySettlementFields,
 } from './cross-currency-settlement';
 import { NO_BREAK_SPACE, SEPARATOR } from './separator';
+import { dayKeyInZone, monthAbbreviation, zonedMoment } from './zoned-calendar';
 import { withSign } from './money';
 
 export { rateText, roundedRate } from './cross-currency-settlement';
@@ -321,20 +322,37 @@ function calendarDay(date: string): string {
   return format(new Date(year, month - 1, day), `d${NO_BREAK_SPACE}MMM`);
 }
 
-/** "5 Nov 17:44", in the viewer's own time, kept on one line with no-break spaces (#895). */
-const dayAndTime = (date: Date) => format(date, `d${NO_BREAK_SPACE}MMM${NO_BREAK_SPACE}HH:mm`);
+/** "17:44": a moment's time in a zone on a 24-hour clock. */
+const clockIn = (date: Date, timeZone: string) => {
+  const { hour, minute } = zonedMoment(date, timeZone);
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+};
+
+/**
+ * "5 Nov 17:44", in the viewer's own time, kept on one line with no-break spaces (#895): in
+ * `timeZone` when given, such as the phone's that Android names, since Hermes keeps the zone the
+ * app started in for its dates (#1302); otherwise in the runtime's own.
+ */
+const dayAndTime = (date: Date, timeZone?: string) => {
+  if (!timeZone) return format(date, `d${NO_BREAK_SPACE}MMM${NO_BREAK_SPACE}HH:mm`);
+  const { day, month } = zonedMoment(date, timeZone);
+  return `${day}${NO_BREAK_SPACE}${monthAbbreviation(month)}${NO_BREAK_SPACE}${clockIn(date, timeZone)}`;
+};
 
 /**
  * "today 06:00", "yesterday 18:00" or "18 Oct 18:00", in the viewer's own time, on one line
- * (#895).
+ * (#895): its day and time both in `timeZone` when given (#1302).
  */
-function fetchedWhen(fetchedAt: string, now: Date): string {
+function fetchedWhen(fetchedAt: string, now: Date, timeZone?: string): string {
   const fetched = new Date(fetchedAt);
   const day = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    timeZone
+      ? Date.parse(dayKeyInZone(date, timeZone))
+      : new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const daysAgo = Math.round((day(now) - day(fetched)) / 86_400_000);
   const when = daysAgo === 0 ? 'today' : daysAgo === 1 ? 'yesterday' : null;
-  return when ? `${when}${NO_BREAK_SPACE}${format(fetched, 'HH:mm')}` : dayAndTime(fetched);
+  if (!when) return dayAndTime(fetched, timeZone);
+  return `${when}${NO_BREAK_SPACE}${timeZone ? clockIn(fetched, timeZone) : format(fetched, 'HH:mm')}`;
 }
 
 const SOURCE_NAMES: Partial<Record<RateSuggestion['source'], string>> = {
@@ -355,6 +373,8 @@ export function rateNote(
   suggestion: RateSuggestion | null,
   paidCurrency: string,
   now: Date,
+  /** The zone its fetched day and time are spelled in (`fetchedWhen`). */
+  timeZone?: string,
 ): RateNote {
   if (!suggestion || kind === 'entered')
     return {
@@ -376,7 +396,7 @@ export function rateNote(
     text:
       suggestion.ageDays > OLD_AFTER_DAYS
         ? `${lead}, ${suggestion.ageDays}${NO_BREAK_SPACE}days old. Today’s rates aren’t in yet.`
-        : `${lead}${SEPARATOR}fetched${NO_BREAK_SPACE}${fetchedWhen(suggestion.fetchedAt, now)}`,
+        : `${lead}${SEPARATOR}fetched${NO_BREAK_SPACE}${fetchedWhen(suggestion.fetchedAt, now, timeZone)}`,
     attribution,
     useSuggestion: null,
   };
@@ -547,7 +567,12 @@ export function crossCurrencySummary({
  * who paid whom, both amounts, the rate used and the suggestion beside it with its source, the
  * Debt between the two before and after, and that nothing else moved.
  */
-export function paymentRecord(record: CrossCurrencyRecord, viewerId?: string) {
+export function paymentRecord(
+  record: CrossCurrencyRecord,
+  viewerId?: string,
+  /** The zone its fetched day and time are spelled in (`dayAndTime`). */
+  timeZone?: string,
+) {
   // As its amounts name it: "per €", or "per PLN" for the zloty (#884), kept on one line (#892).
   const per = perUnit(record.currency);
   const payer = memberLabel(record.paidBy, record.paidByName, viewerId) ?? 'Former member';
@@ -560,7 +585,7 @@ export function paymentRecord(record: CrossCurrencyRecord, viewerId?: string) {
     record.suggestedRate && record.rateSource && record.rateAsOf && record.rateFetchedAt
       ? {
           rate: `${decimalMoney(rateText(record.suggestedRate), record.paidCurrency)} ${per}`,
-          source: `${SOURCE_NAMES[record.rateSource] ? `${SOURCE_NAMES[record.rateSource]}${SEPARATOR}r` : 'R'}ates of${NO_BREAK_SPACE}${calendarDay(record.rateAsOf)}${SEPARATOR}fetched${NO_BREAK_SPACE}${dayAndTime(new Date(record.rateFetchedAt))}`,
+          source: `${SOURCE_NAMES[record.rateSource] ? `${SOURCE_NAMES[record.rateSource]}${SEPARATOR}r` : 'R'}ates of${NO_BREAK_SPACE}${calendarDay(record.rateAsOf)}${SEPARATOR}fetched${NO_BREAK_SPACE}${dayAndTime(new Date(record.rateFetchedAt), timeZone)}`,
           attribution:
             record.rateSource === 'frankfurter' ? null : { ...EXCHANGE_RATE_API_ATTRIBUTION },
         }

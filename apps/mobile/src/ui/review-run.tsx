@@ -75,6 +75,7 @@ import { SplitSheet } from './split-sheet';
 import { TagSheet } from './tag-sheet';
 import { useStartWhileUnfocused } from './start-while-unfocused';
 import { fonts, useTheme } from './theme';
+import { usePhoneNow } from './phone-now';
 import { reviewedItemsLine } from './review-run-copy';
 import { expenseDay } from '@splitbook/shared/expense-day';
 import { NO_BREAK_SPACE, SEPARATOR } from '@splitbook/shared/separator';
@@ -331,6 +332,8 @@ function ReviewRunContent({
   userId: string;
   close(): void;
 }) {
+  // Its days are drawn again at midnight and after a zone change while it shows (#1302).
+  usePhoneNow();
   const theme = useTheme();
   // A drag that starts on the duplicate checkbox never checks it (#684).
   const duplicateTap = useTap();

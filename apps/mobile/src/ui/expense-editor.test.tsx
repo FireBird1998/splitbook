@@ -2692,3 +2692,30 @@ it('shows held-update feedback over Add expense without replacing its form or sc
   expect(screen!.root.findAllByType(Snackbar)).toHaveLength(1);
   expect(f.controller.getSnapshot().heldNotificationNotice).toBeNull();
 });
+
+// #1302: the form left open takes the new day at midnight: the Expense's day becomes yesterday.
+describe('the Date tile left open at midnight (#1302)', () => {
+  it('says the Expense’s day is yesterday once midnight passes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 8, 28, 23, 59, 59, 700) });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const ui = await render((controller) => controller.openExpense(groupId));
+    expect(ui.controller.getSnapshot().expense.draft?.date).toBe('2026-09-28');
+    expect(expenseDateLabel('2026-09-28').spoken).toMatch(/^Today, /);
+    expect(ui.tile('Date').props.accessibilityLabel).toBe(
+      `Date: ${expenseDateLabel('2026-09-28').spoken}`,
+    );
+    vi.setSystemTime(new Date(2026, 8, 29, 0, 0, 1));
+    expect(expenseDateLabel('2026-09-28').spoken).toMatch(/^Yesterday, /);
+    await vi.waitFor(
+      async () => {
+        await act(async () => {});
+        expect(ui.tile('Date').props.accessibilityLabel).toBe(
+          `Date: ${expenseDateLabel('2026-09-28').spoken}`,
+        );
+      },
+      { timeout: 2500, interval: 50 },
+    );
+  });
+});

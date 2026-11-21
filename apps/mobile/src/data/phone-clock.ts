@@ -83,3 +83,101 @@ export function phoneHour(moment: Instant = Date.now()): number {
   // Some engines write midnight as 24 with a 24-hour clock.
   return Number.isInteger(hour) ? hour % 24 : date.getHours();
 }
+
+/** The phone's day, hour and zone, as the clock last checked them. */
+export interface PhoneNow {
+  day: DayKey;
+  hour: number;
+  timeZone: string | undefined;
+}
+
+const MINUTE = 60_000;
+const listeners = new Set<() => void>();
+let checked: PhoneNow | null = null;
+/** When the last reading stops being current: the next whole minute after it. */
+let currentUntil = 0;
+let timer: ReturnType<typeof setTimeout> | undefined;
+let inFront = true;
+
+const readNow = (): PhoneNow => ({ day: phoneDay(), hour: phoneHour(), timeZone: phoneTimeZone() });
+
+/** Reads the phone's day, hour and zone again: true when one of them moved. */
+function reread() {
+  const next = readNow();
+  const at = Date.now();
+  currentUntil = at - (at % MINUTE) + MINUTE;
+  if (
+    checked &&
+    next.day === checked.day &&
+    next.hour === checked.hour &&
+    next.timeZone === checked.timeZone
+  )
+    return false;
+  checked = next;
+  return true;
+}
+
+const tell = () => {
+  for (const listener of [...listeners]) listener();
+};
+
+/** Reads the phone's day, hour and zone, and tells every listener when one of them moved. */
+function check() {
+  if (reread()) tell();
+}
+
+/** The next check is at the next whole minute, while something listens with the app in front. */
+function schedule() {
+  if (timer !== undefined) clearTimeout(timer);
+  timer = undefined;
+  if (!inFront || !listeners.size) return;
+  timer = setTimeout(
+    () => {
+      timer = undefined;
+      check();
+      schedule();
+    },
+    MINUTE - (Date.now() % MINUTE),
+  );
+  // The clock never keeps a process running by itself, such as a verifier run in Node.
+  (timer as { unref?: () => void }).unref?.();
+}
+
+/**
+ * The phone's clock for what stays on screen (#1302). A screen draws "today" and the hour when
+ * it draws, so one left open kept yesterday's day after midnight, the last hour's sky, and the
+ * old zone's day after the phone's zone changed (#1298), until something else drew it again.
+ *
+ * While anything listens and the app is in front, the clock checks the phone's day, hour and zone
+ * at each whole minute, the finest step any zone's hour moves by, and tells its listeners only
+ * when one of them moved. A zone change is noticed at the next minute. Behind other apps it
+ * doesn't check; brought to the front, it checks at once.
+ */
+export const phoneClock = {
+  /** The phone's day, hour and zone as last checked: the same object until one of them moves. */
+  now(): PhoneNow {
+    // A screen drawn after a check was due reads it anew, and the others hear of a move once
+    // this draw is done (a draw is no time to tell them).
+    if ((!checked || Date.now() >= currentUntil) && reread() && listeners.size)
+      queueMicrotask(tell);
+    return checked!;
+  },
+  /** `listener` hears each move of the day, hour or zone, until it stops listening. */
+  subscribe(listener: () => void): () => void {
+    // A new listener reads the clock as it is now, and hears only later moves; the others hear
+    // a move it finds. The next check is counted from now.
+    if (reread()) tell();
+    listeners.add(listener);
+    schedule();
+    return () => {
+      listeners.delete(listener);
+      if (!listeners.size) schedule();
+    };
+  },
+  /** The app came to the front (`true`), checked at once, or went behind other apps. */
+  setInFront(front: boolean) {
+    inFront = front;
+    if (front) check();
+    schedule();
+  },
+};

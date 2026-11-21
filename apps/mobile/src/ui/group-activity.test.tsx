@@ -818,6 +818,19 @@ describe('a payment in another currency’s record (#728)', () => {
     expect(shown).not.toContain('recorded a payment');
   });
 
+  // #1302: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+  // India for its dates (#1283); when the rates were fetched is spelled in the phone's zone, day and
+  // time together: 12:00 UTC on 20 Nov is 1:00 AM on 20 Nov there (5:30 PM in India).
+  it('says when the rates were fetched in the phone’s zone after it moves while the app runs (#1302)', () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    const { root } = render({
+      state: activity({ selected: payment({ rateFetchedAt: '2026-11-20T12:00:00.000Z' }) }),
+    });
+    expect(text(root)).toContain(
+      'Frankfurter\u00a0· rates of\u00a020\u00a0Oct\u00a0· fetched\u00a020\u00a0Nov\u00a001:00',
+    );
+  });
+
   it('links a second source’s attribution where its rate shows', () => {
     const onOpenLink = vi.fn();
     const { root } = render({

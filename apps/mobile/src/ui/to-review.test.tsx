@@ -2465,3 +2465,29 @@ describe.each(['light', 'dark'] as const)(
     });
   },
 );
+
+// #1302: To review left open takes the new day at midnight: items dated today become yesterday's.
+describe.each(['light', 'dark'] as const)(
+  'To review left open at midnight in %s (#1302)',
+  (mode) => {
+    it('says the items are yesterday’s once midnight passes', async () => {
+      const before = new Date(2026, 9, 14, 23, 59, 59, 700).getTime();
+      vi.useFakeTimers({ toFake: ['Date'], now: before });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+      const f = fixture({ now: before });
+      await signIn(f);
+      const list = await render(<ToReviewList controller={f.controller} groupId={groupId} />, mode);
+      expect(text(list)).toContain('Prepared by Claude · Today');
+      vi.setSystemTime(before + 1300);
+      await vi.waitFor(
+        async () => {
+          await act(async () => {});
+          expect(text(list)).toContain('Prepared by Claude · Yesterday');
+        },
+        { timeout: 2500, interval: 50 },
+      );
+    });
+  },
+);

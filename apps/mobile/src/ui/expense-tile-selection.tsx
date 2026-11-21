@@ -3,6 +3,7 @@ import type { MobileController } from '../data/mobile-controller';
 import { ExpenseTiles, expenseDateLabel, splitSummary } from './expense-form';
 import { paidBySummary } from './payer-sheet';
 import { inactiveTagReport } from './tag-sheet';
+import { usePhoneNow } from './phone-now';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 
 export const SelectedExpenseTiles = memo(function SelectedExpenseTiles({
@@ -13,6 +14,8 @@ export const SelectedExpenseTiles = memo(function SelectedExpenseTiles({
   controller: MobileController;
   currentUserId?: string;
 }) {
+  // The Date tile's Today and Yesterday are drawn again at midnight while the form shows (#1302).
+  usePhoneNow();
   const value = useMobileSnapshot(
     controller,
     ({ expense }) => {

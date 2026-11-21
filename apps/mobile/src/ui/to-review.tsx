@@ -60,6 +60,7 @@ import { useDismissAfter } from './group-snackbar';
 import { groupIcon } from './group-icon';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
+import { usePhoneNow } from './phone-now';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 import { expenseDay } from '@splitbook/shared/expense-day';
 import { recentDay } from './day-format';
@@ -420,6 +421,8 @@ export function ToReviewHomeCard({
   controller: MobileController;
   disabled?: boolean;
 }) {
+  // Its days are drawn again at midnight and after a zone change while it shows (#1302).
+  usePhoneNow();
   const state = useReviewSnapshot(controller);
   const theme = useTheme();
   const model = controller.toReviewModel();
@@ -580,6 +583,8 @@ export function ToReviewGroupBanner({
   controller: MobileController;
   groupId: string;
 }) {
+  // Its days are drawn again at midnight and after a zone change while it shows (#1302).
+  usePhoneNow();
   const state = useReviewSnapshot(controller);
   const theme = useTheme();
   // A drag that starts on the bar never opens the list (#684).
@@ -887,6 +892,8 @@ export function ToReviewList({
   controller: MobileController;
   groupId: string;
 }) {
+  // Its days are drawn again at midnight and after a zone change while it shows (#1302).
+  usePhoneNow();
   const theme = useTheme();
   const state = useReviewSnapshot(controller);
   // A drag that starts on a Who paid? or tag option never picks it (#665).

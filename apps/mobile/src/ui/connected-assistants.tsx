@@ -24,6 +24,7 @@ import {
   useTextColumn,
 } from './compact';
 import { phoneDay } from '../data/phone-clock';
+import { usePhoneNow } from './phone-now';
 import { nearDay, spellDay, spellTime } from './day-format';
 import { ReadTime } from './financial-views';
 import { useDismissAfter } from './group-snackbar';
@@ -59,6 +60,8 @@ function AssistantRow({
   offline: boolean;
   onAsk: (id: string) => void;
 }) {
+  // "Last used" is drawn again at midnight and after a zone change while it shows (#1302).
+  usePhoneNow();
   // At large text Disconnect goes onto a line of its own, at the row's end, where it would
   // leave the name less than `largeTextColumn`, as a list row's trailing value does.
   const column = useTextColumn();

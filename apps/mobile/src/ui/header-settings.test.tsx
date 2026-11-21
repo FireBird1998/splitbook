@@ -421,3 +421,20 @@ it('Auto follows the phone’s clock after its zone moves while the app runs (#1
   expect(labels(auto)).toEqual([`Auto, Follows your clock${SEPARATOR}night now`]);
   act(() => view.unmount());
 });
+
+// #1302: Auto's line follows the clock while the page stays open, with nothing else drawing it.
+it('Auto takes the next hour while the page is open (#1302)', async () => {
+  vi.setSystemTime(new Date(2026, 10, 16, 9, 59, 59, 700));
+  const view = await open(page({ draft: { ...scene, time: 'sunset' } }));
+  const auto = () => labels(rows(group(view, 'Time of day'))[0]);
+  expect(auto()).toEqual([`Auto, Follows your clock${SEPARATOR}morning now`]);
+  vi.setSystemTime(new Date(2026, 10, 16, 10, 0, 1));
+  await vi.waitFor(
+    async () => {
+      await act(async () => {});
+      expect(auto()).toEqual([`Auto, Follows your clock${SEPARATOR}day now`]);
+    },
+    { timeout: 2500, interval: 50 },
+  );
+  act(() => view.unmount());
+});

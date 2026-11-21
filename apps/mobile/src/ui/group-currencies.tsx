@@ -23,6 +23,7 @@ import { ReadTime } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
+import { phoneTimeZone } from '../data/phone-clock';
 
 /** A currency's code in its tile, as the Currency sheet draws it. */
 function CodeTile({ code }: { code: string }) {
@@ -178,7 +179,14 @@ export function GroupCurrencies({
                           {index > 0 ? <Divider /> : null}
                           <CurrencyRow
                             code={setting.code}
-                            line={extraCurrencyRow(setting, { viewerId, now }).line}
+                            line={
+                              // The day it was added, in the phone's zone (#1302).
+                              extraCurrencyRow(setting, {
+                                viewerId,
+                                now,
+                                timeZone: phoneTimeZone(),
+                              }).line
+                            }
                           />
                         </View>
                       ))}

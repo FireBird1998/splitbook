@@ -5,7 +5,8 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { hermesZoneMoved } from '@splitbook/shared/test-support/hermes-zone';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import type { GroupCurrencySettings } from '@splitbook/shared/group-currency-settings';
 import type { GroupCurrenciesState } from '../data/types';
@@ -165,5 +166,30 @@ describe('a Group’s currencies (#722)', () => {
     view();
     const tree = screen!.toJSON() as ReactTestRendererJSON;
     expect(unreadText(tree, size.fontScale, size.width - 32)).toEqual([]);
+  });
+});
+
+// #1302: the app started in India and the phone moved to Pago Pago while it ran. Hermes keeps
+// India for its dates (#1283); the day a currency was added is the phone's. 20:00 UTC on 31 Dec
+// 2026 is 9:00 AM on 31 Dec there (01:30 on 1 Jan 2027 in India), and at 08:00 UTC on 1 Jan 2027
+// it is still 31 Dec 2026 there, so the day takes no year.
+describe('when a currency was added, after the phone’s zone moves while the app runs (#1302)', () => {
+  it('names the phone’s day, with the year only outside the phone’s year', () => {
+    onTestFinished(hermesZoneMoved('Asia/Kolkata', 'Pacific/Pago_Pago'));
+    const added = {
+      ...lisbon,
+      extraCurrencies: [
+        {
+          ...lisbon.extraCurrencies[0]!,
+          added: { by: { _id: sam, name: 'Sam' }, at: '2026-12-31T20:00:00.000Z' },
+        },
+      ],
+    };
+    const { root } = view({
+      state: ready({ data: added }),
+      now: new Date('2027-01-01T08:00:00.000Z'),
+    });
+    expect(text(root)).toContain('added by Sam, 31 Dec');
+    expect(text(root)).not.toContain('31 Dec 2026');
   });
 });

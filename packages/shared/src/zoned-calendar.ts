@@ -89,6 +89,64 @@ export function zonedDay(instant: Instant, timeZone: string): ZonedDay {
   return { year: part('year'), month: part('month'), day: part('day') };
 }
 
+/** A moment in a zone, as numbers: its calendar day (month 1–12) and its time on a 24-hour clock. */
+export interface ZonedMoment extends ZonedDay {
+  hour: number;
+  minute: number;
+}
+
+const clockFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * The calendar day and 24-hour time a moment falls on in a zone, such as the phone's that Android
+ * names, since Hermes keeps the zone the app started in for its dates (#1302).
+ */
+export function zonedMoment(instant: Instant, timeZone: string): ZonedMoment {
+  const zone = readTimeZone(timeZone);
+  let format = clockFormatters.get(zone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-US-u-ca-gregory-nu-latn', {
+      timeZone: zone,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      hourCycle: 'h23',
+    });
+    clockFormatters.set(zone, format);
+  }
+  const parts = format.formatToParts(epochMillis(instant));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((candidate) => candidate.type === type)?.value);
+  return {
+    year: part('year'),
+    month: part('month'),
+    day: part('day'),
+    // Some engines write midnight as 24 on a 24-hour clock.
+    hour: part('hour') % 24,
+    minute: part('minute'),
+  };
+}
+
+const MONTH_ABBREVIATIONS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const;
+
+/** A month's English short name, as date-fns's `MMM` writes it: `monthAbbreviation(11)` is "Nov". */
+export const monthAbbreviation = (month: number): string => MONTH_ABBREVIATIONS[month - 1]!;
+
 const pad = (value: number, width = 2) => String(value).padStart(width, '0');
 const monthKey = (year: number, month: number): MonthKey => `${pad(year, 4)}-${pad(month)}`;
 

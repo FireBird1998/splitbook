@@ -1203,6 +1203,25 @@ describe('Spending: its Months, days and currencies (#1276)', () => {
     expect(controller.getSnapshot().spending.today).toBe(tomorrow.toISOString().slice(0, 10));
   });
 
+  // #1302: with the app in front and nothing read or changed, today moves at midnight; Home's
+  // card and the Spending screen draw it from here.
+  it('draws the new day as today at midnight, with the app in front and nothing else changing (#1302)', async () => {
+    const here = new Date(start);
+    const midnight = new Date(here.getFullYear(), here.getMonth(), here.getDate() + 1).getTime();
+    vi.setSystemTime(midnight - 300);
+    const f = fixture();
+    const controller = await onSpending(f);
+    expect(controller.getSnapshot().spending.today).toBe(todayHere);
+    const tomorrow = new Date(`${todayHere}T12:00:00Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    vi.setSystemTime(midnight + 1000);
+    await vi.waitFor(
+      () =>
+        expect(controller.getSnapshot().spending.today).toBe(tomorrow.toISOString().slice(0, 10)),
+      { timeout: 2500, interval: 50 },
+    );
+  });
+
   it.each(['a lost Group', 'the switch turned off', 'a change of account'] as const)(
     'removes an older Month’s saved copy too, on %s (QA round)',
     async (event) => {

@@ -371,3 +371,22 @@ describe('Date sheet’s today after the phone’s zone moves while the app runs
     expect(render('').month()).toBe('November 2026');
   });
 });
+
+// #1302: the sheet left open takes the new day at midnight, with nothing else drawing it again.
+describe('Date sheet left open at midnight (#1302)', () => {
+  it('marks and chooses the new today', async () => {
+    vi.setSystemTime(new Date(2026, 8, 29, 23, 59, 59, 700));
+    const sheet = render('2026-09-15');
+    expect(sheet.pressable('Tuesday 29 September 2026, today')).toBeTruthy();
+    vi.setSystemTime(new Date(2026, 8, 30, 0, 0, 1));
+    await vi.waitFor(
+      async () => {
+        await act(async () => {});
+        expect(sheet.pressable('Wednesday 30 September 2026, today')).toBeTruthy();
+      },
+      { timeout: 2500, interval: 50 },
+    );
+    sheet.press('Today');
+    expect(changes).toEqual(['2026-09-30']);
+  });
+});

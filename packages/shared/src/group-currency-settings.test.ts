@@ -48,6 +48,33 @@ describe('an extra currency as its settings row shows it (#721)', () => {
     added: ExtraCurrencySetting['added'] = null,
   ) => extraCurrencyRow({ code, use: use(change), added }, { viewerId: ALEX, now });
 
+  // #1302: Android names the phone's zone, which Intl follows when the phone's zone changes while
+  // the app runs (#1283). 20:00 UTC on 31 Dec 2026 is 9:00 AM on 31 Dec in Pago Pago and 01:30 on
+  // 1 Jan 2027 in India; at 08:00 UTC on 1 Jan 2027 Pago Pago is still in 2026.
+  it('names the day it was added, and its year, in the zone given', () => {
+    const added = addedBy(SAM, 'Sam', '2026-12-31T20:00:00.000Z');
+    const line = (timeZone: string) =>
+      extraCurrencyRow(
+        { code: 'EUR', use: use({}), added },
+        { viewerId: ALEX, now: new Date('2027-01-01T08:00:00.000Z'), timeZone },
+      ).line;
+    expect(line('Pacific/Pago_Pago')).toContain('added by Sam, 31 Dec');
+    expect(line('Pacific/Pago_Pago')).not.toContain('2026');
+    expect(line('Asia/Kolkata')).toContain('added by Sam, 1 Jan');
+    expect(line('Asia/Tokyo')).toContain('added by Sam, 1 Jan');
+    // Added in another year than now, in the zone given.
+    expect(
+      extraCurrencyRow(
+        { code: 'EUR', use: use({}), added },
+        {
+          viewerId: ALEX,
+          now: new Date('2027-01-01T20:00:00.000Z'),
+          timeZone: 'Pacific/Pago_Pago',
+        },
+      ).line,
+    ).toContain('added by Sam, 31 Dec 2026');
+  });
+
   it('counts what uses it and names who added it, and when', () => {
     expect(
       row(
