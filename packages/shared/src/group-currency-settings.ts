@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { z } from 'zod';
 import { CURRENCIES, CURRENCY_CODES, wholeUnit } from './currency';
 import { SEPARATOR, counted } from './separator';
+import { monthAbbreviation, zonedDay } from './zoned-calendar';
 
 const identity = z.string().regex(/^[a-f\d]{24}$/i);
 const code = z.string().refine((value) => CURRENCY_CODES.includes(value));
@@ -53,13 +54,29 @@ export function isCurrencyInUse(use: ExtraCurrencyUse): boolean {
   return use.expenses.count + use.settlements + toReviewCount(use) > 0;
 }
 
+/** "1 Oct", or "1 Oct 2025" outside `now`'s year: in `timeZone` when given, else the runtime's. */
+function addedDay(at: Date, now: Date, timeZone?: string) {
+  if (!timeZone) return format(at, at.getFullYear() === now.getFullYear() ? 'd MMM' : 'd MMM yyyy');
+  const { year, month, day } = zonedDay(at, timeZone);
+  return `${day} ${monthAbbreviation(month)}${year === zonedDay(now, timeZone).year ? '' : ` ${year}`}`;
+}
+
 /**
  * An extra currency's row in the settings: "11 Expenses · 1 Settlement · added by Sam, 1 Oct".
  * The viewer is "you"; a day in an earlier year keeps its year.
  */
 export function extraCurrencyRow(
   setting: ExtraCurrencySetting,
-  { viewerId, now = new Date() }: { viewerId: string; now?: Date },
+  {
+    viewerId,
+    now = new Date(),
+    timeZone,
+  }: {
+    viewerId: string;
+    now?: Date;
+    /** The zone its day and year are read in, such as the phone's that Android names (#1302). */
+    timeZone?: string;
+  },
 ): { inUse: boolean; line: string } {
   const { use, added } = setting;
   const inUse = isCurrencyInUse(use);
@@ -73,8 +90,7 @@ export function extraCurrencyRow(
     : ['Nothing uses it'];
   if (wholeUnit(setting.code)) parts.push('whole amounts only');
   if (added) {
-    const at = new Date(added.at);
-    const day = format(at, at.getFullYear() === now.getFullYear() ? 'd MMM' : 'd MMM yyyy');
+    const day = addedDay(new Date(added.at), now, timeZone);
     parts.push(`added by ${added.by._id === viewerId ? 'you' : added.by.name}, ${day}`);
   }
   return { inUse, line: parts.filter(Boolean).join(SEPARATOR) };

@@ -92,7 +92,8 @@ import { returnScrollTarget, visibleRowAnchor, type RowPlaces } from './src/ui/r
 import { recordOutline } from './src/ui/expense-record-view';
 import { expenseRecoveryWords } from './src/ui/expense-recovery-copy';
 import { DetailsNotice, RefreshStatus, RetainedNotice } from './src/ui/financial-views';
-import { phoneDay } from './src/data/phone-clock';
+import { phoneClock } from './src/data/phone-clock';
+import { usePhoneNow } from './src/ui/phone-now';
 import { GroupExpensesView } from './src/ui/group-expenses';
 import { TripStrip } from './src/ui/trip-strip';
 import { readGroupHeader } from '@splitbook/shared/group-header';
@@ -240,7 +241,10 @@ function SplitBook() {
     // Mounted again over a started controller: the recreated activity may have resumed before
     // these listeners were back, so the screen the member is on reads again, as on any return.
     if (started) void controller.refresh('foreground');
+    // The phone's clock checks the day and hour only while the app is in front (#1302).
+    if (AppState.currentState === 'background') phoneClock.setInFront(false);
     const appState = AppState.addEventListener('change', (next) => {
+      phoneClock.setInFront(next === 'active');
       if (next === 'active') void controller.refresh('foreground');
     });
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -1119,6 +1123,8 @@ const unlistedGroup = (id: string): MobileGroup => ({
 function GroupScreen() {
   const motion = useSyncExternalStore(sceneMotion.subscribe, sceneMotion.getSnapshot);
   const tilt = useSyncExternalStore(sceneTilt.subscribe, sceneTilt.getSnapshot);
+  // The phone's day: an open Group takes the new one at midnight or after a zone change (#1302).
+  const clock = usePhoneNow();
   const native = useHeldUpdateNativeOverlays();
   const shareInvite = useShareInvite();
   const heldUpdate = useHeldUpdateBanner();
@@ -1145,7 +1151,6 @@ function GroupScreen() {
       groupCurrencies: snapshot.groupCurrencies,
       currencyAdd: snapshot.currencyAdd,
       home: snapshot.home,
-      dayKey: phoneDay(),
       feedback: refreshFeedback(snapshot),
     }),
     (a, b) =>
@@ -1409,7 +1414,7 @@ function GroupScreen() {
       currency={shown.defaultCurrency}
       members={activityMembers}
       offline={state.offline.active}
-      dayKey={state.dayKey}
+      dayKey={clock.day}
       onRetry={refreshActivity}
       onMore={loadMoreActivity}
       onLoadNewer={loadNewerActivity}
@@ -1669,7 +1674,7 @@ function GroupScreen() {
                 }
                 offline={state.offline.active}
                 firstRead={opening !== null}
-                dayKey={state.dayKey}
+                dayKey={clock.day}
                 onSelectMonth={selectMonth}
                 onRefreshExpenses={refreshExpenses}
                 onLoadMore={loadMoreExpenses}

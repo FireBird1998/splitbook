@@ -22,6 +22,7 @@ import { Badge, Banner, CompactButton, CompactText, radius } from './compact';
 import { FieldError } from './group-workflows';
 import { fonts, useTheme } from './theme';
 import { SEPARATOR } from '@splitbook/shared/separator';
+import { phoneTimeZone } from '../data/phone-clock';
 
 /** As formatCurrency writes it before an amount: "€", or "PLN" for the zloty (#868). */
 const symbol = currencyPrefix;
@@ -116,7 +117,8 @@ export function CrossCurrencyFields({
       ? null
       : rate.status === 'unreachable'
         ? null
-        : rateNote(kind, suggestion, paidCurrency, now);
+        : // When the rates were fetched, in the phone's zone as the Date tile beside it is (#1302).
+          rateNote(kind, suggestion, paidCurrency, now, phoneTimeZone());
   const known = rate.status === 'ready' || rate.status === 'none';
 
   const field = (name: CrossCurrencyField, code: string, label: string, lead?: string) => {

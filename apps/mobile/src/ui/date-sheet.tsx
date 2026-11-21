@@ -9,7 +9,8 @@ import {
 import { BottomSheet, Chip, CompactText, IconButton, touch, useTap } from './compact';
 import { expenseDate } from '@splitbook/shared/expense-day';
 import type { DayKey } from '@splitbook/shared/zoned-calendar';
-import { phoneDay, phoneMonth, readPhoneCalendar } from '../data/phone-clock';
+import { phoneMonth, readPhoneCalendar } from '../data/phone-clock';
+import { usePhoneNow } from './phone-now';
 import { dayBefore, gregorianDateFormat, spellDayKey } from './day-format';
 import { useTheme } from './theme';
 
@@ -69,8 +70,9 @@ export function DateSheet({
     if (visible) setMonth(monthOf(value));
   }, [visible]);
 
-  // The phone's days, which follow its zone while the app runs (#1298).
-  const today = phoneDay();
+  // The phone's days, which follow its zone while the app runs (#1298), drawn again at midnight
+  // while the sheet is open (#1302).
+  const today = usePhoneNow().day;
   const yesterday = dayBefore(today);
   // The editor re-renders on every keystroke; only a new Month or date is spelled out again,
   // and all of it from one reading of the phone's locale and zone.
